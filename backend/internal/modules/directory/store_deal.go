@@ -9,7 +9,7 @@ import (
 	"time"
 
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
-	"github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 )
 
@@ -23,15 +23,30 @@ type DealStore struct{ db *sql.DB }
 // NewDealStore returns a DealStore.
 func NewDealStore(db *sql.DB) *DealStore { return &DealStore{db: db} }
 
-// Create inserts a new deal row and its create audit_log entry in one
-// workspace-scoped tx (margince_app + app.workspace_id), so the row and its audit
-// commit atomically under RLS (audit parity with offer/product/lead creates).
-func (s *DealStore) Create(ctx context.Context, d Deal) (Deal, error) {
+// Create inserts a new deal row, its initial stage history row, its create
+// audit_log entry, and its deal.created outbox event in one workspace-scoped tx.
+// The stage pre-check keeps the error readable at the store boundary instead of
+// relying on the composite FK to surface a lower-level constraint violation.
+func (s *DealStore) Create(ctx context.Context, d Deal, idempotencyKey string) (Deal, error) {
 	if err := requireProvenance(d.Source, d.CapturedBy); err != nil {
 		return Deal{}, err
 	}
 	d.ID = ids.New()
 	err := withWorkspaceTx(ctx, s.db, d.WorkspaceID, func(tx *sql.Tx) error {
+		var inPipeline bool
+		if err := tx.QueryRowContext(ctx, `
+			SELECT EXISTS(
+				SELECT 1
+				FROM stage
+				WHERE id=$1::uuid AND pipeline_id=$2::uuid AND workspace_id=$3::uuid AND archived_at IS NULL
+			)`,
+			d.StageID, d.PipelineID, d.WorkspaceID).Scan(&inPipeline); err != nil {
+			return err
+		}
+		if !inPipeline {
+			return errs.ErrStageNotInPipeline
+		}
+
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO deal (id, workspace_id, name, pipeline_id, stage_id,
 			    organization_id, owner_id, partner_org_id,
@@ -46,8 +61,30 @@ func (s *DealStore) Create(ctx context.Context, d Deal) (Deal, error) {
 			d.Source, d.CapturedBy); err != nil {
 			return err
 		}
+
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO deal_stage_history (
+				workspace_id, deal_id, from_stage_id, to_stage_id,
+				changed_by, amount_minor_at_change, currency_at_change
+			)
+			VALUES ($1::uuid, $2::uuid, NULL, $3::uuid, $4, $5, $6)`,
+			d.WorkspaceID, d.ID, d.StageID, d.CapturedBy, d.AmountMinor, d.Currency); err != nil {
+			return fmt.Errorf("deal create history: %w", err)
+		}
+
+		payload, _ := json.Marshal(map[string]any{"deal_id": d.ID})
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload)
+			 VALUES ($1,$2,$3::uuid,$4)`,
+			d.WorkspaceID, "deal.created", d.ID, payload); err != nil {
+			return fmt.Errorf("deal create event: %w", err)
+		}
+
 		e := crmaudit.EntryFromPrincipal(ctx, "create", entityTypeDeal, &d.ID, nil, d)
 		e.WorkspaceID = d.WorkspaceID
+		if idempotencyKey != "" {
+			e.Evidence = map[string]any{"idempotency_key": idempotencyKey}
+		}
 		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
 			return fmt.Errorf("deal create audit: %w", err)
 		}
@@ -62,6 +99,7 @@ func (s *DealStore) Create(ctx context.Context, d Deal) (Deal, error) {
 // Get returns one deal by id, workspace-scoped; ErrNotFound if absent.
 func (s *DealStore) Get(ctx context.Context, id, workspaceID string) (Deal, error) {
 	var d Deal
+	var stageEnteredAt sql.NullTime
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		return tx.QueryRowContext(ctx, `
 			SELECT id, workspace_id, name, pipeline_id, stage_id,
@@ -70,7 +108,9 @@ func (s *DealStore) Get(ctx context.Context, id, workspaceID string) (Deal, erro
 			       status, lost_reason, expected_close_date, closed_at,
 			       forecast_category, wait_until, last_activity_at,
 			       (`+stalledPredicate(3)+`) AS stalled,
-			       version, source, captured_by, created_at, updated_at, archived_at
+			       version, source, captured_by, created_at, updated_at, archived_at,
+			       (SELECT max(occurred_at) FROM deal_stage_history WHERE deal_id=deal.id) AS stage_entered_at,
+			       (SELECT count(*) FROM relationship WHERE deal_id=deal.id AND kind='deal_stakeholder' AND archived_at IS NULL) AS stakeholder_count
 			FROM deal WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
 			id, workspaceID, defaultStalledDays).Scan(
 			&d.ID, &d.WorkspaceID, &d.Name, &d.PipelineID, &d.StageID,
@@ -80,135 +120,49 @@ func (s *DealStore) Get(ctx context.Context, id, workspaceID string) (Deal, erro
 			&d.ForecastCategory, &d.WaitUntil, &d.LastActivityAt, &d.Stalled,
 			&d.Version, &d.Source, &d.CapturedBy,
 			&d.CreatedAt, &d.UpdatedAt, &d.ArchivedAt,
+			&stageEnteredAt, &d.StakeholderCount,
 		)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return d, errs.ErrNotFound
 	}
+	if stageEnteredAt.Valid {
+		d.StageEnteredAt = &stageEnteredAt.Time
+	}
 	return d, err
 }
 
-// DealListFilter holds optional predicates for ListFiltered. Zero value = no extra filters.
-type DealListFilter struct {
-	PipelineID     string
-	StageID        string
-	OwnerID        string
-	OrganizationID string
-	Status         string // "" | open | won | lost (validated by the caller)
-	Stalled        bool
-}
-
-// defaultStalledDays is the idle threshold for the stalled=true filter, matching
-// the StalledDeals predicate in contextgraph.go which takes this value as a param.
-const defaultStalledDays = 14
-
-// stalledPredicateFmt is the single source of the deterministic "is this deal stalled"
-// SQL rule: an open deal whose last_activity_at is NULL or older than the threshold.
-// The %d placeholder is the bound param index carrying defaultStalledDays. Every site
-// that decides staleness — the ?stalled=true filter predicate and the per-deal `stalled`
-// projection on the Get/List reads — formats this one string with its own param index,
-// so the filter and the per-deal flag agree by construction.
-// The param is an integer day-count multiplied by a 1-day interval — NOT string
-// concatenation. `($n || ' days')::interval` would type $n as text, which the pgx
-// driver refuses to encode an int into (lib/pq coerces silently); integer × interval
-// keeps $n integer-typed so the predicate is portable across both drivers.
-const stalledPredicateFmt = `status='open' AND (last_activity_at IS NULL OR last_activity_at < now() - ($%d * interval '1 day'))`
-
-// stalledPredicate renders stalledPredicateFmt for the given bound-param index.
-func stalledPredicate(paramN int) string {
-	return fmt.Sprintf(stalledPredicateFmt, paramN)
-}
-
-// List delegates to ListFiltered with a zero filter, preserving the existing signature.
-func (s *DealStore) List(ctx context.Context, workspaceID, cursor string, limit int) ([]Deal, string, error) {
-	return s.ListFiltered(ctx, workspaceID, cursor, limit, DealListFilter{})
-}
-
-// ListFiltered returns cursor-keyed, workspace-scoped deals matching f.
-// Predicates are AND-ed; all filter values are bound params.
-func (s *DealStore) ListFiltered(ctx context.Context, workspaceID, cursor string, limit int, f DealListFilter) ([]Deal, string, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 20
+// FindByIdempotencyKey resolves a prior create-action audit row carrying the key
+// in audit_log.evidence and returns the deal it created.
+func (s *DealStore) FindByIdempotencyKey(ctx context.Context, workspaceID, key string) (Deal, bool, error) {
+	if key == "" {
+		return Deal{}, false, nil
 	}
 
-	// Start with the fixed base args: workspaceID, cursor, fetch-limit.
-	args := []any{workspaceID, cursor, limit + 1}
-	n := 3 // next $N index
-
-	where := `workspace_id=$1::uuid AND archived_at IS NULL AND ($2 = '' OR id::text > $2)`
-
-	if f.PipelineID != "" {
-		n++
-		args = append(args, f.PipelineID)
-		where += fmt.Sprintf(` AND pipeline_id=$%d::uuid`, n)
-	}
-	if f.StageID != "" {
-		n++
-		args = append(args, f.StageID)
-		where += fmt.Sprintf(` AND stage_id=$%d::uuid`, n)
-	}
-	if f.OwnerID != "" {
-		n++
-		args = append(args, f.OwnerID)
-		where += fmt.Sprintf(` AND owner_id=$%d::uuid`, n)
-	}
-	if f.OrganizationID != "" {
-		n++
-		args = append(args, f.OrganizationID)
-		where += fmt.Sprintf(` AND organization_id=$%d::uuid`, n)
-	}
-	if f.Status != "" {
-		n++
-		args = append(args, f.Status)
-		where += fmt.Sprintf(` AND status=$%d`, n)
-	}
-	if f.Stalled {
-		n++
-		args = append(args, defaultStalledDays)
-		where += ` AND ` + stalledPredicate(n)
-	}
-	stalledN := len(args) + 1
-	args = append(args, defaultStalledDays)
-
-	out := []Deal{}
+	var dealID string
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		//nolint:gosec // G202: `where` and stalledPredicate inject only bound-param indices ($N), never user input; all filter values are passed via args
-		rows, err := tx.QueryContext(ctx,
-			`SELECT id, workspace_id, name, pipeline_id, stage_id,
-			        organization_id, owner_id,
-			        amount_minor, currency, status, last_activity_at,
-			        (`+stalledPredicate(stalledN)+`) AS stalled,
-			        version, source, captured_by, created_at, updated_at
-			 FROM deal
-			 WHERE `+where+`
-			 ORDER BY id LIMIT $3`,
-			args...)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = rows.Close() }()
-		for rows.Next() {
-			var d Deal
-			if err := rows.Scan(&d.ID, &d.WorkspaceID, &d.Name, &d.PipelineID, &d.StageID,
-				&d.OrganizationID, &d.OwnerID,
-				&d.AmountMinor, &d.Currency, &d.Status, &d.LastActivityAt, &d.Stalled, &d.Version,
-				&d.Source, &d.CapturedBy,
-				&d.CreatedAt, &d.UpdatedAt); err != nil {
-				return err
-			}
-			out = append(out, d)
-		}
-		return rows.Err()
+		return tx.QueryRowContext(ctx, `
+			SELECT entity_id
+			FROM audit_log
+			WHERE workspace_id=$1::uuid
+			  AND entity_type=$2
+			  AND action='create'
+			  AND evidence->>'idempotency_key' = $3
+			ORDER BY occurred_at DESC
+			LIMIT 1`,
+			workspaceID, entityTypeDeal, key).Scan(&dealID)
 	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return Deal{}, false, nil
+	}
 	if err != nil {
-		return nil, "", err
+		return Deal{}, false, err
 	}
-	var next string
-	if len(out) > limit {
-		next = out[limit-1].ID
-		out = out[:limit]
+	d, err := s.Get(ctx, dealID, workspaceID)
+	if err != nil {
+		return Deal{}, false, err
 	}
-	return out, next, nil
+	return d, true, nil
 }
 
 // Update applies partial updates. When status moves to won/lost it freezes the FX rate.
@@ -224,6 +178,12 @@ func (s *DealStore) Update(ctx context.Context, id, workspaceID string, updates 
 	}
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.workspace_id', $1, true)`, workspaceID); err != nil {
 		return Deal{}, err
+	}
+
+	if stageID, ok := updates["stage_id"].(string); ok && stageID != "" {
+		if err := s.checkStageInPipeline(ctx, tx, id, workspaceID, stageID); err != nil {
+			return Deal{}, err
+		}
 	}
 
 	newStatus, _ := updates["status"].(string)
@@ -281,6 +241,30 @@ func (s *DealStore) Update(ctx context.Context, id, workspaceID string, updates 
 		return Deal{}, err
 	}
 	return s.Get(ctx, id, workspaceID)
+}
+
+// checkStageInPipeline verifies that stageID belongs to the pipeline the deal
+// identified by id currently sits in, returning errs.ErrStageNotInPipeline if not.
+func (s *DealStore) checkStageInPipeline(ctx context.Context, tx *sql.Tx, id, workspaceID, stageID string) error {
+	var pipelineID string
+	if err := tx.QueryRowContext(ctx, `SELECT pipeline_id FROM deal WHERE id=$1::uuid AND workspace_id=$2::uuid`,
+		id, workspaceID).Scan(&pipelineID); err != nil {
+		return err
+	}
+	var inPipeline bool
+	if err := tx.QueryRowContext(ctx, `
+		SELECT EXISTS(
+			SELECT 1
+			FROM stage
+			WHERE id=$1::uuid AND pipeline_id=$2::uuid AND workspace_id=$3::uuid AND archived_at IS NULL
+		)`,
+		stageID, pipelineID, workspaceID).Scan(&inPipeline); err != nil {
+		return err
+	}
+	if !inPipeline {
+		return errs.ErrStageNotInPipeline
+	}
+	return nil
 }
 
 // freezeDealFX returns the latest FX rate (and its date) for the deal's current

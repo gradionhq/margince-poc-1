@@ -8,6 +8,7 @@ import (
 	"github.com/riverqueue/river"
 
 	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
+	dealtransport "github.com/gradionhq/margince/backend/internal/modules/directory/transport"
 	crmauth "github.com/gradionhq/margince/backend/internal/modules/identity"
 	identitytransport "github.com/gradionhq/margince/backend/internal/modules/identity/transport"
 	peopletransport "github.com/gradionhq/margince/backend/internal/modules/people/transport"
@@ -34,10 +35,10 @@ type routeKit struct {
 // the whole surface.
 //
 // This is the pruned platform+person surface (skeleton harvest): only
-// observability, auth/workspace bootstrap, passports, roles, members, and the
-// /people slice are registered here. The frozen poc's deal/async/export/import,
-// Gmail/Calendar webhook, HubSpot OAuth, approvals inbox, automation, and
-// product surfaces are not wired in this tree.
+// observability, auth/workspace bootstrap, passports, roles, members, the
+// /people slice, and the core /deals CRUD are registered here. The frozen poc's
+// async/export/import, Gmail/Calendar webhook, HubSpot OAuth, approvals inbox,
+// automation, and product surfaces are not wired in this tree.
 func buildMux(ctx context.Context, db *sql.DB, cfg Config, riverClient *river.Client[*sql.Tx]) *http.ServeMux {
 	sessionStore := crmauth.NewSessionStore(db)
 	passportStore := crmauth.NewPassportStore(db)
@@ -111,4 +112,5 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 		mux.Handle(path+"/", wrapped)
 	}
 	crud("/people", httpserver.ObjPerson, peopletransport.NewPersonHandler(directory.NewPersonStore(k.db)))
+	crud("/deals", httpserver.ObjDeal, dealtransport.NewDealHandler(directory.NewDealStore(k.db)))
 }

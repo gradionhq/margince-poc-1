@@ -96,7 +96,7 @@ func (f *fakeOrgStore) List(ctx context.Context, workspaceID, cursor string, lim
 
 type fakeDealStore struct{}
 
-func (f *fakeDealStore) Create(ctx context.Context, d crmcore.Deal) (crmcore.Deal, error) {
+func (f *fakeDealStore) Create(ctx context.Context, d crmcore.Deal, idempotencyKey string) (crmcore.Deal, error) {
 	d.ID = "deal-1"
 	return d, nil
 }

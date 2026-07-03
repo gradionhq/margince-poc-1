@@ -31,7 +31,7 @@ type orgStore interface {
 }
 
 type dealStore interface {
-	Create(ctx context.Context, d Deal) (Deal, error)
+	Create(ctx context.Context, d Deal, idempotencyKey string) (Deal, error)
 	Get(ctx context.Context, id, workspaceID string) (Deal, error)
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (Deal, error)
 	List(ctx context.Context, workspaceID, cursor string, limit int) ([]Deal, string, error)
@@ -139,7 +139,7 @@ func (p *DatasourceProvider) Create(ctx context.Context, in datasource.CreateInp
 		deal.WorkspaceID = p.workspaceID
 		deal.Source = in.Source
 		deal.CapturedBy = in.CapturedBy
-		created, err := p.deals.Create(ctx, deal)
+		created, err := p.deals.Create(ctx, deal, "")
 		if err != nil {
 			return datasource.EntityRef{}, err
 		}

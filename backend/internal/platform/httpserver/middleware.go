@@ -125,6 +125,10 @@ const (
 // admin-perms seed and the /people route wiring.
 const ObjPerson = "person"
 
+// ObjDeal is the canonical RBAC object name for deals, shared by the
+// admin-perms seed and the /deals route wiring.
+const ObjDeal = "deal"
+
 // MethodToAction maps an HTTP method to the canonical RBAC action name.
 func MethodToAction(method string) string {
 	switch strings.ToUpper(method) {

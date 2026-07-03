@@ -25,6 +25,7 @@ type Entry struct {
 	Before            any
 	After             any
 	AuthorizationRule *string
+	Evidence          any // optional structured context (e.g. idempotency key), stored in audit_log.evidence
 }
 
 // EntryFromPrincipal shapes attribution from the ctx Principal:
@@ -90,12 +91,12 @@ func WriteTx(ctx context.Context, tx DBExec, e Entry) (string, error) {
 	err := tx.QueryRowContext(ctx, `
 		INSERT INTO audit_log
 		  (workspace_id, actor_type, actor_id, passport_id, on_behalf_of,
-		   action, entity_type, entity_id, before, after, authorization_rule)
-		VALUES ($1::uuid,$2,$3,$4::uuid,$5::uuid,$6,$7,$8::uuid,$9,$10,$11)
+		   action, entity_type, entity_id, before, after, authorization_rule, evidence)
+		VALUES ($1::uuid,$2,$3,$4::uuid,$5::uuid,$6,$7,$8::uuid,$9,$10,$11,$12)
 		RETURNING id`,
 		e.WorkspaceID, e.ActorType, e.ActorID, e.PassportID, e.OnBehalfOf,
 		e.Action, e.EntityType, e.EntityID, jsonOrNil(e.Before), jsonOrNil(e.After),
-		e.AuthorizationRule).Scan(&auditID)
+		e.AuthorizationRule, jsonOrNil(e.Evidence)).Scan(&auditID)
 	if err != nil {
 		return "", fmt.Errorf("crmaudit insert: %w", err)
 	}
