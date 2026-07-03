@@ -438,6 +438,26 @@ func (s *PersonStore) attachStrength(ctx context.Context, tx *sql.Tx, workspaceI
 	return nil
 }
 
+// StrengthBreakdown returns PO-F-3's full evidence for one person: the
+// literal factor values plus the contributing activities, for the
+// non-black-box evidence read (PO-EXT-2). ErrNotFound if the person doesn't
+// exist or is archived (mirrors Get).
+func (s *PersonStore) StrengthBreakdown(ctx context.Context, id, workspaceID string) (StrengthResult, error) {
+	if _, err := s.Get(ctx, id, workspaceID); err != nil {
+		return StrengthResult{}, err
+	}
+	var result StrengthResult
+	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		byPerson, err := s.strengthActivitiesFor(ctx, tx, workspaceID, []string{id})
+		if err != nil {
+			return err
+		}
+		result = ComputeStrength(time.Now().UTC(), byPerson[id])
+		return nil
+	})
+	return result, err
+}
+
 // Update applies partial updates to a person using optimistic concurrency.
 // When ifMatch==0 the version check is skipped (last-write-wins).
 func (s *PersonStore) Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (Person, error) {

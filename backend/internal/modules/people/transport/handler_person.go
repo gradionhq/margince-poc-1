@@ -52,6 +52,11 @@ func NewPersonHandler(store *directory.PersonStore) *PersonHandler {
 
 // ServeHTTP dispatches on method + path suffix.
 func (h *PersonHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/strength-breakdown") {
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/people/"), "/strength-breakdown")
+		h.strengthBreakdown(w, r, id)
+		return
+	}
 	id := pathID(r.URL.Path, "/people")
 	switch {
 	case r.Method == http.MethodGet && id == "":
@@ -67,6 +72,34 @@ func (h *PersonHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func (h *PersonHandler) strengthBreakdown(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := workspaceID(r)
+	result, err := h.store.StrengthBreakdown(r.Context(), id, wsID)
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	activities := make([]map[string]any, len(result.ContributingActivities))
+	for i, a := range result.ContributingActivities {
+		activities[i] = map[string]any{
+			"id": a.ID, "kind": a.Kind, "subject": a.Subject, "occurred_at": a.OccurredAt,
+		}
+	}
+	jsonOK(w, map[string]any{
+		"person_id":               id,
+		"score":                   result.Score,
+		"bucket":                  result.Bucket,
+		"recency":                 result.Recency,
+		"frequency":               result.Frequency,
+		"reciprocity":             result.Reciprocity,
+		"contributing_activities": activities,
+	})
 }
 
 func (h *PersonHandler) list(w http.ResponseWriter, r *http.Request) {
