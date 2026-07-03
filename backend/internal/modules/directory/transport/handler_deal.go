@@ -96,12 +96,12 @@ func (h *DealHandler) create(w http.ResponseWriter, r *http.Request) {
 	d.OrganizationID = body.OrganizationID
 	d.OwnerID = body.OwnerID
 	if body.ExpectedCloseDate != nil {
-		if t, err := time.Parse("2006-01-02", *body.ExpectedCloseDate); err == nil {
-			d.ExpectedCloseDate = &t
-		} else {
+		t, err := time.Parse("2006-01-02", *body.ExpectedCloseDate)
+		if err != nil {
 			jsonProblem(w, http.StatusBadRequest, "bad_expected_close_date")
 			return
 		}
+		d.ExpectedCloseDate = &t
 	}
 
 	created, err := h.store.Create(r.Context(), d, idemKey)

@@ -18,7 +18,6 @@ import (
 
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
-	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
 func openDealTestDB(t *testing.T) *sql.DB {
@@ -71,10 +70,6 @@ func seedDealFixtures(t *testing.T, db *sql.DB, tag string) (pipelineID, stageID
 		t.Fatalf("seed stage B: %v", err)
 	}
 	return pA, sA, sB
-}
-
-func provenanceForTest(source, capturedBy string) prov.Provenance {
-	return prov.Provenance{Source: source, CapturedBy: capturedBy}
 }
 
 func TestDealHandler_Create_Returns201WithLocationAndHistoryRow(t *testing.T) {
@@ -193,7 +188,7 @@ func TestDealHandler_Update_IfMatchVersionSkew(t *testing.T) {
 	h := NewDealHandler(store)
 
 	d := crmcore.NewDeal("Update-me", pipelineID, stageID,
-		provenanceForTest("test", "human:test"))
+		provenanceOf("test", "human:test"))
 	d.WorkspaceID = dealTestWorkspaceID
 	created, err := store.Create(context.Background(), d, "")
 	if err != nil {
@@ -225,7 +220,7 @@ func TestDealHandler_Update_MalformedIfMatch(t *testing.T) {
 	h := NewDealHandler(store)
 
 	d := crmcore.NewDeal("Malformed-if-match", pipelineID, stageID,
-		provenanceForTest("test", "human:test"))
+		provenanceOf("test", "human:test"))
 	d.WorkspaceID = dealTestWorkspaceID
 	created, err := store.Create(context.Background(), d, "")
 	if err != nil {
@@ -252,7 +247,7 @@ func TestDealHandler_Update_StageNotInPipeline(t *testing.T) {
 	h := NewDealHandler(store)
 
 	d := crmcore.NewDeal("Stage-move", pipelineID, stageID,
-		provenanceForTest("test", "human:test"))
+		provenanceOf("test", "human:test"))
 	d.WorkspaceID = dealTestWorkspaceID
 	created, err := store.Create(context.Background(), d, "")
 	if err != nil {
@@ -278,7 +273,7 @@ func TestDealHandler_Update_HappyPath(t *testing.T) {
 	h := NewDealHandler(store)
 
 	d := crmcore.NewDeal("Happy-update", pipelineID, stageID,
-		provenanceForTest("test", "human:test"))
+		provenanceOf("test", "human:test"))
 	d.WorkspaceID = dealTestWorkspaceID
 	created, err := store.Create(context.Background(), d, "")
 	if err != nil {
@@ -311,7 +306,7 @@ func TestDealHandler_List_FilterAndSort(t *testing.T) {
 	ctx := context.Background()
 
 	fc := "commit"
-	d := crmcore.NewDeal("List me", pipelineID, stageID, provenanceForTest("test", "human:test"))
+	d := crmcore.NewDeal("List me", pipelineID, stageID, provenanceOf("test", "human:test"))
 	d.WorkspaceID = dealTestWorkspaceID
 	d.ForecastCategory = &fc
 	amt := int64(500)
