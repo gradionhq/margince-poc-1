@@ -6,16 +6,17 @@ import "errors"
 
 // The Tier-0 error sentinels; the trailing comment on each is its HTTP status.
 var (
-	ErrNotFound           = errors.New("not found")             // -> 404
-	ErrConflict           = errors.New("conflict")              // -> 409 (dedupe)
-	ErrScopeExceeded      = errors.New("scope exceeded")        // -> 403 (agent <= human)
-	ErrRequiresApproval   = errors.New("requires approval")     // -> 409 (yellow gate)
-	ErrVersionSkew        = errors.New("version skew")          // -> 409 (optimistic concurrency)
-	ErrBudgetExceeded     = errors.New("budget exceeded")       // -> 429
-	ErrForbidden          = errors.New("forbidden")             // -> 403
-	ErrNullProvenance     = errors.New("null provenance")       // -> 422 (capture rejected: missing source/captured_by)
-	ErrStageNotInPipeline = errors.New("stage not in pipeline") // -> 422 (validation)
-	ErrSuppressed         = errors.New("suppressed")            // -> 451 (GDPR erasure suppression)
+	ErrNotFound                  = errors.New("not found")                            // -> 404
+	ErrConflict                  = errors.New("conflict")                             // -> 409 (dedupe)
+	ErrScopeExceeded             = errors.New("scope exceeded")                       // -> 403 (agent <= human)
+	ErrRequiresApproval          = errors.New("requires approval")                    // -> 409 (yellow gate)
+	ErrVersionSkew               = errors.New("version skew")                         // -> 409 (optimistic concurrency)
+	ErrBudgetExceeded            = errors.New("budget exceeded")                      // -> 429
+	ErrForbidden                 = errors.New("forbidden")                            // -> 403
+	ErrNullProvenance            = errors.New("null provenance")                      // -> 422 (capture rejected: missing source/captured_by)
+	ErrStageNotInPipeline        = errors.New("stage not in pipeline")                // -> 422 (validation)
+	ErrTerminalProbabilityPinned = errors.New("terminal stage probability is pinned") // -> 422 (validation: won=100, lost=0)
+	ErrSuppressed                = errors.New("suppressed")                           // -> 451 (GDPR erasure suppression)
 )
 
 // HTTPStatus maps a domain error to its HTTP status code — the single sentinel→status
@@ -37,7 +38,8 @@ func HTTPStatus(err error) int {
 	case errors.Is(err, ErrBudgetExceeded):
 		return 429
 	case errors.Is(err, ErrNullProvenance),
-		errors.Is(err, ErrStageNotInPipeline):
+		errors.Is(err, ErrStageNotInPipeline),
+		errors.Is(err, ErrTerminalProbabilityPinned):
 		return 422
 	case errors.Is(err, ErrSuppressed):
 		return 451

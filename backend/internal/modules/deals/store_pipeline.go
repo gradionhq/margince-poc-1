@@ -9,6 +9,7 @@ import (
 
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/lib/pq"
 )
 
 // ---------------------------------------------------------------------------
@@ -94,16 +95,22 @@ func (s *PipelineStore) List(ctx context.Context, workspaceID, cursor string, li
 	return out, next, nil
 }
 
-// Update applies field updates under optimistic concurrency (ifMatch).
-func (s *PipelineStore) Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (Pipeline, error) {
+// Update applies the RC-1 bounded pipeline update surface inside one tx.
+func (s *PipelineStore) Update(ctx context.Context, id, workspaceID string, updates map[string]any) (Pipeline, error) {
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `
 			UPDATE pipeline
 			SET name       = COALESCE($3, name),
+			    position   = COALESCE($4, position),
+			    is_default = COALESCE($5, is_default),
 			    updated_at = now()
 			WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
-			id, workspaceID, nullStr(updates, "name"))
+			id, workspaceID, nullStr(updates, "name"), nullInt(updates, "position"), nullBool(updates, "is_default"))
 		if err != nil {
+			var pgErr *pq.Error
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.Constraint == "uq_pipeline_default" {
+				return errs.ErrConflict
+			}
 			return err
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
@@ -262,7 +269,12 @@ func (s *StageStore) Update(ctx context.Context, id, workspaceID string, updates
 
 	// Defer unique constraints so position reorder doesn't collide mid-transaction.
 	// Best-effort: if the constraint isn't deferrable, fall back without deferring.
-	_, _ = tx.ExecContext(ctx, `SET CONSTRAINTS uq_stage_position DEFERRED`)
+	_, _ = tx.ExecContext(ctx, `SAVEPOINT stage_update_constraints`)
+	if _, err := tx.ExecContext(ctx, `SET CONSTRAINTS uq_stage_position DEFERRED`); err != nil {
+		_, _ = tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT stage_update_constraints`)
+	} else {
+		_, _ = tx.ExecContext(ctx, `RELEASE SAVEPOINT stage_update_constraints`)
+	}
 
 	setClauses := []string{"updated_at = now()"}
 	args := []any{id, workspaceID}
@@ -277,12 +289,26 @@ func (s *StageStore) Update(ctx context.Context, id, workspaceID string, updates
 		args = append(args, *pos)
 		i++
 	}
+	if wp := nullInt(updates, "win_probability"); wp != nil {
+		setClauses = append(setClauses, fmt.Sprintf("win_probability = $%d", i))
+		args = append(args, *wp)
+		i++
+	}
 
 	//nolint:gosec // G201: setClauses are hardcoded "col = $N" fragments with bound-param indices; all values are passed via args
 	q := fmt.Sprintf(`UPDATE stage SET %s WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
 		strings.Join(setClauses, ", "))
 	res, err := tx.ExecContext(ctx, q, args...)
 	if err != nil {
+		var pgErr *pq.Error
+		if errors.As(err, &pgErr) {
+			switch {
+			case pgErr.Code == "23505" && pgErr.Constraint == "uq_stage_position":
+				return Stage{}, errs.ErrConflict
+			case pgErr.Code == "23514" && pgErr.Constraint == "stage_terminal_prob":
+				return Stage{}, errs.ErrTerminalProbabilityPinned
+			}
+		}
 		return Stage{}, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
