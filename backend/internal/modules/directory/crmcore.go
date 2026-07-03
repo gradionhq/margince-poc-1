@@ -12,20 +12,21 @@ import (
 
 // Person is a contact record (data-model §3.1).
 type Person struct {
-	ID                  string         `json:"id"`
-	WorkspaceID         string         `json:"workspace_id"`
-	FirstName           *string        `json:"first_name"`
-	LastName            *string        `json:"last_name"`
-	FullName            string         `json:"full_name"`
-	Title               *string        `json:"title"`
-	OwnerID             *string        `json:"owner_id"`
-	Social              map[string]any `json:"social"`
-	Address             map[string]any `json:"address"`
-	MergedIntoID        *string        `json:"merged_into_id"`
-	ConvertedFromLeadID *string        `json:"converted_from_lead_id"`
-	Version             int64          `json:"version"`
-	Source              string         `json:"source"`
-	CapturedBy          string         `json:"captured_by"`
+	ID                  string          `json:"id"`
+	WorkspaceID         string          `json:"workspace_id"`
+	FirstName           *string         `json:"first_name"`
+	LastName            *string         `json:"last_name"`
+	FullName            string          `json:"full_name"`
+	Title               *string         `json:"title"`
+	OwnerID             *string         `json:"owner_id"`
+	Social              map[string]any  `json:"social"`
+	Address             map[string]any  `json:"address"`
+	MergedIntoID        *string         `json:"merged_into_id"`
+	ConvertedFromLeadID *string         `json:"converted_from_lead_id"`
+	Version             int64           `json:"version"`
+	Strength            *PersonStrength `json:"strength"`
+	Source              string          `json:"source"`
+	CapturedBy          string          `json:"captured_by"`
 	// Provenance is kept for internal use (audit etc.); not serialised directly.
 	Provenance prov.Provenance `json:"-"`
 	CreatedAt  time.Time       `json:"created_at"`
@@ -152,6 +153,29 @@ func NewPerson(fullName string, p prov.Provenance) Person {
 	return Person{
 		ID: ids.New(), FullName: fullName, Social: map[string]any{},
 		Provenance: p, Source: p.Source, CapturedBy: p.CapturedBy, Version: 1,
+	}
+}
+
+// PersonStrength is the wire shape of PO-EXT-1's relationship-strength block.
+type PersonStrength struct {
+	Score            int     `json:"score"`
+	Bucket           string  `json:"bucket"`
+	Recency          float64 `json:"recency"`
+	Frequency        float64 `json:"frequency"`
+	Reciprocity      float64 `json:"reciprocity"`
+	NoRecentActivity bool    `json:"no_recent_activity,omitempty"`
+}
+
+// personStrengthFrom converts a StrengthResult into the wire PersonStrength,
+// or nil for the no-signal-yet case.
+func personStrengthFrom(r StrengthResult) *PersonStrength {
+	if r.NoSignalYet {
+		return nil
+	}
+	return &PersonStrength{
+		Score: r.Score, Bucket: r.Bucket,
+		Recency: r.Recency, Frequency: r.Frequency, Reciprocity: r.Reciprocity,
+		NoRecentActivity: r.NoRecentActivity,
 	}
 }
 

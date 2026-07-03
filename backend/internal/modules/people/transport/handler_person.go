@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
-	"github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
@@ -37,6 +37,10 @@ const (
 	codeForbidden  = "forbidden"
 	codeBadRequest = "bad_request"
 )
+
+var personSortValues = map[string]bool{
+	"": true, "id": true, "strength": true, "-strength": true,
+}
 
 // PersonHandler routes /people and /people/{id} requests to the PersonStore.
 type PersonHandler struct{ store *directory.PersonStore }
@@ -70,9 +74,14 @@ func (h *PersonHandler) list(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	sort := r.URL.Query().Get("sort")
+	if !personSortValues[sort] {
+		jsonProblem(w, http.StatusUnprocessableEntity, "sort_field_not_allowed")
+		return
+	}
 	cursor := r.URL.Query().Get("cursor")
 	limit := queryLimit(r, 20)
-	items, next, err := h.store.List(r.Context(), wsID, cursor, limit)
+	items, next, err := h.store.List(r.Context(), wsID, cursor, limit, sort)
 	if err != nil {
 		jsonErr(w, err)
 		return
