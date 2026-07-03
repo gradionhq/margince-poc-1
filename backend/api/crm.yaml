@@ -677,14 +677,14 @@ paths:
     get:
       tags: [Deals]
       operationId: getDeal
-      summary: Get a deal by id (the 360 record).
+      summary: "Get a deal's composite 360 read (record + stakeholders + timeline refs) by id."
       x-mcp-tool: { verb: read_record, record_type: deal, tier: green }
       responses:
         '200':
-          description: The deal.
+          description: The deal-360 composite read — record, stakeholders, timeline refs.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Deal' }
+              schema: { $ref: '#/components/schemas/DealDetail' }
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
       tags: [Deals]
@@ -4149,6 +4149,36 @@ components:
       properties:
         data: { type: array, items: { $ref: '#/components/schemas/Deal' } }
         page: { $ref: '#/components/schemas/PageInfo' }
+
+    DealTimelineRef:
+      type: object
+      description: |
+        A timeline reference — activity identity only, never the full body (one
+        composite read must stay light). Mirrors the identity fields of `Activity`.
+      required: [id, kind, occurred_at]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [email, call, meeting, note, task, whatsapp, telegram] }
+        subject: { type: [string, 'null'] }
+        occurred_at: { type: string, format: date-time }
+
+    DealDetail:
+      type: object
+      description: |
+        The deal-360 composite read (DEAL-EXT-3) — one round trip per the
+        one-composite-read doctrine (architecture/frontend.md): the deal record, its
+        stakeholders (person + role), and timeline refs together.
+      required: [deal, stakeholders, timeline]
+      properties:
+        deal: { $ref: '#/components/schemas/Deal' }
+        stakeholders:
+          type: array
+          description: The deal's stakeholder relationships (person + role), DEAL-WIRE-5.
+          items: { $ref: '#/components/schemas/Relationship' }
+        timeline:
+          type: array
+          description: Timeline refs linked to this deal, most recent first.
+          items: { $ref: '#/components/schemas/DealTimelineRef' }
 
     # ---- Pipeline + Stage ----
     Stage:

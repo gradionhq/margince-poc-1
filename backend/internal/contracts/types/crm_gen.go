@@ -1176,6 +1176,39 @@ func (e DealRoomConsentState) Valid() bool {
 	}
 }
 
+// Defines values for DealTimelineRefKind.
+const (
+	DealTimelineRefKindCall     DealTimelineRefKind = "call"
+	DealTimelineRefKindEmail    DealTimelineRefKind = "email"
+	DealTimelineRefKindMeeting  DealTimelineRefKind = "meeting"
+	DealTimelineRefKindNote     DealTimelineRefKind = "note"
+	DealTimelineRefKindTask     DealTimelineRefKind = "task"
+	DealTimelineRefKindTelegram DealTimelineRefKind = "telegram"
+	DealTimelineRefKindWhatsapp DealTimelineRefKind = "whatsapp"
+)
+
+// Valid indicates whether the value is a known member of the DealTimelineRefKind enum.
+func (e DealTimelineRefKind) Valid() bool {
+	switch e {
+	case DealTimelineRefKindCall:
+		return true
+	case DealTimelineRefKindEmail:
+		return true
+	case DealTimelineRefKindMeeting:
+		return true
+	case DealTimelineRefKindNote:
+		return true
+	case DealTimelineRefKindTask:
+		return true
+	case DealTimelineRefKindTelegram:
+		return true
+	case DealTimelineRefKindWhatsapp:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DraftingAssetApprovalState.
 const (
 	DraftingAssetApprovalStateApproved DraftingAssetApprovalState = "approved"
@@ -2090,31 +2123,31 @@ func (e UserStatus) Valid() bool {
 
 // Defines values for ListActivitiesParamsKind.
 const (
-	Call     ListActivitiesParamsKind = "call"
-	Email    ListActivitiesParamsKind = "email"
-	Meeting  ListActivitiesParamsKind = "meeting"
-	Note     ListActivitiesParamsKind = "note"
-	Task     ListActivitiesParamsKind = "task"
-	Telegram ListActivitiesParamsKind = "telegram"
-	Whatsapp ListActivitiesParamsKind = "whatsapp"
+	ListActivitiesParamsKindCall     ListActivitiesParamsKind = "call"
+	ListActivitiesParamsKindEmail    ListActivitiesParamsKind = "email"
+	ListActivitiesParamsKindMeeting  ListActivitiesParamsKind = "meeting"
+	ListActivitiesParamsKindNote     ListActivitiesParamsKind = "note"
+	ListActivitiesParamsKindTask     ListActivitiesParamsKind = "task"
+	ListActivitiesParamsKindTelegram ListActivitiesParamsKind = "telegram"
+	ListActivitiesParamsKindWhatsapp ListActivitiesParamsKind = "whatsapp"
 )
 
 // Valid indicates whether the value is a known member of the ListActivitiesParamsKind enum.
 func (e ListActivitiesParamsKind) Valid() bool {
 	switch e {
-	case Call:
+	case ListActivitiesParamsKindCall:
 		return true
-	case Email:
+	case ListActivitiesParamsKindEmail:
 		return true
-	case Meeting:
+	case ListActivitiesParamsKindMeeting:
 		return true
-	case Note:
+	case ListActivitiesParamsKindNote:
 		return true
-	case Task:
+	case ListActivitiesParamsKindTask:
 		return true
-	case Telegram:
+	case ListActivitiesParamsKindTelegram:
 		return true
-	case Whatsapp:
+	case ListActivitiesParamsKindWhatsapp:
 		return true
 	default:
 		return false
@@ -3204,6 +3237,20 @@ type DealForecastCategory string
 // DealStatus defines model for Deal.Status.
 type DealStatus string
 
+// DealDetail The deal-360 composite read (DEAL-EXT-3) — one round trip per the
+// one-composite-read doctrine (architecture/frontend.md): the deal record, its
+// stakeholders (person + role), and timeline refs together.
+type DealDetail struct {
+	// Deal A deal. Mirrors the `deal` table.
+	Deal Deal `json:"deal"`
+
+	// Stakeholders The deal's stakeholder relationships (person + role), DEAL-WIRE-5.
+	Stakeholders []Relationship `json:"stakeholders"`
+
+	// Timeline Timeline refs linked to this deal, most recent first.
+	Timeline []DealTimelineRef `json:"timeline"`
+}
+
 // DealKPISignals defines model for DealKPISignals.
 type DealKPISignals struct {
 	Signals []KPISignal `json:"signals"`
@@ -3241,6 +3288,18 @@ type DealRoom struct {
 
 // DealRoomConsentState Disclosed-consent state. Publish requires granted.
 type DealRoomConsentState string
+
+// DealTimelineRef A timeline reference — activity identity only, never the full body (one
+// composite read must stay light). Mirrors the identity fields of `Activity`.
+type DealTimelineRef struct {
+	Id         openapi_types.UUID  `json:"id"`
+	Kind       DealTimelineRefKind `json:"kind"`
+	OccurredAt time.Time           `json:"occurred_at"`
+	Subject    *string             `json:"subject,omitempty"`
+}
+
+// DealTimelineRefKind defines model for DealTimelineRef.Kind.
+type DealTimelineRefKind string
 
 // DerivationResult defines model for DerivationResult.
 type DerivationResult struct {

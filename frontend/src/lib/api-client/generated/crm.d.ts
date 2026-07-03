@@ -246,7 +246,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Get a deal by id (the 360 record). */
+        /** Get a deal's composite 360 read (record + stakeholders + timeline refs) by id. */
         get: operations["getDeal"];
         put?: never;
         post?: never;
@@ -2647,6 +2647,31 @@ export interface components {
         DealListResponse: {
             data: components["schemas"]["Deal"][];
             page: components["schemas"]["PageInfo"];
+        };
+        /**
+         * @description A timeline reference — activity identity only, never the full body (one
+         *     composite read must stay light). Mirrors the identity fields of `Activity`.
+         */
+        DealTimelineRef: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "email" | "call" | "meeting" | "note" | "task" | "whatsapp" | "telegram";
+            subject?: string | null;
+            /** Format: date-time */
+            occurred_at: string;
+        };
+        /**
+         * @description The deal-360 composite read (DEAL-EXT-3) — one round trip per the
+         *     one-composite-read doctrine (architecture/frontend.md): the deal record, its
+         *     stakeholders (person + role), and timeline refs together.
+         */
+        DealDetail: {
+            deal: components["schemas"]["Deal"];
+            /** @description The deal's stakeholder relationships (person + role), DEAL-WIRE-5. */
+            stakeholders: components["schemas"]["Relationship"][];
+            /** @description Timeline refs linked to this deal, most recent first. */
+            timeline: components["schemas"]["DealTimelineRef"][];
         };
         /** @description A pipeline stage. Mirrors the `stage` table. */
         Stage: {
@@ -5077,13 +5102,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The deal. */
+            /** @description The deal-360 composite read — record, stakeholders, timeline refs. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Deal"];
+                    "application/json": components["schemas"]["DealDetail"];
                 };
             };
             404: components["responses"]["NotFound"];
