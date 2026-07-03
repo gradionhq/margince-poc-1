@@ -551,6 +551,33 @@ export interface paths {
         patch: operations["updatePipeline"];
         trace?: never;
     };
+    "/pipelines/{id}/rollup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Weighted pipeline value for this pipeline (DEAL-FORM-2), server-computed.
+         * @description Raw and weighted totals over the pipeline's live open deals, decomposed per stage
+         *     and per deal — the totals always equal the sum of the displayed parts
+         *     (reconciliation). Never intended to be client-summed. A missing stored FX rate for
+         *     an open deal in a non-base currency fails the whole read with `422
+         *     fx_rate_unavailable` rather than substituting a rate of 1 (DEAL-WIRE-8).
+         */
+        get: operations["getPipelineRollup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stages": {
         parameters: {
             query?: never;
@@ -2763,6 +2790,63 @@ export interface components {
         PipelineListResponse: {
             data: components["schemas"]["Pipeline"][];
             page: components["schemas"]["PageInfo"];
+        };
+        /**
+         * @description DEAL-FORM-2's weighted pipeline value, scoped to one pipeline: raw and weighted
+         *     totals over live open deals, decomposable per stage and per deal so the displayed
+         *     total always equals the sum of its parts (totals-reconcile-to-parts). A server
+         *     read only — the client never sums these itself (DEAL-EXT-1).
+         */
+        PipelineRollup: {
+            /** Format: uuid */
+            pipeline_id: string;
+            /**
+             * Format: int64
+             * @description Σ base_value(deal) over live open deals in this pipeline (DEAL-FORM-2).
+             */
+            unweighted_minor: number;
+            /**
+             * Format: int64
+             * @description Σ weighted_value(deal) over live open deals in this pipeline (DEAL-FORM-2).
+             */
+            weighted_minor: number;
+            /** @description workspace.base_currency. */
+            base_currency: string;
+            /**
+             * Format: date
+             * @description The date this roll-up was computed.
+             */
+            as_of_date: string;
+            /** @description Per-stage (per-column) decomposition; sums to the totals above. */
+            by_stage: components["schemas"]["PipelineRollupStage"][];
+            /** @description Per-deal breakdown for "Explain This Number"; sums to the totals above. */
+            breakdown: components["schemas"]["PipelineRollupDeal"][];
+        };
+        PipelineRollupStage: {
+            /** Format: uuid */
+            stage_id: string;
+            /** Format: int64 */
+            unweighted_minor: number;
+            /** Format: int64 */
+            weighted_minor: number;
+            deal_count: number;
+        };
+        /** @description One row of DEAL-FORM-2's per-deal breakdown. */
+        PipelineRollupDeal: {
+            /** Format: uuid */
+            deal_id: string;
+            /**
+             * Format: int64
+             * @description base_value(deal) — minor units in base currency (DEAL-FORM-2).
+             */
+            base_value: number;
+            /** @description Read live from the deal's current stage.win_probability (0-100). */
+            win_probability: number;
+            /**
+             * Format: int64
+             * @description round(base_value * win_probability / 100), half away from zero.
+             */
+            weighted_value: number;
         };
         ActivityLink: {
             /** Format: uuid */
@@ -5650,6 +5734,41 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+        };
+    };
+    getPipelineRollup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The pipeline's weighted roll-up. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineRollup"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description A stored FX rate is unavailable for an open deal's currency. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     listStages: {

@@ -1084,6 +1084,45 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  /pipelines/{id}/rollup:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Pipelines]
+      operationId: getPipelineRollup
+      summary: Weighted pipeline value for this pipeline (DEAL-FORM-2), server-computed.
+      description: |
+        Raw and weighted totals over the pipeline's live open deals, decomposed per stage
+        and per deal — the totals always equal the sum of the displayed parts
+        (reconciliation). Never intended to be client-summed. A missing stored FX rate for
+        an open deal in a non-base currency fails the whole read with `422
+        fx_rate_unavailable` rather than substituting a rate of 1 (DEAL-WIRE-8).
+      responses:
+        '200':
+          description: The pipeline's weighted roll-up.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PipelineRollup' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: A stored FX rate is unavailable for an open deal's currency.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                fxUnavailable:
+                  value:
+                    type: 'https://errors.margince.com/fx_rate_unavailable'
+                    title: FX rate unavailable
+                    status: 422
+                    code: fx_rate_unavailable
+                    detail: No stored FX rate for USD as of 2026-06-04.
+                    details:
+                      currency: USD
+                      as_of: '2026-06-04'
+
   # ------------------------------ /stages -----------------------------------
   /stages:
     get:
@@ -4266,6 +4305,62 @@ components:
       properties:
         data: { type: array, items: { $ref: '#/components/schemas/Pipeline' } }
         page: { $ref: '#/components/schemas/PageInfo' }
+
+    PipelineRollup:
+      type: object
+      description: |
+        DEAL-FORM-2's weighted pipeline value, scoped to one pipeline: raw and weighted
+        totals over live open deals, decomposable per stage and per deal so the displayed
+        total always equals the sum of its parts (totals-reconcile-to-parts). A server
+        read only — the client never sums these itself (DEAL-EXT-1).
+      required: [pipeline_id, unweighted_minor, weighted_minor, base_currency, as_of_date, by_stage, breakdown]
+      properties:
+        pipeline_id: { type: string, format: uuid }
+        unweighted_minor:
+          type: integer
+          format: int64
+          description: Σ base_value(deal) over live open deals in this pipeline (DEAL-FORM-2).
+        weighted_minor:
+          type: integer
+          format: int64
+          description: Σ weighted_value(deal) over live open deals in this pipeline (DEAL-FORM-2).
+        base_currency: { type: string, pattern: '^[A-Z]{3}$', description: workspace.base_currency. }
+        as_of_date: { type: string, format: date, description: The date this roll-up was computed. }
+        by_stage:
+          type: array
+          description: Per-stage (per-column) decomposition; sums to the totals above.
+          items: { $ref: '#/components/schemas/PipelineRollupStage' }
+        breakdown:
+          type: array
+          description: Per-deal breakdown for "Explain This Number"; sums to the totals above.
+          items: { $ref: '#/components/schemas/PipelineRollupDeal' }
+
+    PipelineRollupStage:
+      type: object
+      required: [stage_id, unweighted_minor, weighted_minor, deal_count]
+      properties:
+        stage_id: { type: string, format: uuid }
+        unweighted_minor: { type: integer, format: int64 }
+        weighted_minor: { type: integer, format: int64 }
+        deal_count: { type: integer }
+
+    PipelineRollupDeal:
+      type: object
+      description: One row of DEAL-FORM-2's per-deal breakdown.
+      required: [deal_id, base_value, win_probability, weighted_value]
+      properties:
+        deal_id: { type: string, format: uuid }
+        base_value:
+          type: integer
+          format: int64
+          description: base_value(deal) — minor units in base currency (DEAL-FORM-2).
+        win_probability:
+          type: integer
+          description: Read live from the deal's current stage.win_probability (0-100).
+        weighted_value:
+          type: integer
+          format: int64
+          description: round(base_value * win_probability / 100), half away from zero.
 
     # ---- Activity + link ----
     ActivityLink:

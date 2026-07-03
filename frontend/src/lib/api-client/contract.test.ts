@@ -175,3 +175,45 @@ describe("DealDetail contract compliance (DEAL-EXT-3)", () => {
     expect(detail.timeline[0].kind).toBe("email");
   });
 });
+
+describe("PipelineRollup contract compliance (DEAL-EXT-1)", () => {
+  it("matches DEAL-FORM-2's shape plus per-stage and per-deal breakdowns", () => {
+    const rollup: components["schemas"]["PipelineRollup"] = {
+      pipeline_id: "00000000-0000-0000-0000-000000000020",
+      unweighted_minor: 14_600_000,
+      weighted_minor: 9_680_000,
+      base_currency: "EUR",
+      as_of_date: "2026-06-04",
+      by_stage: [
+        {
+          stage_id: "00000000-0000-0000-0000-000000000021",
+          unweighted_minor: 10_000_000,
+          weighted_minor: 6_000_000,
+          deal_count: 1,
+        },
+      ],
+      breakdown: [
+        {
+          deal_id: "00000000-0000-0000-0000-000000000010",
+          base_value: 10_000_000,
+          win_probability: 60,
+          weighted_value: 6_000_000,
+        },
+      ],
+    };
+    expect(rollup.unweighted_minor).toBe(14_600_000);
+    expect(rollup.weighted_minor).toBe(9_680_000);
+    expect(rollup.breakdown[0].weighted_value).toBe(6_000_000);
+  });
+
+  it("fx_rate_unavailable Problem carries currency + as_of in details", () => {
+    const problem: components["schemas"]["Problem"] = {
+      status: 422,
+      code: "fx_rate_unavailable",
+      details: { currency: "USD", as_of: "2026-06-04" },
+    };
+    expect(problem.code).toBe("fx_rate_unavailable");
+    expect(problem.details?.currency).toBe("USD");
+    expect(problem.details?.as_of).toBe("2026-06-04");
+  });
+});

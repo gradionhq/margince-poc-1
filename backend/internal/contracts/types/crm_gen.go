@@ -4057,6 +4057,52 @@ type PipelineListResponse struct {
 	Page PageInfo   `json:"page"`
 }
 
+// PipelineRollup DEAL-FORM-2's weighted pipeline value, scoped to one pipeline: raw and weighted
+// totals over live open deals, decomposable per stage and per deal so the displayed
+// total always equals the sum of its parts (totals-reconcile-to-parts). A server
+// read only — the client never sums these itself (DEAL-EXT-1).
+type PipelineRollup struct {
+	// AsOfDate The date this roll-up was computed.
+	AsOfDate openapi_types.Date `json:"as_of_date"`
+
+	// BaseCurrency workspace.base_currency.
+	BaseCurrency string `json:"base_currency"`
+
+	// Breakdown Per-deal breakdown for "Explain This Number"; sums to the totals above.
+	Breakdown []PipelineRollupDeal `json:"breakdown"`
+
+	// ByStage Per-stage (per-column) decomposition; sums to the totals above.
+	ByStage    []PipelineRollupStage `json:"by_stage"`
+	PipelineId openapi_types.UUID    `json:"pipeline_id"`
+
+	// UnweightedMinor Σ base_value(deal) over live open deals in this pipeline (DEAL-FORM-2).
+	UnweightedMinor int64 `json:"unweighted_minor"`
+
+	// WeightedMinor Σ weighted_value(deal) over live open deals in this pipeline (DEAL-FORM-2).
+	WeightedMinor int64 `json:"weighted_minor"`
+}
+
+// PipelineRollupDeal One row of DEAL-FORM-2's per-deal breakdown.
+type PipelineRollupDeal struct {
+	// BaseValue base_value(deal) — minor units in base currency (DEAL-FORM-2).
+	BaseValue int64              `json:"base_value"`
+	DealId    openapi_types.UUID `json:"deal_id"`
+
+	// WeightedValue round(base_value * win_probability / 100), half away from zero.
+	WeightedValue int64 `json:"weighted_value"`
+
+	// WinProbability Read live from the deal's current stage.win_probability (0-100).
+	WinProbability int `json:"win_probability"`
+}
+
+// PipelineRollupStage defines model for PipelineRollupStage.
+type PipelineRollupStage struct {
+	DealCount       int                `json:"deal_count"`
+	StageId         openapi_types.UUID `json:"stage_id"`
+	UnweightedMinor int64              `json:"unweighted_minor"`
+	WeightedMinor   int64              `json:"weighted_minor"`
+}
+
 // Problem RFC 7807 problem+json with a stable machine `code` and structured `details`.
 type Problem struct {
 	// Code Stable machine-readable error code (e.g. duplicate_email, validation_error).
