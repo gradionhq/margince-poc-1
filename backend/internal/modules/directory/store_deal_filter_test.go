@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
@@ -60,21 +61,21 @@ func seedFilterFixture(t *testing.T) filterTestFixtures {
 		t.Fatal("seed org2:", err)
 	}
 
-	pstore := NewPipelineStore(db)
-	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsFilterTest, Name: "FilterTest " + uniq()})
+	pstore := deals.NewPipelineStore(db)
+	pl, err := pstore.Create(ctx, deals.Pipeline{WorkspaceID: wsFilterTest, Name: "FilterTest " + uniq()})
 	if err != nil {
 		t.Fatal("seed pipeline:", err)
 	}
 
-	sstore := NewStageStore(db)
-	stA, err := sstore.Create(ctx, Stage{
+	sstore := deals.NewStageStore(db)
+	stA, err := sstore.Create(ctx, deals.Stage{
 		WorkspaceID: wsFilterTest, PipelineID: pl.ID,
 		Name: "StageA", Position: 1, Semantic: "open", WinProbability: 30,
 	})
 	if err != nil {
 		t.Fatal("seed stageA:", err)
 	}
-	stB, err := sstore.Create(ctx, Stage{
+	stB, err := sstore.Create(ctx, deals.Stage{
 		WorkspaceID: wsFilterTest, PipelineID: pl.ID,
 		Name: "StageB", Position: 2, Semantic: "open", WinProbability: 60,
 	})
@@ -548,13 +549,13 @@ func TestDealListFilter_P95AndExplain(t *testing.T) {
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsKanbanP95})
 	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
 
-	pstore := NewPipelineStore(db)
-	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsKanbanP95, Name: "P95 " + uniq()})
+	pstore := deals.NewPipelineStore(db)
+	pl, err := pstore.Create(ctx, deals.Pipeline{WorkspaceID: wsKanbanP95, Name: "P95 " + uniq()})
 	if err != nil {
 		t.Fatal("seed pipeline:", err)
 	}
-	sstore := NewStageStore(db)
-	st, err := sstore.Create(ctx, Stage{
+	sstore := deals.NewStageStore(db)
+	st, err := sstore.Create(ctx, deals.Stage{
 		WorkspaceID: wsKanbanP95, PipelineID: pl.ID,
 		Name: "KanbanCol", Position: 1, Semantic: "open", WinProbability: 50,
 	})

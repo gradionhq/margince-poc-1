@@ -60,6 +60,8 @@ components:
   identitytransport: { in: internal/modules/identity/transport }
   directory:         { in: internal/modules/directory }
   dealtransport:     { in: internal/modules/directory/transport }
+  deals:             { in: internal/modules/deals }
+  dealstransport:    { in: internal/modules/deals/transport }
   people:            { in: internal/modules/people/transport }
   contracts:         { in: internal/contracts/types }
   gdpr:              { in: internal/modules/gdpr }
@@ -103,6 +105,9 @@ deps:
   directory:
     mayDependOn: [crmctx, datasource, ids, errs, prov, audit]
     canUse: [pq]
+  deals:
+    mayDependOn: [crmctx, errs, ids]
+    canUse: [pq]
   # people is the person-specific HTTP transport layer only (handler_person.go);
   # it depends on directory for the Person type/store (see directory's note
   # above) plus the Tier-0 kernel bits its handler uses directly.
@@ -113,6 +118,13 @@ deps:
   # the Tier-0 kernel bits its handler uses directly.
   dealtransport:
     mayDependOn: [directory, crmctx, errs, prov]
+  # dealstransport is the pipeline/stage module's HTTP transport layer
+  # (handler_pipeline.go, handler_stage.go, T10); same shape as
+  # dealtransport/people above — depends on deals for the
+  # Pipeline/Stage type/store plus the Tier-0 kernel bits its handlers use
+  # directly.
+  dealstransport:
+    mayDependOn: [deals, crmctx, errs, prov]
   gdpr:
     mayDependOn: [crmctx, audit, ids]
     canUse: [river]

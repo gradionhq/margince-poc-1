@@ -1,4 +1,4 @@
-package crmcore
+package deals
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 )
 

@@ -13,6 +13,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
 	"github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/ports/datasource"
@@ -117,10 +118,10 @@ func TestDatasourceIntegrationAdvanceDeal(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a pipeline and a stage so deal FKs are valid.
-	pipelines := crmcore.NewPipelineStore(db)
-	stages := crmcore.NewStageStore(db)
+	pipelines := deals.NewPipelineStore(db)
+	stages := deals.NewStageStore(db)
 
-	pl, err := pipelines.Create(ctx, crmcore.Pipeline{
+	pl, err := pipelines.Create(ctx, deals.Pipeline{
 		WorkspaceID: wsID,
 		Name:        "test-pipeline",
 		IsDefault:   false,
@@ -130,7 +131,7 @@ func TestDatasourceIntegrationAdvanceDeal(t *testing.T) {
 		t.Fatalf("create pipeline: %v", err)
 	}
 
-	st, err := stages.Create(ctx, crmcore.Stage{
+	st, err := stages.Create(ctx, deals.Stage{
 		WorkspaceID:    wsID,
 		PipelineID:     pl.ID,
 		Name:           "Prospecting",

@@ -1,5 +1,5 @@
 // Package crmcore is the Tier-1 domain core: person, organization, deal,
-// pipeline, stage, activity, lead. Implements the datasource.Provider seam.
+// activity, lead. Implements the datasource.Provider seam.
 // Imports only Tier-0 seams (ADR-0014).
 package crmcore
 
@@ -54,32 +54,6 @@ type Organization struct {
 	CreatedAt  time.Time       `json:"created_at"`
 	UpdatedAt  time.Time       `json:"updated_at"`
 	ArchivedAt *time.Time      `json:"archived_at"`
-}
-
-// Pipeline is a named sales pipeline (data-model §6.1).
-type Pipeline struct {
-	ID          string     `json:"id"`
-	WorkspaceID string     `json:"workspace_id"`
-	Name        string     `json:"name"`
-	IsDefault   bool       `json:"is_default"`
-	Position    int        `json:"position"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	ArchivedAt  *time.Time `json:"archived_at"`
-}
-
-// Stage is one step in a Pipeline (data-model §6.2).
-type Stage struct {
-	ID             string     `json:"id"`
-	WorkspaceID    string     `json:"workspace_id"`
-	PipelineID     string     `json:"pipeline_id"`
-	Name           string     `json:"name"`
-	Position       int        `json:"position"`
-	Semantic       string     `json:"semantic"` // open | won | lost
-	WinProbability int        `json:"win_probability"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
-	ArchivedAt     *time.Time `json:"archived_at"`
 }
 
 // Deal is a sales opportunity (data-model §6.3).
