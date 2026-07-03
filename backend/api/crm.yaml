@@ -357,6 +357,28 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  /people/{id}/strength-breakdown:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [People]
+      operationId: getPersonStrengthBreakdown
+      summary: Get the evidence behind a person's relationship-strength score (PO-EXT-2).
+      description: |
+        Returns the contributing activity ids and factor values behind `Person.strength` —
+        serves the AC-person-3/4 evidence drawer. Read-only; new operation, does not modify
+        `strength`'s scoring itself.
+      x-mcp-tool: { verb: read_record, record_type: person, tier: green }
+      responses:
+        '200':
+          description: The strength-breakdown evidence for this person.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PersonStrengthBreakdown' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # --------------------------- /organizations -------------------------------
   /organizations:
     get:
@@ -3867,6 +3889,40 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         archived_at: { type: [string, 'null'], format: date-time }
+        strength:
+          type: [object, 'null']
+          readOnly: true
+          description: |
+            PO-EXT-1 relationship-strength block — present on both list rows and detail
+            reads. Server-computed from interaction recency/frequency/reciprocity; null
+            until a score has been computed for this person. `bucket` mirrors PO-PARAM-3's
+            display thresholds (0-24 weak · 25-59 moderate · 60-100 strong).
+          properties:
+            score: { type: integer, minimum: 0, maximum: 100 }
+            bucket: { type: string, enum: [weak, moderate, strong] }
+            recency: { type: number }
+            frequency: { type: number }
+            reciprocity: { type: number }
+          required: [score, bucket, recency, frequency, reciprocity]
+        relationships:
+          type: array
+          readOnly: true
+          description: |
+            PO-EXT-3 person-360 composite read — this person's relationship edges
+            (employment, deal-stakeholder roles, etc.). Populated on the single-record read
+            (`getPerson`); omitted on list rows (`listPeople`) for payload economy, mirroring
+            the existing readOnly composite fields already on `Deal`.
+          items: { $ref: '#/components/schemas/Relationship' }
+        deals:
+          type: array
+          readOnly: true
+          description: PO-EXT-3 — deals this person is a stakeholder on. Populated on `getPerson` only.
+          items: { $ref: '#/components/schemas/Deal' }
+        activities:
+          type: array
+          readOnly: true
+          description: PO-EXT-3 — timeline activity refs linked to this person, most recent first. Populated on `getPerson` only.
+          items: { $ref: '#/components/schemas/ActivityRef' }
       additionalProperties: true
       x-extension: true
       x-extension-note: |
@@ -3979,6 +4035,24 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         archived_at: { type: [string, 'null'], format: date-time }
+        relationships:
+          type: array
+          readOnly: true
+          description: |
+            PO-EXT-3 organization-360 composite read — this org's relationship edges
+            (employment, partner edges). Populated on the single-record read
+            (`getOrganization`); omitted on list rows (`listOrganizations`).
+          items: { $ref: '#/components/schemas/Relationship' }
+        deals:
+          type: array
+          readOnly: true
+          description: PO-EXT-3 — deals attributed to this organization. Populated on `getOrganization` only.
+          items: { $ref: '#/components/schemas/Deal' }
+        activities:
+          type: array
+          readOnly: true
+          description: PO-EXT-3 — timeline activity refs linked to this organization, most recent first. Populated on `getOrganization` only.
+          items: { $ref: '#/components/schemas/ActivityRef' }
       additionalProperties: true
       x-extension: true
 
@@ -4086,6 +4160,40 @@ components:
       properties:
         data: { type: array, items: { $ref: '#/components/schemas/Relationship' } }
         page: { $ref: '#/components/schemas/PageInfo' }
+
+    # ---- Composite/evidence reads (PO-EXT-2/3) ----
+    ActivityRef:
+      type: object
+      description: |
+        A lightweight activity identity reference — id/kind/subject/occurred_at only, never
+        the full body (one composite/evidence read must stay light per the
+        one-composite-read doctrine). Mirrors DealTimelineRef's shape, generalized beyond
+        deals for person/org composite reads and the strength-breakdown evidence list.
+      required: [id, kind, occurred_at]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [email, call, meeting, note, task, whatsapp, telegram] }
+        subject: { type: [string, 'null'] }
+        occurred_at: { type: string, format: date-time }
+
+    PersonStrengthBreakdown:
+      type: object
+      description: |
+        Contributing evidence behind a person's relationship-strength score (PO-EXT-2) —
+        the factor values plus the interaction activities that produced them, serving the
+        AC-person-3/4 evidence drawer.
+      required: [person_id, score, bucket, recency, frequency, reciprocity, contributing_activities]
+      properties:
+        person_id: { type: string, format: uuid }
+        score: { type: integer, minimum: 0, maximum: 100 }
+        bucket: { type: string, enum: [weak, moderate, strong] }
+        recency: { type: number }
+        frequency: { type: number }
+        reciprocity: { type: number }
+        contributing_activities:
+          type: array
+          description: The interaction activities behind this score, most recent first.
+          items: { $ref: '#/components/schemas/ActivityRef' }
 
     # ---- Deal ----
     Deal:

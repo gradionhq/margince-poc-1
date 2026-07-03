@@ -75,6 +75,119 @@ describe("Person contract compliance", () => {
   });
 });
 
+describe("Person.strength contract compliance (PO-EXT-1)", () => {
+  it("carries score/bucket/recency/frequency/reciprocity, optional and nullable", () => {
+    const withStrength: Person = {
+      id: "00000000-0000-0000-0000-000000000001",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      full_name: "Alice Müller",
+      source: "test",
+      captured_by: "human:test",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      strength: {
+        score: 72,
+        bucket: "strong",
+        recency: 0.9,
+        frequency: 0.6,
+        reciprocity: 0.8,
+      },
+    };
+    expect(withStrength.strength?.score).toBe(72);
+    expect(withStrength.strength?.bucket).toBe("strong");
+
+    const withoutStrength: Person = {
+      id: "00000000-0000-0000-0000-000000000003",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      full_name: "Bob Null",
+      source: "test",
+      captured_by: "human:test",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+    };
+    expect(withoutStrength.strength).toBeUndefined();
+  });
+});
+
+describe("PersonStrengthBreakdown contract compliance (PO-EXT-2)", () => {
+  it("carries factor values plus contributing activity refs", () => {
+    const breakdown: components["schemas"]["PersonStrengthBreakdown"] = {
+      person_id: "00000000-0000-0000-0000-000000000001",
+      score: 72,
+      bucket: "strong",
+      recency: 0.9,
+      frequency: 0.6,
+      reciprocity: 0.8,
+      contributing_activities: [
+        {
+          id: "00000000-0000-0000-0000-000000000040",
+          kind: "email",
+          subject: "Re: proposal",
+          occurred_at: "2025-06-01T09:00:00Z",
+        },
+      ],
+    };
+    expect(breakdown.bucket).toBe("strong");
+    expect(breakdown.contributing_activities).toHaveLength(1);
+    expect(breakdown.contributing_activities[0].kind).toBe("email");
+  });
+});
+
+describe("Person/Organization 360 composite reads (PO-EXT-3)", () => {
+  it("Person carries relationships/deals/activities in one round trip via getPerson's Person shape", () => {
+    const person360: Person = {
+      id: "00000000-0000-0000-0000-000000000001",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      full_name: "Alice Müller",
+      source: "test",
+      captured_by: "human:test",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      relationships: [
+        {
+          id: "00000000-0000-0000-0000-000000000030",
+          workspace_id: "00000000-0000-0000-0000-000000000002",
+          kind: "employment",
+          source: "test",
+          captured_by: "human:test",
+          created_at: "2025-01-01T00:00:00Z",
+          updated_at: "2025-01-01T00:00:00Z",
+        },
+      ],
+      deals: [],
+      activities: [
+        {
+          id: "00000000-0000-0000-0000-000000000040",
+          kind: "email",
+          subject: "Re: proposal",
+          occurred_at: "2025-06-01T09:00:00Z",
+        },
+      ],
+    };
+    expect(person360.relationships).toHaveLength(1);
+    expect(person360.relationships?.[0].kind).toBe("employment");
+    expect(person360.activities?.[0].kind).toBe("email");
+  });
+
+  it("Organization carries the same three composite arrays", () => {
+    const org360: components["schemas"]["Organization"] = {
+      id: "00000000-0000-0000-0000-000000000050",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      display_name: "Acme Inc",
+      source: "test",
+      captured_by: "human:test",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      relationships: [],
+      deals: [],
+      activities: [],
+    };
+    expect(org360.relationships).toEqual([]);
+    expect(org360.deals).toEqual([]);
+    expect(org360.activities).toEqual([]);
+  });
+});
+
 describe("restoreDeal contract compliance", () => {
   it("200 response schema is Deal with a nullable archived_at", () => {
     const restored: Deal = {
