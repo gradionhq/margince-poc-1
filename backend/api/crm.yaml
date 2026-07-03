@@ -3867,6 +3867,21 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         archived_at: { type: [string, 'null'], format: date-time }
+        strength:
+          type: [object, 'null']
+          readOnly: true
+          description: |
+            PO-EXT-1 relationship-strength block — present on both list rows and detail
+            reads. Server-computed from interaction recency/frequency/reciprocity; null
+            until a score has been computed for this person. `bucket` mirrors PO-PARAM-3's
+            display thresholds (0-24 weak · 25-59 moderate · 60-100 strong).
+          properties:
+            score: { type: integer, minimum: 0, maximum: 100 }
+            bucket: { type: string, enum: [weak, moderate, strong] }
+            recency: { type: number }
+            frequency: { type: number }
+            reciprocity: { type: number }
+          required: [score, bucket, recency, frequency, reciprocity]
       additionalProperties: true
       x-extension: true
       x-extension-note: |

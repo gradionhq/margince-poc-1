@@ -2280,6 +2280,20 @@ export interface components {
             updated_at: string;
             /** Format: date-time */
             archived_at?: string | null;
+            /**
+             * @description PO-EXT-1 relationship-strength block — present on both list rows and detail
+             *     reads. Server-computed from interaction recency/frequency/reciprocity; null
+             *     until a score has been computed for this person. `bucket` mirrors PO-PARAM-3's
+             *     display thresholds (0-24 weak · 25-59 moderate · 60-100 strong).
+             */
+            readonly strength?: {
+                score: number;
+                /** @enum {string} */
+                bucket: "weak" | "moderate" | "strong";
+                recency: number;
+                frequency: number;
+                reciprocity: number;
+            } | null;
         } & {
             [key: string]: unknown;
         };

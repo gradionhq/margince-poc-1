@@ -1638,6 +1638,27 @@ func (e PartnerPartnerRole) Valid() bool {
 	}
 }
 
+// Defines values for PersonStrengthBucket.
+const (
+	Moderate PersonStrengthBucket = "moderate"
+	Strong   PersonStrengthBucket = "strong"
+	Weak     PersonStrengthBucket = "weak"
+)
+
+// Valid indicates whether the value is a known member of the PersonStrengthBucket enum.
+func (e PersonStrengthBucket) Valid() bool {
+	switch e {
+	case Moderate:
+		return true
+	case Strong:
+		return true
+	case Weak:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PersonConsentStateState.
 const (
 	PersonConsentStateStateGranted   PersonConsentStateState = "granted"
@@ -4024,6 +4045,18 @@ type Person struct {
 	Social *map[string]interface{} `json:"social,omitempty"`
 	Source string                  `json:"source"`
 
+	// Strength PO-EXT-1 relationship-strength block — present on both list rows and detail
+	// reads. Server-computed from interaction recency/frequency/reciprocity; null
+	// until a score has been computed for this person. `bucket` mirrors PO-PARAM-3's
+	// display thresholds (0-24 weak · 25-59 moderate · 60-100 strong).
+	Strength *struct {
+		Bucket      PersonStrengthBucket `json:"bucket"`
+		Frequency   float32              `json:"frequency"`
+		Recency     float32              `json:"recency"`
+		Reciprocity float32              `json:"reciprocity"`
+		Score       int                  `json:"score"`
+	} `json:"strength,omitempty"`
+
 	// Title Denormalized current title; authoritative title is on the employment relationship.
 	Title     *string   `json:"title,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -4037,6 +4070,9 @@ type Person struct {
 	WorkspaceId          openapi_types.UUID     `json:"workspace_id"`
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
+
+// PersonStrengthBucket defines model for Person.Strength.Bucket.
+type PersonStrengthBucket string
 
 // PersonConsentState A person's current consent for one purpose.
 type PersonConsentState struct {
@@ -8128,6 +8164,14 @@ func (a *Person) UnmarshalJSON(b []byte) error {
 		delete(object, "source")
 	}
 
+	if raw, found := object["strength"]; found {
+		err = json.Unmarshal(raw, &a.Strength)
+		if err != nil {
+			return fmt.Errorf("error reading 'strength': %w", err)
+		}
+		delete(object, "strength")
+	}
+
 	if raw, found := object["title"]; found {
 		err = json.Unmarshal(raw, &a.Title)
 		if err != nil {
@@ -8286,6 +8330,13 @@ func (a Person) MarshalJSON() ([]byte, error) {
 	object["source"], err = json.Marshal(a.Source)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'source': %w", err)
+	}
+
+	if a.Strength != nil {
+		object["strength"], err = json.Marshal(a.Strength)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'strength': %w", err)
+		}
 	}
 
 	if a.Title != nil {

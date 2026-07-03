@@ -75,6 +75,40 @@ describe("Person contract compliance", () => {
   });
 });
 
+describe("Person.strength contract compliance (PO-EXT-1)", () => {
+  it("carries score/bucket/recency/frequency/reciprocity, optional and nullable", () => {
+    const withStrength: Person = {
+      id: "00000000-0000-0000-0000-000000000001",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      full_name: "Alice Müller",
+      source: "test",
+      captured_by: "human:test",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      strength: {
+        score: 72,
+        bucket: "strong",
+        recency: 0.9,
+        frequency: 0.6,
+        reciprocity: 0.8,
+      },
+    };
+    expect(withStrength.strength?.score).toBe(72);
+    expect(withStrength.strength?.bucket).toBe("strong");
+
+    const withoutStrength: Person = {
+      id: "00000000-0000-0000-0000-000000000003",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      full_name: "Bob Null",
+      source: "test",
+      captured_by: "human:test",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+    };
+    expect(withoutStrength.strength).toBeUndefined();
+  });
+});
+
 describe("restoreDeal contract compliance", () => {
   it("200 response schema is Deal with a nullable archived_at", () => {
     const restored: Deal = {
