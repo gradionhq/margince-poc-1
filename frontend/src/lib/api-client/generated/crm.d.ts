@@ -2555,6 +2555,19 @@ export interface components {
             last_activity_at?: string | null;
             /** @description Derived — no activity past the threshold (absolute duration). */
             readonly stalled?: boolean;
+            /**
+             * Format: date-time
+             * @description Timestamp the deal entered its current stage — the `changed_at` of the most
+             *     recent `deal_stage_history` row for this deal (DEAL-DDL-4). Derived, not a
+             *     stored `deal` column; every deal has one via the creation-writes-history-row
+             *     rule (DEAL-AC-H1), so this is never null for a live deal.
+             */
+            readonly stage_entered_at?: string | null;
+            /**
+             * @description Count of live `deal_stakeholder` `relationship` rows for this deal
+             *     (DEAL-WIRE-5). Derived, not a stored `deal` column.
+             */
+            readonly stakeholder_count?: number;
             source: string;
             captured_by: string;
             raw?: {
@@ -4980,6 +4993,11 @@ export interface operations {
                 status?: "open" | "won" | "lost";
                 /** @description Deterministic stalled flag (no activity past the threshold). */
                 stalled?: boolean;
+                /**
+                 * @description Reverse lookup — deals where this person is a stakeholder (a live
+                 *     `deal_stakeholder` relationship row), per DEAL-AC-10.
+                 */
+                person_id?: string;
             };
             header?: never;
             path?: never;

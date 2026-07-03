@@ -92,3 +92,41 @@ describe("restoreDeal contract compliance", () => {
     expect(restored.archived_at).toBeNull();
   });
 });
+
+describe("Deal row-extension contract compliance (DEAL-EXT-2)", () => {
+  it("stage_entered_at is an optional nullable date-time", () => {
+    const deal: Deal = {
+      id: "00000000-0000-0000-0000-000000000010",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      name: "Acme — expansion",
+      pipeline_id: "00000000-0000-0000-0000-000000000020",
+      stage_id: "00000000-0000-0000-0000-000000000021",
+      status: "open",
+      source: "test",
+      captured_by: "human:test",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      stage_entered_at: "2025-06-01T09:00:00Z",
+      stakeholder_count: 3,
+    };
+    expect(typeof deal.stage_entered_at).toBe("string");
+    expect(typeof deal.stakeholder_count).toBe("number");
+  });
+
+  it("both fields are optional (absent on a minimal Deal)", () => {
+    const minimal: Deal = {
+      id: "00000000-0000-0000-0000-000000000011",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      name: "Acme — bare",
+      pipeline_id: "00000000-0000-0000-0000-000000000020",
+      stage_id: "00000000-0000-0000-0000-000000000021",
+      status: "open",
+      source: "test",
+      captured_by: "human:test",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+    };
+    expect(minimal.stage_entered_at).toBeUndefined();
+    expect(minimal.stakeholder_count).toBeUndefined();
+  });
+});

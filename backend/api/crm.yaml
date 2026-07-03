@@ -603,6 +603,12 @@ paths:
           in: query
           schema: { type: boolean }
           description: Deterministic stalled flag (no activity past the threshold).
+        - name: person_id
+          in: query
+          schema: { type: string, format: uuid }
+          description: |
+            Reverse lookup — deals where this person is a stakeholder (a live
+            `deal_stakeholder` relationship row), per DEAL-AC-10.
       responses:
         '200':
           description: A page of deals.
@@ -4068,6 +4074,21 @@ components:
         closed_at: { type: [string, 'null'], format: date-time }
         last_activity_at: { type: [string, 'null'], format: date-time, description: Drives the deterministic stalled flag. }
         stalled: { type: boolean, readOnly: true, description: Derived — no activity past the threshold (absolute duration). }
+        stage_entered_at:
+          type: [string, 'null']
+          format: date-time
+          readOnly: true
+          description: |
+            Timestamp the deal entered its current stage — the `changed_at` of the most
+            recent `deal_stage_history` row for this deal (DEAL-DDL-4). Derived, not a
+            stored `deal` column; every deal has one via the creation-writes-history-row
+            rule (DEAL-AC-H1), so this is never null for a live deal.
+        stakeholder_count:
+          type: integer
+          readOnly: true
+          description: |
+            Count of live `deal_stakeholder` `relationship` rows for this deal
+            (DEAL-WIRE-5). Derived, not a stored `deal` column.
         source: { type: string }
         captured_by: { type: string }
         raw: { type: [object, 'null'], additionalProperties: true }

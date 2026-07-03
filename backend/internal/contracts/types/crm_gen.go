@@ -3167,8 +3167,18 @@ type Deal struct {
 	Raw          *map[string]interface{} `json:"raw,omitempty"`
 	Source       string                  `json:"source"`
 
+	// StageEnteredAt Timestamp the deal entered its current stage — the `changed_at` of the most
+	// recent `deal_stage_history` row for this deal (DEAL-DDL-4). Derived, not a
+	// stored `deal` column; every deal has one via the creation-writes-history-row
+	// rule (DEAL-AC-H1), so this is never null for a live deal.
+	StageEnteredAt *time.Time `json:"stage_entered_at,omitempty"`
+
 	// StageId Must belong to pipeline_id.
 	StageId openapi_types.UUID `json:"stage_id"`
+
+	// StakeholderCount Count of live `deal_stakeholder` `relationship` rows for this deal
+	// (DEAL-WIRE-5). Derived, not a stored `deal` column.
+	StakeholderCount *int `json:"stakeholder_count,omitempty"`
 
 	// Stalled Derived — no activity past the threshold (absolute duration).
 	Stalled   *bool      `json:"stalled,omitempty"`
@@ -4806,6 +4816,10 @@ type ListDealsParams struct {
 
 	// Stalled Deterministic stalled flag (no activity past the threshold).
 	Stalled *bool `form:"stalled,omitempty" json:"stalled,omitempty"`
+
+	// PersonId Reverse lookup — deals where this person is a stakeholder (a live
+	// `deal_stakeholder` relationship row), per DEAL-AC-10.
+	PersonId *openapi_types.UUID `form:"person_id,omitempty" json:"person_id,omitempty"`
 }
 
 // ListDealsParamsStatus defines parameters for ListDeals.
@@ -6611,12 +6625,28 @@ func (a *Deal) UnmarshalJSON(b []byte) error {
 		delete(object, "source")
 	}
 
+	if raw, found := object["stage_entered_at"]; found {
+		err = json.Unmarshal(raw, &a.StageEnteredAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'stage_entered_at': %w", err)
+		}
+		delete(object, "stage_entered_at")
+	}
+
 	if raw, found := object["stage_id"]; found {
 		err = json.Unmarshal(raw, &a.StageId)
 		if err != nil {
 			return fmt.Errorf("error reading 'stage_id': %w", err)
 		}
 		delete(object, "stage_id")
+	}
+
+	if raw, found := object["stakeholder_count"]; found {
+		err = json.Unmarshal(raw, &a.StakeholderCount)
+		if err != nil {
+			return fmt.Errorf("error reading 'stakeholder_count': %w", err)
+		}
+		delete(object, "stakeholder_count")
 	}
 
 	if raw, found := object["stalled"]; found {
@@ -6814,9 +6844,23 @@ func (a Deal) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("error marshaling 'source': %w", err)
 	}
 
+	if a.StageEnteredAt != nil {
+		object["stage_entered_at"], err = json.Marshal(a.StageEnteredAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'stage_entered_at': %w", err)
+		}
+	}
+
 	object["stage_id"], err = json.Marshal(a.StageId)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'stage_id': %w", err)
+	}
+
+	if a.StakeholderCount != nil {
+		object["stakeholder_count"], err = json.Marshal(a.StakeholderCount)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'stakeholder_count': %w", err)
+		}
 	}
 
 	if a.Stalled != nil {
