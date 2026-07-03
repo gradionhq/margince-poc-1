@@ -1,0 +1,118 @@
+version: 3
+# Margince module DAG (architecture/01-module-dag.md, ADR-0014, docs/quality/craftsmanship.md §2.3).
+# A module reaches another only through a Tier-0 seam; never another module's internals.
+#
+# Hardened per the code-quality operating model (§2.3):
+#  - No blanket allow.depOnAnyVendor. Vendor edges are explicit: each component lists the
+#    vendors it may use via `canUse`, so an incumbent SDK (e.g. an LLM client, hubspot) in
+#    crm-ai/crm-agents is a build failure, not a silent allow.
+#  - The per-file test-exemption list (which grew to ~40 entries and shrank the checked
+#    surface) is collapsed to ONE rule: `*_test.go` is out of the production DAG graph.
+#    Production (non-test) cross-layer edges remain fully checked — that is the real signal.
+#    Integration tests living in external `_test` packages necessarily wire sibling modules
+#    to exercise the real pipeline; that is test composition, not a production dependency.
+excludeFiles:
+  - ".*_test\\.go$"
+  # cmd/api is the composition root (main package), not a DAG-governed component — same
+  # scope as pre-merge, when it lived in the separate cmd/server module this file never
+  # scanned (1c module merge, task-2-brief.md: "keep scope identical").
+  - "/cmd/api/.*\\.go$"
+allow:
+  deepScan: false        # init()-based self-registration triggers false positives in deepScan
+# Vendor allow-list (replaces depOnAnyVendor). A component may import only the vendors named
+# in its `canUse`. Production usage as of this commit; extend deliberately when a real new
+# dependency lands (the slopsquatting/incumbent-SDK guard, §3.4 T9).
+vendors:
+  pq:      { in: "github.com/lib/pq" }
+  river:   { in: "github.com/riverqueue/river**" }
+  redis:   { in: "github.com/redis/go-redis**" }
+  migrate: { in: "github.com/golang-migrate/migrate**" }
+  oapi:    { in: "github.com/oapi-codegen/runtime**" }
+  minio:   { in: "github.com/minio/minio-go**" }
+  uuid:    { in: "github.com/google/uuid" }
+  yaml:    { in: "gopkg.in/yaml.v3" }
+  crypto:  { in: "golang.org/x/crypto**" }
+components:
+  # Tier-0 shared kernel (dependency-free leaf layer)
+  obs:          { in: internal/shared/kernel/obs }
+  crmctx:       { in: internal/shared/kernel/crmctx }
+  ids:          { in: internal/shared/kernel/ids }
+  errs:         { in: internal/shared/apperrors }
+  prov:         { in: internal/shared/kernel/prov }
+  trust:        { in: internal/shared/kernel/trust }
+  # Tier-0 ports (cross-module seam interfaces)
+  wellknown:    { in: internal/shared/ports/wellknown }
+  datasource:   { in: internal/shared/ports/datasource }
+  mcp:          { in: internal/shared/ports/mcp }
+  connector:    { in: internal/shared/ports/connector }
+  workflow:     { in: internal/shared/ports/workflow }
+  model:        { in: internal/shared/ports/model }
+  retrieval:    { in: internal/shared/ports/retrieval }
+  jurisdiction: { in: pkg/jurisdiction }
+  migrate:      { in: internal/shared/ports/migrate }
+  # Tier-1 platform (seams WITH impls, cross-cutting)
+  blobstore:  { in: internal/platform/blobstore }
+  keyvault:   { in: internal/platform/keyvault }
+  audit:      { in: internal/platform/audit }
+  httpserver: { in: internal/platform/httpserver }
+  # Tier-1 / Tier-2 domain modules
+  identity:          { in: internal/modules/identity }
+  identitytransport: { in: internal/modules/identity/transport }
+  directory:         { in: internal/modules/directory }
+  people:            { in: internal/modules/people/transport }
+  contracts:         { in: internal/contracts/types }
+  gdpr:              { in: internal/modules/gdpr }
+  approvals:         { in: internal/modules/approvals }
+deps:
+  # Tier-0 seams + kernel are not listed -> may depend on nothing internal.
+  # Exception: datasource aliases errs.ErrVersionSkew (ADR-0036/B-E18.1a) — both are Tier-0.
+  datasource:
+    mayDependOn: [errs, trust]
+  migrate:
+    mayDependOn: [jurisdiction]
+    canUse: [migrate, pq]
+  ids:
+    canUse: [uuid]
+  blobstore:
+    canUse: [minio]
+  identity:
+    mayDependOn: [keyvault]
+    canUse: [crypto]
+  # httpserver (extracted from cmd/api, 1c restructure) wraps auth/session
+  # middleware, so it depends on identity the same way cmd/api used to; its
+  # RFC 7807 problem writer emits the generated contract's Problem type.
+  httpserver:
+    mayDependOn: [crmctx, obs, identity, contracts]
+  # identitytransport (extracted from cmd/api, 1c restructure) is the identity
+  # module's HTTP handler layer: it depends on the shared error/middleware
+  # writer (httpserver), the identity domain, audit (role-assignment writes),
+  # and the Tier-0 kernel bits its handlers use directly. canUse: [pq] mirrors
+  # cmd/api's own blank `_ "github.com/lib/pq"` driver-registration import,
+  # carried over unchanged from auth_handler.go's original poc file.
+  identitytransport:
+    mayDependOn: [httpserver, identity, audit, crmctx, ids]
+    canUse: [pq]
+  audit:
+    mayDependOn: [crmctx, ids]
+  # directory is core's successor for the un-mounted spine (org/deal/pipeline/
+  # stage/activity/lead) plus the Person entity/store (see task-3-report.md's
+  # mapping-deviations: Person could not cleanly split out into modules/people
+  # without forcing unexported same-package access in Lead.Promote and
+  # DatasourceProvider to become exported, which this task does not authorize).
+  directory:
+    mayDependOn: [crmctx, datasource, ids, errs, prov, audit]
+    canUse: [pq]
+  # people is the person-specific HTTP transport layer only (handler_person.go);
+  # it depends on directory for the Person type/store (see directory's note
+  # above) plus the Tier-0 kernel bits its handler uses directly.
+  people:
+    mayDependOn: [directory, crmctx, errs, prov]
+  gdpr:
+    mayDependOn: [crmctx, audit, ids]
+    canUse: [river]
+  approvals:
+    mayDependOn: [mcp, datasource, audit, errs, ids]
+    canUse: [river]
+  # contracts is generated and imports only the oapi-codegen runtime.
+  contracts:
+    canUse: [oapi]

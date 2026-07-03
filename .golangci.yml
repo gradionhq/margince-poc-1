@@ -1,0 +1,142 @@
+# Margince T1 linter ruleset — the deterministic taste/correctness gate.
+# Normative implementation of architecture/18-code-quality-operating-model.md §3.
+# Architect-owned; changes are ADR-traceable. CI + `make lint` run THIS committed
+# config (never a developer's local defaults). golangci-lint v2 schema.
+version: "2"
+
+run:
+  build-tags:
+    - integration
+    - liveuat
+
+linters:
+  # Default set is disabled; we enable exactly the §3 table so the ruleset is explicit.
+  default: none
+  enable:
+    # --- §3.1 idiom (gofumpt/gci/godot live under `formatters:` in v2) ---
+    - revive          # configurable idiom: exported-without-comment, early-return, naming
+    - gocritic        # idiom & diagnostics: ifElseChain, sprintfQuotedString, rangeValCopy
+    - staticcheck     # v2 folds in stylecheck (ST*) + gosimple: doc comments, receiver names, godoc
+    # --- §3.2 complexity & size (the god-file / god-func guards) ---
+    - funlen          # max function length
+    - cyclop          # cyclomatic complexity per func
+    - gocognit        # cognitive complexity
+    - maintidx        # maintainability-index floor
+    - dupl            # copy-paste blocks
+    - nestif          # deeply nested if
+    # --- §3.3 correctness & safety ---
+    - errcheck        # no unchecked / `_`-discarded errors
+    - rowserrcheck    # rows.Err() checked after Next() loops
+    - sqlclosecheck   # *sql.Rows / *sql.Stmt always closed
+    - bodyclose       # HTTP response bodies closed
+    - noctx           # no HTTP/DB call without a context
+    - gosec           # SAST incl. G201/G202 SQL string-building
+    - contextcheck    # context propagated, not dropped to Background()
+    - forcetypeassert # no unchecked x.(T)
+    - nilnil          # no return nil, nil
+    - nilerr          # no return nil after a non-nil err
+    - govet           # the compiler-adjacent vet suite (shadow off by default)
+    # --- §3.4 anti-slop & taste-adjacent ---
+    - forbidigo       # project blocklist (see settings)
+    - depguard        # import allow/deny + slopsquatting guard
+    - goconst         # repeated literals -> named const
+    - unparam         # unused function parameters (speculative API)
+    - unused          # dead/speculative code, unreferenced "for future use" exports
+    - ireturn         # accept interfaces, return structs
+    - tagliatelle     # struct-tag case consistency (json/db)
+    - predeclared     # no shadowing of len/error/etc.
+    # --- §3.5 config discipline ---
+    - nolintlint      # a bare //nolint is itself a failure
+
+  settings:
+    funlen:
+      lines: 80          # §3.2 ~60-80 LOC
+      statements: 50
+      ignore-comments: true
+    cyclop:
+      max-complexity: 15
+    gocognit:
+      min-complexity: 30
+    maintidx:
+      under: 20
+    dupl:
+      threshold: 150
+    nestif:
+      min-complexity: 5
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+      ignore-tests: true   # test-string repetition should not force a production constant
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment   # memory-layout micro-opt; not a §3 concern
+        - shadow           # high-noise; revive/idiom covers the real cases
+    gosec:
+      excludes:
+        - G115             # int conversion overflow — pervasive false positives on DB ids
+    revive:
+      rules:
+        - name: exported
+        - name: blank-imports
+        - name: context-as-argument
+        - name: early-return
+        - name: confusing-naming
+        - name: unreachable-code
+        - name: redefines-builtin-id
+    staticcheck:
+      # v2: ST* (ex-stylecheck) checks live here. §3.1 / §4: package & exported-symbol
+      # doc comments, receiver-name consistency, godoc grammar.
+      checks:
+        - all
+    ireturn:
+      allow:
+        - error
+        - empty
+        - stdlib
+        - generic
+    tagliatelle:
+      case:
+        rules:
+          json: snake
+          yaml: snake
+        use-field-name: false
+    forbidigo:
+      analyze-types: true
+      forbid:
+        # §3.4 / §4: slog over fmt.Print*, no panic in libraries, no http.Error for JSON,
+        # no context.Background() off the request root.
+        - pattern: '^fmt\.Print.*$'
+          msg: "use slog, not fmt.Print* (architecture/18 §3.4)"
+        - pattern: '^http\.Error$'
+          msg: "ship JSON via httperr.Write, not http.Error (architecture/18 §4)"
+    depguard:
+      rules:
+        # Slopsquatting / dependency-hygiene guard (§3.4 T9). Boundary edges are
+        # enforced by go-arch-lint (§2.3); depguard here is the import-policy net.
+        main:
+          list-mode: lax
+          deny:
+            - pkg: "github.com/pkg/errors"
+              desc: "use stdlib errors + %w wrapping (architecture/11 §1)"
+
+  exclusions:
+    generated: lax
+    rules:
+      # Generated contract/codegen output is not hand-written; exempt from taste linters.
+      - path: '(_gen|\.gen)\.go$'
+        linters: [funlen, cyclop, gocognit, maintidx, dupl, revive, staticcheck, goconst, unparam]
+      # Tests: relax size/dup/return-style noise that does not reflect on test quality.
+      - path: '_test\.go$'
+        linters: [funlen, cyclop, gocognit, maintidx, dupl, goconst, ireturn, forcetypeassert, errcheck, gosec, contextcheck, noctx]
+
+formatters:
+  enable:
+    - gofumpt   # §3.1 stricter-than-gofmt
+    - gci       # §4: stdlib / third-party / intra-repo import grouping
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - localmodule

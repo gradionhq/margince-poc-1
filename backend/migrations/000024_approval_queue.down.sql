@@ -1,0 +1,5 @@
+ALTER TABLE audit_log DROP CONSTRAINT IF EXISTS audit_log_action_check;
+ALTER TABLE audit_log ADD  CONSTRAINT audit_log_action_check
+  CHECK (action IN ('create','update','archive','merge','promote','restore',
+                    'export','erase','login','assign','advance_stage','capture'));
+DROP TABLE IF EXISTS approval_item;

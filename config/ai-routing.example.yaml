@@ -1,0 +1,69 @@
+# ai-routing.yaml — Margince AI tier routing configuration
+#
+# profile: selects the active deployment profile.
+#   eu_hosted      — Margince-managed EU cloud (data stays in EU).
+#   cloud_frontier — customer-supplied BYOK cloud API (full capability).
+#   sovereign      — all inference forced to a LocalOnly tier; zero external egress.
+#
+# tiers: named capability tiers. Each tier maps to a provider adapter.
+#   provider: fake | cloud | local
+#   model:     provider-specific model name (e.g. gemma2, mistral-7b-eu)
+#   api_key:   BYOK API key (cloud provider only)
+#   endpoint:  base URL override (cloud or local Ollama/vLLM endpoint)
+#   embed_dims: expected embedding vector dimensions
+#
+# tasks: per-task routing rules.
+#   tier:     primary tier name (must exist in tiers)
+#   fallback: ordered fallback ladder (each must exist in tiers)
+#
+# Under profile: sovereign, every task is forced to the first LocalOnly tier
+# found in its [tier, fallback...] ladder. If none exists there, the first
+# LocalOnly tier defined anywhere in tiers is used. If no LocalOnly tier is
+# defined at all, startup fails (sovereign with no local tier is a misconfiguration).
+
+profile: cloud_frontier
+
+tiers:
+  # L-S: lightweight / fast — cheap summarization, triage, low-stakes classification
+  L-S:
+    provider: fake
+    model: small-fast
+    embed_dims: 768
+
+  # C-C: cost-controlled cloud — balanced quality/cost for most CRM enrichment
+  C-C:
+    provider: cloud
+    model: cost-efficient-model
+    api_key: ${AI_CC_API_KEY}
+    embed_dims: 1536
+
+  # P-F: premium frontier — highest capability for complex drafting, analysis
+  P-F:
+    provider: cloud
+    model: premium-frontier-model
+    api_key: ${AI_PF_API_KEY}
+    embed_dims: 3072
+
+  # L-L: local-only — self-hosted Ollama/vLLM; zero external egress (required for sovereign)
+  L-L:
+    provider: local
+    model: gemma2
+    endpoint: http://127.0.0.1:11434
+    embed_dims: 768
+
+tasks:
+  classify_lead:
+    tier: C-C
+    fallback: [L-S]
+
+  draft_summary:
+    tier: P-F
+    fallback: [C-C, L-S]
+
+  embed_record:
+    tier: L-L
+    fallback: []
+
+  enrich_contact:
+    tier: C-C
+    fallback: [L-S]

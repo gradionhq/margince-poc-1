@@ -1,0 +1,7 @@
+# oapi-codegen config for Margince contract types (models only).
+# Fed the DERIVED 3.0 spec (down-converted + disambiguated); see scripts/gen-types.sh.
+package: types
+generate:
+  models: true
+output-options:
+  skip-prune: true

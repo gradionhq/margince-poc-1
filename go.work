@@ -1,0 +1,8 @@
+go 1.26
+
+use (
+	./backend
+	./cli/craft
+	./cli/crm-gen
+	./crm-de
+)

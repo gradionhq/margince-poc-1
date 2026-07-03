@@ -1,0 +1,134 @@
+name: CI
+
+# CI runs the gate suite on every push to main and on pull requests. Draft PRs are
+# skipped per-job: the dark-factory swarm pushes many WIP commits to a draft PR during
+# implementation, and running the suite on each is waste. Marking a PR ready
+# (`ready_for_review`) fires the full suite once on the final state, and every fix
+# pushed while ready re-runs it until green. Push events to main carry no PR context
+# (`draft` is null), so the per-job guard falls through to true and main is always checked.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # ready_for_review is what makes CI fire when a draft PR is marked ready.
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+# The craftsmanship gate (gate-2) runs ONLY after the deterministic gates (gate-1)
+# are green, via `needs`. Gate ordering is the deterministic gates -> craftsmanship
+# -> human acceptance (foundation architecture/16). See docs/quality/craftsmanship.md.
+jobs:
+  deterministic-gates:
+    name: deterministic-gates
+    # Skip draft PRs; push to main and ready-for-review PRs run the full suite.
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5  # v5.5.0
+        with:
+          go-version: "1.26"
+      # Interim gate-1: the deterministic, container-stable gates — gofmt + vet
+      # repo-wide, the craftsmanship-doc presence gate, and the craft module's own
+      # tests. The full `make check` (codegen drift, arch-lint, jurisdiction
+      # fitness, frontend, SAST, and the repo-wide test suite — which needs
+      # `git config init.defaultBranch=main` for the cli/swarm tests) is wired by
+      # B-EP08.1/.2/.22. The craftsmanship job below `needs` this, so the gate-1
+      # -> gate-2 ordering invariant holds either way.
+      - name: deterministic Go gates
+        run: make check-craft-doc fmt-check vet
+      - name: craft module tests
+        run: cd cli/craft && go test ./...
+      - name: Reproducible build check
+        run: |
+          make build
+          cp bin/server bin/server.first
+          make build
+          if ! diff -q bin/server bin/server.first; then
+            echo "Build is NOT reproducible — binary differs across runs" >&2
+            exit 1
+          fi
+          echo "Build is reproducible"
+
+  craftsmanship:
+    name: craftsmanship
+    # Gate ordering: craftsmanship runs only after the deterministic gates are green.
+    needs: [deterministic-gates]
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    # Advisory until the golden set calibrates BLOCK precision (B-EP11.6); flipped
+    # to a required, no-override check in Phase 4. `continue-on-error` keeps it
+    # non-blocking while it is being calibrated and avoids wedging the very PRs
+    # that build the gate.
+    continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5  # v5.5.0
+        with:
+          go-version: "1.26"
+      - name: build craft
+        run: cd cli/craft && go build -o "$RUNNER_TEMP/craft" .
+      - name: review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          "$RUNNER_TEMP/craft" review \
+            --base "origin/$BASE_REF" \
+            --head HEAD --root . > "$RUNNER_TEMP/result.json"
+          cat "$RUNNER_TEMP/result.json"
+      - name: post inline comments (MAJOR/MINOR non-blocking)
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: scripts/craft-comment.sh "$RUNNER_TEMP/result.json" "$PR_NUMBER"
+      - name: verdict (exit non-zero on BLOCK)
+        run: |
+          "$RUNNER_TEMP/craft" verdict --result "$RUNNER_TEMP/result.json"
+
+  # DCO: every commit in an external PR must be signed off (CONTRIBUTING.md).
+  # Deterministic and merge-blocking. Runs on PRs (external contributors); on a
+  # push to main the range is empty and it passes.
+  dco:
+    name: dco
+    runs-on: ubuntu-latest
+    # PR-only (a push to main has an empty commit range); skip drafts.
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    # Advisory until activation (Phase 4), like the craftsmanship job: until the
+    # build agents + contributors adopt `git commit -s`, a missing sign-off should
+    # not show as a hard build failure. Flipped to required with branch protection.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: DCO sign-off check
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: scripts/check-dco.sh "origin/$BASE_REF" HEAD
+
+  # The residue gate is deterministic (no model) — it belongs with the structural
+  # gates and is merge-blocking, not advisory: a CRAFT-FIX/CRAFT-DISPUTE marker
+  # left in the tree fails the merge. This is what makes the markers leak-proof.
+  craft-residue:
+    name: craft-residue
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    needs: [deterministic-gates]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5  # v5.5.0
+        with:
+          go-version: "1.26"
+      - name: build craft
+        run: cd cli/craft && go build -o "$RUNNER_TEMP/craft" .
+      - name: residue gate
+        run: |
+          "$RUNNER_TEMP/craft" residue --root .

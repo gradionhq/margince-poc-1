@@ -1,0 +1,3 @@
+BEGIN;
+DROP VIEW IF EXISTS search_corpus;
+COMMIT;

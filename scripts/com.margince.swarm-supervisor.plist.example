@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd unit for the durable swarm supervisor (macOS).
+
+  Setup:
+    1. cp this file to ~/Library/LaunchAgents/com.margince.swarm-supervisor.plist
+    2. Replace ABSOLUTE_REPO_PATH below with your repo root (e.g. /Users/you/.../margince-poc).
+    3. launchctl load ~/Library/LaunchAgents/com.margince.swarm-supervisor.plist
+    4. Stop gracefully: `bin/supervisor stop` (or `touch ABSOLUTE_REPO_PATH/.swarm-STOP`) —
+       the loop exits between iterations; then `launchctl unload ...` to stop relaunching.
+
+  Requires bin/supervisor to be built (`make supervisor`). KeepAlive relaunches ONLY
+  on a crash (non-zero exit); a clean exit (STOP / frontier exhausted) does NOT relaunch.
+  bin/supervisor has its own poll-backoff loop, so launchd is only a crash backstop.
+  Watch the dashboard at http://localhost:8787.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.margince.swarm-supervisor</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>ABSOLUTE_REPO_PATH/bin/supervisor</string>
+    <string>run</string>
+    <string>--serve</string>
+    <string>--port</string><string>8787</string>
+    <string>--model</string><string>opus</string>
+    <string>--backoff</string><string>25m</string>
+    <string>--max-iters</string><string>50</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>ABSOLUTE_REPO_PATH</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- claude/gh read auth from the user's home; ensure PATH includes their bins -->
+    <key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>ABSOLUTE_REPO_PATH/.tmp/swarm-supervisor/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>ABSOLUTE_REPO_PATH/.tmp/swarm-supervisor/launchd.err.log</string>
+</dict>
+</plist>

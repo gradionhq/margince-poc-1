@@ -1,0 +1,28 @@
+// Full generated surface — consumers that need deep path/operations access
+export type { paths, operations, components } from "./crm.js";
+
+// Named schema aliases — the everyday types
+import type { components as C } from "./crm.js";
+export type Problem             = C["schemas"]["Problem"];
+export type PageInfo            = C["schemas"]["PageInfo"];
+export type Provenance          = C["schemas"]["Provenance"];
+export type Person              = C["schemas"]["Person"];
+export type CreatePersonRequest = C["schemas"]["CreatePersonRequest"];
+export type UpdatePersonRequest = C["schemas"]["UpdatePersonRequest"];
+export type PersonListResponse  = C["schemas"]["PersonListResponse"];
+export type Organization              = C["schemas"]["Organization"];
+export type CreateOrganizationRequest = C["schemas"]["CreateOrganizationRequest"];
+export type OrganizationListResponse  = C["schemas"]["OrganizationListResponse"];
+export type Deal              = C["schemas"]["Deal"];
+export type CreateDealRequest = C["schemas"]["CreateDealRequest"];
+export type DealListResponse  = C["schemas"]["DealListResponse"];
+export type Activity              = C["schemas"]["Activity"];
+export type CreateActivityRequest = C["schemas"]["CreateActivityRequest"];
+export type ActivityListResponse  = C["schemas"]["ActivityListResponse"];
+export type Approval              = C["schemas"]["Approval"];
+export type ApprovalListResponse  = C["schemas"]["ApprovalListResponse"];
+export type Role               = C["schemas"]["Role"];
+export type Member             = C["schemas"]["Member"];
+export type MemberListResponse = C["schemas"]["MemberListResponse"];
+export type RoleListResponse   = C["schemas"]["RoleListResponse"];
+export type AssignRoleRequest  = C["schemas"]["AssignRoleRequest"];

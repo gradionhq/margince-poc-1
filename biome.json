@@ -1,0 +1,21 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.1/schema.json",
+  "files": {
+    "includes": [
+      "frontend/**/*.ts",
+      "frontend/**/*.tsx",
+      "**/*.json",
+      "!**/node_modules",
+      "!**/.tmp",
+      "!**/dist",
+      "!**/.claude",
+      "!frontend/storybook-static",
+      "!frontend/.shots",
+      "!swarm/superpowers/backlog",
+      "!**/testdata",
+      "!frontend/src/lib/api-client/generated"
+    ]
+  },
+  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2 },
+  "linter": { "enabled": true }
+}

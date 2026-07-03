@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_connector_secret_connection_id_fk;

@@ -1,0 +1,77 @@
+/*
+ * Ledger-Green brand override layer
+ *
+ * Overrides Gradion Forge's --gf-* tokens with Margince's brand palette
+ * (ADR-0040, Ledger-Green). Imported in index.css AFTER the two @shared/token
+ * imports so this layer wins the cascade. Do not edit vendor/forge/*.tgz.
+ *
+ * This file is the single source of brand truth — raw brand hex is allowed
+ * here exactly as in Forge's own variables.css. The ds-purity scanner
+ * excludes this file from its hex-literal check (it is the definition, not a
+ * consumer). All other frontend/src files must use var(--gf-*) tokens.
+ */
+
+/* ─── Light theme ─────────────────────────────────────────────────────────── */
+:root {
+  /* Surfaces */
+  --gf-bg-page:     #FBFCFB;
+  --gf-bg-elevated: #ffffff;
+  --gf-bg-card:     #EEF1F0;
+  --gf-bg-hover:    #F3F6F4;
+  --gf-bg-rail:     #13231D;
+
+  /* Brand accent — Ledger emerald */
+  --gf-accent:       #0B7A53;
+  --gf-accent-light: rgba(11,122,83,.09);
+  --gf-accent-med:   rgba(11,122,83,.17);
+
+  /* Text */
+  --gf-text-primary:   #15201B;
+  --gf-text-content:   #36433D;
+  --gf-text-secondary: #68756E;
+  --gf-text-tertiary:  #9AA6A0;
+  --gf-text-muted:     #CBD2CD;
+
+  /* Borders */
+  --gf-border-subtle: #E5E9E7;
+  --gf-border-strong: #D2D8D4;
+
+  /* Signal / status tokens — spec §2 exact values */
+  --gf-online: #22c55e;
+  --gf-teal:   #0E7490;
+  --gf-away:   #fbbf24;
+  --gf-dnd:    #ef4444;
+
+  /* Confidence scale (EP09 §4.2) — distinct from autonomy/presence signal. */
+  --gf-confidence-high: #22c55e;
+  --gf-confidence-med:  #fbbf24;
+  --gf-confidence-low:  #ef4444;
+}
+
+@layer utilities {
+  .bg-gf-confidence-high { background-color: var(--gf-confidence-high); }
+  .bg-gf-confidence-med  { background-color: var(--gf-confidence-med); }
+  .bg-gf-confidence-low  { background-color: var(--gf-confidence-low); }
+}
+
+/* ─── Dark theme ──────────────────────────────────────────────────────────── */
+/*
+ * Strategy: reuse Forge's complete .dark cascade for all neutral/surface/
+ * tooltip/shadow/status tokens (Forge's .dark block flips those correctly).
+ * This override re-declares ONLY the brand tokens — accent, accent-light/med,
+ * and rail — on top of Forge's dark neutrals, so no light token is stranded
+ * and no surface hex is invented here.
+ *
+ * Toggle: both `data-theme="dark"` AND `.dark` must be set on <html>
+ * (Storybook decorator handles this; see frontend/.storybook/preview.ts).
+ */
+[data-theme="dark"],
+.dark {
+  /* Brand accent — lighter green for contrast on dark surfaces */
+  --gf-accent:       #16A34A;
+  --gf-accent-light: color-mix(in srgb, var(--gf-accent) 12%, transparent);
+  --gf-accent-med:   color-mix(in srgb, var(--gf-accent) 20%, transparent);
+
+  /* Rail stays deep ink-green in both themes */
+  --gf-bg-rail: #13231D;
+}
