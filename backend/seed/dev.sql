@@ -162,11 +162,11 @@ ON CONFLICT (id) DO NOTHING;
 -- Gives the stakeholders-per-deal cross-object report + its "Explain This Number"
 -- drill-through a non-empty result to resolve (swarm/manual-test/b-e09-9.md Step 4).
 
-INSERT INTO relationship (id, workspace_id, kind, person_id, deal_id, source, captured_by)
+INSERT INTO relationship (id, workspace_id, kind, person_id, deal_id, role, source, captured_by)
 VALUES
   ('00000000-0000-0000-0043-000000000001', '00000000-0000-0000-0000-000000000001',
    'deal_stakeholder', '00000000-0000-0000-0001-000000000001',
-   '00000000-0000-0000-0042-000000000001', 'seed', 'human:dev')
+   '00000000-0000-0000-0042-000000000001', 'champion', 'seed', 'human:dev')
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── Audit log rows (E11-P7 UAT seed) ──────────────────────
