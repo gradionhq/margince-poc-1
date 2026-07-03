@@ -3,6 +3,7 @@ import type {
   PageInfo,
   Person,
   PersonListResponse,
+  Deal,
 } from "./generated/index.js";
 
 describe("PersonListResponse contract compliance", () => {
@@ -70,5 +71,24 @@ describe("Person contract compliance", () => {
 
   it("phones is optional and absent when not set", () => {
     expect(minimalPerson.phones).toBeUndefined();
+  });
+});
+
+describe("restoreDeal contract compliance", () => {
+  it("200 response schema is Deal with a nullable archived_at", () => {
+    const restored: Deal = {
+      id: "00000000-0000-0000-0000-000000000010",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      name: "Acme — restored deal",
+      pipeline_id: "00000000-0000-0000-0000-000000000020",
+      stage_id: "00000000-0000-0000-0000-000000000021",
+      status: "open",
+      source: "test",
+      captured_by: "human:test",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      archived_at: null,
+    };
+    expect(restored.archived_at).toBeNull();
   });
 });

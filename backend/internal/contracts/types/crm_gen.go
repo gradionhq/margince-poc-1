@@ -4875,6 +4875,18 @@ type AcceptDealNextStepParams struct {
 	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
 }
 
+// RestoreDealParams defines parameters for RestoreDeal.
+type RestoreDealParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+}
+
 // ListDraftingAssetsParams defines parameters for ListDraftingAssets.
 type ListDraftingAssetsParams struct {
 	// CursorParam Opaque keyset cursor from a prior response's `page.next_cursor`. The cursor encodes the
