@@ -302,3 +302,110 @@ func TestDealHandler_Update_HappyPath(t *testing.T) {
 		t.Fatalf("name = %s, want Renamed OK", updated.Name)
 	}
 }
+
+func TestDealHandler_List_FilterAndSort(t *testing.T) {
+	db := openDealTestDB(t)
+	pipelineID, stageID, _ := seedDealFixtures(t, db, "list")
+	store := crmcore.NewDealStore(db)
+	h := NewDealHandler(store)
+	ctx := context.Background()
+
+	fc := "commit"
+	d := crmcore.NewDeal("List me", pipelineID, stageID, provenanceForTest("test", "human:test"))
+	d.WorkspaceID = dealTestWorkspaceID
+	d.ForecastCategory = &fc
+	amt := int64(500)
+	d.AmountMinor = &amt
+	d.Status = "open"
+	if _, err := store.Create(ctx, d, ""); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/deals?sort=amount_minor&status=open&forecast_category=commit&pipeline_id="+pipelineID, nil)
+	req = withDealWorkspace(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	var page struct {
+		Data []crmcore.Deal `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	found := false
+	for _, dl := range page.Data {
+		if dl.Name == "List me" {
+			found = true
+			if dl.StageEnteredAt == nil {
+				t.Fatal("expected stage_entered_at on list rows")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected 'List me' deal in filtered results")
+	}
+}
+
+func TestDealHandler_FullLifecycle_CreateUpdateList(t *testing.T) {
+	db := openDealTestDB(t)
+	pipelineID, stageID, otherStageID := seedDealFixtures(t, db, "lifecycle")
+	h := NewDealHandler(crmcore.NewDealStore(db))
+
+	createBody, _ := json.Marshal(map[string]any{
+		"name": "Lifecycle deal", "pipeline_id": pipelineID, "stage_id": stageID,
+		"source": "test", "captured_by": "human:test",
+	})
+	createReq := httptest.NewRequest(http.MethodPost, "/deals", bytes.NewReader(createBody))
+	createReq = withDealWorkspace(createReq)
+	createW := httptest.NewRecorder()
+	h.ServeHTTP(createW, createReq)
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, body=%s", createW.Code, createW.Body.String())
+	}
+	var created crmcore.Deal
+	_ = json.Unmarshal(createW.Body.Bytes(), &created)
+
+	badStageBody, _ := json.Marshal(map[string]any{"stage_id": otherStageID})
+	badStageReq := httptest.NewRequest(http.MethodPatch, "/deals/"+created.ID, bytes.NewReader(badStageBody))
+	badStageReq = withDealWorkspace(badStageReq)
+	badStageW := httptest.NewRecorder()
+	h.ServeHTTP(badStageW, badStageReq)
+	if badStageW.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("update stage_not_in_pipeline status = %d, want 422", badStageW.Code)
+	}
+
+	renameBody, _ := json.Marshal(map[string]any{"name": "Lifecycle deal (renamed)"})
+	renameReq := httptest.NewRequest(http.MethodPatch, "/deals/"+created.ID, bytes.NewReader(renameBody))
+	renameReq = withDealWorkspace(renameReq)
+	renameReq.Header.Set("If-Match", strconv.FormatInt(created.Version, 10))
+	renameW := httptest.NewRecorder()
+	h.ServeHTTP(renameW, renameReq)
+	if renameW.Code != http.StatusOK {
+		t.Fatalf("update status = %d, body=%s", renameW.Code, renameW.Body.String())
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/deals?pipeline_id="+pipelineID, nil)
+	listReq = withDealWorkspace(listReq)
+	listW := httptest.NewRecorder()
+	h.ServeHTTP(listW, listReq)
+	if listW.Code != http.StatusOK {
+		t.Fatalf("list status = %d, body=%s", listW.Code, listW.Body.String())
+	}
+	var page struct {
+		Data []crmcore.Deal `json:"data"`
+	}
+	_ = json.Unmarshal(listW.Body.Bytes(), &page)
+	renamed := false
+	for _, dl := range page.Data {
+		if dl.ID == created.ID && dl.Name == "Lifecycle deal (renamed)" {
+			renamed = true
+		}
+	}
+	if !renamed {
+		t.Fatal("expected the renamed deal to appear in the list")
+	}
+}

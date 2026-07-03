@@ -337,6 +337,52 @@ func TestDealListFilter(t *testing.T) {
 	})
 }
 
+func TestDealStore_ListFiltered_ForecastCategoryPartnerOrgSort(t *testing.T) {
+	fix := seedFilterFixture(t)
+	db := openTestDB(t)
+	setRLS(t, db, wsFilterTest)
+	ds := NewDealStore(db)
+	ctx := context.Background()
+
+	fc := "commit"
+	d1 := NewDeal("Forecast A "+uniq(), fix.pipelineID, fix.stageA, prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	d1.WorkspaceID = wsFilterTest
+	d1.ForecastCategory = &fc
+	amt1 := int64(1000)
+	d1.AmountMinor = &amt1
+	if _, err := ds.Create(ctx, d1, ""); err != nil {
+		t.Fatalf("create d1: %v", err)
+	}
+
+	d2 := NewDeal("Forecast B "+uniq(), fix.pipelineID, fix.stageA, prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	d2.WorkspaceID = wsFilterTest
+	amt2 := int64(2000)
+	d2.AmountMinor = &amt2
+	if _, err := ds.Create(ctx, d2, ""); err != nil {
+		t.Fatalf("create d2: %v", err)
+	}
+
+	out, _, err := ds.ListFiltered(ctx, wsFilterTest, "", 20, DealListFilter{PipelineID: fix.pipelineID, ForecastCategory: fc})
+	if err != nil {
+		t.Fatalf("ListFiltered forecast_category: %v", err)
+	}
+	if len(out) != 1 || out[0].Name != d1.Name {
+		t.Fatalf("expected exactly Forecast A, got %+v", out)
+	}
+
+	out, _, err = ds.ListFiltered(ctx, wsFilterTest, "", 20, DealListFilter{PipelineID: fix.pipelineID, Sort: "amount_minor"})
+	if err != nil {
+		t.Fatalf("ListFiltered sort=amount_minor: %v", err)
+	}
+	if len(out) < 2 || out[0].AmountMinor == nil || out[1].AmountMinor == nil || *out[0].AmountMinor > *out[1].AmountMinor {
+		t.Fatalf("expected ascending amount_minor order, got %+v", out)
+	}
+
+	if len(out) > 0 && out[0].StageEnteredAt == nil {
+		t.Fatal("expected StageEnteredAt to be populated on list rows")
+	}
+}
+
 func TestDealStalledFlag(t *testing.T) {
 	fix := seedFilterFixture(t)
 	db := openTestDB(t)

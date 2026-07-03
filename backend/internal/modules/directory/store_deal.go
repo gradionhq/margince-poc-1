@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
@@ -167,12 +168,16 @@ func (s *DealStore) FindByIdempotencyKey(ctx context.Context, workspaceID, key s
 
 // DealListFilter holds optional predicates for ListFiltered. Zero value = no extra filters.
 type DealListFilter struct {
-	PipelineID     string
-	StageID        string
-	OwnerID        string
-	OrganizationID string
-	Status         string // "" | open | won | lost (validated by the caller)
-	Stalled        bool
+	PipelineID       string
+	StageID          string
+	OwnerID          string
+	OrganizationID   string
+	Status           string // "" | open | won | lost (validated by the caller)
+	Stalled          bool
+	ForecastCategory string
+	PartnerOrgID     string
+	PersonID         string
+	Sort             string
 }
 
 // defaultStalledDays is the idle threshold for the stalled=true filter, matching
@@ -194,6 +199,36 @@ const stalledPredicateFmt = `status='open' AND (last_activity_at IS NULL OR last
 // stalledPredicate renders stalledPredicateFmt for the given bound-param index.
 func stalledPredicate(paramN int) string {
 	return fmt.Sprintf(stalledPredicateFmt, paramN)
+}
+
+var dealSortColumns = map[string]bool{
+	"created_at":          true,
+	"updated_at":          true,
+	"amount_minor":        true,
+	"expected_close_date": true,
+	"last_activity_at":    true,
+}
+
+func dealOrderBy(sort string) string {
+	if sort == "" {
+		return "ORDER BY id"
+	}
+	var clauses []string
+	for _, f := range strings.Split(sort, ",") {
+		f = strings.TrimSpace(f)
+		dir := "ASC"
+		col := f
+		if strings.HasPrefix(f, "-") {
+			dir = "DESC"
+			col = f[1:]
+		}
+		if !dealSortColumns[col] {
+			continue
+		}
+		clauses = append(clauses, col+" "+dir)
+	}
+	clauses = append(clauses, "id")
+	return "ORDER BY " + strings.Join(clauses, ", ")
 }
 
 // List delegates to ListFiltered with a zero filter, preserving the existing signature.
@@ -244,6 +279,21 @@ func (s *DealStore) ListFiltered(ctx context.Context, workspaceID, cursor string
 		args = append(args, defaultStalledDays)
 		where += ` AND ` + stalledPredicate(n)
 	}
+	if f.ForecastCategory != "" {
+		n++
+		args = append(args, f.ForecastCategory)
+		where += fmt.Sprintf(` AND forecast_category=$%d`, n)
+	}
+	if f.PartnerOrgID != "" {
+		n++
+		args = append(args, f.PartnerOrgID)
+		where += fmt.Sprintf(` AND partner_org_id=$%d::uuid`, n)
+	}
+	if f.PersonID != "" {
+		n++
+		args = append(args, f.PersonID)
+		where += fmt.Sprintf(` AND EXISTS (SELECT 1 FROM relationship WHERE relationship.deal_id=deal.id AND relationship.kind='deal_stakeholder' AND relationship.person_id=$%d::uuid AND relationship.archived_at IS NULL)`, n)
+	}
 	stalledN := len(args) + 1
 	args = append(args, defaultStalledDays)
 
@@ -255,10 +305,12 @@ func (s *DealStore) ListFiltered(ctx context.Context, workspaceID, cursor string
 			        organization_id, owner_id,
 			        amount_minor, currency, status, last_activity_at,
 			        (`+stalledPredicate(stalledN)+`) AS stalled,
-			        version, source, captured_by, created_at, updated_at
+			        version, source, captured_by, created_at, updated_at,
+			        (SELECT max(occurred_at) FROM deal_stage_history WHERE deal_id=deal.id) AS stage_entered_at,
+			        (SELECT count(*) FROM relationship WHERE deal_id=deal.id AND kind='deal_stakeholder' AND archived_at IS NULL) AS stakeholder_count
 			 FROM deal
 			 WHERE `+where+`
-			 ORDER BY id LIMIT $3`,
+			 `+dealOrderBy(f.Sort)+` LIMIT $3`,
 			args...)
 		if err != nil {
 			return err
@@ -266,12 +318,17 @@ func (s *DealStore) ListFiltered(ctx context.Context, workspaceID, cursor string
 		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var d Deal
+			var stageEnteredAt sql.NullTime
 			if err := rows.Scan(&d.ID, &d.WorkspaceID, &d.Name, &d.PipelineID, &d.StageID,
 				&d.OrganizationID, &d.OwnerID,
 				&d.AmountMinor, &d.Currency, &d.Status, &d.LastActivityAt, &d.Stalled, &d.Version,
 				&d.Source, &d.CapturedBy,
-				&d.CreatedAt, &d.UpdatedAt); err != nil {
+				&d.CreatedAt, &d.UpdatedAt,
+				&stageEnteredAt, &d.StakeholderCount); err != nil {
 				return err
+			}
+			if stageEnteredAt.Valid {
+				d.StageEnteredAt = &stageEnteredAt.Time
 			}
 			out = append(out, d)
 		}

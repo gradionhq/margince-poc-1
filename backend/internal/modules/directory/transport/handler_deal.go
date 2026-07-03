@@ -43,6 +43,8 @@ func NewDealHandler(store *directory.DealStore) *DealHandler {
 func (h *DealHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id := pathID(r.URL.Path, "/deals")
 	switch {
+	case r.Method == http.MethodGet && id == "":
+		h.list(w, r)
 	case r.Method == http.MethodPost && id == "":
 		h.create(w, r)
 	case r.Method == http.MethodPatch && id != "":
@@ -150,6 +152,55 @@ func (h *DealHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 	jsonOK(w, d)
 }
 
+var dealSortColumns = map[string]bool{
+	"created_at":          true,
+	"updated_at":          true,
+	"amount_minor":        true,
+	"expected_close_date": true,
+	"last_activity_at":    true,
+}
+
+func (h *DealHandler) list(w http.ResponseWriter, r *http.Request) {
+	wsID, ok := requireWorkspace(w, r)
+	if !ok {
+		return
+	}
+	q := r.URL.Query()
+	sort := q.Get("sort")
+	for _, f := range strings.Split(sort, ",") {
+		f = strings.TrimSpace(strings.TrimPrefix(f, "-"))
+		if f != "" && !dealSortColumns[f] {
+			jsonProblem(w, http.StatusUnprocessableEntity, "sort_field_not_allowed")
+			return
+		}
+	}
+
+	stalled := false
+	if s := q.Get("stalled"); s != "" {
+		stalled, _ = strconv.ParseBool(s)
+	}
+
+	filter := directory.DealListFilter{
+		PipelineID:       q.Get("pipeline_id"),
+		StageID:          q.Get("stage_id"),
+		OwnerID:          q.Get("owner_id"),
+		OrganizationID:   q.Get("organization_id"),
+		Status:           q.Get("status"),
+		Stalled:          stalled,
+		ForecastCategory: q.Get("forecast_category"),
+		PartnerOrgID:     q.Get("partner_org_id"),
+		PersonID:         q.Get("person_id"),
+		Sort:             sort,
+	}
+
+	items, next, err := h.store.ListFiltered(r.Context(), wsID, q.Get("cursor"), queryLimit(r, 20), filter)
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, pageResponse(items, next))
+}
+
 // ---------------------------------------------------------------------------
 // shared HTTP helpers (unexported, used across handler files in this package)
 // ---------------------------------------------------------------------------
@@ -166,6 +217,15 @@ func pathID(path, prefix string) string {
 func workspaceID(r *http.Request) string {
 	p, _ := crmctx.From(r.Context())
 	return p.TenantID
+}
+
+func requireWorkspace(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id := workspaceID(r)
+	if id == "" {
+		jsonProblem(w, http.StatusBadRequest, "missing_workspace")
+		return "", false
+	}
+	return id, true
 }
 
 func queryLimit(r *http.Request, def int) int {
