@@ -544,3 +544,81 @@ func TestPasswordWorkspace(t *testing.T) {
 		t.Error("password_hash must not be NULL/empty on the admin user")
 	}
 }
+
+// TestRelationshipStakeholderRoleEnum verifies migration 000063's CHECK constraint
+// (DEAL-EXT-5): kind='deal_stakeholder' rows must have a role from the fixed
+// vocabulary and NULL is disallowed for that kind; other kinds keep free-text role.
+func TestRelationshipStakeholderRoleEnum(t *testing.T) {
+	pool := mustPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+	nonce := fmt.Sprintf("%d", time.Now().UnixNano())
+	ws := newWorkspace(t, pool, "rolecheck-"+nonce)
+
+	person := insertPerson(t, pool, ws, "Stakeholder-"+nonce)
+
+	var pipelineID, stageID, dealID string
+	if err := asTenant(t, pool, ws, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(ctx,
+			`INSERT INTO pipeline(workspace_id,name,is_default,position) VALUES($1,'RolePipe',true,1) RETURNING id`,
+			ws).Scan(&pipelineID); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx,
+			`INSERT INTO stage(workspace_id,pipeline_id,name,position,semantic,win_probability)
+			 VALUES($1,$2,'S1',1,'open',0) RETURNING id`,
+			ws, pipelineID).Scan(&stageID); err != nil {
+			return err
+		}
+		return tx.QueryRow(ctx,
+			`INSERT INTO deal(workspace_id,name,pipeline_id,stage_id,status,source,captured_by,version)
+			 VALUES($1,'Role Deal',$2,$3,'open','api','human:test',1) RETURNING id`,
+			ws, pipelineID, stageID).Scan(&dealID)
+	}); err != nil {
+		t.Fatalf("setup pipeline/stage/deal: %v", err)
+	}
+
+	insertStakeholder := func(role any) error {
+		return asTenant(t, pool, ws, func(tx pgx.Tx) error {
+			_, e := tx.Exec(ctx,
+				`INSERT INTO relationship(workspace_id,kind,person_id,deal_id,role,source,captured_by)
+				 VALUES($1,'deal_stakeholder',$2,$3,$4,'api','human:test')`,
+				ws, person, dealID, role)
+			return e
+		})
+	}
+
+	// NULL role for a deal_stakeholder row is rejected.
+	if err := insertStakeholder(nil); err == nil {
+		t.Fatal("expected CHECK violation for NULL role on deal_stakeholder, insert succeeded")
+	}
+
+	// A role outside the fixed vocabulary is rejected.
+	if err := insertStakeholder("not_a_real_role"); err == nil {
+		t.Fatal("expected CHECK violation for invalid role on deal_stakeholder, insert succeeded")
+	}
+
+	// A valid role from the enum succeeds.
+	if err := insertStakeholder("champion"); err != nil {
+		t.Fatalf("expected valid role 'champion' to succeed: %v", err)
+	}
+
+	// A non-stakeholder kind (employment) still allows NULL role — CHECK is scoped, not table-wide.
+	org := ""
+	if err := asTenant(t, pool, ws, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx,
+			`INSERT INTO organization(workspace_id,name,source,captured_by) VALUES($1,'RoleOrg',$2,$3) RETURNING id`,
+			ws, "api", "human:test").Scan(&org)
+	}); err != nil {
+		t.Fatalf("setup organization: %v", err)
+	}
+	if err := asTenant(t, pool, ws, func(tx pgx.Tx) error {
+		_, e := tx.Exec(ctx,
+			`INSERT INTO relationship(workspace_id,kind,person_id,organization_id,role,source,captured_by)
+			 VALUES($1,'employment',$2,$3,NULL,'api','human:test')`,
+			ws, person, org)
+		return e
+	}); err != nil {
+		t.Fatalf("employment kind must still allow NULL role: %v", err)
+	}
+}
