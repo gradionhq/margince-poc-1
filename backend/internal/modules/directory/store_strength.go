@@ -37,7 +37,8 @@ func decodeOffsetCursor(cursor string) (int, bool) {
 
 func (s *PersonStore) listByStrength(ctx context.Context, workspaceID, cursor string, limit int, ascending bool) ([]Person, string, error) {
 	offset, _ := decodeOffsetCursor(cursor)
-	var all []Person
+	// Non-nil so an empty result marshals to a JSON array ([]), never null.
+	all := []Person{}
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `
 			SELECT id, workspace_id, full_name, first_name, last_name, title,

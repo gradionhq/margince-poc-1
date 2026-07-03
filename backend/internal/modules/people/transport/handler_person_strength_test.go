@@ -259,3 +259,41 @@ func TestPersonHandler_List_SortStrength(t *testing.T) {
 		t.Errorf("sort=bogus_field: want 422, got %d", w2.Code)
 	}
 }
+
+// TestPersonHandler_List_SortStrength_EmptyWorkspace proves listByStrength's
+// "all := []Person{}" (not "var all []Person") invariant survives the full
+// store -> handler -> JSON round-trip: on a workspace with zero people,
+// GET /people?sort=strength must serialize data as [] not null, mirroring
+// listByID's documented non-nil-slice convention in modules/directory/store.go.
+// Uses a workspace ID distinct from testWorkspaceID (which other cases in
+// this file seed people into) so the "zero people" precondition is
+// guaranteed regardless of test run order.
+func TestPersonHandler_List_SortStrength_EmptyWorkspace(t *testing.T) {
+	db := openTestDB(t)
+	store := directory.NewPersonStore(db)
+	h := NewPersonHandler(store)
+
+	const wsID = "00000000-0000-0000-0000-000000000002"
+	seedWorkspace(t, db, wsID)
+	setRLS(t, db, wsID)
+
+	req := httptest.NewRequest(http.MethodGet, "/people?sort=strength", nil)
+	req = req.WithContext(crmctx.With(req.Context(), crmctx.Principal{TenantID: wsID, UserID: "human:test"}))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /people?sort=strength: want 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	data, ok := resp["data"].([]interface{})
+	if !ok {
+		t.Fatalf("data = %#v (%T), want []interface{}, not null", resp["data"], resp["data"])
+	}
+	if len(data) != 0 {
+		t.Errorf("data = %v, want empty slice for zero-person workspace", data)
+	}
+}
