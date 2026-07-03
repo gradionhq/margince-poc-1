@@ -11,12 +11,23 @@ import (
 
 // PipelineHandler routes /pipelines and /pipelines/{id} requests to the
 // PipelineStore. GET (list/read) ships in Task 1; PATCH ships in Task 2.
-type PipelineHandler struct{ store *deals.PipelineStore }
-
-// NewPipelineHandler returns a PipelineHandler.
-func NewPipelineHandler(store *deals.PipelineStore) *PipelineHandler {
-	return &PipelineHandler{store: store}
+type PipelineHandler struct {
+	store  *deals.PipelineStore
+	stages *deals.StageStore
 }
+
+// NewPipelineHandler returns a PipelineHandler. stages is used by the
+// single-pipeline get to embed the pipeline's ordered stages, per the
+// crm.yaml Pipeline schema's "embedded stages on GET" contract.
+func NewPipelineHandler(store *deals.PipelineStore, stages *deals.StageStore) *PipelineHandler {
+	return &PipelineHandler{store: store, stages: stages}
+}
+
+// maxPipelineStages bounds the single get-by-id stage embed. Product design
+// pins a small, fixed stage count per pipeline (DEAL-FORM-1 pins exactly
+// seven), so a single generously-sized page is sufficient — no need to
+// follow cursors in a loop.
+const maxPipelineStages = 100
 
 func (h *PipelineHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id := pathID(r.URL.Path, "/pipelines")
@@ -56,6 +67,12 @@ func (h *PipelineHandler) get(w http.ResponseWriter, r *http.Request, id string)
 		jsonErr(w, err)
 		return
 	}
+	stages, _, err := h.stages.List(r.Context(), wsID, pl.ID, "", maxPipelineStages)
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	pl.Stages = stages
 	jsonOK(w, pl)
 }
 

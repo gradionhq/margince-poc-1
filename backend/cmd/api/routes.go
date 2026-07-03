@@ -116,6 +116,6 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 	}
 	crud("/people", httpserver.ObjPerson, peopletransport.NewPersonHandler(directory.NewPersonStore(k.db)))
 	crud("/deals", httpserver.ObjDeal, dealtransport.NewDealHandler(directory.NewDealStore(k.db)))
-	crud("/pipelines", httpserver.ObjPipeline, dealstransport.NewPipelineHandler(deals.NewPipelineStore(k.db)))
+	crud("/pipelines", httpserver.ObjPipeline, dealstransport.NewPipelineHandler(deals.NewPipelineStore(k.db), deals.NewStageStore(k.db)))
 	crud("/stages", httpserver.ObjStage, dealstransport.NewStageHandler(deals.NewStageStore(k.db)))
 }
