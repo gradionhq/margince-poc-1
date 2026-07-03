@@ -246,7 +246,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Get a deal by id (the 360 record). */
+        /** Get a deal's composite 360 read (record + stakeholders + timeline refs) by id. */
         get: operations["getDeal"];
         put?: never;
         post?: never;
@@ -256,6 +256,33 @@ export interface paths {
         head?: never;
         /** Update a deal (partial). Closing requires terminal status + lost_reason if lost. */
         patch: operations["updateDeal"];
+        trace?: never;
+    };
+    "/deals/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore (un-archive) a soft-deleted deal.
+         * @description Inverse of `archiveDeal`: clears `archived_at`, restoring the deal to default
+         *     list visibility. Triggers `deal.restored` (DEAL-EVT-6). Restoring an already-live
+         *     deal is a no-op success (idempotent read-modify-write); restoring a deal that was
+         *     never archived still returns 200 with the unchanged deal. 🟢 — undoing a soft-delete
+         *     carries no data-loss risk, unlike `archiveDeal` (🟡).
+         */
+        post: operations["restoreDeal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/deals/{id}/advance": {
@@ -522,6 +549,33 @@ export interface paths {
         head?: never;
         /** Update a pipeline (rename / reorder / set default — bounded config). */
         patch: operations["updatePipeline"];
+        trace?: never;
+    };
+    "/pipelines/{id}/rollup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Weighted pipeline value for this pipeline (DEAL-FORM-2), server-computed.
+         * @description Raw and weighted totals over the pipeline's live open deals, decomposed per stage
+         *     and per deal — the totals always equal the sum of the displayed parts
+         *     (reconciliation). Never intended to be client-summed. A missing stored FX rate for
+         *     an open deal in a non-base currency fails the whole read with `422
+         *     fx_rate_unavailable` rather than substituting a rate of 1 (DEAL-WIRE-8).
+         */
+        get: operations["getPipelineRollup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/stages": {
@@ -2528,6 +2582,19 @@ export interface components {
             last_activity_at?: string | null;
             /** @description Derived — no activity past the threshold (absolute duration). */
             readonly stalled?: boolean;
+            /**
+             * Format: date-time
+             * @description Timestamp the deal entered its current stage — the `changed_at` of the most
+             *     recent `deal_stage_history` row for this deal (DEAL-DDL-4). Derived, not a
+             *     stored `deal` column; every deal has one via the creation-writes-history-row
+             *     rule (DEAL-AC-H1), so this is never null for a live deal.
+             */
+            readonly stage_entered_at?: string | null;
+            /**
+             * @description Count of live `deal_stakeholder` `relationship` rows for this deal
+             *     (DEAL-WIRE-5). Derived, not a stored `deal` column.
+             */
+            readonly stakeholder_count?: number;
             source: string;
             captured_by: string;
             raw?: {
@@ -2607,6 +2674,118 @@ export interface components {
         DealListResponse: {
             data: components["schemas"]["Deal"][];
             page: components["schemas"]["PageInfo"];
+        };
+        /**
+         * @description A timeline reference — activity identity only, never the full body (one
+         *     composite read must stay light). Mirrors the identity fields of `Activity`.
+         */
+        DealTimelineRef: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "email" | "call" | "meeting" | "note" | "task" | "whatsapp" | "telegram";
+            subject?: string | null;
+            /** Format: date-time */
+            occurred_at: string;
+        };
+        /**
+         * @description The deal-360 composite read (DEAL-EXT-3) — one round trip per the
+         *     one-composite-read doctrine (architecture/frontend.md): the deal record's own
+         *     fields (duplicated flat here rather than composed via `allOf` — `oasdiff`'s
+         *     default breaking-change diff, as run by `scripts/check-contract-breaking.sh`,
+         *     does not resolve `allOf` when comparing response schemas, and `--flatten-allof`
+         *     itself errors on this spec's OpenAPI-3.1 nullable `type: [T, 'null']` unions, so
+         *     `allOf` can't be used for any schema that must diff cleanly against a flat
+         *     predecessor), its stakeholders (person + role), and timeline refs, together.
+         */
+        DealDetail: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            workspace_id: string;
+            name: string;
+            /** Format: int64 */
+            amount_minor?: number | null;
+            currency?: string | null;
+            /** @description Native→base, frozen at close (null while open). Decimal-as-string to avoid float rounding of the 10-dp rate. */
+            fx_rate_to_base?: string | null;
+            /** Format: date */
+            fx_rate_date?: string | null;
+            /** Format: uuid */
+            pipeline_id: string;
+            /**
+             * Format: uuid
+             * @description Must belong to pipeline_id.
+             */
+            stage_id: string;
+            /**
+             * Format: uuid
+             * @description Primary org; never a raw lead.
+             */
+            organization_id?: string | null;
+            /**
+             * Format: uuid
+             * @description Deal registration/attribution to a partner org (A38/A41/ADR-0032). The org must have a `partner` row.
+             */
+            partner_org_id?: string | null;
+            /** Format: uuid */
+            owner_id?: string | null;
+            /**
+             * @default open
+             * @enum {string}
+             */
+            status: "open" | "won" | "lost";
+            /** @description Required when status=lost. */
+            lost_reason?: string | null;
+            /** @enum {string|null} */
+            forecast_category?: null | "commit" | "best_case" | "pipeline" | "omitted";
+            /** Format: date */
+            expected_close_date?: string | null;
+            /**
+             * Format: date
+             * @description 'Customer asked us to wait until' date; suppresses the stalled flag but not the overdue close-date flag.
+             */
+            wait_until?: string | null;
+            /** Format: date-time */
+            closed_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Drives the deterministic stalled flag.
+             */
+            last_activity_at?: string | null;
+            /** @description Derived — no activity past the threshold (absolute duration). */
+            readonly stalled?: boolean;
+            /**
+             * Format: date-time
+             * @description Timestamp the deal entered its current stage — the `changed_at` of the most
+             *     recent `deal_stage_history` row for this deal (DEAL-DDL-4). Derived, not a
+             *     stored `deal` column; every deal has one via the creation-writes-history-row
+             *     rule (DEAL-AC-H1), so this is never null for a live deal.
+             */
+            readonly stage_entered_at?: string | null;
+            /**
+             * @description Count of live `deal_stakeholder` `relationship` rows for this deal
+             *     (DEAL-WIRE-5). Derived, not a stored `deal` column.
+             */
+            readonly stakeholder_count?: number;
+            source: string;
+            captured_by: string;
+            raw?: {
+                [key: string]: unknown;
+            } | null;
+            version?: components["schemas"]["RowVersion"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            archived_at?: string | null;
+            /** @description The deal's stakeholder relationships (person + role), DEAL-WIRE-5. */
+            stakeholders: components["schemas"]["Relationship"][];
+            /** @description Timeline refs linked to this deal, most recent first. */
+            timeline: components["schemas"]["DealTimelineRef"][];
+        } & {
+            [key: string]: unknown;
         };
         /** @description A pipeline stage. Mirrors the `stage` table. */
         Stage: {
@@ -2698,6 +2877,63 @@ export interface components {
         PipelineListResponse: {
             data: components["schemas"]["Pipeline"][];
             page: components["schemas"]["PageInfo"];
+        };
+        /**
+         * @description DEAL-FORM-2's weighted pipeline value, scoped to one pipeline: raw and weighted
+         *     totals over live open deals, decomposable per stage and per deal so the displayed
+         *     total always equals the sum of its parts (totals-reconcile-to-parts). A server
+         *     read only — the client never sums these itself (DEAL-EXT-1).
+         */
+        PipelineRollup: {
+            /** Format: uuid */
+            pipeline_id: string;
+            /**
+             * Format: int64
+             * @description Σ base_value(deal) over live open deals in this pipeline (DEAL-FORM-2).
+             */
+            unweighted_minor: number;
+            /**
+             * Format: int64
+             * @description Σ weighted_value(deal) over live open deals in this pipeline (DEAL-FORM-2).
+             */
+            weighted_minor: number;
+            /** @description workspace.base_currency. */
+            base_currency: string;
+            /**
+             * Format: date
+             * @description The date this roll-up was computed.
+             */
+            as_of_date: string;
+            /** @description Per-stage (per-column) decomposition; sums to the totals above. */
+            by_stage: components["schemas"]["PipelineRollupStage"][];
+            /** @description Per-deal breakdown for "Explain This Number"; sums to the totals above. */
+            breakdown: components["schemas"]["PipelineRollupDeal"][];
+        };
+        PipelineRollupStage: {
+            /** Format: uuid */
+            stage_id: string;
+            /** Format: int64 */
+            unweighted_minor: number;
+            /** Format: int64 */
+            weighted_minor: number;
+            deal_count: number;
+        };
+        /** @description One row of DEAL-FORM-2's per-deal breakdown. */
+        PipelineRollupDeal: {
+            /** Format: uuid */
+            deal_id: string;
+            /**
+             * Format: int64
+             * @description base_value(deal) — minor units in base currency (DEAL-FORM-2).
+             */
+            base_value: number;
+            /** @description Read live from the deal's current stage.win_probability (0-100). */
+            win_probability: number;
+            /**
+             * Format: int64
+             * @description round(base_value * win_probability / 100), half away from zero.
+             */
+            weighted_value: number;
         };
         ActivityLink: {
             /** Format: uuid */
@@ -4953,6 +5189,11 @@ export interface operations {
                 status?: "open" | "won" | "lost";
                 /** @description Deterministic stalled flag (no activity past the threshold). */
                 stalled?: boolean;
+                /**
+                 * @description Reverse lookup — deals where this person is a stakeholder (a live
+                 *     `deal_stakeholder` relationship row), per DEAL-AC-10.
+                 */
+                person_id?: string;
             };
             header?: never;
             path?: never;
@@ -5032,13 +5273,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The deal. */
+            /** @description The deal-360 composite read — record, stakeholders, timeline refs. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Deal"];
+                    "application/json": components["schemas"]["DealDetail"];
                 };
             };
             404: components["responses"]["NotFound"];
@@ -5115,6 +5356,43 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+        };
+    };
+    restoreDeal: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+                 *     `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+                 *     returns the original status + body. Reusing the same key with a *different* request body
+                 *     returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+                 *     **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+                 *     retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+                 *     (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Restored deal (now carries `archived_at: null`). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deal"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     advanceDeal: {
@@ -5543,6 +5821,41 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+        };
+    };
+    getPipelineRollup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The pipeline's weighted roll-up. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineRollup"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description A stored FX rate is unavailable for an open deal's currency. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     listStages: {
