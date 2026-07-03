@@ -4,11 +4,13 @@ package transport
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
 func openDealTestDB(t *testing.T) *sql.DB {
@@ -68,6 +71,10 @@ func seedDealFixtures(t *testing.T, db *sql.DB, tag string) (pipelineID, stageID
 		t.Fatalf("seed stage B: %v", err)
 	}
 	return pA, sA, sB
+}
+
+func provenanceForTest(source, capturedBy string) prov.Provenance {
+	return prov.Provenance{Source: source, CapturedBy: capturedBy}
 }
 
 func TestDealHandler_Create_Returns201WithLocationAndHistoryRow(t *testing.T) {
@@ -176,5 +183,122 @@ func TestDealHandler_Create_StageNotInPipeline(t *testing.T) {
 	first := errs[0].(map[string]any)
 	if first["field"] != "stage_id" || first["code"] != "stage_not_in_pipeline" {
 		t.Fatalf("expected {field:stage_id, code:stage_not_in_pipeline}, got %v", first)
+	}
+}
+
+func TestDealHandler_Update_IfMatchVersionSkew(t *testing.T) {
+	db := openDealTestDB(t)
+	pipelineID, stageID, _ := seedDealFixtures(t, db, "update-version-skew")
+	store := crmcore.NewDealStore(db)
+	h := NewDealHandler(store)
+
+	d := crmcore.NewDeal("Update-me", pipelineID, stageID,
+		provenanceForTest("test", "human:test"))
+	d.WorkspaceID = dealTestWorkspaceID
+	created, err := store.Create(context.Background(), d, "")
+	if err != nil {
+		t.Fatalf("seed create: %v", err)
+	}
+
+	body := map[string]any{"name": "Renamed"}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPatch, "/deals/"+created.ID, bytes.NewReader(b))
+	req = withDealWorkspace(req)
+	req.Header.Set("If-Match", "999")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409, body=%s", w.Code, w.Body.String())
+	}
+	var problem map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &problem)
+	if problem[fieldCode] != "version_skew" {
+		t.Fatalf("code = %v, want version_skew", problem[fieldCode])
+	}
+}
+
+func TestDealHandler_Update_MalformedIfMatch(t *testing.T) {
+	db := openDealTestDB(t)
+	pipelineID, stageID, _ := seedDealFixtures(t, db, "update-malformed")
+	store := crmcore.NewDealStore(db)
+	h := NewDealHandler(store)
+
+	d := crmcore.NewDeal("Malformed-if-match", pipelineID, stageID,
+		provenanceForTest("test", "human:test"))
+	d.WorkspaceID = dealTestWorkspaceID
+	created, err := store.Create(context.Background(), d, "")
+	if err != nil {
+		t.Fatalf("seed create: %v", err)
+	}
+
+	body := map[string]any{"name": "Renamed"}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPatch, "/deals/"+created.ID, bytes.NewReader(b))
+	req = withDealWorkspace(req)
+	req.Header.Set("If-Match", "not-a-number")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestDealHandler_Update_StageNotInPipeline(t *testing.T) {
+	db := openDealTestDB(t)
+	pipelineID, stageID, otherStageID := seedDealFixtures(t, db, "update-stage-check")
+	store := crmcore.NewDealStore(db)
+	h := NewDealHandler(store)
+
+	d := crmcore.NewDeal("Stage-move", pipelineID, stageID,
+		provenanceForTest("test", "human:test"))
+	d.WorkspaceID = dealTestWorkspaceID
+	created, err := store.Create(context.Background(), d, "")
+	if err != nil {
+		t.Fatalf("seed create: %v", err)
+	}
+
+	body := map[string]any{"stage_id": otherStageID}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPatch, "/deals/"+created.ID, bytes.NewReader(b))
+	req = withDealWorkspace(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422, body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestDealHandler_Update_HappyPath(t *testing.T) {
+	db := openDealTestDB(t)
+	pipelineID, stageID, _ := seedDealFixtures(t, db, "update-happy")
+	store := crmcore.NewDealStore(db)
+	h := NewDealHandler(store)
+
+	d := crmcore.NewDeal("Happy-update", pipelineID, stageID,
+		provenanceForTest("test", "human:test"))
+	d.WorkspaceID = dealTestWorkspaceID
+	created, err := store.Create(context.Background(), d, "")
+	if err != nil {
+		t.Fatalf("seed create: %v", err)
+	}
+
+	body := map[string]any{"name": "Renamed OK"}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPatch, "/deals/"+created.ID, bytes.NewReader(b))
+	req = withDealWorkspace(req)
+	req.Header.Set("If-Match", strconv.FormatInt(created.Version, 10))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	var updated crmcore.Deal
+	_ = json.Unmarshal(w.Body.Bytes(), &updated)
+	if updated.Name != "Renamed OK" {
+		t.Fatalf("name = %s, want Renamed OK", updated.Name)
 	}
 }

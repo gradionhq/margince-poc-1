@@ -303,6 +303,27 @@ func (s *DealStore) Update(ctx context.Context, id, workspaceID string, updates 
 		return Deal{}, err
 	}
 
+	if stageID, ok := updates["stage_id"].(string); ok && stageID != "" {
+		var pipelineID string
+		if err := tx.QueryRowContext(ctx, `SELECT pipeline_id FROM deal WHERE id=$1::uuid AND workspace_id=$2::uuid`,
+			id, workspaceID).Scan(&pipelineID); err != nil {
+			return Deal{}, err
+		}
+		var inPipeline bool
+		if err := tx.QueryRowContext(ctx, `
+			SELECT EXISTS(
+				SELECT 1
+				FROM stage
+				WHERE id=$1::uuid AND pipeline_id=$2::uuid AND workspace_id=$3::uuid AND archived_at IS NULL
+			)`,
+			stageID, pipelineID, workspaceID).Scan(&inPipeline); err != nil {
+			return Deal{}, err
+		}
+		if !inPipeline {
+			return Deal{}, errs.ErrStageNotInPipeline
+		}
+	}
+
 	newStatus, _ := updates["status"].(string)
 
 	// If closing (won/lost), freeze the FX rate against the deal's current currency.

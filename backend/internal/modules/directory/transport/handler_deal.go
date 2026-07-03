@@ -45,6 +45,8 @@ func (h *DealHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodPost && id == "":
 		h.create(w, r)
+	case r.Method == http.MethodPatch && id != "":
+		h.update(w, r, id)
 	default:
 		http.NotFound(w, r)
 	}
@@ -111,6 +113,41 @@ func (h *DealHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonCreatedAt(w, created, "/deals/"+created.ID)
+}
+
+func (h *DealHandler) update(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := workspaceID(r)
+	ifMatch, malformed := parseIfMatch(r)
+	if malformed {
+		jsonProblem(w, http.StatusBadRequest, "bad_if_match")
+		return
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
+		return
+	}
+
+	d, err := h.store.Update(r.Context(), id, wsID, body, ifMatch)
+	if errors.Is(err, errs.ErrStageNotInPipeline) {
+		jsonValidationError(w, "stage_id does not belong to pipeline_id.",
+			[]fieldError{{Field: "stage_id", Code: "stage_not_in_pipeline"}})
+		return
+	}
+	if errors.Is(err, errs.ErrVersionSkew) {
+		jsonProblem(w, http.StatusConflict, "version_skew")
+		return
+	}
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, d)
 }
 
 // ---------------------------------------------------------------------------
