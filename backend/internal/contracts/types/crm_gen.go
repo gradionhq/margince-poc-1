@@ -120,6 +120,39 @@ func (e ActivityLinkEntityType) Valid() bool {
 	}
 }
 
+// Defines values for ActivityRefKind.
+const (
+	ActivityRefKindCall     ActivityRefKind = "call"
+	ActivityRefKindEmail    ActivityRefKind = "email"
+	ActivityRefKindMeeting  ActivityRefKind = "meeting"
+	ActivityRefKindNote     ActivityRefKind = "note"
+	ActivityRefKindTask     ActivityRefKind = "task"
+	ActivityRefKindTelegram ActivityRefKind = "telegram"
+	ActivityRefKindWhatsapp ActivityRefKind = "whatsapp"
+)
+
+// Valid indicates whether the value is a known member of the ActivityRefKind enum.
+func (e ActivityRefKind) Valid() bool {
+	switch e {
+	case ActivityRefKindCall:
+		return true
+	case ActivityRefKindEmail:
+		return true
+	case ActivityRefKindMeeting:
+		return true
+	case ActivityRefKindNote:
+		return true
+	case ActivityRefKindTask:
+		return true
+	case ActivityRefKindTelegram:
+		return true
+	case ActivityRefKindWhatsapp:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AddListMemberRequestEntityType.
 const (
 	AddListMemberRequestEntityTypeDeal         AddListMemberRequestEntityType = "deal"
@@ -1638,6 +1671,27 @@ func (e PartnerPartnerRole) Valid() bool {
 	}
 }
 
+// Defines values for PersonStrengthBucket.
+const (
+	PersonStrengthBucketModerate PersonStrengthBucket = "moderate"
+	PersonStrengthBucketStrong   PersonStrengthBucket = "strong"
+	PersonStrengthBucketWeak     PersonStrengthBucket = "weak"
+)
+
+// Valid indicates whether the value is a known member of the PersonStrengthBucket enum.
+func (e PersonStrengthBucket) Valid() bool {
+	switch e {
+	case PersonStrengthBucketModerate:
+		return true
+	case PersonStrengthBucketStrong:
+		return true
+	case PersonStrengthBucketWeak:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PersonConsentStateState.
 const (
 	PersonConsentStateStateGranted   PersonConsentStateState = "granted"
@@ -1740,6 +1794,27 @@ func (e PersonSignalItemLabel) Valid() bool {
 	case PersonSignalItemLabelNeutral:
 		return true
 	case PersonSignalItemLabelWarm:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PersonStrengthBreakdownBucket.
+const (
+	PersonStrengthBreakdownBucketModerate PersonStrengthBreakdownBucket = "moderate"
+	PersonStrengthBreakdownBucketStrong   PersonStrengthBreakdownBucket = "strong"
+	PersonStrengthBreakdownBucketWeak     PersonStrengthBreakdownBucket = "weak"
+)
+
+// Valid indicates whether the value is a known member of the PersonStrengthBreakdownBucket enum.
+func (e PersonStrengthBreakdownBucket) Valid() bool {
+	switch e {
+	case PersonStrengthBreakdownBucketModerate:
+		return true
+	case PersonStrengthBreakdownBucketStrong:
+		return true
+	case PersonStrengthBreakdownBucketWeak:
 		return true
 	default:
 		return false
@@ -2171,31 +2246,31 @@ func (e UserStatus) Valid() bool {
 
 // Defines values for ListActivitiesParamsKind.
 const (
-	ListActivitiesParamsKindCall     ListActivitiesParamsKind = "call"
-	ListActivitiesParamsKindEmail    ListActivitiesParamsKind = "email"
-	ListActivitiesParamsKindMeeting  ListActivitiesParamsKind = "meeting"
-	ListActivitiesParamsKindNote     ListActivitiesParamsKind = "note"
-	ListActivitiesParamsKindTask     ListActivitiesParamsKind = "task"
-	ListActivitiesParamsKindTelegram ListActivitiesParamsKind = "telegram"
-	ListActivitiesParamsKindWhatsapp ListActivitiesParamsKind = "whatsapp"
+	Call     ListActivitiesParamsKind = "call"
+	Email    ListActivitiesParamsKind = "email"
+	Meeting  ListActivitiesParamsKind = "meeting"
+	Note     ListActivitiesParamsKind = "note"
+	Task     ListActivitiesParamsKind = "task"
+	Telegram ListActivitiesParamsKind = "telegram"
+	Whatsapp ListActivitiesParamsKind = "whatsapp"
 )
 
 // Valid indicates whether the value is a known member of the ListActivitiesParamsKind enum.
 func (e ListActivitiesParamsKind) Valid() bool {
 	switch e {
-	case ListActivitiesParamsKindCall:
+	case Call:
 		return true
-	case ListActivitiesParamsKindEmail:
+	case Email:
 		return true
-	case ListActivitiesParamsKindMeeting:
+	case Meeting:
 		return true
-	case ListActivitiesParamsKindNote:
+	case Note:
 		return true
-	case ListActivitiesParamsKindTask:
+	case Task:
 		return true
-	case ListActivitiesParamsKindTelegram:
+	case Telegram:
 		return true
-	case ListActivitiesParamsKindWhatsapp:
+	case Whatsapp:
 		return true
 	default:
 		return false
@@ -2553,6 +2628,20 @@ type ActivityListResponse struct {
 	Data []Activity `json:"data"`
 	Page PageInfo   `json:"page"`
 }
+
+// ActivityRef A lightweight activity identity reference — id/kind/subject/occurred_at only, never
+// the full body (one composite/evidence read must stay light per the
+// one-composite-read doctrine). Mirrors DealTimelineRef's shape, generalized beyond
+// deals for person/org composite reads and the strength-breakdown evidence list.
+type ActivityRef struct {
+	Id         openapi_types.UUID `json:"id"`
+	Kind       ActivityRefKind    `json:"kind"`
+	OccurredAt time.Time          `json:"occurred_at"`
+	Subject    *string            `json:"subject,omitempty"`
+}
+
+// ActivityRefKind defines model for ActivityRef.Kind.
+type ActivityRefKind string
 
 // AddListMemberRequest defines model for AddListMemberRequest.
 type AddListMemberRequest struct {
@@ -3848,6 +3937,9 @@ type Money struct {
 
 // Organization A company. Mirrors the `organization` table.
 type Organization struct {
+	// Activities PO-EXT-3 — timeline activity refs linked to this organization, most recent first. Populated on `getOrganization` only.
+	Activities *[]ActivityRef `json:"activities,omitempty"`
+
 	// Address Structured postal address.
 	Address    *Address   `json:"address,omitempty"`
 	ArchivedAt *time.Time `json:"archived_at,omitempty"`
@@ -3856,24 +3948,32 @@ type Organization struct {
 	// Classification An org IS a partner iff classification='partner' AND it has a `partner` row (A41/ADR-0032).
 	Classification *OrganizationClassification `json:"classification,omitempty"`
 	CreatedAt      time.Time                   `json:"created_at"`
-	DisplayName    string                      `json:"display_name"`
-	Domains        *[]OrganizationDomain       `json:"domains,omitempty"`
-	Id             openapi_types.UUID          `json:"id"`
-	Industry       *string                     `json:"industry,omitempty"`
-	LegalName      *string                     `json:"legal_name,omitempty"`
-	MergedIntoId   *openapi_types.UUID         `json:"merged_into_id,omitempty"`
-	OwnerId        *openapi_types.UUID         `json:"owner_id,omitempty"`
+
+	// Deals PO-EXT-3 — deals attributed to this organization. Populated on `getOrganization` only.
+	Deals        *[]Deal               `json:"deals,omitempty"`
+	DisplayName  string                `json:"display_name"`
+	Domains      *[]OrganizationDomain `json:"domains,omitempty"`
+	Id           openapi_types.UUID    `json:"id"`
+	Industry     *string               `json:"industry,omitempty"`
+	LegalName    *string               `json:"legal_name,omitempty"`
+	MergedIntoId *openapi_types.UUID   `json:"merged_into_id,omitempty"`
+	OwnerId      *openapi_types.UUID   `json:"owner_id,omitempty"`
 
 	// ParentOrgId Single-level hierarchy FK; no cycles.
 	ParentOrgId *openapi_types.UUID `json:"parent_org_id,omitempty"`
 
 	// Partner First-class partner state as a 1:1 extension of an organization (an org IS a partner iff it
 	// has a `partner` row + classification='partner'). Company identity is never duplicated.
-	Partner   *Partner                `json:"partner,omitempty"`
-	Raw       *map[string]interface{} `json:"raw,omitempty"`
-	SizeBand  *OrganizationSizeBand   `json:"size_band,omitempty"`
-	Source    string                  `json:"source"`
-	UpdatedAt time.Time               `json:"updated_at"`
+	Partner *Partner                `json:"partner,omitempty"`
+	Raw     *map[string]interface{} `json:"raw,omitempty"`
+
+	// Relationships PO-EXT-3 organization-360 composite read — this org's relationship edges
+	// (employment, partner edges). Populated on the single-record read
+	// (`getOrganization`); omitted on list rows (`listOrganizations`).
+	Relationships *[]Relationship       `json:"relationships,omitempty"`
+	SizeBand      *OrganizationSizeBand `json:"size_band,omitempty"`
+	Source        string                `json:"source"`
+	UpdatedAt     time.Time             `json:"updated_at"`
 
 	// Version Monotonic row version, incremented by the server on every mutation (data-model §1.7).
 	// Echoed back as the `version` field on every mutable entity. To make a write conditional,
@@ -3992,6 +4092,9 @@ type PatchAutomationRequest struct {
 
 // Person A contact. Mirrors the `person` table.
 type Person struct {
+	// Activities PO-EXT-3 — timeline activity refs linked to this person, most recent first. Populated on `getPerson` only.
+	Activities *[]ActivityRef `json:"activities,omitempty"`
+
 	// Address Structured postal address.
 	Address    *Address   `json:"address,omitempty"`
 	ArchivedAt *time.Time `json:"archived_at,omitempty"`
@@ -4006,8 +4109,11 @@ type Person struct {
 	// ConvertedFromLeadId Canonical origin pointer if promoted from a lead.
 	ConvertedFromLeadId *openapi_types.UUID `json:"converted_from_lead_id,omitempty"`
 	CreatedAt           time.Time           `json:"created_at"`
-	Emails              *[]PersonEmail      `json:"emails,omitempty"`
-	FirstName           *string             `json:"first_name,omitempty"`
+
+	// Deals PO-EXT-3 — deals this person is a stakeholder on. Populated on `getPerson` only.
+	Deals     *[]Deal        `json:"deals,omitempty"`
+	Emails    *[]PersonEmail `json:"emails,omitempty"`
+	FirstName *string        `json:"first_name,omitempty"`
 
 	// FullName Always present (display name).
 	FullName string             `json:"full_name"`
@@ -4020,9 +4126,27 @@ type Person struct {
 	Phones       *[]PersonPhone          `json:"phones,omitempty"`
 	Raw          *map[string]interface{} `json:"raw,omitempty"`
 
+	// Relationships PO-EXT-3 person-360 composite read — this person's relationship edges
+	// (employment, deal-stakeholder roles, etc.). Populated on the single-record read
+	// (`getPerson`); omitted on list rows (`listPeople`) for payload economy, mirroring
+	// the existing readOnly composite fields already on `Deal`.
+	Relationships *[]Relationship `json:"relationships,omitempty"`
+
 	// Social { linkedin, twitter, github, ... }
 	Social *map[string]interface{} `json:"social,omitempty"`
 	Source string                  `json:"source"`
+
+	// Strength PO-EXT-1 relationship-strength block — present on both list rows and detail
+	// reads. Server-computed from interaction recency/frequency/reciprocity; null
+	// until a score has been computed for this person. `bucket` mirrors PO-PARAM-3's
+	// display thresholds (0-24 weak · 25-59 moderate · 60-100 strong).
+	Strength *struct {
+		Bucket      PersonStrengthBucket `json:"bucket"`
+		Frequency   float32              `json:"frequency"`
+		Recency     float32              `json:"recency"`
+		Reciprocity float32              `json:"reciprocity"`
+		Score       int                  `json:"score"`
+	} `json:"strength,omitempty"`
 
 	// Title Denormalized current title; authoritative title is on the employment relationship.
 	Title     *string   `json:"title,omitempty"`
@@ -4037,6 +4161,9 @@ type Person struct {
 	WorkspaceId          openapi_types.UUID     `json:"workspace_id"`
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
+
+// PersonStrengthBucket defines model for Person.Strength.Bucket.
+type PersonStrengthBucket string
 
 // PersonConsentState A person's current consent for one purpose.
 type PersonConsentState struct {
@@ -4145,6 +4272,24 @@ type PersonSignalItem struct {
 
 // PersonSignalItemLabel The derived or human-corrected relationship label.
 type PersonSignalItemLabel string
+
+// PersonStrengthBreakdown Contributing evidence behind a person's relationship-strength score (PO-EXT-2) —
+// the factor values plus the interaction activities that produced them, serving the
+// AC-person-3/4 evidence drawer.
+type PersonStrengthBreakdown struct {
+	Bucket PersonStrengthBreakdownBucket `json:"bucket"`
+
+	// ContributingActivities The interaction activities behind this score, most recent first.
+	ContributingActivities []ActivityRef      `json:"contributing_activities"`
+	Frequency              float32            `json:"frequency"`
+	PersonId               openapi_types.UUID `json:"person_id"`
+	Recency                float32            `json:"recency"`
+	Reciprocity            float32            `json:"reciprocity"`
+	Score                  int                `json:"score"`
+}
+
+// PersonStrengthBreakdownBucket defines model for PersonStrengthBreakdown.Bucket.
+type PersonStrengthBreakdownBucket string
 
 // Pipeline A pipeline. Mirrors the `pipeline` table (with embedded stages on GET).
 type Pipeline struct {
@@ -7653,6 +7798,14 @@ func (a *Organization) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
+	if raw, found := object["activities"]; found {
+		err = json.Unmarshal(raw, &a.Activities)
+		if err != nil {
+			return fmt.Errorf("error reading 'activities': %w", err)
+		}
+		delete(object, "activities")
+	}
+
 	if raw, found := object["address"]; found {
 		err = json.Unmarshal(raw, &a.Address)
 		if err != nil {
@@ -7691,6 +7844,14 @@ func (a *Organization) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("error reading 'created_at': %w", err)
 		}
 		delete(object, "created_at")
+	}
+
+	if raw, found := object["deals"]; found {
+		err = json.Unmarshal(raw, &a.Deals)
+		if err != nil {
+			return fmt.Errorf("error reading 'deals': %w", err)
+		}
+		delete(object, "deals")
 	}
 
 	if raw, found := object["display_name"]; found {
@@ -7773,6 +7934,14 @@ func (a *Organization) UnmarshalJSON(b []byte) error {
 		delete(object, "raw")
 	}
 
+	if raw, found := object["relationships"]; found {
+		err = json.Unmarshal(raw, &a.Relationships)
+		if err != nil {
+			return fmt.Errorf("error reading 'relationships': %w", err)
+		}
+		delete(object, "relationships")
+	}
+
 	if raw, found := object["size_band"]; found {
 		err = json.Unmarshal(raw, &a.SizeBand)
 		if err != nil {
@@ -7832,6 +8001,13 @@ func (a Organization) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
 
+	if a.Activities != nil {
+		object["activities"], err = json.Marshal(a.Activities)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'activities': %w", err)
+		}
+	}
+
 	if a.Address != nil {
 		object["address"], err = json.Marshal(a.Address)
 		if err != nil {
@@ -7861,6 +8037,13 @@ func (a Organization) MarshalJSON() ([]byte, error) {
 	object["created_at"], err = json.Marshal(a.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'created_at': %w", err)
+	}
+
+	if a.Deals != nil {
+		object["deals"], err = json.Marshal(a.Deals)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'deals': %w", err)
+		}
 	}
 
 	object["display_name"], err = json.Marshal(a.DisplayName)
@@ -7929,6 +8112,13 @@ func (a Organization) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if a.Relationships != nil {
+		object["relationships"], err = json.Marshal(a.Relationships)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'relationships': %w", err)
+		}
+	}
+
 	if a.SizeBand != nil {
 		object["size_band"], err = json.Marshal(a.SizeBand)
 		if err != nil {
@@ -7992,6 +8182,14 @@ func (a *Person) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
+	if raw, found := object["activities"]; found {
+		err = json.Unmarshal(raw, &a.Activities)
+		if err != nil {
+			return fmt.Errorf("error reading 'activities': %w", err)
+		}
+		delete(object, "activities")
+	}
+
 	if raw, found := object["address"]; found {
 		err = json.Unmarshal(raw, &a.Address)
 		if err != nil {
@@ -8038,6 +8236,14 @@ func (a *Person) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("error reading 'created_at': %w", err)
 		}
 		delete(object, "created_at")
+	}
+
+	if raw, found := object["deals"]; found {
+		err = json.Unmarshal(raw, &a.Deals)
+		if err != nil {
+			return fmt.Errorf("error reading 'deals': %w", err)
+		}
+		delete(object, "deals")
 	}
 
 	if raw, found := object["emails"]; found {
@@ -8112,6 +8318,14 @@ func (a *Person) UnmarshalJSON(b []byte) error {
 		delete(object, "raw")
 	}
 
+	if raw, found := object["relationships"]; found {
+		err = json.Unmarshal(raw, &a.Relationships)
+		if err != nil {
+			return fmt.Errorf("error reading 'relationships': %w", err)
+		}
+		delete(object, "relationships")
+	}
+
 	if raw, found := object["social"]; found {
 		err = json.Unmarshal(raw, &a.Social)
 		if err != nil {
@@ -8126,6 +8340,14 @@ func (a *Person) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("error reading 'source': %w", err)
 		}
 		delete(object, "source")
+	}
+
+	if raw, found := object["strength"]; found {
+		err = json.Unmarshal(raw, &a.Strength)
+		if err != nil {
+			return fmt.Errorf("error reading 'strength': %w", err)
+		}
+		delete(object, "strength")
 	}
 
 	if raw, found := object["title"]; found {
@@ -8179,6 +8401,13 @@ func (a Person) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
 
+	if a.Activities != nil {
+		object["activities"], err = json.Marshal(a.Activities)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'activities': %w", err)
+		}
+	}
+
 	if a.Address != nil {
 		object["address"], err = json.Marshal(a.Address)
 		if err != nil {
@@ -8215,6 +8444,13 @@ func (a Person) MarshalJSON() ([]byte, error) {
 	object["created_at"], err = json.Marshal(a.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'created_at': %w", err)
+	}
+
+	if a.Deals != nil {
+		object["deals"], err = json.Marshal(a.Deals)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'deals': %w", err)
+		}
 	}
 
 	if a.Emails != nil {
@@ -8276,6 +8512,13 @@ func (a Person) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if a.Relationships != nil {
+		object["relationships"], err = json.Marshal(a.Relationships)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'relationships': %w", err)
+		}
+	}
+
 	if a.Social != nil {
 		object["social"], err = json.Marshal(a.Social)
 		if err != nil {
@@ -8286,6 +8529,13 @@ func (a Person) MarshalJSON() ([]byte, error) {
 	object["source"], err = json.Marshal(a.Source)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'source': %w", err)
+	}
+
+	if a.Strength != nil {
+		object["strength"], err = json.Marshal(a.Strength)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'strength': %w", err)
+		}
 	}
 
 	if a.Title != nil {

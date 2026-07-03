@@ -102,6 +102,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/people/{id}/strength-breakdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get the evidence behind a person's relationship-strength score (PO-EXT-2).
+         * @description Returns the contributing activity ids and factor values behind `Person.strength` —
+         *     serves the AC-person-3/4 evidence drawer. Read-only; new operation, does not modify
+         *     `strength`'s scoring itself.
+         */
+        get: operations["getPersonStrengthBreakdown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/organizations": {
         parameters: {
             query?: never;
@@ -2280,6 +2305,31 @@ export interface components {
             updated_at: string;
             /** Format: date-time */
             archived_at?: string | null;
+            /**
+             * @description PO-EXT-1 relationship-strength block — present on both list rows and detail
+             *     reads. Server-computed from interaction recency/frequency/reciprocity; null
+             *     until a score has been computed for this person. `bucket` mirrors PO-PARAM-3's
+             *     display thresholds (0-24 weak · 25-59 moderate · 60-100 strong).
+             */
+            readonly strength?: {
+                score: number;
+                /** @enum {string} */
+                bucket: "weak" | "moderate" | "strong";
+                recency: number;
+                frequency: number;
+                reciprocity: number;
+            } | null;
+            /**
+             * @description PO-EXT-3 person-360 composite read — this person's relationship edges
+             *     (employment, deal-stakeholder roles, etc.). Populated on the single-record read
+             *     (`getPerson`); omitted on list rows (`listPeople`) for payload economy, mirroring
+             *     the existing readOnly composite fields already on `Deal`.
+             */
+            readonly relationships?: components["schemas"]["Relationship"][];
+            /** @description PO-EXT-3 — deals this person is a stakeholder on. Populated on `getPerson` only. */
+            readonly deals?: components["schemas"]["Deal"][];
+            /** @description PO-EXT-3 — timeline activity refs linked to this person, most recent first. Populated on `getPerson` only. */
+            readonly activities?: components["schemas"]["ActivityRef"][];
         } & {
             [key: string]: unknown;
         };
@@ -2401,6 +2451,16 @@ export interface components {
             updated_at: string;
             /** Format: date-time */
             archived_at?: string | null;
+            /**
+             * @description PO-EXT-3 organization-360 composite read — this org's relationship edges
+             *     (employment, partner edges). Populated on the single-record read
+             *     (`getOrganization`); omitted on list rows (`listOrganizations`).
+             */
+            readonly relationships?: components["schemas"]["Relationship"][];
+            /** @description PO-EXT-3 — deals attributed to this organization. Populated on `getOrganization` only. */
+            readonly deals?: components["schemas"]["Deal"][];
+            /** @description PO-EXT-3 — timeline activity refs linked to this organization, most recent first. Populated on `getOrganization` only. */
+            readonly activities?: components["schemas"]["ActivityRef"][];
         } & {
             [key: string]: unknown;
         };
@@ -2523,6 +2583,38 @@ export interface components {
         RelationshipListResponse: {
             data: components["schemas"]["Relationship"][];
             page: components["schemas"]["PageInfo"];
+        };
+        /**
+         * @description A lightweight activity identity reference — id/kind/subject/occurred_at only, never
+         *     the full body (one composite/evidence read must stay light per the
+         *     one-composite-read doctrine). Mirrors DealTimelineRef's shape, generalized beyond
+         *     deals for person/org composite reads and the strength-breakdown evidence list.
+         */
+        ActivityRef: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "email" | "call" | "meeting" | "note" | "task" | "whatsapp" | "telegram";
+            subject?: string | null;
+            /** Format: date-time */
+            occurred_at: string;
+        };
+        /**
+         * @description Contributing evidence behind a person's relationship-strength score (PO-EXT-2) —
+         *     the factor values plus the interaction activities that produced them, serving the
+         *     AC-person-3/4 evidence drawer.
+         */
+        PersonStrengthBreakdown: {
+            /** Format: uuid */
+            person_id: string;
+            score: number;
+            /** @enum {string} */
+            bucket: "weak" | "moderate" | "strong";
+            recency: number;
+            frequency: number;
+            reciprocity: number;
+            /** @description The interaction activities behind this score, most recent first. */
+            contributing_activities: components["schemas"]["ActivityRef"][];
         };
         /** @description A deal. Mirrors the `deal` table. */
         Deal: {
@@ -4808,6 +4900,32 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+        };
+    };
+    getPersonStrengthBreakdown: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The strength-breakdown evidence for this person. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonStrengthBreakdown"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listOrganizations: {
