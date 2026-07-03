@@ -120,6 +120,39 @@ func (e ActivityLinkEntityType) Valid() bool {
 	}
 }
 
+// Defines values for ActivityRefKind.
+const (
+	ActivityRefKindCall     ActivityRefKind = "call"
+	ActivityRefKindEmail    ActivityRefKind = "email"
+	ActivityRefKindMeeting  ActivityRefKind = "meeting"
+	ActivityRefKindNote     ActivityRefKind = "note"
+	ActivityRefKindTask     ActivityRefKind = "task"
+	ActivityRefKindTelegram ActivityRefKind = "telegram"
+	ActivityRefKindWhatsapp ActivityRefKind = "whatsapp"
+)
+
+// Valid indicates whether the value is a known member of the ActivityRefKind enum.
+func (e ActivityRefKind) Valid() bool {
+	switch e {
+	case ActivityRefKindCall:
+		return true
+	case ActivityRefKindEmail:
+		return true
+	case ActivityRefKindMeeting:
+		return true
+	case ActivityRefKindNote:
+		return true
+	case ActivityRefKindTask:
+		return true
+	case ActivityRefKindTelegram:
+		return true
+	case ActivityRefKindWhatsapp:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AddListMemberRequestEntityType.
 const (
 	AddListMemberRequestEntityTypeDeal         AddListMemberRequestEntityType = "deal"
@@ -1640,19 +1673,19 @@ func (e PartnerPartnerRole) Valid() bool {
 
 // Defines values for PersonStrengthBucket.
 const (
-	Moderate PersonStrengthBucket = "moderate"
-	Strong   PersonStrengthBucket = "strong"
-	Weak     PersonStrengthBucket = "weak"
+	PersonStrengthBucketModerate PersonStrengthBucket = "moderate"
+	PersonStrengthBucketStrong   PersonStrengthBucket = "strong"
+	PersonStrengthBucketWeak     PersonStrengthBucket = "weak"
 )
 
 // Valid indicates whether the value is a known member of the PersonStrengthBucket enum.
 func (e PersonStrengthBucket) Valid() bool {
 	switch e {
-	case Moderate:
+	case PersonStrengthBucketModerate:
 		return true
-	case Strong:
+	case PersonStrengthBucketStrong:
 		return true
-	case Weak:
+	case PersonStrengthBucketWeak:
 		return true
 	default:
 		return false
@@ -1761,6 +1794,27 @@ func (e PersonSignalItemLabel) Valid() bool {
 	case PersonSignalItemLabelNeutral:
 		return true
 	case PersonSignalItemLabelWarm:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PersonStrengthBreakdownBucket.
+const (
+	PersonStrengthBreakdownBucketModerate PersonStrengthBreakdownBucket = "moderate"
+	PersonStrengthBreakdownBucketStrong   PersonStrengthBreakdownBucket = "strong"
+	PersonStrengthBreakdownBucketWeak     PersonStrengthBreakdownBucket = "weak"
+)
+
+// Valid indicates whether the value is a known member of the PersonStrengthBreakdownBucket enum.
+func (e PersonStrengthBreakdownBucket) Valid() bool {
+	switch e {
+	case PersonStrengthBreakdownBucketModerate:
+		return true
+	case PersonStrengthBreakdownBucketStrong:
+		return true
+	case PersonStrengthBreakdownBucketWeak:
 		return true
 	default:
 		return false
@@ -2192,31 +2246,31 @@ func (e UserStatus) Valid() bool {
 
 // Defines values for ListActivitiesParamsKind.
 const (
-	ListActivitiesParamsKindCall     ListActivitiesParamsKind = "call"
-	ListActivitiesParamsKindEmail    ListActivitiesParamsKind = "email"
-	ListActivitiesParamsKindMeeting  ListActivitiesParamsKind = "meeting"
-	ListActivitiesParamsKindNote     ListActivitiesParamsKind = "note"
-	ListActivitiesParamsKindTask     ListActivitiesParamsKind = "task"
-	ListActivitiesParamsKindTelegram ListActivitiesParamsKind = "telegram"
-	ListActivitiesParamsKindWhatsapp ListActivitiesParamsKind = "whatsapp"
+	Call     ListActivitiesParamsKind = "call"
+	Email    ListActivitiesParamsKind = "email"
+	Meeting  ListActivitiesParamsKind = "meeting"
+	Note     ListActivitiesParamsKind = "note"
+	Task     ListActivitiesParamsKind = "task"
+	Telegram ListActivitiesParamsKind = "telegram"
+	Whatsapp ListActivitiesParamsKind = "whatsapp"
 )
 
 // Valid indicates whether the value is a known member of the ListActivitiesParamsKind enum.
 func (e ListActivitiesParamsKind) Valid() bool {
 	switch e {
-	case ListActivitiesParamsKindCall:
+	case Call:
 		return true
-	case ListActivitiesParamsKindEmail:
+	case Email:
 		return true
-	case ListActivitiesParamsKindMeeting:
+	case Meeting:
 		return true
-	case ListActivitiesParamsKindNote:
+	case Note:
 		return true
-	case ListActivitiesParamsKindTask:
+	case Task:
 		return true
-	case ListActivitiesParamsKindTelegram:
+	case Telegram:
 		return true
-	case ListActivitiesParamsKindWhatsapp:
+	case Whatsapp:
 		return true
 	default:
 		return false
@@ -2574,6 +2628,20 @@ type ActivityListResponse struct {
 	Data []Activity `json:"data"`
 	Page PageInfo   `json:"page"`
 }
+
+// ActivityRef A lightweight activity identity reference — id/kind/subject/occurred_at only, never
+// the full body (one composite/evidence read must stay light per the
+// one-composite-read doctrine). Mirrors DealTimelineRef's shape, generalized beyond
+// deals for person/org composite reads and the strength-breakdown evidence list.
+type ActivityRef struct {
+	Id         openapi_types.UUID `json:"id"`
+	Kind       ActivityRefKind    `json:"kind"`
+	OccurredAt time.Time          `json:"occurred_at"`
+	Subject    *string            `json:"subject,omitempty"`
+}
+
+// ActivityRefKind defines model for ActivityRef.Kind.
+type ActivityRefKind string
 
 // AddListMemberRequest defines model for AddListMemberRequest.
 type AddListMemberRequest struct {
@@ -4181,6 +4249,24 @@ type PersonSignalItem struct {
 
 // PersonSignalItemLabel The derived or human-corrected relationship label.
 type PersonSignalItemLabel string
+
+// PersonStrengthBreakdown Contributing evidence behind a person's relationship-strength score (PO-EXT-2) —
+// the factor values plus the interaction activities that produced them, serving the
+// AC-person-3/4 evidence drawer.
+type PersonStrengthBreakdown struct {
+	Bucket PersonStrengthBreakdownBucket `json:"bucket"`
+
+	// ContributingActivities The interaction activities behind this score, most recent first.
+	ContributingActivities []ActivityRef      `json:"contributing_activities"`
+	Frequency              float32            `json:"frequency"`
+	PersonId               openapi_types.UUID `json:"person_id"`
+	Recency                float32            `json:"recency"`
+	Reciprocity            float32            `json:"reciprocity"`
+	Score                  int                `json:"score"`
+}
+
+// PersonStrengthBreakdownBucket defines model for PersonStrengthBreakdown.Bucket.
+type PersonStrengthBreakdownBucket string
 
 // Pipeline A pipeline. Mirrors the `pipeline` table (with embedded stages on GET).
 type Pipeline struct {

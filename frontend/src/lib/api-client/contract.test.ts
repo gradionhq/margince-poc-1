@@ -109,6 +109,30 @@ describe("Person.strength contract compliance (PO-EXT-1)", () => {
   });
 });
 
+describe("PersonStrengthBreakdown contract compliance (PO-EXT-2)", () => {
+  it("carries factor values plus contributing activity refs", () => {
+    const breakdown: components["schemas"]["PersonStrengthBreakdown"] = {
+      person_id: "00000000-0000-0000-0000-000000000001",
+      score: 72,
+      bucket: "strong",
+      recency: 0.9,
+      frequency: 0.6,
+      reciprocity: 0.8,
+      contributing_activities: [
+        {
+          id: "00000000-0000-0000-0000-000000000040",
+          kind: "email",
+          subject: "Re: proposal",
+          occurred_at: "2025-06-01T09:00:00Z",
+        },
+      ],
+    };
+    expect(breakdown.bucket).toBe("strong");
+    expect(breakdown.contributing_activities).toHaveLength(1);
+    expect(breakdown.contributing_activities[0].kind).toBe("email");
+  });
+});
+
 describe("restoreDeal contract compliance", () => {
   it("200 response schema is Deal with a nullable archived_at", () => {
     const restored: Deal = {
