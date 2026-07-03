@@ -20,6 +20,7 @@ const (
 	fieldStatus    = "status"
 	fieldCode      = "code"
 	fieldData      = "data"
+	fieldDetails   = "details"
 	codeConflict   = "conflict"
 	codeNotFound   = "not_found"
 	codeBadRequest = "bad_request"

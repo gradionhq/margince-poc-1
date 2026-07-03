@@ -4,23 +4,27 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 )
 
 // PipelineHandler routes /pipelines and /pipelines/{id} requests to the
-// PipelineStore. GET (list/read) ships in Task 1; PATCH ships in Task 2.
+// PipelineStore. GET (list/read) ships in Task 1; PATCH ships in Task 2; GET
+// /pipelines/{id}/rollup ships in T13.
 type PipelineHandler struct {
-	store  *deals.PipelineStore
-	stages *deals.StageStore
+	store       *deals.PipelineStore
+	stages      *deals.StageStore
+	rollupStore *deals.RollupStore
 }
 
 // NewPipelineHandler returns a PipelineHandler. stages is used by the
 // single-pipeline get to embed the pipeline's ordered stages, per the
-// crm.yaml Pipeline schema's "embedded stages on GET" contract.
-func NewPipelineHandler(store *deals.PipelineStore, stages *deals.StageStore) *PipelineHandler {
-	return &PipelineHandler{store: store, stages: stages}
+// crm.yaml Pipeline schema's "embedded stages on GET" contract; rollupStore
+// backs GET /pipelines/{id}/rollup.
+func NewPipelineHandler(store *deals.PipelineStore, stages *deals.StageStore, rollupStore *deals.RollupStore) *PipelineHandler {
+	return &PipelineHandler{store: store, stages: stages, rollupStore: rollupStore}
 }
 
 // maxPipelineStages bounds the single get-by-id stage embed. Product design
@@ -31,7 +35,10 @@ const maxPipelineStages = 100
 
 func (h *PipelineHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id := pathID(r.URL.Path, "/pipelines")
+	isRollup := strings.HasSuffix(r.URL.Path, "/rollup")
 	switch {
+	case r.Method == http.MethodGet && isRollup && id != "":
+		h.rollup(w, r, id)
 	case r.Method == http.MethodGet && id == "":
 		h.list(w, r)
 	case r.Method == http.MethodGet && id != "":
