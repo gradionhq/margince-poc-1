@@ -29,8 +29,8 @@ describe("PersonListResponse contract compliance", () => {
 
 describe("Person contract compliance", () => {
   const minimalPerson: Person = {
-    id: "00000000-0000-0000-0000-000000000001" as any,
-    workspace_id: "00000000-0000-0000-0000-000000000002" as any,
+    id: "00000000-0000-0000-0000-000000000001",
+    workspace_id: "00000000-0000-0000-0000-000000000002",
     full_name: "Alice Müller",
     source: "test",
     captured_by: "human:test",
@@ -54,8 +54,8 @@ describe("Person contract compliance", () => {
       ...minimalPerson,
       emails: [
         {
-          id: "00000000-0000-0000-0000-000000000003" as any,
-          email: "alice@example.com" as any,
+          id: "00000000-0000-0000-0000-000000000003",
+          email: "alice@example.com",
           email_type: "work",
           is_primary: true,
           position: 0,
