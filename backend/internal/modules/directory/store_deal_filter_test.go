@@ -350,7 +350,10 @@ func TestDealStore_ListFiltered_ForecastCategoryPartnerOrgSort(t *testing.T) {
 	d1.ForecastCategory = &fc
 	amt1 := int64(1000)
 	d1.AmountMinor = &amt1
-	if _, err := ds.Create(ctx, d1, ""); err != nil {
+	partnerOrg1 := fix.org1
+	d1.PartnerOrgID = &partnerOrg1
+	created1, err := ds.Create(ctx, d1, "")
+	if err != nil {
 		t.Fatalf("create d1: %v", err)
 	}
 
@@ -358,6 +361,8 @@ func TestDealStore_ListFiltered_ForecastCategoryPartnerOrgSort(t *testing.T) {
 	d2.WorkspaceID = wsFilterTest
 	amt2 := int64(2000)
 	d2.AmountMinor = &amt2
+	partnerOrg2 := fix.org2
+	d2.PartnerOrgID = &partnerOrg2
 	if _, err := ds.Create(ctx, d2, ""); err != nil {
 		t.Fatalf("create d2: %v", err)
 	}
@@ -380,6 +385,19 @@ func TestDealStore_ListFiltered_ForecastCategoryPartnerOrgSort(t *testing.T) {
 
 	if len(out) > 0 && out[0].StageEnteredAt == nil {
 		t.Fatal("expected StageEnteredAt to be populated on list rows")
+	}
+
+	// partner_org_id filter: only the deal seeded with the matching
+	// partner_org_id (d1 -> fix.org1) should come back.
+	out, _, err = ds.ListFiltered(ctx, wsFilterTest, "", 20, DealListFilter{PipelineID: fix.pipelineID, PartnerOrgID: fix.org1})
+	if err != nil {
+		t.Fatalf("ListFiltered partner_org_id: %v", err)
+	}
+	if len(out) != 1 || out[0].ID != created1.ID {
+		t.Fatalf("expected exactly deal d1 (%s) for partner_org_id=%s, got %+v", created1.ID, fix.org1, out)
+	}
+	if out[0].Name != d1.Name {
+		t.Fatalf("expected Forecast A, got %+v", out)
 	}
 }
 

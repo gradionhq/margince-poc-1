@@ -305,6 +305,15 @@ func TestDealHandler_List_FilterAndSort(t *testing.T) {
 	h := NewDealHandler(store)
 	ctx := context.Background()
 
+	// Seed an organization row: deal.partner_org_id is a hard FK to
+	// organization(id), so a real row must exist before we can filter on it.
+	var orgID string
+	if err := db.QueryRow(`INSERT INTO organization (id, workspace_id, name, source, captured_by)
+		VALUES (uuidv7(), $1, $2, 'test', 'human:test') RETURNING id`,
+		dealTestWorkspaceID, "PartnerOrg-list").Scan(&orgID); err != nil {
+		t.Fatalf("seed organization: %v", err)
+	}
+
 	fc := "commit"
 	d := crmcore.NewDeal("List me", pipelineID, stageID, provenanceOf("test", "human:test"))
 	d.WorkspaceID = dealTestWorkspaceID
@@ -312,12 +321,28 @@ func TestDealHandler_List_FilterAndSort(t *testing.T) {
 	amt := int64(500)
 	d.AmountMinor = &amt
 	d.Status = "open"
-	if _, err := store.Create(ctx, d, ""); err != nil {
+	d.PartnerOrgID = &orgID
+	created, err := store.Create(ctx, d, "")
+	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
+	// Seed a stakeholder relationship: a real person row plus a
+	// relationship(kind='deal_stakeholder') edge pointing at the created deal.
+	var personID string
+	if err := db.QueryRow(`INSERT INTO person (id, workspace_id, full_name, source, captured_by)
+		VALUES (uuidv7(), $1, $2, 'test', 'human:test') RETURNING id`,
+		dealTestWorkspaceID, "Stakeholder Person").Scan(&personID); err != nil {
+		t.Fatalf("seed person: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO relationship (id, workspace_id, kind, person_id, deal_id, role, source, captured_by)
+		VALUES (uuidv7(), $1, 'deal_stakeholder', $2, $3, 'champion', 'test', 'human:test')`,
+		dealTestWorkspaceID, personID, created.ID); err != nil {
+		t.Fatalf("seed relationship: %v", err)
+	}
+
 	req := httptest.NewRequest(http.MethodGet,
-		"/deals?sort=amount_minor&status=open&forecast_category=commit&pipeline_id="+pipelineID, nil)
+		"/deals?sort=amount_minor&status=open&forecast_category=commit&pipeline_id="+pipelineID+"&partner_org_id="+orgID, nil)
 	req = withDealWorkspace(req)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
@@ -338,10 +363,18 @@ func TestDealHandler_List_FilterAndSort(t *testing.T) {
 			if dl.StageEnteredAt == nil {
 				t.Fatal("expected stage_entered_at on list rows")
 			}
+			if dl.StakeholderCount != 1 {
+				t.Fatalf("stakeholder_count = %d, want 1", dl.StakeholderCount)
+			}
+		} else if dl.PartnerOrgID != nil && *dl.PartnerOrgID != orgID {
+			t.Fatalf("partner_org_id filter leaked deal %s with partner_org_id=%s, want only %s", dl.ID, *dl.PartnerOrgID, orgID)
 		}
 	}
 	if !found {
 		t.Fatal("expected 'List me' deal in filtered results")
+	}
+	if len(page.Data) != 1 {
+		t.Fatalf("expected partner_org_id filter to narrow results to exactly 1 deal, got %d: %+v", len(page.Data), page.Data)
 	}
 }
 
