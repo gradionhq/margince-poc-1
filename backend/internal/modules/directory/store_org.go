@@ -78,8 +78,6 @@ func (s *OrgStore) Get(ctx context.Context, id, workspaceID string) (Organizatio
 }
 
 // List returns a keyset page of organizations for the workspace and the next cursor.
-//
-//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
 func (s *OrgStore) List(ctx context.Context, workspaceID, cursor string, limit int) ([]Organization, string, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20

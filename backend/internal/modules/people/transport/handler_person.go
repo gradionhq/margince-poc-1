@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
-	"github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
@@ -38,6 +38,10 @@ const (
 	codeBadRequest = "bad_request"
 )
 
+var personSortValues = map[string]bool{
+	"": true, "id": true, "strength": true, "-strength": true,
+}
+
 // PersonHandler routes /people and /people/{id} requests to the PersonStore.
 type PersonHandler struct{ store *directory.PersonStore }
 
@@ -48,6 +52,11 @@ func NewPersonHandler(store *directory.PersonStore) *PersonHandler {
 
 // ServeHTTP dispatches on method + path suffix.
 func (h *PersonHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/strength-breakdown") {
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/people/"), "/strength-breakdown")
+		h.strengthBreakdown(w, r, id)
+		return
+	}
 	id := pathID(r.URL.Path, "/people")
 	switch {
 	case r.Method == http.MethodGet && id == "":
@@ -65,14 +74,47 @@ func (h *PersonHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *PersonHandler) strengthBreakdown(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := workspaceID(r)
+	result, err := h.store.StrengthBreakdown(r.Context(), id, wsID)
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	activities := make([]map[string]any, len(result.ContributingActivities))
+	for i, a := range result.ContributingActivities {
+		activities[i] = map[string]any{
+			"id": a.ID, "kind": a.Kind, "subject": a.Subject, "occurred_at": a.OccurredAt,
+		}
+	}
+	jsonOK(w, map[string]any{
+		"person_id":               id,
+		"score":                   result.Score,
+		"bucket":                  result.Bucket,
+		"recency":                 result.Recency,
+		"frequency":               result.Frequency,
+		"reciprocity":             result.Reciprocity,
+		"contributing_activities": activities,
+	})
+}
+
 func (h *PersonHandler) list(w http.ResponseWriter, r *http.Request) {
 	wsID, ok := requireWorkspace(w, r)
 	if !ok {
 		return
 	}
+	sort := r.URL.Query().Get("sort")
+	if !personSortValues[sort] {
+		jsonProblem(w, http.StatusUnprocessableEntity, "sort_field_not_allowed")
+		return
+	}
 	cursor := r.URL.Query().Get("cursor")
 	limit := queryLimit(r, 20)
-	items, next, err := h.store.List(r.Context(), wsID, cursor, limit)
+	items, next, err := h.store.List(r.Context(), wsID, cursor, limit, sort)
 	if err != nil {
 		jsonErr(w, err)
 		return

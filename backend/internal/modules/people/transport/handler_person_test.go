@@ -42,14 +42,13 @@ func withWorkspace(r *http.Request) *http.Request {
 	return r.WithContext(ctx)
 }
 
-// setRLS's wsID parameter is always testWorkspaceID's value in this file's
-// call sites (every case below shares the one fixed test workspace) — kept
-// as-is (not simplified to a no-arg form) to preserve the exact shape of
-// modules/directory's sibling helper this duplicates (see seedWorkspace's
-// doc below); the split itself, not the parameter, is why unparam now flags
-// it in isolation.
-//
-//nolint:unparam // see comment above
+// setRLS's wsID parameter varies across this file's call sites: most cases
+// share testWorkspaceID, but handler_person_strength_test.go's
+// TestPersonHandler_List_SortStrength_EmptyWorkspace uses a second, distinct
+// workspace ID so it can prove the zero-people case on a genuinely empty
+// workspace. Kept as a real parameter (not simplified to a no-arg form) to
+// preserve the exact shape of modules/directory's sibling helper this
+// duplicates (see seedWorkspace's doc below).
 func setRLS(t *testing.T, db *sql.DB, wsID string) {
 	t.Helper()
 	_, err := db.ExecContext(context.Background(),
@@ -66,10 +65,8 @@ func setRLS(t *testing.T, db *sql.DB, wsID string) {
 // so the 9-line helper is copied rather than exported solely for this — same
 // class of directory-move-forced duplication as httpserver's
 // keyStatus/statusRecorder (see internal/platform/httpserver/middleware.go).
-// Its wsID parameter is unparam-flagged for the same single-fixed-workspace
-// reason as setRLS above.
-//
-//nolint:unparam // see comment above
+// Its wsID parameter varies across call sites for the same reason as
+// setRLS above.
 func seedWorkspace(t *testing.T, db *sql.DB, wsID string) {
 	t.Helper()
 	_, err := db.ExecContext(context.Background(),

@@ -189,13 +189,11 @@ func (s *PersonStore) Create(ctx context.Context, p Person) (Person, error) {
 }
 
 // Get returns a live person by ID + workspace.
-//
-//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
 func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (Person, error) {
 	var p Person
 	var socialRaw, addrRaw []byte
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `
+		err := tx.QueryRowContext(ctx, `
 			SELECT id, workspace_id, full_name, first_name, last_name, title,
 			       owner_id, social, address, merged_into_id, converted_from_lead_id,
 			       version, source, captured_by, created_at, updated_at, archived_at
@@ -206,6 +204,10 @@ func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (Person, 
 			&p.Version, &p.Source, &p.CapturedBy,
 			&p.CreatedAt, &p.UpdatedAt, &p.ArchivedAt,
 		)
+		if err != nil {
+			return err
+		}
+		return s.attachStrength(ctx, tx, workspaceID, []*Person{&p})
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return p, errs.ErrNotFound
@@ -223,12 +225,23 @@ func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (Person, 
 }
 
 // List returns a cursor-paginated slice of live persons.
-//
-//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
-func (s *PersonStore) List(ctx context.Context, workspaceID, cursor string, limit int) ([]Person, string, error) {
+func (s *PersonStore) List(ctx context.Context, workspaceID, cursor string, limit int, sort string) ([]Person, string, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
+	switch sort {
+	case "", "id":
+		return s.listByID(ctx, workspaceID, cursor, limit)
+	case "strength":
+		return s.listByStrength(ctx, workspaceID, cursor, limit, false)
+	case "-strength":
+		return s.listByStrength(ctx, workspaceID, cursor, limit, true)
+	default:
+		return s.listByID(ctx, workspaceID, cursor, limit)
+	}
+}
+
+func (s *PersonStore) listByID(ctx context.Context, workspaceID, cursor string, limit int) ([]Person, string, error) {
 	// Non-nil so an empty result marshals to a JSON array ([]), never null.
 	out := []Person{}
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
@@ -256,7 +269,14 @@ func (s *PersonStore) List(ctx context.Context, workspaceID, cursor string, limi
 			unmarshalJSON(socialRaw, &p.Social)
 			out = append(out, p)
 		}
-		return rows.Err()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		ptrs := make([]*Person, len(out))
+		for i := range out {
+			ptrs[i] = &out[i]
+		}
+		return s.attachStrength(ctx, tx, workspaceID, ptrs)
 	})
 	if err != nil {
 		return nil, "", err

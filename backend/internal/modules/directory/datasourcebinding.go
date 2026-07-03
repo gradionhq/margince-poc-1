@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/ports/datasource"
 )
 
@@ -20,7 +20,7 @@ type personStore interface {
 	Create(ctx context.Context, p Person) (Person, error)
 	Get(ctx context.Context, id, workspaceID string) (Person, error)
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (Person, error)
-	List(ctx context.Context, workspaceID, cursor string, limit int) ([]Person, string, error)
+	List(ctx context.Context, workspaceID, cursor string, limit int, sort string) ([]Person, string, error)
 }
 
 type orgStore interface {
@@ -260,7 +260,7 @@ func (p *DatasourceProvider) Search(ctx context.Context, query datasource.Search
 
 	switch query.Type {
 	case datasource.EntityPerson:
-		list, _, err := p.persons.List(ctx, p.workspaceID, "", limit)
+		list, _, err := p.persons.List(ctx, p.workspaceID, "", limit, "")
 		if err != nil {
 			return datasource.SearchResult{}, err
 		}

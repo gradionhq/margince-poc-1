@@ -58,7 +58,7 @@ func (f *fakePersonStore) Update(ctx context.Context, id, workspaceID string, up
 	return p, nil
 }
 
-func (f *fakePersonStore) List(ctx context.Context, workspaceID, cursor string, limit int) ([]crmcore.Person, string, error) {
+func (f *fakePersonStore) List(ctx context.Context, workspaceID, cursor string, limit int, sort string) ([]crmcore.Person, string, error) {
 	f.lastWS = workspaceID
 	var out []crmcore.Person
 	for _, p := range f.persons {
@@ -161,7 +161,7 @@ type personStoreI interface {
 	Create(ctx context.Context, p crmcore.Person) (crmcore.Person, error)
 	Get(ctx context.Context, id, workspaceID string) (crmcore.Person, error)
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (crmcore.Person, error)
-	List(ctx context.Context, workspaceID, cursor string, limit int) ([]crmcore.Person, string, error)
+	List(ctx context.Context, workspaceID, cursor string, limit int, sort string) ([]crmcore.Person, string, error)
 }
 
 func newTestProvider(persons personStoreI) *crmcore.DatasourceProvider {
