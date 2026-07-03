@@ -22,7 +22,8 @@ func seedPersonActivity(t *testing.T, db *sql.DB, wsID, personID, kind, directio
 	t.Helper()
 
 	var activityID string
-	err := db.QueryRowContext(context.Background(), `
+	err := db.QueryRowContext(
+		context.Background(), `
 		INSERT INTO activity (workspace_id, kind, occurred_at, direction, source, captured_by)
 		VALUES ($1,$2,$3,$4,'test','human:test')
 		RETURNING id`,
@@ -32,7 +33,8 @@ func seedPersonActivity(t *testing.T, db *sql.DB, wsID, personID, kind, directio
 		t.Fatal("seed activity:", err)
 	}
 
-	if _, err := db.ExecContext(context.Background(), `
+	if _, err := db.ExecContext(
+		context.Background(), `
 		INSERT INTO activity_link (workspace_id, activity_id, entity_type, person_id)
 		VALUES ($1,$2,'person',$3)`,
 		wsID, activityID, personID,

@@ -130,9 +130,12 @@ func TestStrengthBucket(t *testing.T) {
 		score int
 		want  string
 	}{
-		{0, StrengthBucketWeak}, {24, StrengthBucketWeak},
-		{25, StrengthBucketModerate}, {59, StrengthBucketModerate},
-		{60, StrengthBucketStrong}, {100, StrengthBucketStrong},
+		{0, StrengthBucketWeak},
+		{24, StrengthBucketWeak},
+		{25, StrengthBucketModerate},
+		{59, StrengthBucketModerate},
+		{60, StrengthBucketStrong},
+		{100, StrengthBucketStrong},
 	}
 	for _, tc := range cases {
 		if got := StrengthBucket(tc.score); got != tc.want {

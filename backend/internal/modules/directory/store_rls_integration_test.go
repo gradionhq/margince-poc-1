@@ -53,7 +53,7 @@ func TestStoreRLSCrossWorkspaceReadEmpty(t *testing.T) {
 	}
 
 	// Cross-workspace List in B must be empty (A's row excluded by RLS).
-	gotB, _, err := people.List(appCtx(wsB), wsB, "", 50)
+	gotB, _, err := people.List(appCtx(wsB), wsB, "", 50, "")
 	if err != nil {
 		t.Fatalf("list in B: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestStoreRLSCrossWorkspaceReadEmpty(t *testing.T) {
 	}
 
 	// Sanity: A still sees its own row (the store works when scoped correctly).
-	gotA, _, err := people.List(appCtx(wsA), wsA, "", 50)
+	gotA, _, err := people.List(appCtx(wsA), wsA, "", 50, "")
 	if err != nil {
 		t.Fatalf("list in A: %v", err)
 	}
