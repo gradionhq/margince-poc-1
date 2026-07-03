@@ -30,8 +30,9 @@ type filterTestFixtures struct {
 	dealA1 string // stageA, owner1, org1, status=open,  last_activity_at=now()    (fresh, not stalled)
 	dealA2 string // stageA, owner2, org2, status=won
 	dealA3 string // stageA, owner1, org1, status=lost
-	dealB1 string // stageB, owner1, org2, status=open,  last_activity_at=NULL     (stalled)
-	dealB2 string // stageB, owner2, org1, status=open,  last_activity_at=now()-20d (stalled)
+	dealB1 string // stageB, owner1, org2, status=open,  last_activity_at=NULL, created_at=now()-70d (stalled via created_at fallback)
+	dealB2 string // stageB, owner2, org1, status=open,  last_activity_at=now()-70d (stalled under 60d threshold)
+	dealB3 string // stageB, owner1, org1, status=open,  last_activity_at=now()-70d, wait_until=now()+30d (suppressed, NOT stalled)
 }
 
 func seedFilterFixture(t *testing.T) filterTestFixtures {
@@ -118,15 +119,27 @@ func seedFilterFixture(t *testing.T) filterTestFixtures {
 		t.Fatal("update A3 to lost:", err)
 	}
 
-	// B1: open + NULL last_activity_at → stalled
+	// B1: open + NULL last_activity_at, created_at backdated 70d → stalled via created_at fallback (UAT-6, 60d threshold).
 	b1 := mk("B1", stB.ID, owner1, o2.ID)
+	if _, err := db.ExecContext(context.Background(),
+		`UPDATE deal SET created_at=$2 WHERE id=$1::uuid`, b1.ID, time.Now().UTC().Add(-70*24*time.Hour)); err != nil {
+		t.Fatal("set B1 created_at:", err)
+	}
 
-	// B2: open + >14d last_activity_at → stalled
+	// B2: open + >60d last_activity_at → stalled under DEAL-FORM-3's 60-day threshold.
 	b2 := mk("B2", stB.ID, owner2, o1.ID)
-	old := time.Now().UTC().Add(-20 * 24 * time.Hour)
+	old := time.Now().UTC().Add(-70 * 24 * time.Hour)
 	if _, err := db.ExecContext(context.Background(),
 		`UPDATE deal SET last_activity_at=$2 WHERE id=$1::uuid`, b2.ID, old); err != nil {
 		t.Fatal("set B2 last_activity_at:", err)
+	}
+
+	// B3: open + >60d idle, but wait_until 30d in the future → suppressed, NOT stalled.
+	b3 := mk("B3", stB.ID, owner1, o1.ID)
+	if _, err := db.ExecContext(context.Background(),
+		`UPDATE deal SET last_activity_at=$2, wait_until=$3 WHERE id=$1::uuid`,
+		b3.ID, time.Now().UTC().Add(-70*24*time.Hour), time.Now().UTC().Add(30*24*time.Hour)); err != nil {
+		t.Fatal("set B3 last_activity_at/wait_until:", err)
 	}
 
 	return filterTestFixtures{
@@ -135,7 +148,7 @@ func seedFilterFixture(t *testing.T) filterTestFixtures {
 		owner1: owner1, owner2: owner2,
 		org1: o1.ID, org2: o2.ID,
 		dealA1: a1.ID, dealA2: a2.ID, dealA3: a3.ID,
-		dealB1: b1.ID, dealB2: b2.ID,
+		dealB1: b1.ID, dealB2: b2.ID, dealB3: b3.ID,
 	}
 }
 
@@ -167,7 +180,7 @@ func TestDealListFilter(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertIDSet(t, got, fix.dealB1, fix.dealB2)
+		assertIDSet(t, got, fix.dealB1, fix.dealB2, fix.dealB3)
 	})
 
 	t.Run("stageA_stageB_disjoint_union_equals_pipeline", func(t *testing.T) {
@@ -206,7 +219,7 @@ func TestDealListFilter(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertIDSet(t, got, fix.dealA1, fix.dealA2, fix.dealA3, fix.dealB1, fix.dealB2)
+		assertIDSet(t, got, fix.dealA1, fix.dealA2, fix.dealA3, fix.dealB1, fix.dealB2, fix.dealB3)
 	})
 
 	t.Run("owner_id", func(t *testing.T) {
@@ -214,7 +227,7 @@ func TestDealListFilter(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertIDSet(t, got, fix.dealA1, fix.dealA3, fix.dealB1)
+		assertIDSet(t, got, fix.dealA1, fix.dealA3, fix.dealB1, fix.dealB3)
 	})
 
 	t.Run("organization_id", func(t *testing.T) {
@@ -222,7 +235,7 @@ func TestDealListFilter(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertIDSet(t, got, fix.dealA1, fix.dealA3, fix.dealB2)
+		assertIDSet(t, got, fix.dealA1, fix.dealA3, fix.dealB2, fix.dealB3)
 	})
 
 	t.Run("projects_owner_and_organization_id", func(t *testing.T) {
@@ -280,7 +293,8 @@ func TestDealListFilter(t *testing.T) {
 	})
 
 	t.Run("stalled_true", func(t *testing.T) {
-		// B1 (open + NULL) and B2 (open + >14d) are stalled; A1 is open+fresh; A2/A3 aren't open.
+		// B1 (open + NULL, created_at 70d) and B2 (open + >60d) are stalled under DEAL-FORM-3;
+		// B3 is suppressed by wait_until, so must NOT appear; A1 is open+fresh; A2/A3 aren't open.
 		got, _, err := ds.ListFiltered(ctx, wsFilterTest, "", 100, scope(DealListFilter{Stalled: true}))
 		if err != nil {
 			t.Fatal(err)
@@ -316,7 +330,7 @@ func TestDealListFilter(t *testing.T) {
 			}
 			cursor = next
 		}
-		want := map[string]bool{fix.dealA1: true, fix.dealA2: true, fix.dealA3: true, fix.dealB1: true, fix.dealB2: true}
+		want := map[string]bool{fix.dealA1: true, fix.dealA2: true, fix.dealA3: true, fix.dealB1: true, fix.dealB2: true, fix.dealB3: true}
 		if !equalSets(collected, want) {
 			t.Errorf("pagination full coverage:\n  got:  %v\n  want: %v", sortedKeys(collected), sortedKeys(want))
 		}
@@ -418,6 +432,7 @@ func TestDealStalledFlag(t *testing.T) {
 		{id: fix.dealA3, want: false},
 		{id: fix.dealB1, want: true},
 		{id: fix.dealB2, want: true},
+		{id: fix.dealB3, want: false},
 	}
 
 	wantSet := make(map[string]bool, len(cases))
@@ -451,14 +466,14 @@ func TestDealStalledFlag(t *testing.T) {
 
 	// Regression: the list projection previously omitted last_activity_at, so
 	// every list entry returned a nil LastActivityAt even when the DB column was
-	// non-null. B2 was seeded with last_activity_at = now()-20d, so both the
+	// non-null. B2 was seeded with last_activity_at = now()-70d, so both the
 	// single-deal Get() path and the list path must surface a non-nil value.
 	b2Get, err := ds.Get(ctx, fix.dealB2, wsFilterTest)
 	if err != nil {
 		t.Fatalf("get deal B2: %v", err)
 	}
 	if b2Get.LastActivityAt == nil {
-		t.Fatal("Get(B2).LastActivityAt is nil; want non-nil (seeded now()-20d)")
+		t.Fatal("Get(B2).LastActivityAt is nil; want non-nil (seeded now()-70d)")
 	}
 	b2List, ok := listByID[fix.dealB2]
 	if !ok {

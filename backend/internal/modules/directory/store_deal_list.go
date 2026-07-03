@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -23,27 +24,6 @@ type DealListFilter struct {
 	PartnerOrgID     string
 	PersonID         string
 	Sort             string
-}
-
-// defaultStalledDays is the idle threshold for the stalled=true filter, matching
-// the StalledDeals predicate in contextgraph.go which takes this value as a param.
-const defaultStalledDays = 14
-
-// stalledPredicateFmt is the single source of the deterministic "is this deal stalled"
-// SQL rule: an open deal whose last_activity_at is NULL or older than the threshold.
-// The %d placeholder is the bound param index carrying defaultStalledDays. Every site
-// that decides staleness — the ?stalled=true filter predicate and the per-deal `stalled`
-// projection on the Get/List reads — formats this one string with its own param index,
-// so the filter and the per-deal flag agree by construction.
-// The param is an integer day-count multiplied by a 1-day interval — NOT string
-// concatenation. `($n || ' days')::interval` would type $n as text, which the pgx
-// driver refuses to encode an int into (lib/pq coerces silently); integer × interval
-// keeps $n integer-typed so the predicate is portable across both drivers.
-const stalledPredicateFmt = `status='open' AND (last_activity_at IS NULL OR last_activity_at < now() - ($%d * interval '1 day'))`
-
-// stalledPredicate renders stalledPredicateFmt for the given bound-param index.
-func stalledPredicate(paramN int) string {
-	return fmt.Sprintf(stalledPredicateFmt, paramN)
 }
 
 var dealSortColumns = map[string]bool{
@@ -118,9 +98,11 @@ func buildDealListWhereBasic(f DealListFilter, where string, args []any, n int) 
 // clause, args, and next $N index.
 func buildDealListWhereExtra(f DealListFilter, where string, args []any, n int) (string, []any, int) {
 	if f.Stalled {
-		n++
-		args = append(args, defaultStalledDays)
-		where += ` AND ` + stalledPredicate(n)
+		// IsStalled is only ever true for status='open' deals (DEAL-FORM-3), so this
+		// literal is a safe, sound narrowing pre-filter — never excludes a true
+		// positive. The exact stalled/suppressed decision (which SQL cannot express
+		// without duplicating IsStalled) happens in Go in ListFiltered, on the fetched rows.
+		where += ` AND status='open'`
 	}
 	if f.ForecastCategory != "" {
 		n++
@@ -160,17 +142,14 @@ func (s *DealStore) ListFiltered(ctx context.Context, workspaceID, cursor string
 	}
 
 	where, args, _ := buildDealListWhere(workspaceID, cursor, limit, f)
-	stalledN := len(args) + 1
-	args = append(args, defaultStalledDays)
 
 	out := []Deal{}
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		//nolint:gosec // G202: `where` and stalledPredicate inject only bound-param indices ($N), never user input; all filter values are passed via args
+		//nolint:gosec // G202: `where` injects only bound-param indices ($N), never user input; all filter values are passed via args
 		rows, err := tx.QueryContext(ctx,
 			`SELECT id, workspace_id, name, pipeline_id, stage_id,
 			        organization_id, owner_id,
-			        amount_minor, currency, status, last_activity_at,
-			        (`+stalledPredicate(stalledN)+`) AS stalled,
+			        amount_minor, currency, status, wait_until, last_activity_at,
 			        version, source, captured_by, created_at, updated_at,
 			        (SELECT max(occurred_at) FROM deal_stage_history WHERE deal_id=deal.id) AS stage_entered_at,
 			        (SELECT count(*) FROM relationship WHERE deal_id=deal.id AND kind='deal_stakeholder' AND archived_at IS NULL) AS stakeholder_count
@@ -187,7 +166,7 @@ func (s *DealStore) ListFiltered(ctx context.Context, workspaceID, cursor string
 			var stageEnteredAt sql.NullTime
 			if err := rows.Scan(&d.ID, &d.WorkspaceID, &d.Name, &d.PipelineID, &d.StageID,
 				&d.OrganizationID, &d.OwnerID,
-				&d.AmountMinor, &d.Currency, &d.Status, &d.LastActivityAt, &d.Stalled, &d.Version,
+				&d.AmountMinor, &d.Currency, &d.Status, &d.WaitUntil, &d.LastActivityAt, &d.Version,
 				&d.Source, &d.CapturedBy,
 				&d.CreatedAt, &d.UpdatedAt,
 				&stageEnteredAt, &d.StakeholderCount); err != nil {
@@ -203,6 +182,25 @@ func (s *DealStore) ListFiltered(ctx context.Context, workspaceID, cursor string
 	if err != nil {
 		return nil, "", err
 	}
+
+	now := time.Now().UTC()
+	for i := range out {
+		out[i].Stalled, _ = IsStalled(out[i], now)
+	}
+	if f.Stalled {
+		// See the SQL comment above: a limit+1 over-fetch of open deals can contain
+		// non-stalled (suppressed) rows this trims below limit — an accepted
+		// pagination simplification for this ticket's scope (see plan Global
+		// Constraints).
+		kept := out[:0]
+		for _, d := range out {
+			if d.Stalled {
+				kept = append(kept, d)
+			}
+		}
+		out = kept
+	}
+
 	var next string
 	if len(out) > limit {
 		next = out[limit-1].ID

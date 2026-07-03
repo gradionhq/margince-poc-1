@@ -107,17 +107,16 @@ func (s *DealStore) Get(ctx context.Context, id, workspaceID string) (Deal, erro
 			       amount_minor, currency, fx_rate_to_base, fx_rate_date,
 			       status, lost_reason, expected_close_date, closed_at,
 			       forecast_category, wait_until, last_activity_at,
-			       (`+stalledPredicate(3)+`) AS stalled,
 			       version, source, captured_by, created_at, updated_at, archived_at,
 			       (SELECT max(occurred_at) FROM deal_stage_history WHERE deal_id=deal.id) AS stage_entered_at,
 			       (SELECT count(*) FROM relationship WHERE deal_id=deal.id AND kind='deal_stakeholder' AND archived_at IS NULL) AS stakeholder_count
 			FROM deal WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
-			id, workspaceID, defaultStalledDays).Scan(
+			id, workspaceID).Scan(
 			&d.ID, &d.WorkspaceID, &d.Name, &d.PipelineID, &d.StageID,
 			&d.OrganizationID, &d.OwnerID, &d.PartnerOrgID,
 			&d.AmountMinor, &d.Currency, &d.FxRateToBase, &d.FxRateDate,
 			&d.Status, &d.LostReason, &d.ExpectedCloseDate, &d.ClosedAt,
-			&d.ForecastCategory, &d.WaitUntil, &d.LastActivityAt, &d.Stalled,
+			&d.ForecastCategory, &d.WaitUntil, &d.LastActivityAt,
 			&d.Version, &d.Source, &d.CapturedBy,
 			&d.CreatedAt, &d.UpdatedAt, &d.ArchivedAt,
 			&stageEnteredAt, &d.StakeholderCount,
@@ -126,10 +125,14 @@ func (s *DealStore) Get(ctx context.Context, id, workspaceID string) (Deal, erro
 	if errors.Is(err, sql.ErrNoRows) {
 		return d, errs.ErrNotFound
 	}
+	if err != nil {
+		return d, err
+	}
 	if stageEnteredAt.Valid {
 		d.StageEnteredAt = &stageEnteredAt.Time
 	}
-	return d, err
+	d.Stalled, _ = IsStalled(d, time.Now().UTC())
+	return d, nil
 }
 
 // FindByIdempotencyKey resolves a prior create-action audit row carrying the key
