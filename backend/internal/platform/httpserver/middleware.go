@@ -129,6 +129,14 @@ const ObjPerson = "person"
 // admin-perms seed and the /deals route wiring.
 const ObjDeal = "deal"
 
+// ObjPipeline is the canonical RBAC object name for pipelines, shared by the
+// admin-perms seed and the /pipelines route wiring.
+const ObjPipeline = "pipeline"
+
+// ObjStage is the canonical RBAC object name for stages, shared by the
+// admin-perms seed and the /stages route wiring.
+const ObjStage = "stage"
+
 // MethodToAction maps an HTTP method to the canonical RBAC action name.
 func MethodToAction(method string) string {
 	switch strings.ToUpper(method) {

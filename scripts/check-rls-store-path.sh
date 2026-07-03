@@ -24,10 +24,13 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-dir="$root/backend/internal/modules/directory"
+# modules/deals (T10) holds the pipeline/stage store, split out of
+# modules/directory — scan both so the RLS-bypass gate keeps covering
+# pipeline/stage after the move.
+dirs=("$root/backend/internal/modules/directory" "$root/backend/internal/modules/deals")
 
 # One awk pass over every non-test modules/directory .go file; prev resets per file (FNR==1).
-files="$(find "$dir" -maxdepth 1 -name '*.go' ! -name '*_test.go' | sort)"
+files="$(for d in "${dirs[@]}"; do find "$d" -maxdepth 1 -name '*.go' ! -name '*_test.go'; done | sort)"
 violations="$(echo "$files" | xargs awk '
   FNR == 1 { prev = "" }
   $0 ~ /[A-Za-z_][A-Za-z0-9_]*\.db\.(ExecContext|QueryContext|QueryRowContext)/ {
@@ -40,7 +43,7 @@ violations="$(echo "$files" | xargs awk '
 ')"
 
 if [ -n "$violations" ]; then
-  echo "FAIL — modules/directory store statements addressing the superuser pool directly (RLS bypassed):"
+  echo "FAIL — modules/directory or modules/deals store statements addressing the superuser pool directly (RLS bypassed):"
   echo "$violations"
   echo
   echo "Route each through withWorkspaceTx (SET LOCAL ROLE margince_app + app.workspace_id),"

@@ -126,6 +126,11 @@ INSERT INTO role_assignment (id, workspace_id, role_id, user_id) VALUES
 ON CONFLICT DO NOTHING;
 
 -- ─── Sales pipeline + stages ────────────────────────────────
+-- Seven pinned stages per DEAL-FORM-1: New/10, Qualified/25, Discovery/40,
+-- Proposal/60, Negotiation/80, Closed Won/100, Closed Lost/0. Stage IDs
+-- ...041-000000000001 and ...041-000000000002 are FK-referenced by the
+-- seeded deal rows below — kept stable, only name/position/win_probability
+-- retuned to match the pinned values.
 
 INSERT INTO pipeline (id, workspace_id, name, is_default, position)
 VALUES ('00000000-0000-0000-0040-000000000001', '00000000-0000-0000-0000-000000000001',
@@ -136,13 +141,19 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO stage (id, workspace_id, pipeline_id, name, position, semantic, win_probability)
 VALUES
   ('00000000-0000-0000-0041-000000000001', '00000000-0000-0000-0000-000000000001',
-   '00000000-0000-0000-0040-000000000001', 'Lead',      1, 'open', 10),
+   '00000000-0000-0000-0040-000000000001', 'New',         1, 'open', 10),
   ('00000000-0000-0000-0041-000000000002', '00000000-0000-0000-0000-000000000001',
-   '00000000-0000-0000-0040-000000000001', 'Qualified', 2, 'open', 50),
+   '00000000-0000-0000-0040-000000000001', 'Qualified',   2, 'open', 25),
   ('00000000-0000-0000-0041-000000000003', '00000000-0000-0000-0000-000000000001',
-   '00000000-0000-0000-0040-000000000001', 'Won',       3, 'won',  100),
+   '00000000-0000-0000-0040-000000000001', 'Discovery',   3, 'open', 40),
   ('00000000-0000-0000-0041-000000000004', '00000000-0000-0000-0000-000000000001',
-   '00000000-0000-0000-0040-000000000001', 'Lost',      4, 'lost', 0)
+   '00000000-0000-0000-0040-000000000001', 'Proposal',    4, 'open', 60),
+  ('00000000-0000-0000-0041-000000000005', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0040-000000000001', 'Negotiation', 5, 'open', 80),
+  ('00000000-0000-0000-0041-000000000006', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0040-000000000001', 'Closed Won',  6, 'won',  100),
+  ('00000000-0000-0000-0041-000000000007', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0040-000000000001', 'Closed Lost', 7, 'lost', 0)
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── Sample deals (one owned by rep, one by admin) ──────────

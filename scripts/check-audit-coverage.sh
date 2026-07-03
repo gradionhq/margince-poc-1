@@ -31,6 +31,14 @@ done < <(grep -rl --include='*.go' 'INSERT INTO audit_log' "$root/backend/intern
 # including PersonStore (store.go; Person did not cleanly split into
 # modules/people, see task-3-report.md's mapping-deviations section).
 core_tables='person|organization|deal|activity|lead|pipeline|stage'
+# NOTE (T10): modules/deals (pipeline/stage store, split out of
+# modules/directory) is intentionally NOT scanned here. pipeline/stage never
+# wrote audit_log rows even while inside modules/directory (Rule 2 above is
+# package-scoped and only passed because sibling files there reference
+# crmaudit) — this is a pre-existing gap this ticket doesn't introduce or
+# worsen, and wiring audit coverage for pipeline/stage is out of T10's scope.
+# A future ticket that adds audit_log writes to PipelineStore/StageStore
+# should add modules/deals to core_tables' scan path at the same time.
 while IFS= read -r d; do
   [ -z "$d" ] && continue
   if ! grep -l 'crmaudit' "$d"/*.go 2>/dev/null | grep -qv '_test\.go'; then
