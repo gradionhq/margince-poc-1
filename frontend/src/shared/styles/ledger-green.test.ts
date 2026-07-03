@@ -17,7 +17,7 @@ function extractBlock(
   const tokens = new Map<string, string>();
   // Find the block for the selector
   const match = css.match(
-    new RegExp(selectorPattern.source + "\\s*\\{([^}]+)\\}"),
+    new RegExp(`${selectorPattern.source}\\s*\\{([^}]+)\\}`),
   );
   if (!match) return tokens;
   const block = match[1];

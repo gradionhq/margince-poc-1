@@ -23,7 +23,7 @@ function read(p: string): string {
 }
 
 afterEach(() => {
-  delete document.documentElement.dataset["theme"];
+  delete document.documentElement.dataset.theme;
   document.documentElement.classList.remove("dark");
 });
 
@@ -62,7 +62,7 @@ describe("cascade resolution — structural verification", () => {
       /\[data-theme="dark"\][^{]*\{([^}]+)\}/,
     );
     expect(darkBlockMatch, "dark block must exist in override").not.toBeNull();
-    const darkBlock = darkBlockMatch![1];
+    const darkBlock = darkBlockMatch?.[1];
     expect(
       darkBlock,
       "--gf-bg-page must not be in override dark block",
@@ -93,14 +93,14 @@ describe("cascade resolution — structural verification", () => {
   });
 
   it("jsdom: data-theme=dark + .dark class both apply (DOM toggle smoke test)", () => {
-    document.documentElement.dataset["theme"] = "dark";
+    document.documentElement.dataset.theme = "dark";
     document.documentElement.classList.add("dark");
-    expect(document.documentElement.dataset["theme"]).toBe("dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
 
-    delete document.documentElement.dataset["theme"];
+    delete document.documentElement.dataset.theme;
     document.documentElement.classList.remove("dark");
-    expect(document.documentElement.dataset["theme"]).toBeUndefined();
+    expect(document.documentElement.dataset.theme).toBeUndefined();
     expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
 });

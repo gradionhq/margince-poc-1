@@ -10,13 +10,13 @@ import "../src/app/index.css";
 // <html> so Forge's .dark cascade (surfaces/text/borders/shadows) fires
 // alongside Margince's brand-override block in ledger-green.css.
 const withTheme: Decorator = (Story, context) => {
-  const theme = context.globals["theme"] as string;
+  const theme = context.globals.theme as string;
   const html = document.documentElement;
   if (theme === "dark") {
-    html.dataset["theme"] = "dark";
+    html.dataset.theme = "dark";
     html.classList.add("dark");
   } else {
-    delete html.dataset["theme"];
+    delete html.dataset.theme;
     html.classList.remove("dark");
   }
   return <Story />;
@@ -30,7 +30,7 @@ const withTheme: Decorator = (Story, context) => {
 //   "centered"   — page surface, content centered (best for single atoms)
 //   "fullscreen" — page surface, no gutter (full-bleed shells / boards)
 const withSurface: Decorator = (Story, context) => {
-  const surface = (context.parameters["surface"] as string) ?? "padded";
+  const surface = (context.parameters.surface as string) ?? "padded";
   const cls =
     surface === "fullscreen"
       ? "min-h-screen bg-gf-page"
