@@ -18,6 +18,13 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
+// seedPersonActivity's wsID parameter is always testWorkspaceID's value at
+// every call site in this file (all cases share the one fixed test
+// workspace), same as setRLS/seedWorkspace in handler_person_test.go. Kept
+// as a genuine parameter rather than hardcoded so the helper stays reusable
+// if a future test seeds activity for a second workspace.
+//
+//nolint:unparam // see comment above
 func seedPersonActivity(t *testing.T, db *sql.DB, wsID, personID, kind, direction string, occurredAt time.Time) {
 	t.Helper()
 

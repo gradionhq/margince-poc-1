@@ -189,8 +189,6 @@ func (s *PersonStore) Create(ctx context.Context, p Person) (Person, error) {
 }
 
 // Get returns a live person by ID + workspace.
-//
-//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
 func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (Person, error) {
 	var p Person
 	var socialRaw, addrRaw []byte
@@ -227,8 +225,6 @@ func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (Person, 
 }
 
 // List returns a cursor-paginated slice of live persons.
-//
-//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
 func (s *PersonStore) List(ctx context.Context, workspaceID, cursor string, limit int, sort string) ([]Person, string, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20

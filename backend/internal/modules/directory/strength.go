@@ -6,6 +6,9 @@ import (
 	"time"
 )
 
+// PO-F-3 tunables (docs/subsystems/people-and-organizations.md "Formulas §4",
+// #parameters RELSTRENGTH_*): the recency half-life, frequency saturation point,
+// reciprocity floor, and lookback window used by ComputeStrength.
 const (
 	RelStrengthHalfLifeDays     = 30.0
 	RelStrengthFreqSaturation   = 20.0
@@ -13,6 +16,8 @@ const (
 	RelStrengthWindowDays       = 90
 )
 
+// PO-PARAM-3 buckets: the named strength tiers a computed score is classified
+// into for display.
 const (
 	StrengthBucketWeak     = "weak"
 	StrengthBucketModerate = "moderate"
