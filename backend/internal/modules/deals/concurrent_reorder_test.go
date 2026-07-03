@@ -73,4 +73,7 @@ func TestStageStore_Update_ConcurrentSwap_NoUniquenessViolationWindow(t *testing
 	if rows.Next() {
 		t.Fatal("found two live stages sharing a position after the concurrent swap — uniqueness violation window")
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatal("post-check rows:", err)
+	}
 }

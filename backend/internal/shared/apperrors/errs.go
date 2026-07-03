@@ -16,6 +16,7 @@ var (
 	ErrNullProvenance            = errors.New("null provenance")                      // -> 422 (capture rejected: missing source/captured_by)
 	ErrStageNotInPipeline        = errors.New("stage not in pipeline")                // -> 422 (validation)
 	ErrTerminalProbabilityPinned = errors.New("terminal stage probability is pinned") // -> 422 (validation: won=100, lost=0)
+	ErrWinProbabilityOutOfRange  = errors.New("win_probability out of range")         // -> 422 (validation: 0-100)
 	ErrSuppressed                = errors.New("suppressed")                           // -> 451 (GDPR erasure suppression)
 )
 
@@ -39,7 +40,8 @@ func HTTPStatus(err error) int {
 		return 429
 	case errors.Is(err, ErrNullProvenance),
 		errors.Is(err, ErrStageNotInPipeline),
-		errors.Is(err, ErrTerminalProbabilityPinned):
+		errors.Is(err, ErrTerminalProbabilityPinned),
+		errors.Is(err, ErrWinProbabilityOutOfRange):
 		return 422
 	case errors.Is(err, ErrSuppressed):
 		return 451

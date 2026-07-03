@@ -135,19 +135,6 @@ func nullTime(m map[string]any, key string) *time.Time {
 	return nil
 }
 
-func nullInt(m map[string]any, key string) *int64 {
-	if v, ok := m[key]; ok {
-		switch n := v.(type) {
-		case float64:
-			i := int64(n)
-			return &i
-		case int64:
-			return &n
-		}
-	}
-	return nil
-}
-
 // boolVal safely dereferences a *bool, returning false for nil.
 func boolVal(b *bool) bool {
 	if b == nil {

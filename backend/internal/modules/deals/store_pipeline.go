@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lib/pq"
+
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
-	"github.com/lib/pq"
 )
 
 // ---------------------------------------------------------------------------
@@ -300,16 +301,7 @@ func (s *StageStore) Update(ctx context.Context, id, workspaceID string, updates
 		strings.Join(setClauses, ", "))
 	res, err := tx.ExecContext(ctx, q, args...)
 	if err != nil {
-		var pgErr *pq.Error
-		if errors.As(err, &pgErr) {
-			switch {
-			case pgErr.Code == "23505" && pgErr.Constraint == "uq_stage_position":
-				return Stage{}, errs.ErrConflict
-			case pgErr.Code == "23514" && pgErr.Constraint == "stage_terminal_prob":
-				return Stage{}, errs.ErrTerminalProbabilityPinned
-			}
-		}
-		return Stage{}, err
+		return Stage{}, translateStageUpdateErr(err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return Stage{}, errs.ErrNotFound
@@ -329,6 +321,23 @@ func (s *StageStore) Update(ctx context.Context, id, workspaceID string, updates
 	}
 
 	return st, tx.Commit()
+}
+
+// translateStageUpdateErr maps stage-table constraint violations from Update to the
+// matching Tier-0 sentinel; unrecognized errors pass through unchanged.
+func translateStageUpdateErr(err error) error {
+	var pgErr *pq.Error
+	if errors.As(err, &pgErr) {
+		switch {
+		case pgErr.Code == "23505" && pgErr.Constraint == "uq_stage_position":
+			return errs.ErrConflict
+		case pgErr.Code == "23514" && pgErr.Constraint == "stage_terminal_prob":
+			return errs.ErrTerminalProbabilityPinned
+		case pgErr.Code == "23514" && pgErr.Constraint == "stage_win_probability_check":
+			return errs.ErrWinProbabilityOutOfRange
+		}
+	}
+	return err
 }
 
 // Archive soft-deletes a stage (sets archived_at).

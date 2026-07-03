@@ -38,6 +38,33 @@ func TestStageStore_Update_TerminalProbabilityPinned_Returns422(t *testing.T) {
 	}
 }
 
+func TestStageStore_Update_WinProbabilityOutOfRange_Returns422(t *testing.T) {
+	wsID := ids.New()
+	db := openTestDB(t)
+	setRLS(t, db, wsID)
+	seedWorkspace(t, db, wsID)
+	ctx := context.Background()
+
+	pstore := NewPipelineStore(db)
+	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "Range Test " + uniq()})
+	if err != nil {
+		t.Fatal("create pipeline:", err)
+	}
+	sstore := NewStageStore(db)
+	open, err := sstore.Create(ctx, Stage{
+		WorkspaceID: wsID, PipelineID: pl.ID,
+		Name: "Open", Position: 1, Semantic: "open", WinProbability: 50,
+	})
+	if err != nil {
+		t.Fatal("create open stage:", err)
+	}
+
+	_, err = sstore.Update(ctx, open.ID, wsID, map[string]any{"win_probability": float64(150)})
+	if !errors.Is(err, apperrors.ErrWinProbabilityOutOfRange) {
+		t.Fatalf("expected ErrWinProbabilityOutOfRange, got %v", err)
+	}
+}
+
 func TestPipelineStore_Update_DefaultCollision_Returns409(t *testing.T) {
 	wsID := ids.New()
 	db := openTestDB(t)
