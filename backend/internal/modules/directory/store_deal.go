@@ -9,7 +9,7 @@ import (
 	"time"
 
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
-	"github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 )
 
@@ -23,15 +23,30 @@ type DealStore struct{ db *sql.DB }
 // NewDealStore returns a DealStore.
 func NewDealStore(db *sql.DB) *DealStore { return &DealStore{db: db} }
 
-// Create inserts a new deal row and its create audit_log entry in one
-// workspace-scoped tx (margince_app + app.workspace_id), so the row and its audit
-// commit atomically under RLS (audit parity with offer/product/lead creates).
-func (s *DealStore) Create(ctx context.Context, d Deal) (Deal, error) {
+// Create inserts a new deal row, its initial stage history row, its create
+// audit_log entry, and its deal.created outbox event in one workspace-scoped tx.
+// The stage pre-check keeps the error readable at the store boundary instead of
+// relying on the composite FK to surface a lower-level constraint violation.
+func (s *DealStore) Create(ctx context.Context, d Deal, idempotencyKey string) (Deal, error) {
 	if err := requireProvenance(d.Source, d.CapturedBy); err != nil {
 		return Deal{}, err
 	}
 	d.ID = ids.New()
 	err := withWorkspaceTx(ctx, s.db, d.WorkspaceID, func(tx *sql.Tx) error {
+		var inPipeline bool
+		if err := tx.QueryRowContext(ctx, `
+			SELECT EXISTS(
+				SELECT 1
+				FROM stage
+				WHERE id=$1::uuid AND pipeline_id=$2::uuid AND workspace_id=$3::uuid AND archived_at IS NULL
+			)`,
+			d.StageID, d.PipelineID, d.WorkspaceID).Scan(&inPipeline); err != nil {
+			return err
+		}
+		if !inPipeline {
+			return errs.ErrStageNotInPipeline
+		}
+
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO deal (id, workspace_id, name, pipeline_id, stage_id,
 			    organization_id, owner_id, partner_org_id,
@@ -46,8 +61,30 @@ func (s *DealStore) Create(ctx context.Context, d Deal) (Deal, error) {
 			d.Source, d.CapturedBy); err != nil {
 			return err
 		}
+
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO deal_stage_history (
+				workspace_id, deal_id, from_stage_id, to_stage_id,
+				changed_by, amount_minor_at_change, currency_at_change
+			)
+			VALUES ($1::uuid, $2::uuid, NULL, $3::uuid, $4, $5, $6)`,
+			d.WorkspaceID, d.ID, d.StageID, d.CapturedBy, d.AmountMinor, d.Currency); err != nil {
+			return fmt.Errorf("deal create history: %w", err)
+		}
+
+		payload, _ := json.Marshal(map[string]any{"deal_id": d.ID})
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload)
+			 VALUES ($1,$2,$3::uuid,$4)`,
+			d.WorkspaceID, "deal.created", d.ID, payload); err != nil {
+			return fmt.Errorf("deal create event: %w", err)
+		}
+
 		e := crmaudit.EntryFromPrincipal(ctx, "create", entityTypeDeal, &d.ID, nil, d)
 		e.WorkspaceID = d.WorkspaceID
+		if idempotencyKey != "" {
+			e.Evidence = map[string]any{"idempotency_key": idempotencyKey}
+		}
 		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
 			return fmt.Errorf("deal create audit: %w", err)
 		}
@@ -62,6 +99,7 @@ func (s *DealStore) Create(ctx context.Context, d Deal) (Deal, error) {
 // Get returns one deal by id, workspace-scoped; ErrNotFound if absent.
 func (s *DealStore) Get(ctx context.Context, id, workspaceID string) (Deal, error) {
 	var d Deal
+	var stageEnteredAt sql.NullTime
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		return tx.QueryRowContext(ctx, `
 			SELECT id, workspace_id, name, pipeline_id, stage_id,
@@ -70,7 +108,9 @@ func (s *DealStore) Get(ctx context.Context, id, workspaceID string) (Deal, erro
 			       status, lost_reason, expected_close_date, closed_at,
 			       forecast_category, wait_until, last_activity_at,
 			       (`+stalledPredicate(3)+`) AS stalled,
-			       version, source, captured_by, created_at, updated_at, archived_at
+			       version, source, captured_by, created_at, updated_at, archived_at,
+			       (SELECT max(occurred_at) FROM deal_stage_history WHERE deal_id=deal.id) AS stage_entered_at,
+			       (SELECT count(*) FROM relationship WHERE deal_id=deal.id AND kind='deal_stakeholder' AND archived_at IS NULL) AS stakeholder_count
 			FROM deal WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
 			id, workspaceID, defaultStalledDays).Scan(
 			&d.ID, &d.WorkspaceID, &d.Name, &d.PipelineID, &d.StageID,
@@ -80,12 +120,49 @@ func (s *DealStore) Get(ctx context.Context, id, workspaceID string) (Deal, erro
 			&d.ForecastCategory, &d.WaitUntil, &d.LastActivityAt, &d.Stalled,
 			&d.Version, &d.Source, &d.CapturedBy,
 			&d.CreatedAt, &d.UpdatedAt, &d.ArchivedAt,
+			&stageEnteredAt, &d.StakeholderCount,
 		)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return d, errs.ErrNotFound
 	}
+	if stageEnteredAt.Valid {
+		d.StageEnteredAt = &stageEnteredAt.Time
+	}
 	return d, err
+}
+
+// FindByIdempotencyKey resolves a prior create-action audit row carrying the key
+// in audit_log.evidence and returns the deal it created.
+func (s *DealStore) FindByIdempotencyKey(ctx context.Context, workspaceID, key string) (Deal, bool, error) {
+	if key == "" {
+		return Deal{}, false, nil
+	}
+
+	var dealID string
+	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `
+			SELECT entity_id
+			FROM audit_log
+			WHERE workspace_id=$1::uuid
+			  AND entity_type=$2
+			  AND action='create'
+			  AND evidence->>'idempotency_key' = $3
+			ORDER BY occurred_at DESC
+			LIMIT 1`,
+			workspaceID, entityTypeDeal, key).Scan(&dealID)
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return Deal{}, false, nil
+	}
+	if err != nil {
+		return Deal{}, false, err
+	}
+	d, err := s.Get(ctx, dealID, workspaceID)
+	if err != nil {
+		return Deal{}, false, err
+	}
+	return d, true, nil
 }
 
 // DealListFilter holds optional predicates for ListFiltered. Zero value = no extra filters.

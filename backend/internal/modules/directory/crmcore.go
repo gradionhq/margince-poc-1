@@ -104,6 +104,8 @@ type Deal struct {
 	WaitUntil         *time.Time `json:"wait_until"`
 	LastActivityAt    *time.Time `json:"last_activity_at"`
 	Stalled           bool       `json:"stalled"`
+	StageEnteredAt    *time.Time `json:"stage_entered_at"`
+	StakeholderCount  int        `json:"stakeholder_count"`
 	Version           int64      `json:"version"`
 	Source            string     `json:"source"`
 	CapturedBy        string     `json:"captured_by"`

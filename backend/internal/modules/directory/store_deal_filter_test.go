@@ -91,7 +91,7 @@ func seedFilterFixture(t *testing.T) filterTestFixtures {
 		d.OwnerID = &ownerID
 		d.OrganizationID = &orgID
 		d.Status = "open"
-		created, err := ds.Create(ctx, d)
+		created, err := ds.Create(ctx, d, "")
 		if err != nil {
 			t.Fatalf("create deal %s: %v", name, err)
 		}
@@ -502,7 +502,7 @@ func TestDealListFilter_P95AndExplain(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		d := NewDeal("Card "+uniq(), pl.ID, st.ID, p0)
 		d.WorkspaceID = wsKanbanP95
-		if _, err := ds.Create(ctx, d); err != nil {
+		if _, err := ds.Create(ctx, d, ""); err != nil {
 			t.Fatalf("seed deal %d: %v", i, err)
 		}
 	}

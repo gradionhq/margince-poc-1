@@ -115,7 +115,7 @@ func TestStoreRLSCrossWorkspaceWriteDenied(t *testing.T) {
 	// write is denied rather than silently succeeding on the superuser pool.
 	dB := crmcore.NewDeal("CrossTenantDeal", pipeID, stageID, prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	dB.WorkspaceID = wsB
-	if _, err := deals.Create(appCtx(wsB), dB); err == nil {
+	if _, err := deals.Create(appCtx(wsB), dB, ""); err == nil {
 		t.Fatal("cross-workspace deal create referencing another tenant's pipeline/stage must be denied under RLS")
 	}
 }
