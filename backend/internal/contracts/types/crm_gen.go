@@ -3937,6 +3937,9 @@ type Money struct {
 
 // Organization A company. Mirrors the `organization` table.
 type Organization struct {
+	// Activities PO-EXT-3 — timeline activity refs linked to this organization, most recent first. Populated on `getOrganization` only.
+	Activities *[]ActivityRef `json:"activities,omitempty"`
+
 	// Address Structured postal address.
 	Address    *Address   `json:"address,omitempty"`
 	ArchivedAt *time.Time `json:"archived_at,omitempty"`
@@ -3945,24 +3948,32 @@ type Organization struct {
 	// Classification An org IS a partner iff classification='partner' AND it has a `partner` row (A41/ADR-0032).
 	Classification *OrganizationClassification `json:"classification,omitempty"`
 	CreatedAt      time.Time                   `json:"created_at"`
-	DisplayName    string                      `json:"display_name"`
-	Domains        *[]OrganizationDomain       `json:"domains,omitempty"`
-	Id             openapi_types.UUID          `json:"id"`
-	Industry       *string                     `json:"industry,omitempty"`
-	LegalName      *string                     `json:"legal_name,omitempty"`
-	MergedIntoId   *openapi_types.UUID         `json:"merged_into_id,omitempty"`
-	OwnerId        *openapi_types.UUID         `json:"owner_id,omitempty"`
+
+	// Deals PO-EXT-3 — deals attributed to this organization. Populated on `getOrganization` only.
+	Deals        *[]Deal               `json:"deals,omitempty"`
+	DisplayName  string                `json:"display_name"`
+	Domains      *[]OrganizationDomain `json:"domains,omitempty"`
+	Id           openapi_types.UUID    `json:"id"`
+	Industry     *string               `json:"industry,omitempty"`
+	LegalName    *string               `json:"legal_name,omitempty"`
+	MergedIntoId *openapi_types.UUID   `json:"merged_into_id,omitempty"`
+	OwnerId      *openapi_types.UUID   `json:"owner_id,omitempty"`
 
 	// ParentOrgId Single-level hierarchy FK; no cycles.
 	ParentOrgId *openapi_types.UUID `json:"parent_org_id,omitempty"`
 
 	// Partner First-class partner state as a 1:1 extension of an organization (an org IS a partner iff it
 	// has a `partner` row + classification='partner'). Company identity is never duplicated.
-	Partner   *Partner                `json:"partner,omitempty"`
-	Raw       *map[string]interface{} `json:"raw,omitempty"`
-	SizeBand  *OrganizationSizeBand   `json:"size_band,omitempty"`
-	Source    string                  `json:"source"`
-	UpdatedAt time.Time               `json:"updated_at"`
+	Partner *Partner                `json:"partner,omitempty"`
+	Raw     *map[string]interface{} `json:"raw,omitempty"`
+
+	// Relationships PO-EXT-3 organization-360 composite read — this org's relationship edges
+	// (employment, partner edges). Populated on the single-record read
+	// (`getOrganization`); omitted on list rows (`listOrganizations`).
+	Relationships *[]Relationship       `json:"relationships,omitempty"`
+	SizeBand      *OrganizationSizeBand `json:"size_band,omitempty"`
+	Source        string                `json:"source"`
+	UpdatedAt     time.Time             `json:"updated_at"`
 
 	// Version Monotonic row version, incremented by the server on every mutation (data-model §1.7).
 	// Echoed back as the `version` field on every mutable entity. To make a write conditional,
@@ -4081,6 +4092,9 @@ type PatchAutomationRequest struct {
 
 // Person A contact. Mirrors the `person` table.
 type Person struct {
+	// Activities PO-EXT-3 — timeline activity refs linked to this person, most recent first. Populated on `getPerson` only.
+	Activities *[]ActivityRef `json:"activities,omitempty"`
+
 	// Address Structured postal address.
 	Address    *Address   `json:"address,omitempty"`
 	ArchivedAt *time.Time `json:"archived_at,omitempty"`
@@ -4095,8 +4109,11 @@ type Person struct {
 	// ConvertedFromLeadId Canonical origin pointer if promoted from a lead.
 	ConvertedFromLeadId *openapi_types.UUID `json:"converted_from_lead_id,omitempty"`
 	CreatedAt           time.Time           `json:"created_at"`
-	Emails              *[]PersonEmail      `json:"emails,omitempty"`
-	FirstName           *string             `json:"first_name,omitempty"`
+
+	// Deals PO-EXT-3 — deals this person is a stakeholder on. Populated on `getPerson` only.
+	Deals     *[]Deal        `json:"deals,omitempty"`
+	Emails    *[]PersonEmail `json:"emails,omitempty"`
+	FirstName *string        `json:"first_name,omitempty"`
 
 	// FullName Always present (display name).
 	FullName string             `json:"full_name"`
@@ -4108,6 +4125,12 @@ type Person struct {
 	OwnerId      *openapi_types.UUID     `json:"owner_id,omitempty"`
 	Phones       *[]PersonPhone          `json:"phones,omitempty"`
 	Raw          *map[string]interface{} `json:"raw,omitempty"`
+
+	// Relationships PO-EXT-3 person-360 composite read — this person's relationship edges
+	// (employment, deal-stakeholder roles, etc.). Populated on the single-record read
+	// (`getPerson`); omitted on list rows (`listPeople`) for payload economy, mirroring
+	// the existing readOnly composite fields already on `Deal`.
+	Relationships *[]Relationship `json:"relationships,omitempty"`
 
 	// Social { linkedin, twitter, github, ... }
 	Social *map[string]interface{} `json:"social,omitempty"`
@@ -7775,6 +7798,14 @@ func (a *Organization) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
+	if raw, found := object["activities"]; found {
+		err = json.Unmarshal(raw, &a.Activities)
+		if err != nil {
+			return fmt.Errorf("error reading 'activities': %w", err)
+		}
+		delete(object, "activities")
+	}
+
 	if raw, found := object["address"]; found {
 		err = json.Unmarshal(raw, &a.Address)
 		if err != nil {
@@ -7813,6 +7844,14 @@ func (a *Organization) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("error reading 'created_at': %w", err)
 		}
 		delete(object, "created_at")
+	}
+
+	if raw, found := object["deals"]; found {
+		err = json.Unmarshal(raw, &a.Deals)
+		if err != nil {
+			return fmt.Errorf("error reading 'deals': %w", err)
+		}
+		delete(object, "deals")
 	}
 
 	if raw, found := object["display_name"]; found {
@@ -7895,6 +7934,14 @@ func (a *Organization) UnmarshalJSON(b []byte) error {
 		delete(object, "raw")
 	}
 
+	if raw, found := object["relationships"]; found {
+		err = json.Unmarshal(raw, &a.Relationships)
+		if err != nil {
+			return fmt.Errorf("error reading 'relationships': %w", err)
+		}
+		delete(object, "relationships")
+	}
+
 	if raw, found := object["size_band"]; found {
 		err = json.Unmarshal(raw, &a.SizeBand)
 		if err != nil {
@@ -7954,6 +8001,13 @@ func (a Organization) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
 
+	if a.Activities != nil {
+		object["activities"], err = json.Marshal(a.Activities)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'activities': %w", err)
+		}
+	}
+
 	if a.Address != nil {
 		object["address"], err = json.Marshal(a.Address)
 		if err != nil {
@@ -7983,6 +8037,13 @@ func (a Organization) MarshalJSON() ([]byte, error) {
 	object["created_at"], err = json.Marshal(a.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'created_at': %w", err)
+	}
+
+	if a.Deals != nil {
+		object["deals"], err = json.Marshal(a.Deals)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'deals': %w", err)
+		}
 	}
 
 	object["display_name"], err = json.Marshal(a.DisplayName)
@@ -8051,6 +8112,13 @@ func (a Organization) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if a.Relationships != nil {
+		object["relationships"], err = json.Marshal(a.Relationships)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'relationships': %w", err)
+		}
+	}
+
 	if a.SizeBand != nil {
 		object["size_band"], err = json.Marshal(a.SizeBand)
 		if err != nil {
@@ -8114,6 +8182,14 @@ func (a *Person) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
+	if raw, found := object["activities"]; found {
+		err = json.Unmarshal(raw, &a.Activities)
+		if err != nil {
+			return fmt.Errorf("error reading 'activities': %w", err)
+		}
+		delete(object, "activities")
+	}
+
 	if raw, found := object["address"]; found {
 		err = json.Unmarshal(raw, &a.Address)
 		if err != nil {
@@ -8160,6 +8236,14 @@ func (a *Person) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("error reading 'created_at': %w", err)
 		}
 		delete(object, "created_at")
+	}
+
+	if raw, found := object["deals"]; found {
+		err = json.Unmarshal(raw, &a.Deals)
+		if err != nil {
+			return fmt.Errorf("error reading 'deals': %w", err)
+		}
+		delete(object, "deals")
 	}
 
 	if raw, found := object["emails"]; found {
@@ -8232,6 +8316,14 @@ func (a *Person) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("error reading 'raw': %w", err)
 		}
 		delete(object, "raw")
+	}
+
+	if raw, found := object["relationships"]; found {
+		err = json.Unmarshal(raw, &a.Relationships)
+		if err != nil {
+			return fmt.Errorf("error reading 'relationships': %w", err)
+		}
+		delete(object, "relationships")
 	}
 
 	if raw, found := object["social"]; found {
@@ -8309,6 +8401,13 @@ func (a Person) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
 
+	if a.Activities != nil {
+		object["activities"], err = json.Marshal(a.Activities)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'activities': %w", err)
+		}
+	}
+
 	if a.Address != nil {
 		object["address"], err = json.Marshal(a.Address)
 		if err != nil {
@@ -8345,6 +8444,13 @@ func (a Person) MarshalJSON() ([]byte, error) {
 	object["created_at"], err = json.Marshal(a.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'created_at': %w", err)
+	}
+
+	if a.Deals != nil {
+		object["deals"], err = json.Marshal(a.Deals)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'deals': %w", err)
+		}
 	}
 
 	if a.Emails != nil {
@@ -8403,6 +8509,13 @@ func (a Person) MarshalJSON() ([]byte, error) {
 		object["raw"], err = json.Marshal(a.Raw)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'raw': %w", err)
+		}
+	}
+
+	if a.Relationships != nil {
+		object["relationships"], err = json.Marshal(a.Relationships)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'relationships': %w", err)
 		}
 	}
 

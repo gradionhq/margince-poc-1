@@ -2319,6 +2319,17 @@ export interface components {
                 frequency: number;
                 reciprocity: number;
             } | null;
+            /**
+             * @description PO-EXT-3 person-360 composite read — this person's relationship edges
+             *     (employment, deal-stakeholder roles, etc.). Populated on the single-record read
+             *     (`getPerson`); omitted on list rows (`listPeople`) for payload economy, mirroring
+             *     the existing readOnly composite fields already on `Deal`.
+             */
+            readonly relationships?: components["schemas"]["Relationship"][];
+            /** @description PO-EXT-3 — deals this person is a stakeholder on. Populated on `getPerson` only. */
+            readonly deals?: components["schemas"]["Deal"][];
+            /** @description PO-EXT-3 — timeline activity refs linked to this person, most recent first. Populated on `getPerson` only. */
+            readonly activities?: components["schemas"]["ActivityRef"][];
         } & {
             [key: string]: unknown;
         };
@@ -2440,6 +2451,16 @@ export interface components {
             updated_at: string;
             /** Format: date-time */
             archived_at?: string | null;
+            /**
+             * @description PO-EXT-3 organization-360 composite read — this org's relationship edges
+             *     (employment, partner edges). Populated on the single-record read
+             *     (`getOrganization`); omitted on list rows (`listOrganizations`).
+             */
+            readonly relationships?: components["schemas"]["Relationship"][];
+            /** @description PO-EXT-3 — deals attributed to this organization. Populated on `getOrganization` only. */
+            readonly deals?: components["schemas"]["Deal"][];
+            /** @description PO-EXT-3 — timeline activity refs linked to this organization, most recent first. Populated on `getOrganization` only. */
+            readonly activities?: components["schemas"]["ActivityRef"][];
         } & {
             [key: string]: unknown;
         };

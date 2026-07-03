@@ -3904,6 +3904,25 @@ components:
             frequency: { type: number }
             reciprocity: { type: number }
           required: [score, bucket, recency, frequency, reciprocity]
+        relationships:
+          type: array
+          readOnly: true
+          description: |
+            PO-EXT-3 person-360 composite read — this person's relationship edges
+            (employment, deal-stakeholder roles, etc.). Populated on the single-record read
+            (`getPerson`); omitted on list rows (`listPeople`) for payload economy, mirroring
+            the existing readOnly composite fields already on `Deal`.
+          items: { $ref: '#/components/schemas/Relationship' }
+        deals:
+          type: array
+          readOnly: true
+          description: PO-EXT-3 — deals this person is a stakeholder on. Populated on `getPerson` only.
+          items: { $ref: '#/components/schemas/Deal' }
+        activities:
+          type: array
+          readOnly: true
+          description: PO-EXT-3 — timeline activity refs linked to this person, most recent first. Populated on `getPerson` only.
+          items: { $ref: '#/components/schemas/ActivityRef' }
       additionalProperties: true
       x-extension: true
       x-extension-note: |
@@ -4016,6 +4035,24 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         archived_at: { type: [string, 'null'], format: date-time }
+        relationships:
+          type: array
+          readOnly: true
+          description: |
+            PO-EXT-3 organization-360 composite read — this org's relationship edges
+            (employment, partner edges). Populated on the single-record read
+            (`getOrganization`); omitted on list rows (`listOrganizations`).
+          items: { $ref: '#/components/schemas/Relationship' }
+        deals:
+          type: array
+          readOnly: true
+          description: PO-EXT-3 — deals attributed to this organization. Populated on `getOrganization` only.
+          items: { $ref: '#/components/schemas/Deal' }
+        activities:
+          type: array
+          readOnly: true
+          description: PO-EXT-3 — timeline activity refs linked to this organization, most recent first. Populated on `getOrganization` only.
+          items: { $ref: '#/components/schemas/ActivityRef' }
       additionalProperties: true
       x-extension: true
 
