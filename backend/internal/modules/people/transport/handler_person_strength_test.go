@@ -124,6 +124,62 @@ func TestPersonHandler_Get_StrengthNoRecentActivity(t *testing.T) {
 	}
 }
 
+// TestPersonHandler_Get_StrengthGoldenExample proves the PO-F-3 worked
+// example (docs/subsystems/people-and-organizations.md:389-393, mirrored by
+// TestComputeStrength_GoldenExample in
+// backend/internal/modules/directory/strength_test.go) survives the full
+// PersonStore.Get -> handler.get -> JSON round-trip against a real postgres,
+// not just the pure-function unit test. Unlike that unit test, this one runs
+// against the real clock (time.Now().UTC()), so offsets are seeded relative
+// to "now" rather than a pinned instant; the whole-day offsets keep the
+// resulting score stable at 47/moderate.
+func TestPersonHandler_Get_StrengthGoldenExample(t *testing.T) {
+	db := openTestDB(t)
+	store := directory.NewPersonStore(db)
+	h := NewPersonHandler(store)
+
+	const wsID = testWorkspaceID
+	seedWorkspace(t, db, wsID)
+	setRLS(t, db, wsID)
+
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID})
+	p := directory.NewPerson("Golden Example Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	p.WorkspaceID = wsID
+	created, err := store.Create(ctx, p)
+	if err != nil {
+		t.Fatal("seed:", err)
+	}
+
+	now := time.Now().UTC()
+	// 7 inbound emails, matching TestComputeStrength_GoldenExample's fixture.
+	for _, days := range []int{5, 10, 18, 25, 40, 55, 70} {
+		seedPersonActivity(t, db, wsID, created.ID, "email", "inbound", now.AddDate(0, 0, -days))
+	}
+	// 5 outbound calls.
+	for _, days := range []int{8, 20, 35, 50, 65} {
+		seedPersonActivity(t, db, wsID, created.ID, "call", "outbound", now.AddDate(0, 0, -days))
+	}
+
+	req := withWorkspace(httptest.NewRequest(http.MethodGet, "/people/"+created.ID, nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /people/{id}: want 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	strength, ok := resp["strength"].(map[string]any)
+	if !ok {
+		t.Fatalf("strength = %v, want an object (score=47/moderate), not null", resp["strength"])
+	}
+	if strength["score"] != float64(47) || strength["bucket"] != "moderate" {
+		t.Errorf("strength = %+v, want score=47 bucket=moderate", strength)
+	}
+}
+
 func TestPersonHandler_List_SortStrength(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
