@@ -4205,11 +4205,57 @@ components:
       type: object
       description: |
         The deal-360 composite read (DEAL-EXT-3) — one round trip per the
-        one-composite-read doctrine (architecture/frontend.md): the deal record, its
-        stakeholders (person + role), and timeline refs together.
-      required: [deal, stakeholders, timeline]
+        one-composite-read doctrine (architecture/frontend.md): the deal record's own
+        fields (duplicated flat here rather than composed via `allOf` — `oasdiff`'s
+        default breaking-change diff, as run by `scripts/check-contract-breaking.sh`,
+        does not resolve `allOf` when comparing response schemas, and `--flatten-allof`
+        itself errors on this spec's OpenAPI-3.1 nullable `type: [T, 'null']` unions, so
+        `allOf` can't be used for any schema that must diff cleanly against a flat
+        predecessor), its stakeholders (person + role), and timeline refs, together.
+      required: [id, workspace_id, name, pipeline_id, stage_id, status, source, captured_by, created_at, updated_at, stakeholders, timeline]
       properties:
-        deal: { $ref: '#/components/schemas/Deal' }
+        id: { type: string, format: uuid }
+        workspace_id: { type: string, format: uuid }
+        name: { type: string }
+        amount_minor: { type: [integer, 'null'], format: int64 }
+        currency: { type: [string, 'null'], pattern: '^[A-Z]{3}$' }
+        fx_rate_to_base: { type: [string, 'null'], description: 'Native→base, frozen at close (null while open). Decimal-as-string to avoid float rounding of the 10-dp rate.' }
+        fx_rate_date: { type: [string, 'null'], format: date }
+        pipeline_id: { type: string, format: uuid }
+        stage_id: { type: string, format: uuid, description: Must belong to pipeline_id. }
+        organization_id: { type: [string, 'null'], format: uuid, description: Primary org; never a raw lead. }
+        partner_org_id: { type: [string, 'null'], format: uuid, description: 'Deal registration/attribution to a partner org (A38/A41/ADR-0032). The org must have a `partner` row.' }
+        owner_id: { type: [string, 'null'], format: uuid }
+        status: { type: string, enum: [open, won, lost], default: open }
+        lost_reason: { type: [string, 'null'], description: Required when status=lost. }
+        forecast_category: { type: [string, 'null'], enum: [null, commit, best_case, pipeline, omitted] }
+        expected_close_date: { type: [string, 'null'], format: date }
+        wait_until: { type: [string, 'null'], format: date, description: "'Customer asked us to wait until' date; suppresses the stalled flag but not the overdue close-date flag." }
+        closed_at: { type: [string, 'null'], format: date-time }
+        last_activity_at: { type: [string, 'null'], format: date-time, description: Drives the deterministic stalled flag. }
+        stalled: { type: boolean, readOnly: true, description: Derived — no activity past the threshold (absolute duration). }
+        stage_entered_at:
+          type: [string, 'null']
+          format: date-time
+          readOnly: true
+          description: |
+            Timestamp the deal entered its current stage — the `changed_at` of the most
+            recent `deal_stage_history` row for this deal (DEAL-DDL-4). Derived, not a
+            stored `deal` column; every deal has one via the creation-writes-history-row
+            rule (DEAL-AC-H1), so this is never null for a live deal.
+        stakeholder_count:
+          type: integer
+          readOnly: true
+          description: |
+            Count of live `deal_stakeholder` `relationship` rows for this deal
+            (DEAL-WIRE-5). Derived, not a stored `deal` column.
+        source: { type: string }
+        captured_by: { type: string }
+        raw: { type: [object, 'null'], additionalProperties: true }
+        version: { $ref: '#/components/schemas/RowVersion' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        archived_at: { type: [string, 'null'], format: date-time }
         stakeholders:
           type: array
           description: The deal's stakeholder relationships (person + role), DEAL-WIRE-5.
@@ -4218,6 +4264,8 @@ components:
           type: array
           description: Timeline refs linked to this deal, most recent first.
           items: { $ref: '#/components/schemas/DealTimelineRef' }
+      additionalProperties: true
+      x-extension: true
 
     # ---- Pipeline + Stage ----
     Stage:

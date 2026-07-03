@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
+import type { components } from "./generated/crm.js";
 import type {
+  Deal,
   PageInfo,
   Person,
   PersonListResponse,
-  Deal,
 } from "./generated/index.js";
-import type { components } from "./generated/crm.js";
 
 describe("PersonListResponse contract compliance", () => {
   it("data is an array of Person", () => {
@@ -133,20 +133,18 @@ describe("Deal row-extension contract compliance (DEAL-EXT-2)", () => {
 });
 
 describe("DealDetail contract compliance (DEAL-EXT-3)", () => {
-  it("nests deal, stakeholders, and timeline in one composite read", () => {
+  it("flattens the deal's own fields (backward-compatible with the old Deal-typed getDeal response) alongside stakeholders and timeline in one composite read", () => {
     const detail: components["schemas"]["DealDetail"] = {
-      deal: {
-        id: "00000000-0000-0000-0000-000000000010",
-        workspace_id: "00000000-0000-0000-0000-000000000002",
-        name: "Acme — expansion",
-        pipeline_id: "00000000-0000-0000-0000-000000000020",
-        stage_id: "00000000-0000-0000-0000-000000000021",
-        status: "open",
-        source: "test",
-        captured_by: "human:test",
-        created_at: "2025-01-01T00:00:00Z",
-        updated_at: "2025-01-01T00:00:00Z",
-      },
+      id: "00000000-0000-0000-0000-000000000010",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      name: "Acme — expansion",
+      pipeline_id: "00000000-0000-0000-0000-000000000020",
+      stage_id: "00000000-0000-0000-0000-000000000021",
+      status: "open",
+      source: "test",
+      captured_by: "human:test",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
       stakeholders: [
         {
           id: "00000000-0000-0000-0000-000000000030",
@@ -168,7 +166,7 @@ describe("DealDetail contract compliance (DEAL-EXT-3)", () => {
         },
       ],
     };
-    expect(detail.deal.name).toBe("Acme — expansion");
+    expect(detail.name).toBe("Acme — expansion");
     expect(detail.stakeholders).toHaveLength(1);
     expect(detail.stakeholders[0].role).toBe("champion");
     expect(detail.timeline).toHaveLength(1);

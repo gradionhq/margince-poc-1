@@ -2690,15 +2690,102 @@ export interface components {
         };
         /**
          * @description The deal-360 composite read (DEAL-EXT-3) — one round trip per the
-         *     one-composite-read doctrine (architecture/frontend.md): the deal record, its
-         *     stakeholders (person + role), and timeline refs together.
+         *     one-composite-read doctrine (architecture/frontend.md): the deal record's own
+         *     fields (duplicated flat here rather than composed via `allOf` — `oasdiff`'s
+         *     default breaking-change diff, as run by `scripts/check-contract-breaking.sh`,
+         *     does not resolve `allOf` when comparing response schemas, and `--flatten-allof`
+         *     itself errors on this spec's OpenAPI-3.1 nullable `type: [T, 'null']` unions, so
+         *     `allOf` can't be used for any schema that must diff cleanly against a flat
+         *     predecessor), its stakeholders (person + role), and timeline refs, together.
          */
         DealDetail: {
-            deal: components["schemas"]["Deal"];
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            workspace_id: string;
+            name: string;
+            /** Format: int64 */
+            amount_minor?: number | null;
+            currency?: string | null;
+            /** @description Native→base, frozen at close (null while open). Decimal-as-string to avoid float rounding of the 10-dp rate. */
+            fx_rate_to_base?: string | null;
+            /** Format: date */
+            fx_rate_date?: string | null;
+            /** Format: uuid */
+            pipeline_id: string;
+            /**
+             * Format: uuid
+             * @description Must belong to pipeline_id.
+             */
+            stage_id: string;
+            /**
+             * Format: uuid
+             * @description Primary org; never a raw lead.
+             */
+            organization_id?: string | null;
+            /**
+             * Format: uuid
+             * @description Deal registration/attribution to a partner org (A38/A41/ADR-0032). The org must have a `partner` row.
+             */
+            partner_org_id?: string | null;
+            /** Format: uuid */
+            owner_id?: string | null;
+            /**
+             * @default open
+             * @enum {string}
+             */
+            status: "open" | "won" | "lost";
+            /** @description Required when status=lost. */
+            lost_reason?: string | null;
+            /** @enum {string|null} */
+            forecast_category?: null | "commit" | "best_case" | "pipeline" | "omitted";
+            /** Format: date */
+            expected_close_date?: string | null;
+            /**
+             * Format: date
+             * @description 'Customer asked us to wait until' date; suppresses the stalled flag but not the overdue close-date flag.
+             */
+            wait_until?: string | null;
+            /** Format: date-time */
+            closed_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Drives the deterministic stalled flag.
+             */
+            last_activity_at?: string | null;
+            /** @description Derived — no activity past the threshold (absolute duration). */
+            readonly stalled?: boolean;
+            /**
+             * Format: date-time
+             * @description Timestamp the deal entered its current stage — the `changed_at` of the most
+             *     recent `deal_stage_history` row for this deal (DEAL-DDL-4). Derived, not a
+             *     stored `deal` column; every deal has one via the creation-writes-history-row
+             *     rule (DEAL-AC-H1), so this is never null for a live deal.
+             */
+            readonly stage_entered_at?: string | null;
+            /**
+             * @description Count of live `deal_stakeholder` `relationship` rows for this deal
+             *     (DEAL-WIRE-5). Derived, not a stored `deal` column.
+             */
+            readonly stakeholder_count?: number;
+            source: string;
+            captured_by: string;
+            raw?: {
+                [key: string]: unknown;
+            } | null;
+            version?: components["schemas"]["RowVersion"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            archived_at?: string | null;
             /** @description The deal's stakeholder relationships (person + role), DEAL-WIRE-5. */
             stakeholders: components["schemas"]["Relationship"][];
             /** @description Timeline refs linked to this deal, most recent first. */
             timeline: components["schemas"]["DealTimelineRef"][];
+        } & {
+            [key: string]: unknown;
         };
         /** @description A pipeline stage. Mirrors the `stage` table. */
         Stage: {

@@ -1155,6 +1155,54 @@ func (e DealStatus) Valid() bool {
 	}
 }
 
+// Defines values for DealDetailForecastCategory.
+const (
+	DealDetailForecastCategoryBestCase    DealDetailForecastCategory = "best_case"
+	DealDetailForecastCategoryCommit      DealDetailForecastCategory = "commit"
+	DealDetailForecastCategoryLessThannil DealDetailForecastCategory = "<nil>"
+	DealDetailForecastCategoryOmitted     DealDetailForecastCategory = "omitted"
+	DealDetailForecastCategoryPipeline    DealDetailForecastCategory = "pipeline"
+)
+
+// Valid indicates whether the value is a known member of the DealDetailForecastCategory enum.
+func (e DealDetailForecastCategory) Valid() bool {
+	switch e {
+	case DealDetailForecastCategoryBestCase:
+		return true
+	case DealDetailForecastCategoryCommit:
+		return true
+	case DealDetailForecastCategoryLessThannil:
+		return true
+	case DealDetailForecastCategoryOmitted:
+		return true
+	case DealDetailForecastCategoryPipeline:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DealDetailStatus.
+const (
+	DealDetailStatusLost DealDetailStatus = "lost"
+	DealDetailStatusOpen DealDetailStatus = "open"
+	DealDetailStatusWon  DealDetailStatus = "won"
+)
+
+// Valid indicates whether the value is a known member of the DealDetailStatus enum.
+func (e DealDetailStatus) Valid() bool {
+	switch e {
+	case DealDetailStatusLost:
+		return true
+	case DealDetailStatusOpen:
+		return true
+	case DealDetailStatusWon:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DealRoomConsentState.
 const (
 	DealRoomConsentStateGranted DealRoomConsentState = "granted"
@@ -1997,34 +2045,34 @@ func (e UpdateLeadRequestStatus) Valid() bool {
 
 // Defines values for UpdateOrganizationRequestSizeBand.
 const (
-	UpdateOrganizationRequestSizeBandLessThannil UpdateOrganizationRequestSizeBand = "<nil>"
-	UpdateOrganizationRequestSizeBandN10015000   UpdateOrganizationRequestSizeBand = "1001-5000"
-	UpdateOrganizationRequestSizeBandN110        UpdateOrganizationRequestSizeBand = "1-10"
-	UpdateOrganizationRequestSizeBandN1150       UpdateOrganizationRequestSizeBand = "11-50"
-	UpdateOrganizationRequestSizeBandN201500     UpdateOrganizationRequestSizeBand = "201-500"
-	UpdateOrganizationRequestSizeBandN5000       UpdateOrganizationRequestSizeBand = "5000+"
-	UpdateOrganizationRequestSizeBandN5011000    UpdateOrganizationRequestSizeBand = "501-1000"
-	UpdateOrganizationRequestSizeBandN51200      UpdateOrganizationRequestSizeBand = "51-200"
+	LessThannil UpdateOrganizationRequestSizeBand = "<nil>"
+	N10015000   UpdateOrganizationRequestSizeBand = "1001-5000"
+	N110        UpdateOrganizationRequestSizeBand = "1-10"
+	N1150       UpdateOrganizationRequestSizeBand = "11-50"
+	N201500     UpdateOrganizationRequestSizeBand = "201-500"
+	N5000       UpdateOrganizationRequestSizeBand = "5000+"
+	N5011000    UpdateOrganizationRequestSizeBand = "501-1000"
+	N51200      UpdateOrganizationRequestSizeBand = "51-200"
 )
 
 // Valid indicates whether the value is a known member of the UpdateOrganizationRequestSizeBand enum.
 func (e UpdateOrganizationRequestSizeBand) Valid() bool {
 	switch e {
-	case UpdateOrganizationRequestSizeBandLessThannil:
+	case LessThannil:
 		return true
-	case UpdateOrganizationRequestSizeBandN10015000:
+	case N10015000:
 		return true
-	case UpdateOrganizationRequestSizeBandN110:
+	case N110:
 		return true
-	case UpdateOrganizationRequestSizeBandN1150:
+	case N1150:
 		return true
-	case UpdateOrganizationRequestSizeBandN201500:
+	case N201500:
 		return true
-	case UpdateOrganizationRequestSizeBandN5000:
+	case N5000:
 		return true
-	case UpdateOrganizationRequestSizeBandN5011000:
+	case N5011000:
 		return true
-	case UpdateOrganizationRequestSizeBandN51200:
+	case N51200:
 		return true
 	default:
 		return false
@@ -2198,19 +2246,19 @@ func (e ListApprovalsParamsStatus) Valid() bool {
 
 // Defines values for ListDealsParamsStatus.
 const (
-	Lost ListDealsParamsStatus = "lost"
-	Open ListDealsParamsStatus = "open"
-	Won  ListDealsParamsStatus = "won"
+	ListDealsParamsStatusLost ListDealsParamsStatus = "lost"
+	ListDealsParamsStatusOpen ListDealsParamsStatus = "open"
+	ListDealsParamsStatusWon  ListDealsParamsStatus = "won"
 )
 
 // Valid indicates whether the value is a known member of the ListDealsParamsStatus enum.
 func (e ListDealsParamsStatus) Valid() bool {
 	switch e {
-	case Lost:
+	case ListDealsParamsStatusLost:
 		return true
-	case Open:
+	case ListDealsParamsStatusOpen:
 		return true
-	case Won:
+	case ListDealsParamsStatusWon:
 		return true
 	default:
 		return false
@@ -3238,18 +3286,87 @@ type DealForecastCategory string
 type DealStatus string
 
 // DealDetail The deal-360 composite read (DEAL-EXT-3) — one round trip per the
-// one-composite-read doctrine (architecture/frontend.md): the deal record, its
-// stakeholders (person + role), and timeline refs together.
+// one-composite-read doctrine (architecture/frontend.md): the deal record's own
+// fields (duplicated flat here rather than composed via `allOf` — `oasdiff`'s
+// default breaking-change diff, as run by `scripts/check-contract-breaking.sh`,
+// does not resolve `allOf` when comparing response schemas, and `--flatten-allof`
+// itself errors on this spec's OpenAPI-3.1 nullable `type: [T, 'null']` unions, so
+// `allOf` can't be used for any schema that must diff cleanly against a flat
+// predecessor), its stakeholders (person + role), and timeline refs, together.
 type DealDetail struct {
-	// Deal A deal. Mirrors the `deal` table.
-	Deal Deal `json:"deal"`
+	AmountMinor       *int64                      `json:"amount_minor,omitempty"`
+	ArchivedAt        *time.Time                  `json:"archived_at,omitempty"`
+	CapturedBy        string                      `json:"captured_by"`
+	ClosedAt          *time.Time                  `json:"closed_at,omitempty"`
+	CreatedAt         time.Time                   `json:"created_at"`
+	Currency          *string                     `json:"currency,omitempty"`
+	ExpectedCloseDate *openapi_types.Date         `json:"expected_close_date,omitempty"`
+	ForecastCategory  *DealDetailForecastCategory `json:"forecast_category,omitempty"`
+	FxRateDate        *openapi_types.Date         `json:"fx_rate_date,omitempty"`
+
+	// FxRateToBase Native→base, frozen at close (null while open). Decimal-as-string to avoid float rounding of the 10-dp rate.
+	FxRateToBase *string            `json:"fx_rate_to_base,omitempty"`
+	Id           openapi_types.UUID `json:"id"`
+
+	// LastActivityAt Drives the deterministic stalled flag.
+	LastActivityAt *time.Time `json:"last_activity_at,omitempty"`
+
+	// LostReason Required when status=lost.
+	LostReason *string `json:"lost_reason,omitempty"`
+	Name       string  `json:"name"`
+
+	// OrganizationId Primary org; never a raw lead.
+	OrganizationId *openapi_types.UUID `json:"organization_id,omitempty"`
+	OwnerId        *openapi_types.UUID `json:"owner_id,omitempty"`
+
+	// PartnerOrgId Deal registration/attribution to a partner org (A38/A41/ADR-0032). The org must have a `partner` row.
+	PartnerOrgId *openapi_types.UUID     `json:"partner_org_id,omitempty"`
+	PipelineId   openapi_types.UUID      `json:"pipeline_id"`
+	Raw          *map[string]interface{} `json:"raw,omitempty"`
+	Source       string                  `json:"source"`
+
+	// StageEnteredAt Timestamp the deal entered its current stage — the `changed_at` of the most
+	// recent `deal_stage_history` row for this deal (DEAL-DDL-4). Derived, not a
+	// stored `deal` column; every deal has one via the creation-writes-history-row
+	// rule (DEAL-AC-H1), so this is never null for a live deal.
+	StageEnteredAt *time.Time `json:"stage_entered_at,omitempty"`
+
+	// StageId Must belong to pipeline_id.
+	StageId openapi_types.UUID `json:"stage_id"`
+
+	// StakeholderCount Count of live `deal_stakeholder` `relationship` rows for this deal
+	// (DEAL-WIRE-5). Derived, not a stored `deal` column.
+	StakeholderCount *int `json:"stakeholder_count,omitempty"`
 
 	// Stakeholders The deal's stakeholder relationships (person + role), DEAL-WIRE-5.
 	Stakeholders []Relationship `json:"stakeholders"`
 
+	// Stalled Derived — no activity past the threshold (absolute duration).
+	Stalled *bool            `json:"stalled,omitempty"`
+	Status  DealDetailStatus `json:"status"`
+
 	// Timeline Timeline refs linked to this deal, most recent first.
-	Timeline []DealTimelineRef `json:"timeline"`
+	Timeline  []DealTimelineRef `json:"timeline"`
+	UpdatedAt time.Time         `json:"updated_at"`
+
+	// Version Monotonic row version, incremented by the server on every mutation (data-model §1.7).
+	// Echoed back as the `version` field on every mutable entity. To make a write conditional,
+	// send the last-seen value in `If-Match`; a mismatch returns `409 code: version_skew`
+	// (ErrVersionSkew) so the client re-reads before retrying. Applies to the native path,
+	// not only overlay mode.
+	Version *RowVersion `json:"version,omitempty"`
+
+	// WaitUntil 'Customer asked us to wait until' date; suppresses the stalled flag but not the overdue close-date flag.
+	WaitUntil            *openapi_types.Date    `json:"wait_until,omitempty"`
+	WorkspaceId          openapi_types.UUID     `json:"workspace_id"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
+
+// DealDetailForecastCategory defines model for DealDetail.ForecastCategory.
+type DealDetailForecastCategory string
+
+// DealDetailStatus defines model for DealDetail.Status.
+type DealDetailStatus string
 
 // DealKPISignals defines model for DealKPISignals.
 type DealKPISignals struct {
@@ -6978,6 +7095,504 @@ func (a Deal) MarshalJSON() ([]byte, error) {
 	object["status"], err = json.Marshal(a.Status)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'status': %w", err)
+	}
+
+	object["updated_at"], err = json.Marshal(a.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'updated_at': %w", err)
+	}
+
+	if a.Version != nil {
+		object["version"], err = json.Marshal(a.Version)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'version': %w", err)
+		}
+	}
+
+	if a.WaitUntil != nil {
+		object["wait_until"], err = json.Marshal(a.WaitUntil)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'wait_until': %w", err)
+		}
+	}
+
+	object["workspace_id"], err = json.Marshal(a.WorkspaceId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'workspace_id': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for DealDetail. Returns the specified
+// element and whether it was found
+func (a DealDetail) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for DealDetail
+func (a *DealDetail) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for DealDetail to handle AdditionalProperties
+func (a *DealDetail) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["amount_minor"]; found {
+		err = json.Unmarshal(raw, &a.AmountMinor)
+		if err != nil {
+			return fmt.Errorf("error reading 'amount_minor': %w", err)
+		}
+		delete(object, "amount_minor")
+	}
+
+	if raw, found := object["archived_at"]; found {
+		err = json.Unmarshal(raw, &a.ArchivedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'archived_at': %w", err)
+		}
+		delete(object, "archived_at")
+	}
+
+	if raw, found := object["captured_by"]; found {
+		err = json.Unmarshal(raw, &a.CapturedBy)
+		if err != nil {
+			return fmt.Errorf("error reading 'captured_by': %w", err)
+		}
+		delete(object, "captured_by")
+	}
+
+	if raw, found := object["closed_at"]; found {
+		err = json.Unmarshal(raw, &a.ClosedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'closed_at': %w", err)
+		}
+		delete(object, "closed_at")
+	}
+
+	if raw, found := object["created_at"]; found {
+		err = json.Unmarshal(raw, &a.CreatedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'created_at': %w", err)
+		}
+		delete(object, "created_at")
+	}
+
+	if raw, found := object["currency"]; found {
+		err = json.Unmarshal(raw, &a.Currency)
+		if err != nil {
+			return fmt.Errorf("error reading 'currency': %w", err)
+		}
+		delete(object, "currency")
+	}
+
+	if raw, found := object["expected_close_date"]; found {
+		err = json.Unmarshal(raw, &a.ExpectedCloseDate)
+		if err != nil {
+			return fmt.Errorf("error reading 'expected_close_date': %w", err)
+		}
+		delete(object, "expected_close_date")
+	}
+
+	if raw, found := object["forecast_category"]; found {
+		err = json.Unmarshal(raw, &a.ForecastCategory)
+		if err != nil {
+			return fmt.Errorf("error reading 'forecast_category': %w", err)
+		}
+		delete(object, "forecast_category")
+	}
+
+	if raw, found := object["fx_rate_date"]; found {
+		err = json.Unmarshal(raw, &a.FxRateDate)
+		if err != nil {
+			return fmt.Errorf("error reading 'fx_rate_date': %w", err)
+		}
+		delete(object, "fx_rate_date")
+	}
+
+	if raw, found := object["fx_rate_to_base"]; found {
+		err = json.Unmarshal(raw, &a.FxRateToBase)
+		if err != nil {
+			return fmt.Errorf("error reading 'fx_rate_to_base': %w", err)
+		}
+		delete(object, "fx_rate_to_base")
+	}
+
+	if raw, found := object["id"]; found {
+		err = json.Unmarshal(raw, &a.Id)
+		if err != nil {
+			return fmt.Errorf("error reading 'id': %w", err)
+		}
+		delete(object, "id")
+	}
+
+	if raw, found := object["last_activity_at"]; found {
+		err = json.Unmarshal(raw, &a.LastActivityAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'last_activity_at': %w", err)
+		}
+		delete(object, "last_activity_at")
+	}
+
+	if raw, found := object["lost_reason"]; found {
+		err = json.Unmarshal(raw, &a.LostReason)
+		if err != nil {
+			return fmt.Errorf("error reading 'lost_reason': %w", err)
+		}
+		delete(object, "lost_reason")
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &a.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+		delete(object, "name")
+	}
+
+	if raw, found := object["organization_id"]; found {
+		err = json.Unmarshal(raw, &a.OrganizationId)
+		if err != nil {
+			return fmt.Errorf("error reading 'organization_id': %w", err)
+		}
+		delete(object, "organization_id")
+	}
+
+	if raw, found := object["owner_id"]; found {
+		err = json.Unmarshal(raw, &a.OwnerId)
+		if err != nil {
+			return fmt.Errorf("error reading 'owner_id': %w", err)
+		}
+		delete(object, "owner_id")
+	}
+
+	if raw, found := object["partner_org_id"]; found {
+		err = json.Unmarshal(raw, &a.PartnerOrgId)
+		if err != nil {
+			return fmt.Errorf("error reading 'partner_org_id': %w", err)
+		}
+		delete(object, "partner_org_id")
+	}
+
+	if raw, found := object["pipeline_id"]; found {
+		err = json.Unmarshal(raw, &a.PipelineId)
+		if err != nil {
+			return fmt.Errorf("error reading 'pipeline_id': %w", err)
+		}
+		delete(object, "pipeline_id")
+	}
+
+	if raw, found := object["raw"]; found {
+		err = json.Unmarshal(raw, &a.Raw)
+		if err != nil {
+			return fmt.Errorf("error reading 'raw': %w", err)
+		}
+		delete(object, "raw")
+	}
+
+	if raw, found := object["source"]; found {
+		err = json.Unmarshal(raw, &a.Source)
+		if err != nil {
+			return fmt.Errorf("error reading 'source': %w", err)
+		}
+		delete(object, "source")
+	}
+
+	if raw, found := object["stage_entered_at"]; found {
+		err = json.Unmarshal(raw, &a.StageEnteredAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'stage_entered_at': %w", err)
+		}
+		delete(object, "stage_entered_at")
+	}
+
+	if raw, found := object["stage_id"]; found {
+		err = json.Unmarshal(raw, &a.StageId)
+		if err != nil {
+			return fmt.Errorf("error reading 'stage_id': %w", err)
+		}
+		delete(object, "stage_id")
+	}
+
+	if raw, found := object["stakeholder_count"]; found {
+		err = json.Unmarshal(raw, &a.StakeholderCount)
+		if err != nil {
+			return fmt.Errorf("error reading 'stakeholder_count': %w", err)
+		}
+		delete(object, "stakeholder_count")
+	}
+
+	if raw, found := object["stakeholders"]; found {
+		err = json.Unmarshal(raw, &a.Stakeholders)
+		if err != nil {
+			return fmt.Errorf("error reading 'stakeholders': %w", err)
+		}
+		delete(object, "stakeholders")
+	}
+
+	if raw, found := object["stalled"]; found {
+		err = json.Unmarshal(raw, &a.Stalled)
+		if err != nil {
+			return fmt.Errorf("error reading 'stalled': %w", err)
+		}
+		delete(object, "stalled")
+	}
+
+	if raw, found := object["status"]; found {
+		err = json.Unmarshal(raw, &a.Status)
+		if err != nil {
+			return fmt.Errorf("error reading 'status': %w", err)
+		}
+		delete(object, "status")
+	}
+
+	if raw, found := object["timeline"]; found {
+		err = json.Unmarshal(raw, &a.Timeline)
+		if err != nil {
+			return fmt.Errorf("error reading 'timeline': %w", err)
+		}
+		delete(object, "timeline")
+	}
+
+	if raw, found := object["updated_at"]; found {
+		err = json.Unmarshal(raw, &a.UpdatedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'updated_at': %w", err)
+		}
+		delete(object, "updated_at")
+	}
+
+	if raw, found := object["version"]; found {
+		err = json.Unmarshal(raw, &a.Version)
+		if err != nil {
+			return fmt.Errorf("error reading 'version': %w", err)
+		}
+		delete(object, "version")
+	}
+
+	if raw, found := object["wait_until"]; found {
+		err = json.Unmarshal(raw, &a.WaitUntil)
+		if err != nil {
+			return fmt.Errorf("error reading 'wait_until': %w", err)
+		}
+		delete(object, "wait_until")
+	}
+
+	if raw, found := object["workspace_id"]; found {
+		err = json.Unmarshal(raw, &a.WorkspaceId)
+		if err != nil {
+			return fmt.Errorf("error reading 'workspace_id': %w", err)
+		}
+		delete(object, "workspace_id")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for DealDetail to handle AdditionalProperties
+func (a DealDetail) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.AmountMinor != nil {
+		object["amount_minor"], err = json.Marshal(a.AmountMinor)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'amount_minor': %w", err)
+		}
+	}
+
+	if a.ArchivedAt != nil {
+		object["archived_at"], err = json.Marshal(a.ArchivedAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'archived_at': %w", err)
+		}
+	}
+
+	object["captured_by"], err = json.Marshal(a.CapturedBy)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'captured_by': %w", err)
+	}
+
+	if a.ClosedAt != nil {
+		object["closed_at"], err = json.Marshal(a.ClosedAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'closed_at': %w", err)
+		}
+	}
+
+	object["created_at"], err = json.Marshal(a.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'created_at': %w", err)
+	}
+
+	if a.Currency != nil {
+		object["currency"], err = json.Marshal(a.Currency)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'currency': %w", err)
+		}
+	}
+
+	if a.ExpectedCloseDate != nil {
+		object["expected_close_date"], err = json.Marshal(a.ExpectedCloseDate)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'expected_close_date': %w", err)
+		}
+	}
+
+	if a.ForecastCategory != nil {
+		object["forecast_category"], err = json.Marshal(a.ForecastCategory)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'forecast_category': %w", err)
+		}
+	}
+
+	if a.FxRateDate != nil {
+		object["fx_rate_date"], err = json.Marshal(a.FxRateDate)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'fx_rate_date': %w", err)
+		}
+	}
+
+	if a.FxRateToBase != nil {
+		object["fx_rate_to_base"], err = json.Marshal(a.FxRateToBase)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'fx_rate_to_base': %w", err)
+		}
+	}
+
+	object["id"], err = json.Marshal(a.Id)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'id': %w", err)
+	}
+
+	if a.LastActivityAt != nil {
+		object["last_activity_at"], err = json.Marshal(a.LastActivityAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'last_activity_at': %w", err)
+		}
+	}
+
+	if a.LostReason != nil {
+		object["lost_reason"], err = json.Marshal(a.LostReason)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'lost_reason': %w", err)
+		}
+	}
+
+	object["name"], err = json.Marshal(a.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	if a.OrganizationId != nil {
+		object["organization_id"], err = json.Marshal(a.OrganizationId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'organization_id': %w", err)
+		}
+	}
+
+	if a.OwnerId != nil {
+		object["owner_id"], err = json.Marshal(a.OwnerId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'owner_id': %w", err)
+		}
+	}
+
+	if a.PartnerOrgId != nil {
+		object["partner_org_id"], err = json.Marshal(a.PartnerOrgId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'partner_org_id': %w", err)
+		}
+	}
+
+	object["pipeline_id"], err = json.Marshal(a.PipelineId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'pipeline_id': %w", err)
+	}
+
+	if a.Raw != nil {
+		object["raw"], err = json.Marshal(a.Raw)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'raw': %w", err)
+		}
+	}
+
+	object["source"], err = json.Marshal(a.Source)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'source': %w", err)
+	}
+
+	if a.StageEnteredAt != nil {
+		object["stage_entered_at"], err = json.Marshal(a.StageEnteredAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'stage_entered_at': %w", err)
+		}
+	}
+
+	object["stage_id"], err = json.Marshal(a.StageId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'stage_id': %w", err)
+	}
+
+	if a.StakeholderCount != nil {
+		object["stakeholder_count"], err = json.Marshal(a.StakeholderCount)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'stakeholder_count': %w", err)
+		}
+	}
+
+	if a.Stakeholders != nil {
+		object["stakeholders"], err = json.Marshal(a.Stakeholders)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'stakeholders': %w", err)
+		}
+	}
+
+	if a.Stalled != nil {
+		object["stalled"], err = json.Marshal(a.Stalled)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'stalled': %w", err)
+		}
+	}
+
+	object["status"], err = json.Marshal(a.Status)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'status': %w", err)
+	}
+
+	if a.Timeline != nil {
+		object["timeline"], err = json.Marshal(a.Timeline)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'timeline': %w", err)
+		}
 	}
 
 	object["updated_at"], err = json.Marshal(a.UpdatedAt)
