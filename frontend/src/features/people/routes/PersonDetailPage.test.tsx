@@ -6,8 +6,15 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("../api/person.js", () => ({
   usePerson: vi.fn(),
   useOrganizationName: vi.fn(() => ({ data: undefined, isLoading: false })),
-  useUpdatePerson: vi.fn(() => ({ mutate: vi.fn(), isPending: false, error: null })),
-  usePersonStrengthBreakdown: vi.fn(() => ({ data: undefined, isLoading: false })),
+  useUpdatePerson: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+  })),
+  usePersonStrengthBreakdown: vi.fn(() => ({
+    data: undefined,
+    isLoading: false,
+  })),
   usePersonDeals: vi.fn(() => ({ data: [], isLoading: false, isError: false })),
   useMergePerson: vi.fn(() => ({
     mutate: vi.fn(),
@@ -83,6 +90,31 @@ describe("PersonDetailPage", () => {
     } as unknown as ReturnType<typeof personApi.usePerson>);
     renderAt("p1");
     expect(screen.getByTestId("person-detail-loaded")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /merge/i })).toBeInTheDocument();
+  });
+
+  it("renders header, strength card, tabs, and merge trigger together on a full load", () => {
+    mockUsePerson.mockReturnValue({
+      data: {
+        id: "p1",
+        full_name: "Alice",
+        source: "manual",
+        captured_by: "human:u1",
+        strength: null,
+        activities: [],
+        relationships: [],
+        emails: [],
+        phones: [],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof personApi.usePerson>);
+    renderAt("p1");
+    expect(screen.getByText("Alice")).toBeInTheDocument();
+    expect(screen.getByText(/no signal yet/i)).toBeInTheDocument();
+    expect(screen.getByRole("tablist")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /merge/i })).toBeInTheDocument();
   });
 });
