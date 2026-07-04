@@ -332,8 +332,10 @@ paths:
         Merge A→B relinks A's emails/phones/relationships/activity links to B with zero
         orphaned FKs, archives A with `merged_into_id = B` (features/01 §1.3). One audit
         transaction; reversible within audit.
+      x-mcp-tool: { verb: merge_records, record_type: person, tier: yellow }
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ApprovalToken'
       requestBody:
         required: true
         content:
@@ -356,6 +358,32 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationError' }
+
+  /people/{id}/restore:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [People]
+      operationId: restorePerson
+      summary: Restore (un-archive) a soft-deleted person.
+      description: |
+        Inverse of `archivePerson`: clears `archived_at`, restoring the person to default
+        list visibility. Triggers `person.restored`. Restoring an already-live person is a
+        no-op success (idempotent read-modify-write); restoring a person that was never
+        archived still returns 200 with the unchanged person. 🟢 — undoing a soft-delete
+        carries no data-loss risk, unlike `archivePerson` (🟡).
+      x-mcp-tool: { verb: update_record, record_type: person, tier: green }
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: "Restored person (now carries `archived_at: null`)."
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Person' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /people/{id}/strength-breakdown:
     parameters:
@@ -447,10 +475,21 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409':
-          description: A domain already maps to another organization.
+          description: A domain on the request already maps to another live organization.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                duplicate:
+                  value:
+                    type: 'https://errors.margince.com/duplicate_domain'
+                    title: Duplicate domain
+                    status: 409
+                    code: duplicate_domain
+                    detail: An active organization already owns acme.com.
+                    details:
+                      existing_id: 018f3a1b-0000-7000-8000-000000000020
+                      field: domains[0].domain
         '422': { $ref: '#/components/responses/ValidationError' }
 
   /organizations/{id}:
@@ -536,6 +575,36 @@ paths:
               schema: { $ref: '#/components/schemas/Organization' }
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationError' }
+
+  /organizations/{id}/restore:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Organizations]
+      operationId: restoreOrganization
+      summary: Restore (un-archive) a soft-deleted organization.
+      description: |
+        Inverse of `archiveOrganization`: clears `archived_at`, restoring the organization to
+        default list visibility. Restoring an already-live organization is a no-op success
+        (idempotent read-modify-write); restoring an organization that was never archived
+        still returns 200 with the unchanged organization. 🟢 — undoing a soft-delete carries
+        no data-loss risk, unlike `archiveOrganization` (🟡). Note: `organization.restored` is
+        not in the pinned event catalog (only `organization.created/updated/archived/merged`
+        are) — this operation performs the restore without emitting a new event; adding
+        `organization.restored` to the catalog is separate, uncited scope, tracked outside this
+        ticket.
+      x-mcp-tool: { verb: update_record, record_type: organization, tier: green }
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: "Restored organization (now carries `archived_at: null`)."
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Organization' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /organizations/{id}/partner:
     parameters:
