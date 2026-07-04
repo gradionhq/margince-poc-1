@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Organization } from "../../../lib/api-client/generated/index.js";
 import { EditOrgModal } from "./EditOrgModal.js";
@@ -30,17 +30,15 @@ describe("EditOrgModal", () => {
     const onSaved = vi.fn();
     render(<EditOrgModal open onClose={vi.fn()} org={org} onSaved={onSaved} />);
     const industryInput = screen.getByDisplayValue("Software");
-    industryInput.focus();
-    (industryInput as HTMLInputElement).value = "Fintech";
-    industryInput.dispatchEvent(new Event("input", { bubbles: true }));
-    screen.getByRole("button", { name: /save/i }).click();
+    fireEvent.change(industryInput, { target: { value: "Fintech" } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
     expect(onSaved).toHaveBeenCalledWith(expect.arrayContaining(["industry"]));
   });
 
   it("saving with nothing changed calls onSaved with an empty list", () => {
     const onSaved = vi.fn();
     render(<EditOrgModal open onClose={vi.fn()} org={org} onSaved={onSaved} />);
-    screen.getByRole("button", { name: /save/i }).click();
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
     expect(onSaved).toHaveBeenCalledWith([]);
   });
 });
