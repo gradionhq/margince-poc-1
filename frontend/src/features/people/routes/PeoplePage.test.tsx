@@ -46,6 +46,7 @@ describe("PeoplePage RBAC", () => {
       data: { data: [], page: { has_more: false } },
       isLoading: false,
       isError: false,
+      refetch: vi.fn(),
     } as unknown as ReturnType<typeof peopleApi.usePeople>);
   });
 
@@ -57,7 +58,6 @@ describe("PeoplePage RBAC", () => {
       loading: false,
     });
     renderPeoplePage();
-    // FieldGuard mode="visible" — label is rendered
     expect(
       screen.getByText(/captured_by column: admin only/i),
     ).toBeInTheDocument();
@@ -71,7 +71,6 @@ describe("PeoplePage RBAC", () => {
       loading: false,
     });
     renderPeoplePage();
-    // FieldGuard mode="masked" — label is hidden (renders null)
     expect(
       screen.queryByText(/captured_by column: admin only/i),
     ).not.toBeInTheDocument();
@@ -85,7 +84,6 @@ describe("PeoplePage RBAC", () => {
       loading: false,
     });
     renderPeoplePage();
-    // Both RoleBadge and display_name render "Admin"; getAllByText confirms presence
     expect(screen.getAllByText("Admin").length).toBeGreaterThanOrEqual(1);
   });
 
@@ -98,5 +96,57 @@ describe("PeoplePage RBAC", () => {
     });
     renderPeoplePage();
     expect(screen.getAllByText("Admin").length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("PeoplePage toolbar and section label", () => {
+  beforeEach(() => {
+    mockUseAuthStore.mockReturnValue({
+      user: fakeUser,
+      role: "admin",
+      roles: ["admin"],
+      loading: false,
+    });
+    mockUsePeople.mockReturnValue({
+      data: { data: [], page: { has_more: false } },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof peopleApi.usePeople>);
+  });
+
+  it("renders the section label 'Contacts we actually know'", () => {
+    renderPeoplePage();
+    expect(screen.getByText(/contacts we actually know/i)).toBeInTheDocument();
+  });
+
+  it("renders the Strength sort control", () => {
+    renderPeoplePage();
+    expect(
+      screen.getByRole("button", { name: /sort by strength/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the Filter control", () => {
+    renderPeoplePage();
+    expect(screen.getByText(/filter/i)).toBeInTheDocument();
+  });
+
+  it("renders the search input", () => {
+    renderPeoplePage();
+    expect(screen.getByPlaceholderText(/search contacts/i)).toBeInTheDocument();
+  });
+
+  it("renders the New contact button", () => {
+    renderPeoplePage();
+    expect(
+      screen.getByRole("button", { name: /new contact/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not render a capture banner", () => {
+    renderPeoplePage();
+    expect(screen.queryByText(/capture banner/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/pending.*contact/i)).not.toBeInTheDocument();
   });
 });
