@@ -3,7 +3,7 @@ import { PopoverPortal } from "../../../shared/ui/forge.js";
 
 const BUCKET_COLOR: Record<string, string> = {
   strong: "bg-gf-accent",
-  moderate: "bg-gf-warning",
+  moderate: "bg-gf-status-warning",
   weak: "bg-gf-status-danger",
 };
 
