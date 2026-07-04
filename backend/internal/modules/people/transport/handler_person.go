@@ -34,6 +34,7 @@ const (
 	fieldData      = "data"
 	fieldCode      = "code"
 	fieldStatus    = "status"
+	fieldDetails   = "details"
 	codeForbidden  = "forbidden"
 	codeBadRequest = "bad_request"
 )
@@ -132,6 +133,12 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 		OwnerID    *string `json:"owner_id"`
 		Source     string  `json:"source"`
 		CapturedBy string  `json:"captured_by"`
+		Emails     []struct {
+			Email     string `json:"email"`
+			EmailType string `json:"email_type"`
+			IsPrimary bool   `json:"is_primary"`
+			Position  int    `json:"position"`
+		} `json:"emails"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
@@ -147,14 +154,33 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 	p.LastName = body.LastName
 	p.Title = body.Title
 	p.OwnerID = body.OwnerID
-	created, err := h.store.Create(r.Context(), p)
+	emails := make([]directory.PersonEmailInput, len(body.Emails))
+	for i, e := range body.Emails {
+		emails[i] = directory.PersonEmailInput{Email: e.Email, EmailType: e.EmailType, IsPrimary: e.IsPrimary, Position: e.Position}
+	}
+	created, err := h.store.Create(r.Context(), p, emails)
 	if err != nil {
+		var dup *directory.ErrDuplicateEmail
+		if errors.As(err, &dup) {
+			jsonProblemDetails(w, http.StatusConflict, "duplicate_email",
+				"An active person already owns this email.",
+				map[string]any{"existing_id": dup.ExistingID, "field": dup.Field})
+			return
+		}
 		jsonErr(w, err)
 		return
 	}
 	// Audit is written by PersonStore.Create at the store layer (covers direct
 	// store callers too), so no handler-level audit write is needed here.
 	jsonCreated(w, created)
+}
+
+// jsonProblemDetails writes a problem+json body with request-specific detail data.
+// Duplicated from directory/transport's handler_org.go (see package doc above).
+func jsonProblemDetails(w http.ResponseWriter, status int, code, detail string, details map[string]any) {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]any{fieldStatus: status, fieldCode: code, "detail": detail, fieldDetails: details}) //nolint:errcheck,gosec
 }
 
 func (h *PersonHandler) get(w http.ResponseWriter, r *http.Request, id string) {

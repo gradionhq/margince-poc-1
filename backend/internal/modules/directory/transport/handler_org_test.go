@@ -92,7 +92,7 @@ func TestOrganizationHandler_List_WithAggregates(t *testing.T) {
 	personStore := crmcore.NewPersonStore(db)
 	personSeed := crmcore.NewPerson("Agent-"+ids.New(), p0)
 	personSeed.WorkspaceID = orgHandlerTestWS
-	person, err := personStore.Create(ctx, personSeed)
+	person, err := personStore.Create(ctx, personSeed, nil)
 	if err != nil {
 		t.Fatalf("create person: %v", err)
 	}

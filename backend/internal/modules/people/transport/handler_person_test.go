@@ -136,7 +136,7 @@ func TestPersonHandler_List(t *testing.T) {
 	p := directory.NewPerson("Bob Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = wsID
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID})
-	if _, err := store.Create(ctx, p); err != nil {
+	if _, err := store.Create(ctx, p, nil); err != nil {
 		t.Fatal("seed:", err)
 	}
 
@@ -170,7 +170,7 @@ func TestPersonHandler_UpdateAndArchive(t *testing.T) {
 	p := directory.NewPerson("Charlie Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = wsID
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID})
-	created, err := store.Create(ctx, p)
+	created, err := store.Create(ctx, p, nil)
 	if err != nil {
 		t.Fatal("create:", err)
 	}
@@ -211,7 +211,7 @@ func TestPersonHandler_VersionSkew(t *testing.T) {
 	p := directory.NewPerson("Dave Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = wsID
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID})
-	created, err := store.Create(ctx, p)
+	created, err := store.Create(ctx, p, nil)
 	if err != nil {
 		t.Fatal("create:", err)
 	}
