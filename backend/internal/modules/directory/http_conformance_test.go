@@ -45,7 +45,7 @@ func buildServerMux(t *testing.T, db *sql.DB) http.Handler {
 		})
 	}
 	personStore := crmcore.NewPersonStore(db)
-	personH := wrap(peopletransport.NewPersonHandler(personStore))
+	personH := wrap(peopletransport.NewPersonHandler(personStore, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db)))
 	mux.Handle("/people", personH)
 	mux.Handle("/people/", personH)
 	return mux

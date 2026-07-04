@@ -44,7 +44,7 @@ func buildAuthMux(t *testing.T, db *sql.DB) (http.Handler, *crmauth.SessionStore
 			http.Error(w, `{"code":"unauthorized"}`, http.StatusUnauthorized) //nolint:forbidigo // test mock handler, not a production JSON path
 			return
 		}
-		peopletransport.NewPersonHandler(personStore).ServeHTTP(w, r)
+		peopletransport.NewPersonHandler(personStore, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db)).ServeHTTP(w, r)
 	})
 	// Session middleware: resolve the cookie to a Principal before serving.
 	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
