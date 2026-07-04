@@ -110,6 +110,29 @@ type Deal struct {
 	ArchivedAt *time.Time      `json:"archived_at"`
 }
 
+// Partner is the 1:1 partner-program extension of an organization.
+type Partner struct {
+	ID             string         `json:"id"`
+	WorkspaceID    string         `json:"workspace_id"`
+	OrganizationID string         `json:"organization_id"`
+	CertStatus     string         `json:"cert_status"`
+	PartnerRole    *string        `json:"partner_role"`
+	MarginTier     *string        `json:"margin_tier"`
+	GateMetrics    map[string]any `json:"gate_metrics"`
+	CertifiedStaff int            `json:"certified_staff"`
+	RetentionRate  *float64       `json:"retention_rate"`
+	JoinedAt       *time.Time     `json:"joined_at"`
+	RenewsAt       *time.Time     `json:"renews_at"`
+	Version        int64          `json:"version"`
+	Source         string         `json:"source"`
+	CapturedBy     string         `json:"captured_by"`
+	// Provenance is kept for internal use; not serialised directly.
+	Provenance prov.Provenance `json:"-"`
+	CreatedAt  time.Time       `json:"created_at"`
+	UpdatedAt  time.Time       `json:"updated_at"`
+	ArchivedAt *time.Time      `json:"archived_at"`
+}
+
 // Activity is a timeline event linked to people/orgs/deals (data-model §7).
 type Activity struct {
 	ID              string     `json:"id"`
@@ -218,6 +241,14 @@ func NewOrganization(name string, p prov.Provenance) Organization {
 func NewDeal(name, pipelineID, stageID string, p prov.Provenance) Deal {
 	return Deal{
 		ID: ids.New(), Name: name, PipelineID: pipelineID, StageID: stageID, Status: statusOpen,
+		Provenance: p, Source: p.Source, CapturedBy: p.CapturedBy, Version: 1,
+	}
+}
+
+// NewPartner returns a Partner with a fresh ID, applied status, version 1, and copied provenance.
+func NewPartner(organizationID string, p prov.Provenance) Partner {
+	return Partner{
+		ID: ids.New(), OrganizationID: organizationID, CertStatus: "applied", GateMetrics: map[string]any{},
 		Provenance: p, Source: p.Source, CapturedBy: p.CapturedBy, Version: 1,
 	}
 }

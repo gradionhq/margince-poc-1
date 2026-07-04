@@ -34,6 +34,8 @@ const (
 	codeStageNotInPipeline = "stage_not_in_pipeline"
 	fieldToStageID         = "to_stage_id"
 	codeRequired           = "required"
+	fieldCapturedBy        = "captured_by"
+	fieldSource            = "source"
 )
 
 // stageSemanticReader is the full DealStore seam DealHandler uses — an
@@ -94,6 +96,7 @@ func (h *DealHandler) create(w http.ResponseWriter, r *http.Request) {
 		StageID           string  `json:"stage_id"`
 		OrganizationID    *string `json:"organization_id"`
 		OwnerID           *string `json:"owner_id"`
+		PartnerOrgID      *string `json:"partner_org_id"`
 		ExpectedCloseDate *string `json:"expected_close_date"`
 		Source            string  `json:"source"`
 		CapturedBy        string  `json:"captured_by"`
@@ -125,6 +128,7 @@ func (h *DealHandler) create(w http.ResponseWriter, r *http.Request) {
 	d.Currency = body.Currency
 	d.OrganizationID = body.OrganizationID
 	d.OwnerID = body.OwnerID
+	d.PartnerOrgID = body.PartnerOrgID
 	if body.ExpectedCloseDate != nil {
 		t, err := time.Parse("2006-01-02", *body.ExpectedCloseDate)
 		if err != nil {

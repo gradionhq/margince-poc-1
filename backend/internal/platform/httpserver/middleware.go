@@ -141,6 +141,10 @@ const ObjPipeline = "pipeline"
 // admin-perms seed and the /stages route wiring.
 const ObjStage = "stage"
 
+// ObjPartner is the canonical RBAC object name for the partner extension,
+// shared by the /organizations/{id}/partner and /partners routes.
+const ObjPartner = "partner"
+
 // MethodToAction maps an HTTP method to the canonical RBAC action name.
 func MethodToAction(method string) string {
 	switch strings.ToUpper(method) {

@@ -13,6 +13,7 @@ const (
 	entityTypePerson       = "person"
 	entityTypeOrganization = "organization"
 	entityTypeLead         = "lead"
+	entityTypePartner      = "partner"
 )
 
 // Deal / lead lifecycle status values.

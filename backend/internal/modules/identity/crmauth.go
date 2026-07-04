@@ -28,6 +28,7 @@ var knownObjects = map[string]bool{
 	"approval": true, "drafting_asset": true, "conversation_link": true,
 	"deal_room":  true, // B-E08.6: deal-room publish access gate
 	"automation": true, // B-E15.4: automation CRUD endpoints
+	"partner":    true,
 }
 
 // knownRowScopes is the valid row_scope token set.
