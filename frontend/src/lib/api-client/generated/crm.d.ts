@@ -2538,6 +2538,17 @@ export interface components {
             /** Format: date-time */
             archived_at?: string | null;
             /**
+             * @description PO-AC-19 non-blocking fuzzy-dedupe review flag (PO-F-2 name-only tier). Present only on
+             *     the createOrganization response when a live candidate's legal-suffix-normalized display
+             *     name scores >= DEDUPE_REVIEW_THRESHOLD (0.72); null otherwise. Never persisted —
+             *     review-queue storage/UI is a separate data-hygiene-chapter ticket.
+             */
+            readonly dedupe_review?: {
+                /** Format: uuid */
+                candidate_id: string;
+                confidence: number;
+            } | null;
+            /**
              * @description PO-EXT-3 organization-360 composite read — this org's relationship edges
              *     (employment, partner edges). Populated on the single-record read
              *     (`getOrganization`); omitted on list rows (`listOrganizations`).

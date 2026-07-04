@@ -4173,6 +4173,18 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         archived_at: { type: [string, 'null'], format: date-time }
+        dedupe_review:
+          type: [object, 'null']
+          readOnly: true
+          description: |
+            PO-AC-19 non-blocking fuzzy-dedupe review flag (PO-F-2 name-only tier). Present only on
+            the createOrganization response when a live candidate's legal-suffix-normalized display
+            name scores >= DEDUPE_REVIEW_THRESHOLD (0.72); null otherwise. Never persisted —
+            review-queue storage/UI is a separate data-hygiene-chapter ticket.
+          properties:
+            candidate_id: { type: string, format: uuid }
+            confidence: { type: number }
+          required: [candidate_id, confidence]
         relationships:
           type: array
           readOnly: true

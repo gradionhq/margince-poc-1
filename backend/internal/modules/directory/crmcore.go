@@ -71,13 +71,16 @@ type Organization struct {
 	Source         string               `json:"source"`
 	CapturedBy     string               `json:"captured_by"`
 	// Provenance is kept for internal use; not serialised directly.
-	Provenance    prov.Provenance `json:"-"`
-	CreatedAt     time.Time       `json:"created_at"`
-	UpdatedAt     time.Time       `json:"updated_at"`
-	ArchivedAt    *time.Time      `json:"archived_at"`
-	Relationships []Relationship  `json:"relationships,omitempty"`
-	Deals         []Deal          `json:"deals,omitempty"`
-	Activities    []ActivityRef   `json:"activities,omitempty"`
+	Provenance prov.Provenance `json:"-"`
+	CreatedAt  time.Time       `json:"created_at"`
+	UpdatedAt  time.Time       `json:"updated_at"`
+	ArchivedAt *time.Time      `json:"archived_at"`
+	// ReviewFlag is PO-AC-19's non-blocking fuzzy-dedupe flag (PO-F-2
+	// name-only tier), computed fresh on every Create call, never persisted.
+	ReviewFlag    *DedupeReviewFlag `json:"dedupe_review,omitempty"`
+	Relationships []Relationship    `json:"relationships,omitempty"`
+	Deals         []Deal            `json:"deals,omitempty"`
+	Activities    []ActivityRef     `json:"activities,omitempty"`
 }
 
 // OrganizationDomain is a normalized domain owned by an organization

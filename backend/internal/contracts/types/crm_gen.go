@@ -4068,7 +4068,16 @@ type Organization struct {
 	CreatedAt    time.Time `json:"created_at"`
 
 	// Deals PO-EXT-3 — deals attributed to this organization. Populated on `getOrganization` only.
-	Deals       *[]Deal               `json:"deals,omitempty"`
+	Deals *[]Deal `json:"deals,omitempty"`
+
+	// DedupeReview PO-AC-19 non-blocking fuzzy-dedupe review flag (PO-F-2 name-only tier). Present only on
+	// the createOrganization response when a live candidate's legal-suffix-normalized display
+	// name scores >= DEDUPE_REVIEW_THRESHOLD (0.72); null otherwise. Never persisted —
+	// review-queue storage/UI is a separate data-hygiene-chapter ticket.
+	DedupeReview *struct {
+		CandidateId openapi_types.UUID `json:"candidate_id"`
+		Confidence  float32            `json:"confidence"`
+	} `json:"dedupe_review,omitempty"`
 	DisplayName string                `json:"display_name"`
 	Domains     *[]OrganizationDomain `json:"domains,omitempty"`
 	Id          openapi_types.UUID    `json:"id"`
@@ -8084,6 +8093,14 @@ func (a *Organization) UnmarshalJSON(b []byte) error {
 		delete(object, "deals")
 	}
 
+	if raw, found := object["dedupe_review"]; found {
+		err = json.Unmarshal(raw, &a.DedupeReview)
+		if err != nil {
+			return fmt.Errorf("error reading 'dedupe_review': %w", err)
+		}
+		delete(object, "dedupe_review")
+	}
+
 	if raw, found := object["display_name"]; found {
 		err = json.Unmarshal(raw, &a.DisplayName)
 		if err != nil {
@@ -8320,6 +8337,13 @@ func (a Organization) MarshalJSON() ([]byte, error) {
 		object["deals"], err = json.Marshal(a.Deals)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'deals': %w", err)
+		}
+	}
+
+	if a.DedupeReview != nil {
+		object["dedupe_review"], err = json.Marshal(a.DedupeReview)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'dedupe_review': %w", err)
 		}
 	}
 
