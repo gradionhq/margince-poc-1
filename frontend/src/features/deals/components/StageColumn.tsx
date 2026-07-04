@@ -31,7 +31,7 @@ export function StageColumn({
       data-testid={`stage-column-${stage.id}`}
       className={`flex flex-col min-w-[260px] rounded-lg border p-gf-sm gap-gf-sm ${
         isTransient
-          ? "border-dashed border-gf-accent bg-gf-accent-subtle"
+          ? "border-dashed border-gf-accent bg-gf-accent-light"
           : "border-gf-subtle"
       } ${isOver ? "ring-2 ring-gf-accent" : ""}`}
     >
@@ -46,7 +46,9 @@ export function StageColumn({
       </div>
       <div className="flex flex-col gap-gf-sm min-h-[80px]">
         {sorted.length === 0 && (
-          <p className="text-gf-caption text-gf-muted p-gf-sm">Drop a card here</p>
+          <p className="text-gf-caption text-gf-muted p-gf-sm">
+            Drop a card here
+          </p>
         )}
         {sorted.map((deal) => (
           <DraggableDealCard

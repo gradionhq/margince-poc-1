@@ -33,7 +33,9 @@ describe("OutcomeDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
     const input = screen.getByPlaceholderText(/reason/i);
     await userEvent.type(input, "Budget cut");
-    await userEvent.click(screen.getByRole("button", { name: /confirm lost/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /confirm lost/i }),
+    );
     expect(onLost).toHaveBeenCalledWith("Budget cut");
   });
 
@@ -50,7 +52,9 @@ describe("OutcomeDialog", () => {
       />,
     );
     await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
-    await userEvent.click(screen.getByRole("button", { name: /confirm lost/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /confirm lost/i }),
+    );
     expect(onLost).not.toHaveBeenCalled();
     expect(onCancel).toHaveBeenCalled();
   });

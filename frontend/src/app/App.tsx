@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import { LoginPage } from "../features/identity/routes/LoginPage.js";
 import { DealDetailPage } from "../features/deals/routes/DealDetailPage.js";
 import { PipelinePage } from "../features/deals/routes/PipelinePage.js";
+import { LoginPage } from "../features/identity/routes/LoginPage.js";
 import { CompaniesPage } from "../features/organizations/routes/CompaniesPage.js";
 import { PeoplePage } from "../features/people/routes/PeoplePage.js";
 import { ProtectedRoute } from "./ProtectedRoute.js";

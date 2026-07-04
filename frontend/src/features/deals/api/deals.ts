@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../../lib/api-client/client.js";
 import type {
+  CreateDealRequest,
   Deal,
   DealDetail,
   DealListResponse,
@@ -52,7 +53,11 @@ export function useDeals(filters: {
   status?: "open" | "won" | "lost";
 }) {
   return useQuery<DealListResponse>({
-    queryKey: dealsKeys.list(filters.pipelineId, filters.stageId, filters.status),
+    queryKey: dealsKeys.list(
+      filters.pipelineId,
+      filters.stageId,
+      filters.status,
+    ),
     enabled: !!filters.pipelineId,
     queryFn: async () => {
       const { data, error } = await apiClient.GET("/deals", {
@@ -92,9 +97,12 @@ export function useDeal(id: string | undefined) {
     queryKey: dealsKeys.detail(id),
     enabled: !!id,
     queryFn: async () => {
-      const { data, error } = await apiClient.GET(`/deals/${id}` as "/deals/{id}", {
-        params: { path: { id: id as string } },
-      });
+      const { data, error } = await apiClient.GET(
+        `/deals/${id}` as "/deals/{id}",
+        {
+          params: { path: { id: id as string } },
+        },
+      );
       if (error) throw error;
       if (!data) throw new Error("empty response");
       return data;
@@ -126,7 +134,11 @@ export function useAdvanceDeal(pipelineId: string | undefined) {
       // version field the contract doesn't accept.
       const { data, error } = await apiClient.POST("/deals/{id}/advance", {
         params: { path: { id: dealId } },
-        body: { to_stage_id: toStageId, status, lost_reason: lostReason ?? undefined },
+        body: {
+          to_stage_id: toStageId,
+          status,
+          lost_reason: lostReason ?? undefined,
+        },
       });
       if (error) throw error;
       if (!data) throw new Error("empty response");
@@ -139,7 +151,11 @@ export function useAdvanceDeal(pipelineId: string | undefined) {
           ...previous,
           data: previous.data.map((d) =>
             d.id === dealId
-              ? { ...d, stage_id: toStageId, stage_entered_at: new Date().toISOString() }
+              ? {
+                  ...d,
+                  stage_id: toStageId,
+                  stage_entered_at: new Date().toISOString(),
+                }
               : d,
           ),
         });
@@ -157,6 +173,64 @@ export function useAdvanceDeal(pipelineId: string | undefined) {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: listKey });
       qc.invalidateQueries({ queryKey: dealsKeys.rollup(pipelineId) });
+    },
+  });
+}
+
+export function useCreateDeal() {
+  const qc = useQueryClient();
+  return useMutation<Deal, unknown, CreateDealRequest>({
+    mutationFn: async (body) => {
+      const { data, error } = await apiClient.POST("/deals", { body });
+      if (error) throw error;
+      if (!data) throw new Error("empty response");
+      return data;
+    },
+    onSuccess: (deal) => {
+      qc.invalidateQueries({
+        queryKey: dealsKeys.list(deal.pipeline_id, undefined, "open"),
+      });
+      qc.invalidateQueries({ queryKey: dealsKeys.rollup(deal.pipeline_id) });
+    },
+  });
+}
+
+export function useOpenDealsForOrg(organizationId: string | undefined) {
+  return useQuery<DealListResponse>({
+    queryKey: ["deals", "org-open", organizationId],
+    enabled: !!organizationId,
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET("/deals", {
+        params: { query: { organization_id: organizationId, status: "open" } },
+      });
+      if (error) throw error;
+      if (!data) throw new Error("empty response");
+      return data;
+    },
+  });
+}
+
+// "Recent-activity count" (AC-pipeline-9) — an honest count of the most recent captured
+// activities linked to this org, not a fabricated total: reads one page of listActivities
+// filtered to entity_type=organization, and reports how many rows that page returned. A future
+// ticket can add a real total if the contract grows one; this never invents a bigger number than
+// what's actually visible.
+export function useRecentActivityCount(organizationId: string | undefined) {
+  return useQuery<number>({
+    queryKey: ["deals", "org-activity-count", organizationId],
+    enabled: !!organizationId,
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET("/activities", {
+        params: {
+          query: {
+            entity_type: "organization",
+            entity_id: organizationId,
+            limit: 10,
+          },
+        },
+      });
+      if (error) throw error;
+      return data?.data.length ?? 0;
     },
   });
 }

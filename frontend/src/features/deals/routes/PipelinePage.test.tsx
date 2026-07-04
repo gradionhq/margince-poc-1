@@ -7,11 +7,26 @@ vi.mock("../api/deals.js", () => ({
   useDefaultPipeline: () => ({ data: { id: "p1" } }),
   useStages: () => ({
     data: [
-      { id: "s0", name: "New", position: 0, semantic: "open", win_probability: 10 },
+      {
+        id: "s0",
+        name: "New",
+        position: 0,
+        semantic: "open",
+        win_probability: 10,
+      },
     ],
   }),
-  useDeals: () => ({ data: { data: [] }, isLoading: false, isError: false, refetch: vi.fn() }),
-  usePipelineRollup: () => ({ data: undefined, isLoading: false, isError: false }),
+  useDeals: () => ({
+    data: { data: [] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  usePipelineRollup: () => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+  }),
   useAdvanceDeal: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 

@@ -1,5 +1,6 @@
 import type { Deal, Stage } from "../../../lib/api-client/generated/index.js";
 import { DataTable } from "../../../shared/ui/DataTable.js";
+import { Icon } from "../../../shared/ui/forge.js";
 import { formatMoney, stalledDays, weightedValue } from "./DealCard.js";
 
 export function DealsTable({
@@ -9,7 +10,9 @@ export function DealsTable({
   deals: Deal[];
   stagesById: Record<string, Stage>;
 }) {
-  const sorted = deals.slice().sort((a, b) => (b.amount_minor ?? 0) - (a.amount_minor ?? 0));
+  const sorted = deals
+    .slice()
+    .sort((a, b) => (b.amount_minor ?? 0) - (a.amount_minor ?? 0));
   return (
     <DataTable
       rows={sorted}
@@ -39,7 +42,10 @@ export function DealsTable({
           header: "Weighted",
           render: (d) =>
             formatMoney(
-              weightedValue(d.amount_minor, stagesById[d.stage_id]?.win_probability ?? 0),
+              weightedValue(
+                d.amount_minor,
+                stagesById[d.stage_id]?.win_probability ?? 0,
+              ),
               d.currency,
             ),
         },
@@ -49,9 +55,13 @@ export function DealsTable({
           render: (d) => (
             <span
               data-testid={`age-cell-${d.id}`}
-              className={d.stalled ? "text-gf-status-warning font-medium" : "text-gf-secondary"}
+              className={
+                d.stalled
+                  ? "inline-flex items-center gap-gf-xs text-gf-status-warning font-medium"
+                  : "text-gf-secondary"
+              }
             >
-              {d.stalled && "⚠ "}
+              {d.stalled && <Icon name="AlertCircle" size={14} />}
               {stalledDays(d.stage_entered_at)}d
             </span>
           ),

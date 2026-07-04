@@ -43,9 +43,15 @@ export function DealCard({
 }) {
   const age = stalledDays(deal.stage_entered_at);
   return (
+    // biome-ignore lint/a11y/useSemanticElements: can't be a real <button> — it nests the Advance <button> and hosts dnd-kit's drag-handle attributes; role="button" + onKeyDown keeps it operable.
     <div
       data-testid={`deal-card-${deal.id}`}
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onClick();
+      }}
       className={`rounded-lg border bg-gf-card p-gf-md cursor-pointer transition-shadow ${
         deal.stalled
           ? "border-l-4 border-l-gf-status-warning border-gf-subtle"
@@ -100,15 +106,21 @@ export function DraggableDealCard({
   onClick: () => void;
   onAdvanceClick?: (dealId: string) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: deal.id,
-  });
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: deal.id,
+    });
   const style = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
     : undefined;
   return (
     <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
-      <DealCard deal={deal} onClick={onClick} onAdvanceClick={onAdvanceClick} dragging={isDragging} />
+      <DealCard
+        deal={deal}
+        onClick={onClick}
+        onAdvanceClick={onAdvanceClick}
+        dragging={isDragging}
+      />
     </div>
   );
 }

@@ -13,12 +13,48 @@ vi.mock("../api/deals.js", () => ({
 }));
 
 const stages: Stage[] = [
-  { id: "s0", workspace_id: "w1", pipeline_id: "p1", name: "New", position: 0, semantic: "open", win_probability: 10, created_at: "", updated_at: "" },
-  { id: "s1", workspace_id: "w1", pipeline_id: "p1", name: "Qualified", position: 1, semantic: "open", win_probability: 25, created_at: "", updated_at: "" },
+  {
+    id: "s0",
+    workspace_id: "w1",
+    pipeline_id: "p1",
+    name: "New",
+    position: 0,
+    semantic: "open",
+    win_probability: 10,
+    created_at: "",
+    updated_at: "",
+  },
+  {
+    id: "s1",
+    workspace_id: "w1",
+    pipeline_id: "p1",
+    name: "Qualified",
+    position: 1,
+    semantic: "open",
+    win_probability: 25,
+    created_at: "",
+    updated_at: "",
+  },
 ];
 
 const deals: Deal[] = [
-  { id: "d1", workspace_id: "w1", name: "Acme", amount_minor: 100_00, currency: "EUR", pipeline_id: "p1", stage_id: "s0", status: "open", source: "manual", captured_by: "human:u1", created_at: "", updated_at: "", stakeholder_count: 1, stalled: false, stage_entered_at: "" },
+  {
+    id: "d1",
+    workspace_id: "w1",
+    name: "Acme",
+    amount_minor: 100_00,
+    currency: "EUR",
+    pipeline_id: "p1",
+    stage_id: "s0",
+    status: "open",
+    source: "manual",
+    captured_by: "human:u1",
+    created_at: "",
+    updated_at: "",
+    stakeholder_count: 1,
+    stalled: false,
+    stage_entered_at: "",
+  },
 ];
 
 describe("PipelineBoard", () => {
@@ -128,8 +164,28 @@ describe("PipelineBoard drag mechanics", () => {
 // asserted at the live-UAT layer (workspace/manual-test/t21.md step 4). The test above only pins
 // the non-drag click path so a regression here is still caught fast.
 
-const wonStage: Stage = { id: "sw", workspace_id: "w1", pipeline_id: "p1", name: "Closed Won", position: 5, semantic: "won", win_probability: 100, created_at: "", updated_at: "" };
-const lostStage: Stage = { id: "sl", workspace_id: "w1", pipeline_id: "p1", name: "Closed Lost", position: 6, semantic: "lost", win_probability: 0, created_at: "", updated_at: "" };
+const wonStage: Stage = {
+  id: "sw",
+  workspace_id: "w1",
+  pipeline_id: "p1",
+  name: "Closed Won",
+  position: 5,
+  semantic: "won",
+  win_probability: 100,
+  created_at: "",
+  updated_at: "",
+};
+const lostStage: Stage = {
+  id: "sl",
+  workspace_id: "w1",
+  pipeline_id: "p1",
+  name: "Closed Lost",
+  position: 6,
+  semantic: "lost",
+  win_probability: 0,
+  created_at: "",
+  updated_at: "",
+};
 
 describe("PipelineBoard terminal transitions", () => {
   it("does not render Won/Lost as standing columns absent an active drag (DEAL-AC-B3)", () => {
@@ -165,7 +221,10 @@ describe("PipelineBoard Advance button", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /^advance$/i }));
-    expect(mockAdvanceMutate).toHaveBeenCalledWith({ dealId: "d1", toStageId: "s1" });
+    expect(mockAdvanceMutate).toHaveBeenCalledWith({
+      dealId: "d1",
+      toStageId: "s1",
+    });
     expect(screen.queryByText(/confirm the outcome/i)).not.toBeInTheDocument();
   });
 

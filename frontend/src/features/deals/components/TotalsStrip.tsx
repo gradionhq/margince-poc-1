@@ -13,7 +13,10 @@ export function TotalsStrip({
 }) {
   if (isLoading) {
     return (
-      <div data-testid="totals-strip-skeleton" className="flex gap-gf-lg p-gf-md">
+      <div
+        data-testid="totals-strip-skeleton"
+        className="flex gap-gf-lg p-gf-md"
+      >
         <Skeleton height="24px" />
         <Skeleton height="24px" />
         <Skeleton height="24px" />

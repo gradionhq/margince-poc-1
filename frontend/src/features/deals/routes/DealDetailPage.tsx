@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
-import { useDeal } from "../api/deals.js";
 import { Skeleton } from "../../../shared/ui/forge.js";
+import { useDeal } from "../api/deals.js";
 import { formatMoney } from "../components/DealCard.js";
 
 export function DealDetailPage() {
@@ -20,7 +20,11 @@ export function DealDetailPage() {
         <p className="text-gf-body text-gf-status-danger mb-gf-sm">
           Failed to load this deal.
         </p>
-        <button type="button" onClick={() => refetch()} className="text-gf-accent underline">
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="text-gf-accent underline"
+        >
           Retry
         </button>
       </div>
@@ -28,7 +32,9 @@ export function DealDetailPage() {
   }
   return (
     <div className="p-gf-lg">
-      <h1 className="text-gf-title font-semibold text-gf-primary">{deal.name}</h1>
+      <h1 className="text-gf-title font-semibold text-gf-primary">
+        {deal.name}
+      </h1>
       <p className="text-gf-body text-gf-secondary">
         {formatMoney(deal.amount_minor, deal.currency)} · {deal.status}
       </p>

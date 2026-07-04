@@ -5,7 +5,13 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../api/deals.js", () => ({
   useDeal: () => ({
-    data: { id: "d1", name: "Acme deal", amount_minor: 1000, currency: "EUR", status: "open" },
+    data: {
+      id: "d1",
+      name: "Acme deal",
+      amount_minor: 1000,
+      currency: "EUR",
+      status: "open",
+    },
     isLoading: false,
     isError: false,
     refetch: vi.fn(),

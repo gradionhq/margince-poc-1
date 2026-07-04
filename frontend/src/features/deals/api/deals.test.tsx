@@ -14,10 +14,13 @@ import { apiClient } from "../../../lib/api-client/client.js";
 import {
   dealsKeys,
   useAdvanceDeal,
+  useCreateDeal,
   useDeal,
   useDeals,
   useDefaultPipeline,
+  useOpenDealsForOrg,
   usePipelineRollup,
+  useRecentActivityCount,
   useStages,
 } from "./deals.js";
 
@@ -25,9 +28,7 @@ function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
-  );
+  return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
 }
 
 describe("deals read API", () => {
@@ -112,18 +113,19 @@ describe("deals read API", () => {
     });
     const { result } = renderHook(() => useDeal("d1"), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(apiClient.GET).toHaveBeenCalledWith(
-      "/deals/d1",
-      expect.anything(),
-    );
+    expect(apiClient.GET).toHaveBeenCalledWith("/deals/d1", expect.anything());
   });
 });
 
 describe("useAdvanceDeal (optimistic mutation)", () => {
   it("patches the cache in onMutate before the network resolves", async () => {
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     qc.setQueryData(dealsKeys.list("p1", undefined, "open"), {
-      data: [{ id: "d1", stage_id: "s0", stage_entered_at: "2020-01-01T00:00:00Z" }],
+      data: [
+        { id: "d1", stage_id: "s0", stage_entered_at: "2020-01-01T00:00:00Z" },
+      ],
       page: {},
     });
     let resolvePost!: (v: unknown) => void;
@@ -135,16 +137,18 @@ describe("useAdvanceDeal (optimistic mutation)", () => {
     const localWrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={qc}>{children}</QueryClientProvider>
     );
-    const { result } = renderHook(() => useAdvanceDeal("p1"), { wrapper: localWrapper });
+    const { result } = renderHook(() => useAdvanceDeal("p1"), {
+      wrapper: localWrapper,
+    });
 
     act(() => {
       result.current.mutate({ dealId: "d1", toStageId: "s1" });
     });
 
     // Optimistic patch is synchronous — check before the network resolves.
-    const optimistic = qc.getQueryData<{ data: Array<{ id: string; stage_id: string }> }>(
-      dealsKeys.list("p1", undefined, "open"),
-    );
+    const optimistic = qc.getQueryData<{
+      data: Array<{ id: string; stage_id: string }>;
+    }>(dealsKeys.list("p1", undefined, "open"));
     expect(optimistic?.data[0].stage_id).toBe("s1");
 
     resolvePost({ data: { id: "d1", stage_id: "s1" }, error: undefined });
@@ -152,7 +156,9 @@ describe("useAdvanceDeal (optimistic mutation)", () => {
   });
 
   it("rolls back the cache onError and surfaces the server-named cause", async () => {
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     qc.setQueryData(dealsKeys.list("p1", undefined, "open"), {
       data: [{ id: "d1", stage_id: "s0" }],
       page: {},
@@ -164,7 +170,9 @@ describe("useAdvanceDeal (optimistic mutation)", () => {
     const localWrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={qc}>{children}</QueryClientProvider>
     );
-    const { result } = renderHook(() => useAdvanceDeal("p1"), { wrapper: localWrapper });
+    const { result } = renderHook(() => useAdvanceDeal("p1"), {
+      wrapper: localWrapper,
+    });
 
     await act(async () => {
       try {
@@ -175,9 +183,90 @@ describe("useAdvanceDeal (optimistic mutation)", () => {
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    const rolledBack = qc.getQueryData<{ data: Array<{ id: string; stage_id: string }> }>(
-      dealsKeys.list("p1", undefined, "open"),
-    );
+    const rolledBack = qc.getQueryData<{
+      data: Array<{ id: string; stage_id: string }>;
+    }>(dealsKeys.list("p1", undefined, "open"));
     expect(rolledBack?.data[0].stage_id).toBe("s0");
+  });
+});
+
+describe("useCreateDeal", () => {
+  it("posts a CreateDealRequest and returns the created deal", async () => {
+    (apiClient.POST as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: { id: "d9", name: "New Acme deal" },
+      error: undefined,
+    });
+    const qc = new QueryClient();
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useCreateDeal(), {
+      wrapper: localWrapper,
+    });
+    const created = await result.current.mutateAsync({
+      name: "New Acme deal",
+      pipeline_id: "p1",
+      stage_id: "s0",
+      organization_id: "o1",
+      source: "manual",
+      captured_by: "human:u1",
+    });
+    expect(created.id).toBe("d9");
+    expect(apiClient.POST).toHaveBeenCalledWith(
+      "/deals",
+      expect.objectContaining({
+        body: expect.objectContaining({ organization_id: "o1" }),
+      }),
+    );
+  });
+});
+
+describe("useOpenDealsForOrg", () => {
+  it("filters listDeals by organization_id + status=open (duplicate-deal check)", async () => {
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: { data: [{ id: "d1" }], page: {} },
+      error: undefined,
+    });
+    const qc = new QueryClient();
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useOpenDealsForOrg("o1"), {
+      wrapper: localWrapper,
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiClient.GET).toHaveBeenCalledWith(
+      "/deals",
+      expect.objectContaining({
+        params: { query: { organization_id: "o1", status: "open" } },
+      }),
+    );
+    expect(result.current.data?.data).toHaveLength(1);
+  });
+});
+
+describe("useRecentActivityCount", () => {
+  it("counts the returned page of organization-linked activities honestly (no fabricated total)", async () => {
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: { data: [{ id: "a1" }, { id: "a2" }], page: { has_more: false } },
+      error: undefined,
+    });
+    const qc = new QueryClient();
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useRecentActivityCount("o1"), {
+      wrapper: localWrapper,
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiClient.GET).toHaveBeenCalledWith(
+      "/activities",
+      expect.objectContaining({
+        params: {
+          query: { entity_type: "organization", entity_id: "o1", limit: 10 },
+        },
+      }),
+    );
+    expect(result.current.data).toBe(2);
   });
 });
