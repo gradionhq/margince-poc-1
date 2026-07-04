@@ -73,6 +73,7 @@ export function PipelinePage() {
               (s) => s.semantic !== "open",
             )}
             deals={dealPage?.data ?? []}
+            rollup={rollup}
             isLoading={dealsLoading}
             isError={dealsError}
             onRetry={refetchDeals}

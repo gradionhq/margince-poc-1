@@ -1,29 +1,41 @@
 import { useDroppable } from "@dnd-kit/core";
-import type { Deal, Stage } from "../../../lib/api-client/generated/index.js";
-import { DraggableDealCard, formatMoney, weightedValue } from "./DealCard.js";
+import type {
+  Deal,
+  PipelineRollupStage,
+  Stage,
+} from "../../../lib/api-client/generated/index.js";
+import { DraggableDealCard, formatMoney } from "./DealCard.js";
 
 export function StageColumn({
   stage,
   deals,
+  rollupStage,
+  baseCurrency,
   isTransient = false,
   onCardClick,
   onAdvanceClick,
 }: {
   stage: Stage;
   deals: Deal[];
+  // The per-stage raw/weighted decomposition from GET /pipelines/{id}/rollup
+  // (PipelineRollupStage) — the contract is explicit that this is "a server
+  // read only — the client never sums these itself" (DEAL-EXT-1). Summing
+  // deal.amount_minor client-side here would also silently mix currencies
+  // when a column holds deals in more than one currency; the rollup is
+  // already reduced to the workspace's base currency. undefined while the
+  // rollup hasn't loaded yet (or errored) — rendered as an honest "—", never
+  // a fabricated total.
+  rollupStage?: PipelineRollupStage;
+  baseCurrency?: string;
   isTransient?: boolean;
   onCardClick: (dealId: string) => void;
   onAdvanceClick?: (dealId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
-  const raw = deals.reduce((sum, d) => sum + (d.amount_minor ?? 0), 0);
-  const weighted = deals.reduce(
-    (sum, d) => sum + weightedValue(d.amount_minor, stage.win_probability),
-    0,
-  );
   const sorted = deals
     .slice()
     .sort((a, b) => (b.amount_minor ?? 0) - (a.amount_minor ?? 0));
+  const dealCount = rollupStage?.deal_count ?? deals.length;
 
   return (
     <div
@@ -40,8 +52,15 @@ export function StageColumn({
           {stage.name} · {stage.win_probability}%
         </p>
         <p className="text-gf-caption text-gf-secondary">
-          {deals.length} deals · {formatMoney(raw, deals[0]?.currency ?? "EUR")}{" "}
-          raw · {formatMoney(weighted, deals[0]?.currency ?? "EUR")} weighted
+          {dealCount} deal{dealCount === 1 ? "" : "s"} ·{" "}
+          {rollupStage && baseCurrency
+            ? formatMoney(rollupStage.unweighted_minor, baseCurrency)
+            : "—"}{" "}
+          raw ·{" "}
+          {rollupStage && baseCurrency
+            ? formatMoney(rollupStage.weighted_minor, baseCurrency)
+            : "—"}{" "}
+          weighted
         </p>
       </div>
       <div className="flex flex-col gap-gf-sm min-h-[80px]">

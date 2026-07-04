@@ -7,7 +7,11 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { useState } from "react";
-import type { Deal, Stage } from "../../../lib/api-client/generated/index.js";
+import type {
+  Deal,
+  PipelineRollup,
+  Stage,
+} from "../../../lib/api-client/generated/index.js";
 import { Skeleton } from "../../../shared/ui/forge.js";
 import { useAdvanceDeal } from "../api/deals.js";
 import { OutcomeDialog } from "./OutcomeDialog.js";
@@ -49,6 +53,7 @@ export function PipelineBoard({
   stages,
   terminalStages = [],
   deals,
+  rollup,
   isLoading,
   isError,
   onRetry,
@@ -60,6 +65,10 @@ export function PipelineBoard({
   stages: Stage[];
   terminalStages?: Stage[];
   deals: Deal[];
+  // Drives each column's raw/weighted sub-line (DEAL-EXT-1: server read only, never
+  // client-summed) — undefined while the roll-up hasn't loaded/errored, rendered
+  // honestly rather than falling back to a client-side sum.
+  rollup?: PipelineRollup;
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
@@ -194,6 +203,10 @@ export function PipelineBoard({
               key={stage.id}
               stage={stage}
               deals={deals.filter((d) => d.stage_id === stage.id)}
+              rollupStage={rollup?.by_stage.find(
+                (s) => s.stage_id === stage.id,
+              )}
+              baseCurrency={rollup?.base_currency}
               onCardClick={onCardClick}
               onAdvanceClick={handleAdvanceClick}
             />
