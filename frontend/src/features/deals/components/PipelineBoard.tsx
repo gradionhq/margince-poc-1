@@ -13,6 +13,22 @@ import { useAdvanceDeal } from "../api/deals.js";
 import { OutcomeDialog } from "./OutcomeDialog.js";
 import { StageColumn } from "./StageColumn.js";
 
+// Extracts the server-named cause from a failed advanceDeal call (a Problem-shaped body with
+// `detail`/`code`) rather than surfacing a generic "failed" — AC-pipeline-3/4 requires the
+// snap-back toast to name the specific reason.
+export function advanceErrorMessage(error: unknown): string {
+  if (error && typeof error === "object") {
+    const problem = error as { detail?: unknown; code?: unknown };
+    if (typeof problem.detail === "string" && problem.detail.length > 0) {
+      return problem.detail;
+    }
+    if (typeof problem.code === "string" && problem.code.length > 0) {
+      return `Move failed (${problem.code})`;
+    }
+  }
+  return "Move failed — please try again.";
+}
+
 // The next stage in DEAL-FORM-1 position order after `currentStageId`, searching across
 // ALL stages (open + terminal) — this is what both the Advance button (DEAL-AC-B4) and the
 // drag-drop terminal check resolve against. Returns undefined only for the last stage.
@@ -37,6 +53,7 @@ export function PipelineBoard({
   isError,
   onRetry,
   onCardClick,
+  onMoveError,
 }: {
   pipelineId: string;
   stages: Stage[];
@@ -46,6 +63,7 @@ export function PipelineBoard({
   isError: boolean;
   onRetry: () => void;
   onCardClick: (dealId: string) => void;
+  onMoveError?: (message: string) => void;
 }) {
   const advance = useAdvanceDeal(pipelineId);
   const [isDragging, setIsDragging] = useState(false);
@@ -83,7 +101,10 @@ export function PipelineBoard({
       });
       return;
     }
-    advance.mutate({ dealId, toStageId });
+    advance.mutate(
+      { dealId, toStageId },
+      { onError: (err) => onMoveError?.(advanceErrorMessage(err)) },
+    );
   }
 
   function handleDragStart(_event: DragStartEvent) {
@@ -186,21 +207,27 @@ export function PipelineBoard({
         isLoading={advance.isPending}
         onWon={() => {
           if (!pendingOutcome?.wonStageId) return;
-          advance.mutate({
-            dealId: pendingOutcome.dealId,
-            toStageId: pendingOutcome.wonStageId,
-            status: "won",
-          });
+          advance.mutate(
+            {
+              dealId: pendingOutcome.dealId,
+              toStageId: pendingOutcome.wonStageId,
+              status: "won",
+            },
+            { onError: (err) => onMoveError?.(advanceErrorMessage(err)) },
+          );
           setPendingOutcome(null);
         }}
         onLost={(reason) => {
           if (!pendingOutcome?.lostStageId) return;
-          advance.mutate({
-            dealId: pendingOutcome.dealId,
-            toStageId: pendingOutcome.lostStageId,
-            status: "lost",
-            lostReason: reason,
-          });
+          advance.mutate(
+            {
+              dealId: pendingOutcome.dealId,
+              toStageId: pendingOutcome.lostStageId,
+              status: "lost",
+              lostReason: reason,
+            },
+            { onError: (err) => onMoveError?.(advanceErrorMessage(err)) },
+          );
           setPendingOutcome(null);
         }}
         onCancel={() => setPendingOutcome(null)}

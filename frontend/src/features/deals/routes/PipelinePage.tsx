@@ -18,7 +18,7 @@ export function PipelinePage() {
   const [view, setView] = useState<"board" | "table">("board");
   const [newDealOpen, setNewDealOpen] = useState(false);
   const [toasts, setToasts] = useState<
-    Array<{ id: string; variant: "success"; message: string }>
+    Array<{ id: string; variant: "success" | "error"; message: string }>
   >([]);
   const { data: pipeline } = useDefaultPipeline();
   const pipelineId = pipeline?.id;
@@ -77,6 +77,12 @@ export function PipelinePage() {
             isError={dealsError}
             onRetry={refetchDeals}
             onCardClick={(dealId) => navigate(`/deals/${dealId}`)}
+            onMoveError={(message) =>
+              setToasts((t) => [
+                ...t,
+                { id: crypto.randomUUID(), variant: "error", message },
+              ])
+            }
           />
         ) : (
           <DealsTable deals={dealPage?.data ?? []} stagesById={stagesById} />

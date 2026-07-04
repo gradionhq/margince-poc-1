@@ -147,9 +147,14 @@ describe("useAdvanceDeal (optimistic mutation)", () => {
 
     // Optimistic patch is synchronous — check before the network resolves.
     const optimistic = qc.getQueryData<{
-      data: Array<{ id: string; stage_id: string }>;
+      data: Array<{ id: string; stage_id: string; stage_entered_at: string }>;
     }>(dealsKeys.list("p1", undefined, "open"));
     expect(optimistic?.data[0].stage_id).toBe("s1");
+    // In-stage age resets on a successful move (AC-pipeline-3/4) — the optimistic patch
+    // stamps a fresh stage_entered_at rather than carrying over the old stage's age.
+    expect(optimistic?.data[0].stage_entered_at).not.toBe(
+      "2020-01-01T00:00:00Z",
+    );
 
     resolvePost({ data: { id: "d1", stage_id: "s1" }, error: undefined });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));

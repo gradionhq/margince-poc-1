@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Deal, Stage } from "../../../lib/api-client/generated/index.js";
-import { PipelineBoard } from "./PipelineBoard.js";
+import { advanceErrorMessage, PipelineBoard } from "./PipelineBoard.js";
 
 // Vitest hoists vi.mock factories above imports, but allows referencing identifiers prefixed
 // `mock` inside them — declared once here so every test in this file (including later tasks'
@@ -221,10 +221,10 @@ describe("PipelineBoard Advance button", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /^advance$/i }));
-    expect(mockAdvanceMutate).toHaveBeenCalledWith({
-      dealId: "d1",
-      toStageId: "s1",
-    });
+    expect(mockAdvanceMutate).toHaveBeenCalledWith(
+      { dealId: "d1", toStageId: "s1" },
+      expect.anything(),
+    );
     expect(screen.queryByText(/confirm the outcome/i)).not.toBeInTheDocument();
   });
 
@@ -245,5 +245,54 @@ describe("PipelineBoard Advance button", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /^advance$/i }));
     expect(screen.getByText(/confirm the outcome/i)).toBeInTheDocument();
+  });
+});
+
+describe("advanceErrorMessage", () => {
+  it("surfaces the Problem body's detail as the specific cause", () => {
+    expect(
+      advanceErrorMessage({
+        code: "validation_error",
+        detail: "stage not in pipeline",
+      }),
+    ).toBe("stage not in pipeline");
+  });
+
+  it("falls back to the error code when detail is absent", () => {
+    expect(advanceErrorMessage({ code: "forbidden" })).toBe(
+      "Move failed (forbidden)",
+    );
+  });
+
+  it("falls back to a generic message for a shapeless error", () => {
+    expect(advanceErrorMessage(new Error("network down"))).toBe(
+      "Move failed — please try again.",
+    );
+  });
+});
+
+describe("PipelineBoard onMoveError", () => {
+  it("names the specific cause from the failed move's error body (AC-pipeline-3/4)", () => {
+    mockAdvanceMutate.mockClear();
+    const onMoveError = vi.fn();
+    render(
+      <PipelineBoard
+        pipelineId="p1"
+        stages={stages}
+        deals={deals}
+        isLoading={false}
+        isError={false}
+        onRetry={vi.fn()}
+        onCardClick={vi.fn()}
+        onMoveError={onMoveError}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^advance$/i }));
+    const [, options] = mockAdvanceMutate.mock.calls[0];
+    options.onError({
+      code: "validation_error",
+      detail: "stage not in pipeline",
+    });
+    expect(onMoveError).toHaveBeenCalledWith("stage not in pipeline");
   });
 });
