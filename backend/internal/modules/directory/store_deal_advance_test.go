@@ -144,3 +144,117 @@ func TestDealStore_Advance_LostWithoutReasonRejected(t *testing.T) {
 		t.Fatal("expected advancing to a lost stage without lost_reason to be rejected")
 	}
 }
+
+func TestDealStore_Advance_OpenToOpen_NoFXNoClosedAt(t *testing.T) {
+	db := openCreateTestDB(t)
+	pipe, err := seedTwoOpenStagePipeline(t, db, "o2o-real")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := crmcore.NewDealStore(db)
+	ctx := context.Background()
+
+	openA, openB := pipe.stageA, pipe.stageB
+	d := crmcore.NewDeal("Deal o2o real", pipe.pipeline, openA, prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	d.WorkspaceID = advanceTestWorkspaceID
+	created, err := store.Create(ctx, d, "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	updated, err := store.Advance(ctx, created.ID, advanceTestWorkspaceID, crmcore.AdvanceInput{
+		ToStageID: openB,
+	}, 0, "human:test")
+	if err != nil {
+		t.Fatalf("Advance open->open: %v", err)
+	}
+	if updated.Status != "open" || updated.ClosedAt != nil || updated.FxRateToBase != nil {
+		t.Fatalf("open->open must not close or freeze FX: %+v", updated)
+	}
+}
+
+func TestDealStore_Advance_Reopen_ClearsClosedAtLostReasonAndFX(t *testing.T) {
+	db := openCreateTestDB(t)
+	pipelineID, openA, _, lostA := setupAdvanceFixtures(t, db, "reopen")
+	if _, err := db.Exec(`INSERT INTO fx_rate (workspace_id, from_currency, to_currency, rate, rate_date)
+		VALUES ($1, 'EUR', 'USD', 1.1, current_date) ON CONFLICT DO NOTHING`, advanceTestWorkspaceID); err != nil {
+		t.Fatalf("seed fx_rate: %v", err)
+	}
+	store := crmcore.NewDealStore(db)
+	ctx := context.Background()
+
+	amount := int64(10000)
+	currency := "EUR"
+	d := crmcore.NewDeal("Deal reopen", pipelineID, openA, prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	d.WorkspaceID = advanceTestWorkspaceID
+	d.AmountMinor = &amount
+	d.Currency = &currency
+	created, err := store.Create(ctx, d, "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	reason := "budget cut"
+	closed, err := store.Advance(ctx, created.ID, advanceTestWorkspaceID, crmcore.AdvanceInput{
+		ToStageID: lostA, LostReason: &reason,
+	}, 0, "human:test")
+	if err != nil {
+		t.Fatalf("Advance to lost: %v", err)
+	}
+	if closed.ClosedAt == nil || closed.LostReason == nil || closed.FxRateToBase == nil {
+		t.Fatalf("expected closed_at/lost_reason/fx_rate_to_base all set after close: %+v", closed)
+	}
+
+	reopened, err := store.Advance(ctx, created.ID, advanceTestWorkspaceID, crmcore.AdvanceInput{
+		ToStageID: openA,
+	}, 0, "human:test")
+	if err != nil {
+		t.Fatalf("Advance reopen: %v", err)
+	}
+	if reopened.ClosedAt != nil || reopened.LostReason != nil || reopened.FxRateToBase != nil || reopened.FxRateDate != nil {
+		t.Fatalf("expected closed_at/lost_reason/fx fields all cleared on reopen: %+v", reopened)
+	}
+	if reopened.Status != "open" {
+		t.Fatalf("expected status=open after reopen, got %q", reopened.Status)
+	}
+
+	var historyCount int
+	if err := db.QueryRow(`SELECT count(*) FROM deal_stage_history WHERE deal_id=$1`, created.ID).Scan(&historyCount); err != nil {
+		t.Fatal(err)
+	}
+	if historyCount != 3 { // create + close + reopen
+		t.Fatalf("expected 3 history rows (create, close, reopen), got %d", historyCount)
+	}
+}
+
+type twoOpenStagePipeline struct {
+	pipeline, stageA, stageB string
+}
+
+func seedTwoOpenStagePipeline(t *testing.T, db *sql.DB, tag string) (twoOpenStagePipeline, error) {
+	t.Helper()
+	tag = fmt.Sprintf("%s-%d", tag, time.Now().UnixNano())
+	if _, err := db.Exec(`INSERT INTO workspace (id, name, slug, base_currency) VALUES ($1,'t12-2open-ws',$2,'EUR')
+		ON CONFLICT (id) DO NOTHING`, advanceTestWorkspaceID, "t12-2open-ws-"+tag); err != nil {
+		return twoOpenStagePipeline{}, err
+	}
+	if _, err := db.Exec(`SELECT set_config('app.workspace_id', $1, false)`, advanceTestWorkspaceID); err != nil {
+		return twoOpenStagePipeline{}, err
+	}
+	var p twoOpenStagePipeline
+	if err := db.QueryRow(`INSERT INTO pipeline (id, workspace_id, name) VALUES (uuidv7(), $1, $2) RETURNING id`,
+		advanceTestWorkspaceID, "2open "+tag).Scan(&p.pipeline); err != nil {
+		return p, err
+	}
+	if err := db.QueryRow(`INSERT INTO stage (id, workspace_id, pipeline_id, name, position, semantic, win_probability)
+		VALUES (uuidv7(), $1, $2, 'A '||$3, 1, 'open', 10) RETURNING id`,
+		advanceTestWorkspaceID, p.pipeline, tag).Scan(&p.stageA); err != nil {
+		return p, err
+	}
+	if err := db.QueryRow(`INSERT INTO stage (id, workspace_id, pipeline_id, name, position, semantic, win_probability)
+		VALUES (uuidv7(), $1, $2, 'B '||$3, 2, 'open', 40) RETURNING id`,
+		advanceTestWorkspaceID, p.pipeline, tag).Scan(&p.stageB); err != nil {
+		return p, err
+	}
+	return p, nil
+}
