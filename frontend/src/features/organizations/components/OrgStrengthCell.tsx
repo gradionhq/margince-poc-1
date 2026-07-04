@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { PopoverPortal } from "../../../shared/ui/forge.js";
 
 type OrgStrength = {
   score: number;
@@ -21,6 +22,7 @@ export function OrgStrengthCell({
   contactCount: number;
 }) {
   const [showPopover, setShowPopover] = useState(false);
+  const anchorRef = useRef<HTMLButtonElement>(null);
 
   if (!strength) {
     return (
@@ -35,10 +37,11 @@ export function OrgStrengthCell({
   const barColor = bucketBarColor[strength.bucket] ?? "bg-gf-secondary";
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: strength cell needs mouse/focus tracking for informational popover
-    <div
+    <button
+      ref={anchorRef}
+      type="button"
       data-testid="org-strength-cell"
-      className="relative flex flex-col gap-0.5 cursor-default"
+      className="flex flex-col gap-0.5 cursor-default select-none text-left"
       onMouseEnter={() => setShowPopover(true)}
       onMouseLeave={() => setShowPopover(false)}
       onFocus={() => setShowPopover(true)}
@@ -58,19 +61,25 @@ export function OrgStrengthCell({
       </span>
 
       {showPopover && (
-        <div className="absolute bottom-full left-0 mb-1 z-50 w-64 rounded-md bg-gf-elevated border border-gf-subtle shadow-md p-gf-md text-gf-caption">
-          <p className="font-semibold text-gf-body mb-1">
-            Org strength {strength.score}
-          </p>
-          <p className="text-gf-secondary mb-1">
-            Top contact: {strength.top_person_name}
-          </p>
-          <p className="text-gf-muted italic">
-            the org score is the max over its contacts — not an average that
-            hides one warm champion.
-          </p>
-        </div>
+        <PopoverPortal
+          anchorRef={anchorRef}
+          placement="bottom-left"
+          onClickOutside={() => setShowPopover(false)}
+        >
+          <div className="flex flex-col gap-gf-sm p-gf-md bg-gf-elevated rounded-md shadow-sm min-w-48 text-gf-caption">
+            <p className="font-semibold text-gf-body">
+              Org strength {strength.score}
+            </p>
+            <p className="text-gf-secondary">
+              Top contact: {strength.top_person_name}
+            </p>
+            <p className="text-gf-muted italic">
+              the org score is the max over its contacts — not an average that
+              hides one warm champion.
+            </p>
+          </div>
+        </PopoverPortal>
       )}
-    </div>
+    </button>
   );
 }
