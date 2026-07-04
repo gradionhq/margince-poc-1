@@ -148,7 +148,7 @@ func (s *DealStore) ListFiltered(ctx context.Context, workspaceID, cursor string
 		//nolint:gosec // G202: `where` injects only bound-param indices ($N), never user input; all filter values are passed via args
 		rows, err := tx.QueryContext(ctx,
 			`SELECT id, workspace_id, name, pipeline_id, stage_id,
-			        organization_id, owner_id,
+			        organization_id, owner_id, partner_org_id,
 			        amount_minor, currency, status, wait_until, last_activity_at,
 			        version, source, captured_by, created_at, updated_at,
 			        (SELECT max(occurred_at) FROM deal_stage_history WHERE deal_id=deal.id) AS stage_entered_at,
@@ -165,7 +165,7 @@ func (s *DealStore) ListFiltered(ctx context.Context, workspaceID, cursor string
 			var d Deal
 			var stageEnteredAt sql.NullTime
 			if err := rows.Scan(&d.ID, &d.WorkspaceID, &d.Name, &d.PipelineID, &d.StageID,
-				&d.OrganizationID, &d.OwnerID,
+				&d.OrganizationID, &d.OwnerID, &d.PartnerOrgID,
 				&d.AmountMinor, &d.Currency, &d.Status, &d.WaitUntil, &d.LastActivityAt, &d.Version,
 				&d.Source, &d.CapturedBy,
 				&d.CreatedAt, &d.UpdatedAt,

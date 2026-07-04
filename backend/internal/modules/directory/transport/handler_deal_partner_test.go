@@ -134,6 +134,9 @@ func TestDealHandler_CreateUpdateAndList_RoundTripPartnerOrgID(t *testing.T) {
 	for _, d := range page.Data {
 		if d.ID == created.ID {
 			found = true
+			if d.PartnerOrgID == nil || *d.PartnerOrgID != orgB {
+				t.Fatalf("listDeals?partner_org_id=%s returned deal with partner_org_id = %v, want %s", orgB, d.PartnerOrgID, orgB)
+			}
 		}
 	}
 	if !found {
