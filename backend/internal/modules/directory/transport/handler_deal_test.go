@@ -75,7 +75,7 @@ func seedDealFixtures(t *testing.T, db *sql.DB, tag string) (pipelineID, stageID
 func TestDealHandler_Create_Returns201WithLocationAndHistoryRow(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, _ := seedDealFixtures(t, db, "create")
-	h := NewDealHandler(crmcore.NewDealStore(db))
+	h := NewDealHandler(crmcore.NewDealStore(db), db)
 
 	body := map[string]any{
 		"name": "Acme deal", "pipeline_id": pipelineID, "stage_id": stageID,
@@ -105,7 +105,7 @@ func TestDealHandler_Create_Returns201WithLocationAndHistoryRow(t *testing.T) {
 func TestDealHandler_Create_IdempotencyKeyReplay(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, _ := seedDealFixtures(t, db, "replay")
-	h := NewDealHandler(crmcore.NewDealStore(db))
+	h := NewDealHandler(crmcore.NewDealStore(db), db)
 
 	body := map[string]any{
 		"name": "Replay deal", "pipeline_id": pipelineID, "stage_id": stageID,
@@ -148,7 +148,7 @@ func TestDealHandler_Create_IdempotencyKeyReplay(t *testing.T) {
 func TestDealHandler_Create_StageNotInPipeline(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, _, otherStageID := seedDealFixtures(t, db, "stage-check")
-	h := NewDealHandler(crmcore.NewDealStore(db))
+	h := NewDealHandler(crmcore.NewDealStore(db), db)
 
 	body := map[string]any{
 		"name": "Bad deal", "pipeline_id": pipelineID, "stage_id": otherStageID,
@@ -381,7 +381,7 @@ func TestDealHandler_List_FilterAndSort(t *testing.T) {
 func TestDealHandler_FullLifecycle_CreateUpdateList(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, otherStageID := seedDealFixtures(t, db, "lifecycle")
-	h := NewDealHandler(crmcore.NewDealStore(db))
+	h := NewDealHandler(crmcore.NewDealStore(db), db)
 
 	createBody, _ := json.Marshal(map[string]any{
 		"name": "Lifecycle deal", "pipeline_id": pipelineID, "stage_id": stageID,

@@ -20,6 +20,9 @@ var (
 	ErrFXRateUnavailable         = errors.New("fx rate unavailable")                  // -> 422 (no stored rate for as-of lookup)
 	ErrSuppressed                = errors.New("suppressed")                           // -> 451 (GDPR erasure suppression)
 	ErrApprovalTokenInvalid      = errors.New("approval token invalid")               // -> 403 (expired, replayed, or mis-bound token — API-ERR-11)
+	ErrApprovalRequired          = errors.New("approval required")                    // -> 403 (agent on a 🟡 transition, no token — API-ERR-10)
+	ErrStatusMismatch            = errors.New("status mismatch")                      // -> 422 (explicit status != target stage's derived semantic)
+	ErrLostReasonRequired        = errors.New("lost reason required")                 // -> 422 (advancing to a lost stage needs lost_reason)
 )
 
 // HTTPStatus maps a domain error to its HTTP status code — the single sentinel→status
@@ -37,7 +40,8 @@ func HTTPStatus(err error) int {
 		return 409
 	case errors.Is(err, ErrScopeExceeded),
 		errors.Is(err, ErrForbidden),
-		errors.Is(err, ErrApprovalTokenInvalid):
+		errors.Is(err, ErrApprovalTokenInvalid),
+		errors.Is(err, ErrApprovalRequired):
 		return 403
 	case errors.Is(err, ErrBudgetExceeded):
 		return 429
@@ -45,7 +49,9 @@ func HTTPStatus(err error) int {
 		errors.Is(err, ErrStageNotInPipeline),
 		errors.Is(err, ErrTerminalProbabilityPinned),
 		errors.Is(err, ErrWinProbabilityOutOfRange),
-		errors.Is(err, ErrFXRateUnavailable):
+		errors.Is(err, ErrFXRateUnavailable),
+		errors.Is(err, ErrStatusMismatch),
+		errors.Is(err, ErrLostReasonRequired):
 		return 422
 	case errors.Is(err, ErrSuppressed):
 		return 451

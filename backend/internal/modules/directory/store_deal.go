@@ -312,13 +312,24 @@ func (s *DealStore) StageSemantic(ctx context.Context, stageID, workspaceID stri
 	return semantic, nil
 }
 
-// AdvanceStage moves a deal to a new stage in a transaction that also writes deal_stage_history.
-func (s *DealStore) AdvanceStage(ctx context.Context, id, workspaceID, toStageID, changedBy string) (Deal, error) {
+// AdvanceInput carries a validated advanceDeal request body.
+type AdvanceInput struct {
+	ToStageID  string
+	Status     string  // client-supplied status, "" if the caller omitted it
+	LostReason *string
+}
+
+// Advance moves a deal to ToStageID, deriving status from the target stage's
+// semantic (DEAL-WIRE-9). An explicit mismatching Status is rejected with
+// ErrStatusMismatch. Writes exactly one deal_stage_history row, one audit_log
+// row (action=advance_stage), and one deal.stage_changed event per call.
+// FX freeze on close (DM-FX-3) and reopen clear are handled here.
+func (s *DealStore) Advance(ctx context.Context, id, workspaceID string, in AdvanceInput, ifMatch int64, changedBy string) (Deal, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Deal{}, err
 	}
-	defer tx.Rollback() //nolint:errcheck
+	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `SET LOCAL ROLE margince_app`); err != nil {
 		return Deal{}, err
@@ -327,63 +338,111 @@ func (s *DealStore) AdvanceStage(ctx context.Context, id, workspaceID, toStageID
 		return Deal{}, err
 	}
 
-	var fromStageID string
+	var fromStageID, fromStatus string
 	var amountMinor sql.NullInt64
 	var currency sql.NullString
-	err = tx.QueryRowContext(ctx,
-		`SELECT stage_id, amount_minor, currency FROM deal WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
-		id, workspaceID).Scan(&fromStageID, &amountMinor, &currency)
+	var version int64
+	err = tx.QueryRowContext(ctx, `
+		SELECT stage_id, status, amount_minor, currency, version
+		FROM deal WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL
+		FOR UPDATE`,
+		id, workspaceID).Scan(&fromStageID, &fromStatus, &amountMinor, &currency, &version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Deal{}, errs.ErrNotFound
 	}
 	if err != nil {
 		return Deal{}, err
 	}
+	if ifMatch != 0 && version != ifMatch {
+		return Deal{}, errs.ErrVersionSkew
+	}
 
-	res, err := tx.ExecContext(ctx,
-		`UPDATE deal SET stage_id=$1::uuid, updated_at=now() WHERE id=$2::uuid AND workspace_id=$3::uuid AND archived_at IS NULL`,
-		toStageID, id, workspaceID)
+	if err := s.checkStageInPipeline(ctx, tx, id, workspaceID, in.ToStageID); err != nil {
+		return Deal{}, err
+	}
+
+	var toSemantic string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT semantic FROM stage WHERE id=$1::uuid AND workspace_id=$2::uuid`,
+		in.ToStageID, workspaceID).Scan(&toSemantic); err != nil {
+		return Deal{}, err
+	}
+
+	if in.Status != "" && in.Status != toSemantic {
+		return Deal{}, errs.ErrStatusMismatch
+	}
+	if toSemantic == statusLost && (in.LostReason == nil || *in.LostReason == "") {
+		return Deal{}, errs.ErrLostReasonRequired
+	}
+
+	closing := toSemantic == statusWon || toSemantic == statusLost
+	reopening := fromStatus != statusOpen && toSemantic == statusOpen
+
+	var lostReason *string
+	var fxRate *float64
+	var fxRateDate *time.Time
+	if closing {
+		if toSemantic == statusLost {
+			lostReason = in.LostReason
+		}
+		fxRate, fxRateDate = s.freezeDealFX(ctx, tx, workspaceID, id, toSemantic)
+	}
+
+	res, err := tx.ExecContext(ctx, `
+		UPDATE deal
+		SET stage_id        = $3::uuid,
+		    status          = $4,
+		    lost_reason     = CASE WHEN $5 THEN NULL WHEN $6 THEN $7 ELSE lost_reason END,
+		    closed_at       = CASE WHEN $5 THEN NULL WHEN $6 THEN now() ELSE closed_at END,
+		    fx_rate_to_base = CASE WHEN $5 THEN NULL WHEN $6 THEN COALESCE($8, fx_rate_to_base) ELSE fx_rate_to_base END,
+		    fx_rate_date    = CASE WHEN $5 THEN NULL WHEN $6 THEN COALESCE($9, fx_rate_date) ELSE fx_rate_date END,
+		    updated_at      = now()
+		WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL
+		  AND ($10 = 0 OR version = $10)`,
+		id, workspaceID, in.ToStageID, toSemantic,
+		reopening, closing, lostReason, fxRate, fxRateDate, ifMatch)
 	if err != nil {
 		return Deal{}, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
+		if ifMatch != 0 {
+			return Deal{}, errs.ErrVersionSkew
+		}
 		return Deal{}, errs.ErrNotFound
 	}
 
-	_, err = tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO deal_stage_history (workspace_id, deal_id, from_stage_id, to_stage_id,
 		    changed_by, amount_minor_at_change, currency_at_change)
-		VALUES ($1::uuid, $2::uuid, NULLIF($3,'')::uuid, $4::uuid, $5, $6, $7)`,
-		workspaceID, id, fromStageID, toStageID, changedBy,
-		amountMinor, currency)
-	if err != nil {
-		return Deal{}, err
+		VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7)`,
+		workspaceID, id, fromStageID, in.ToStageID, changedBy, amountMinor, currency); err != nil {
+		return Deal{}, fmt.Errorf("deal advance history: %w", err)
 	}
 
-	// Resolve the target stage semantic to decide on closed-won status + outbox event.
-	var toSemantic string
-	if err = tx.QueryRowContext(ctx,
-		`SELECT semantic FROM stage WHERE id=$1::uuid AND workspace_id=$2::uuid`,
-		toStageID, workspaceID).Scan(&toSemantic); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return Deal{}, err
+	e := crmaudit.EntryFromPrincipal(ctx, "advance_stage", entityTypeDeal, &id,
+		map[string]any{"stage_id": fromStageID, "status": fromStatus},
+		map[string]any{"stage_id": in.ToStageID, "status": toSemantic})
+	e.WorkspaceID = workspaceID
+	if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+		return Deal{}, fmt.Errorf("deal advance audit: %w", err)
 	}
 
-	if toSemantic == statusWon {
-		if _, err = tx.ExecContext(ctx,
-			`UPDATE deal SET status='won', closed_at=now() WHERE id=$1::uuid AND workspace_id=$2::uuid`,
-			id, workspaceID); err != nil {
-			return Deal{}, err
-		}
-		payload, _ := json.Marshal(map[string]any{
-			"to_status":   statusWon,
-			colDealID:     id,
-			"to_stage_id": toStageID,
-		})
-		if _, err = tx.ExecContext(ctx,
-			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
-			workspaceID, "deal.stage_changed", id, payload); err != nil {
-			return Deal{}, err
-		}
+	var winProbability int
+	_ = tx.QueryRowContext(ctx, `SELECT win_probability FROM stage WHERE id=$1::uuid`, in.ToStageID).Scan(&winProbability)
+	payload, _ := json.Marshal(map[string]any{
+		colDealID:         id,
+		"from_stage_id":   fromStageID,
+		"to_stage_id":     in.ToStageID,
+		"from_status":     fromStatus,
+		"to_status":       toSemantic,
+		"amount_minor":    amountMinor,
+		"currency":        currency,
+		"win_probability": winProbability,
+	})
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
+		workspaceID, "deal.stage_changed", id, payload); err != nil {
+		return Deal{}, fmt.Errorf("deal advance event: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {

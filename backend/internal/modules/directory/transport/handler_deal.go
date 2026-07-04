@@ -7,6 +7,8 @@
 package transport
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
+	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
@@ -29,18 +33,41 @@ const (
 	codeValidation = "validation_error"
 )
 
-// DealHandler routes /deals and /deals/{id} requests to the DealStore.
-type DealHandler struct{ store *directory.DealStore }
+// stageSemanticReader is the full DealStore seam DealHandler uses — an
+// interface so the 403/422 pre-store advance gate paths are unit-testable
+// without Postgres.
+type stageSemanticReader interface {
+	Get(ctx context.Context, id, workspaceID string) (directory.Deal, error)
+	StageSemantic(ctx context.Context, stageID, workspaceID string) (string, error)
+	Advance(ctx context.Context, id, workspaceID string, in directory.AdvanceInput, ifMatch int64, changedBy string) (directory.Deal, error)
+	FindByIdempotencyKey(ctx context.Context, workspaceID, key string) (directory.Deal, bool, error)
+	Create(ctx context.Context, d directory.Deal, idempotencyKey string) (directory.Deal, error)
+	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (directory.Deal, error)
+	ListFiltered(ctx context.Context, workspaceID, cursor string, limit int, filter directory.DealListFilter) ([]directory.Deal, string, error)
+}
 
-// NewDealHandler returns a DealHandler.
-func NewDealHandler(store *directory.DealStore) *DealHandler {
-	return &DealHandler{store: store}
+// DealHandler routes /deals and /deals/{id} requests to the DealStore.
+type DealHandler struct {
+	store stageSemanticReader
+	db    *sql.DB // used only for VerifyAndConsume on the 🟡 advance path
+}
+
+// NewDealHandler returns a DealHandler. db is the raw pool the approval-token
+// consumption seam writes through — kept separate from store so store tx
+// boundaries are untouched.
+func NewDealHandler(store *directory.DealStore, db *sql.DB) *DealHandler {
+	return &DealHandler{store: store, db: db}
 }
 
 // ServeHTTP dispatches on method + path suffix. Only POST /deals is
 // implemented by this task; PATCH /deals/{id} (Task 2) and GET /deals
 // (Task 3) add their cases below as they land.
 func (h *DealHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/advance") {
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/advance"), "/deals")
+		h.advance(w, r, id)
+		return
+	}
 	id := pathID(r.URL.Path, "/deals")
 	switch {
 	case r.Method == http.MethodGet && id == "":
@@ -150,6 +177,111 @@ func (h *DealHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 	jsonOK(w, d)
+}
+
+func (h *DealHandler) advance(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := workspaceID(r)
+	ifMatch, malformed := parseIfMatch(r)
+	if malformed {
+		jsonProblem(w, http.StatusBadRequest, "bad_if_match")
+		return
+	}
+
+	var body struct {
+		ToStageID  string  `json:"to_stage_id"`
+		Status     string  `json:"status"`
+		LostReason *string `json:"lost_reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ToStageID == "" {
+		jsonValidationError(w, "to_stage_id is required.", []fieldError{{Field: "to_stage_id", Code: "required"}})
+		return
+	}
+
+	deal, err := h.store.Get(r.Context(), id, wsID)
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+
+	fromSemantic, err := h.store.StageSemantic(r.Context(), deal.StageID, wsID)
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	toSemantic, err := h.store.StageSemantic(r.Context(), body.ToStageID, wsID)
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonValidationError(w, "to_stage_id does not belong to this workspace.",
+			[]fieldError{{Field: "to_stage_id", Code: "stage_not_in_pipeline"}})
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+
+	p, _ := crmctx.From(r.Context())
+	if deals.ResolveTier(fromSemantic, toSemantic) == deals.TierYellow && p.IsAgent {
+		token := r.Header.Get("X-Approval-Token")
+		if token == "" {
+			jsonProblem(w, http.StatusForbidden, "approval_required")
+			return
+		}
+		diffFields := map[string]any{
+			"deal_id":     id,
+			"to_stage_id": body.ToStageID,
+			"status":      toSemantic,
+		}
+		if body.LostReason != nil {
+			diffFields["lost_reason"] = *body.LostReason
+		}
+		diffHash := crmapprovals.HashDiff(diffFields)
+		var targetVersion *int64
+		if ifMatch != 0 {
+			targetVersion = &ifMatch
+		}
+		if err := crmapprovals.VerifyAndConsume(r.Context(), h.db, token, crmapprovals.Binding{
+			WorkspaceID: wsID, Tool: "advance_deal", DiffHash: diffHash, TargetVersion: targetVersion,
+		}); err != nil {
+			jsonProblem(w, http.StatusForbidden, "approval_token_invalid")
+			return
+		}
+	}
+
+	updated, err := h.store.Advance(r.Context(), id, wsID, directory.AdvanceInput{
+		ToStageID: body.ToStageID, Status: body.Status, LostReason: body.LostReason,
+	}, ifMatch, p.UserID)
+	if errors.Is(err, errs.ErrStageNotInPipeline) {
+		jsonValidationError(w, "to_stage_id does not belong to this deal's pipeline.",
+			[]fieldError{{Field: "to_stage_id", Code: "stage_not_in_pipeline"}})
+		return
+	}
+	if errors.Is(err, errs.ErrStatusMismatch) {
+		jsonValidationError(w, "status does not match the target stage's semantic.",
+			[]fieldError{{Field: "status", Code: "status_mismatch"}})
+		return
+	}
+	if errors.Is(err, errs.ErrLostReasonRequired) {
+		jsonValidationError(w, "lost_reason is required when advancing to a lost stage.",
+			[]fieldError{{Field: "lost_reason", Code: "lost_reason_required"}})
+		return
+	}
+	if errors.Is(err, errs.ErrVersionSkew) {
+		jsonProblem(w, http.StatusConflict, "version_skew")
+		return
+	}
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, updated)
 }
 
 var dealSortColumns = map[string]bool{
