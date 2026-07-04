@@ -1,5 +1,5 @@
-// This file is the either-endpoint tier resolver for deal-stage transitions
-// (DEAL-WIRE-4), migrated from the skeleton's superseded
+// Package deals provides the either-endpoint tier resolver for deal-stage
+// transitions (DEAL-WIRE-4), migrated from the skeleton's superseded
 // directory.terminalStageTier (target-semantic-only, dead code — zero
 // callers) per the T12 spec. A transition is 🟡 when EITHER endpoint's
 // semantic is terminal (won/lost): closing and reopening are both governed;
@@ -10,6 +10,7 @@ package deals
 // Tier classifies a stage-transition's approval requirement level.
 type Tier int
 
+// Tier values classify the approval requirement for a deal-stage transition.
 const (
 	TierGreen  Tier = iota // no approval required
 	TierYellow             // approval required for agent callers

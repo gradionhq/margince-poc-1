@@ -20,22 +20,28 @@ type fakeStageSemanticReader struct {
 func (f *fakeStageSemanticReader) Get(_ context.Context, _, _ string) (directory.Deal, error) {
 	return f.deal, nil
 }
+
 func (f *fakeStageSemanticReader) StageSemantic(_ context.Context, stageID, _ string) (string, error) {
 	return f.semanticByID[stageID], nil
 }
+
 func (f *fakeStageSemanticReader) Advance(_ context.Context, _, _ string, _ directory.AdvanceInput, _ int64, _ string) (directory.Deal, error) {
 	f.advanceCalled = true
 	return directory.Deal{}, nil
 }
+
 func (f *fakeStageSemanticReader) FindByIdempotencyKey(_ context.Context, _, _ string) (directory.Deal, bool, error) {
 	return directory.Deal{}, false, nil
 }
+
 func (f *fakeStageSemanticReader) Create(_ context.Context, d directory.Deal, _ string) (directory.Deal, error) {
 	return d, nil
 }
+
 func (f *fakeStageSemanticReader) Update(_ context.Context, _, _ string, _ map[string]any, _ int64) (directory.Deal, error) {
 	return directory.Deal{}, nil
 }
+
 func (f *fakeStageSemanticReader) ListFiltered(_ context.Context, _, _ string, _ int, _ directory.DealListFilter) ([]directory.Deal, string, error) {
 	return nil, "", nil
 }

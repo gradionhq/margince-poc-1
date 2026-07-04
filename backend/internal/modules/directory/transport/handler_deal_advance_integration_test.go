@@ -77,11 +77,11 @@ func seedAdvHandlerFixtures(t *testing.T, db *sql.DB, tag string) (pipelineID, o
 	return pipelineID, openA, openB, won, lost
 }
 
-func createAdvHandlerDeal(t *testing.T, h *DealHandler, pipelineID, stageID string, amountMinor int64, currency string) map[string]any {
+func createAdvHandlerDeal(t *testing.T, h *DealHandler, pipelineID, stageID string) map[string]any {
 	t.Helper()
 	body := map[string]any{
 		"name": "adv-deal", "pipeline_id": pipelineID, "stage_id": stageID,
-		"amount_minor": amountMinor, "currency": currency,
+		"amount_minor": 5000, "currency": "EUR",
 		"source": "test", "captured_by": "human:test",
 	}
 	b, _ := json.Marshal(body)
@@ -121,7 +121,7 @@ func TestAdvanceDeal_UAT1_OpenToOpen_NoTokenNeeded(t *testing.T) {
 	db := openDealTestDB(t)
 	h := NewDealHandler(crmcore.NewDealStore(db), db)
 	pipelineID, openA, openB, _, _ := seedAdvHandlerFixtures(t, db, "uat1")
-	created := createAdvHandlerDeal(t, h, pipelineID, openA, 5000, "EUR")
+	created := createAdvHandlerDeal(t, h, pipelineID, openA)
 	dealID := created["id"].(string)
 
 	// Agent principal, open->open, no token — must still succeed (🟢).
@@ -143,7 +143,7 @@ func TestAdvanceDeal_UAT2_AgentWithoutToken_403ApprovalRequired(t *testing.T) {
 	db := openDealTestDB(t)
 	h := NewDealHandler(crmcore.NewDealStore(db), db)
 	pipelineID, openA, _, won, _ := seedAdvHandlerFixtures(t, db, "uat2")
-	created := createAdvHandlerDeal(t, h, pipelineID, openA, 5000, "EUR")
+	created := createAdvHandlerDeal(t, h, pipelineID, openA)
 	dealID := created["id"].(string)
 	preVersion := created["version"]
 
@@ -170,7 +170,7 @@ func TestAdvanceDeal_UAT3_AgentWithValidToken_SucceedsThenReplayRejected(t *test
 	db := openDealTestDB(t)
 	h := NewDealHandler(crmcore.NewDealStore(db), db)
 	pipelineID, openA, _, won, _ := seedAdvHandlerFixtures(t, db, "uat3")
-	created := createAdvHandlerDeal(t, h, pipelineID, openA, 5000, "EUR")
+	created := createAdvHandlerDeal(t, h, pipelineID, openA)
 	dealID := created["id"].(string)
 	version := int64(created["version"].(float64))
 
@@ -212,7 +212,7 @@ func TestAdvanceDeal_UAT4_LostWithoutReason_422(t *testing.T) {
 	db := openDealTestDB(t)
 	h := NewDealHandler(crmcore.NewDealStore(db), db)
 	pipelineID, openA, _, _, lost := seedAdvHandlerFixtures(t, db, "uat4")
-	created := createAdvHandlerDeal(t, h, pipelineID, openA, 5000, "EUR")
+	created := createAdvHandlerDeal(t, h, pipelineID, openA)
 	dealID := created["id"].(string)
 
 	// Human principal — no token required for the 🟡 gate, but lost_reason
@@ -228,7 +228,7 @@ func TestAdvanceDeal_UAT5_Reopen_AgentGatedThenClearsOnSuccess(t *testing.T) {
 	db := openDealTestDB(t)
 	h := NewDealHandler(crmcore.NewDealStore(db), db)
 	pipelineID, openA, _, _, lost := seedAdvHandlerFixtures(t, db, "uat5")
-	created := createAdvHandlerDeal(t, h, pipelineID, openA, 5000, "EUR")
+	created := createAdvHandlerDeal(t, h, pipelineID, openA)
 	dealID := created["id"].(string)
 
 	reason := "lost to competitor"
@@ -270,7 +270,7 @@ func TestAdvanceDeal_UAT6_RenamedStageSemanticStillGoverned(t *testing.T) {
 	db := openDealTestDB(t)
 	h := NewDealHandler(crmcore.NewDealStore(db), db)
 	pipelineID, openA, _, won, _ := seedAdvHandlerFixtures(t, db, "uat6")
-	created := createAdvHandlerDeal(t, h, pipelineID, openA, 5000, "EUR")
+	created := createAdvHandlerDeal(t, h, pipelineID, openA)
 	dealID := created["id"].(string)
 
 	// Rename the won stage's NAME only — its semantic ('won') is untouched.

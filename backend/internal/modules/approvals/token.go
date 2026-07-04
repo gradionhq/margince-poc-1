@@ -1,10 +1,10 @@
-// This file implements the X-Approval-Token verify/consume seam (gate issue
-// #59, Option 1): a minimal, self-contained compact-JWS (HMAC-SHA256)
-// parser/validator with single-use consumption tracking. Minting (an
-// approval decision issuing a token to the requesting agent) is explicitly
-// out of scope for this ticket — a fast-follow ticket wires the real mint
-// flow onto SignToken's shape and retrofits T06 (person/org merge) onto
-// VerifyAndConsume once it lands.
+// Package crmapprovals implements the X-Approval-Token verify/consume seam
+// (gate issue #59, Option 1): a minimal, self-contained compact-JWS
+// (HMAC-SHA256) parser/validator with single-use consumption tracking.
+// Minting (an approval decision issuing a token to the requesting agent) is
+// explicitly out of scope for this ticket — a fast-follow ticket wires the
+// real mint flow onto SignToken's shape and retrofits T06 (person/org merge)
+// onto VerifyAndConsume once it lands.
 package crmapprovals
 
 import (

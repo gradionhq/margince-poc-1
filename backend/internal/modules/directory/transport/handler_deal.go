@@ -25,12 +25,14 @@ import (
 )
 
 const (
-	fieldData      = "data"
-	fieldCode      = "code"
-	fieldStatus    = "status"
-	fieldDetails   = "details"
-	codeBadRequest = "bad_request"
-	codeValidation = "validation_error"
+	fieldData              = "data"
+	fieldCode              = "code"
+	fieldStatus            = "status"
+	fieldDetails           = "details"
+	codeBadRequest         = "bad_request"
+	codeValidation         = "validation_error"
+	codeStageNotInPipeline = "stage_not_in_pipeline"
+	fieldToStageID         = "to_stage_id"
 )
 
 // stageSemanticReader is the full DealStore seam DealHandler uses — an
@@ -134,7 +136,7 @@ func (h *DealHandler) create(w http.ResponseWriter, r *http.Request) {
 	created, err := h.store.Create(r.Context(), d, idemKey)
 	if errors.Is(err, errs.ErrStageNotInPipeline) {
 		jsonValidationError(w, "stage_id does not belong to pipeline_id.",
-			[]fieldError{{Field: "stage_id", Code: "stage_not_in_pipeline"}})
+			[]fieldError{{Field: "stage_id", Code: codeStageNotInPipeline}})
 		return
 	}
 	if err != nil {
@@ -161,7 +163,7 @@ func (h *DealHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 	d, err := h.store.Update(r.Context(), id, wsID, body, ifMatch)
 	if errors.Is(err, errs.ErrStageNotInPipeline) {
 		jsonValidationError(w, "stage_id does not belong to pipeline_id.",
-			[]fieldError{{Field: "stage_id", Code: "stage_not_in_pipeline"}})
+			[]fieldError{{Field: "stage_id", Code: codeStageNotInPipeline}})
 		return
 	}
 	if errors.Is(err, errs.ErrVersionSkew) {
@@ -179,6 +181,7 @@ func (h *DealHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 	jsonOK(w, d)
 }
 
+//nolint:cyclop // HTTP boundary: each advance error maps to a distinct status code; 16 is 1 over the lint max
 func (h *DealHandler) advance(w http.ResponseWriter, r *http.Request, id string) {
 	wsID := workspaceID(r)
 	ifMatch, malformed := parseIfMatch(r)
@@ -193,7 +196,7 @@ func (h *DealHandler) advance(w http.ResponseWriter, r *http.Request, id string)
 		LostReason *string `json:"lost_reason"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ToStageID == "" {
-		jsonValidationError(w, "to_stage_id is required.", []fieldError{{Field: "to_stage_id", Code: "required"}})
+		jsonValidationError(w, fieldToStageID+" is required.", []fieldError{{Field: fieldToStageID, Code: "required"}})
 		return
 	}
 
@@ -214,8 +217,8 @@ func (h *DealHandler) advance(w http.ResponseWriter, r *http.Request, id string)
 	}
 	toSemantic, err := h.store.StageSemantic(r.Context(), body.ToStageID, wsID)
 	if errors.Is(err, errs.ErrNotFound) {
-		jsonValidationError(w, "to_stage_id does not belong to this workspace.",
-			[]fieldError{{Field: "to_stage_id", Code: "stage_not_in_pipeline"}})
+		jsonValidationError(w, fieldToStageID+" does not belong to this workspace.",
+			[]fieldError{{Field: fieldToStageID, Code: codeStageNotInPipeline}})
 		return
 	}
 	if err != nil {
@@ -224,39 +227,16 @@ func (h *DealHandler) advance(w http.ResponseWriter, r *http.Request, id string)
 	}
 
 	p, _ := crmctx.From(r.Context())
-	if deals.ResolveTier(fromSemantic, toSemantic) == deals.TierYellow && p.IsAgent {
-		token := r.Header.Get("X-Approval-Token")
-		if token == "" {
-			jsonProblem(w, http.StatusForbidden, "approval_required")
-			return
-		}
-		diffFields := map[string]any{
-			"deal_id":     id,
-			"to_stage_id": body.ToStageID,
-			"status":      toSemantic,
-		}
-		if body.LostReason != nil {
-			diffFields["lost_reason"] = *body.LostReason
-		}
-		diffHash := crmapprovals.HashDiff(diffFields)
-		var targetVersion *int64
-		if ifMatch != 0 {
-			targetVersion = &ifMatch
-		}
-		if err := crmapprovals.VerifyAndConsume(r.Context(), h.db, token, crmapprovals.Binding{
-			WorkspaceID: wsID, Tool: "advance_deal", DiffHash: diffHash, TargetVersion: targetVersion,
-		}); err != nil {
-			jsonProblem(w, http.StatusForbidden, "approval_token_invalid")
-			return
-		}
+	if !h.checkApprovalGate(r, w, id, wsID, fromSemantic, toSemantic, body.ToStageID, body.LostReason, ifMatch, p) {
+		return
 	}
 
 	updated, err := h.store.Advance(r.Context(), id, wsID, directory.AdvanceInput{
 		ToStageID: body.ToStageID, Status: body.Status, LostReason: body.LostReason,
 	}, ifMatch, p.UserID)
 	if errors.Is(err, errs.ErrStageNotInPipeline) {
-		jsonValidationError(w, "to_stage_id does not belong to this deal's pipeline.",
-			[]fieldError{{Field: "to_stage_id", Code: "stage_not_in_pipeline"}})
+		jsonValidationError(w, fieldToStageID+" does not belong to this deal's pipeline.",
+			[]fieldError{{Field: fieldToStageID, Code: codeStageNotInPipeline}})
 		return
 	}
 	if errors.Is(err, errs.ErrStatusMismatch) {
@@ -282,6 +262,41 @@ func (h *DealHandler) advance(w http.ResponseWriter, r *http.Request, id string)
 		return
 	}
 	jsonOK(w, updated)
+}
+
+// checkApprovalGate enforces the X-Approval-Token requirement for agent
+// callers on 🟡 transitions. Returns false if the request was rejected (w
+// already has a problem response); returns true to let the caller proceed.
+// Green-tier transitions and human callers always return true without writing.
+func (h *DealHandler) checkApprovalGate(r *http.Request, w http.ResponseWriter, id, wsID, fromSemantic, toSemantic, toStageID string, lostReason *string, ifMatch int64, p crmctx.Principal) bool {
+	if deals.ResolveTier(fromSemantic, toSemantic) != deals.TierYellow || !p.IsAgent {
+		return true
+	}
+	token := r.Header.Get("X-Approval-Token")
+	if token == "" {
+		jsonProblem(w, http.StatusForbidden, "approval_required")
+		return false
+	}
+	diffFields := map[string]any{
+		"deal_id":      id,
+		fieldToStageID: toStageID,
+		"status":       toSemantic,
+	}
+	if lostReason != nil {
+		diffFields["lost_reason"] = *lostReason
+	}
+	diffHash := crmapprovals.HashDiff(diffFields)
+	var targetVersion *int64
+	if ifMatch != 0 {
+		targetVersion = &ifMatch
+	}
+	if err := crmapprovals.VerifyAndConsume(r.Context(), h.db, token, crmapprovals.Binding{
+		WorkspaceID: wsID, Tool: "advance_deal", DiffHash: diffHash, TargetVersion: targetVersion,
+	}); err != nil {
+		jsonProblem(w, http.StatusForbidden, "approval_token_invalid")
+		return false
+	}
+	return true
 }
 
 var dealSortColumns = map[string]bool{
