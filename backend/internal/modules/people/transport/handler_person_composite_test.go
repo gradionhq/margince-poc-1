@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"testing"
 	"time"
 
@@ -153,4 +154,61 @@ func TestPersonHandler_Get_ArchivedStillFetchableWithComposite(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("archived person GET: want 200 (still fetchable by id), got %d: %s", w.Code, w.Body.String())
 	}
+}
+
+func TestPersonHandler_Get_Composite360_P95Under100ms(t *testing.T) {
+	db := openTestDB(t)
+	const ws = "00000000-0000-0000-0000-000000000042"
+	seedWorkspace(t, db, ws)
+	setRLS(t, db, ws)
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: ws, UserID: "human:test"})
+	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
+
+	personStore := directory.NewPersonStore(db)
+	relStore := directory.NewRelationshipStore(db)
+	dealStore := directory.NewDealStore(db)
+	activityStore := directory.NewActivityStore(db)
+	h := NewPersonHandler(personStore, relStore, dealStore, activityStore)
+
+	p, err := personStore.Create(ctx, directory.Person{WorkspaceID: ws, FullName: "Perf Subject", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	const iterations = 30
+	durations := make([]time.Duration, 0, iterations)
+	for i := 0; i < iterations; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/people/"+p.ID, nil)
+		req = req.WithContext(crmctx.With(req.Context(), crmctx.Principal{TenantID: ws, UserID: "human:test"}))
+		w := httptest.NewRecorder()
+		start := time.Now()
+		h.ServeHTTP(w, req)
+		elapsed := time.Since(start)
+		if w.Code != http.StatusOK {
+			t.Fatalf("iteration %d: status=%d", i, w.Code)
+		}
+		durations = append(durations, elapsed)
+	}
+	p95 := percentileDuration(durations, 95)
+	t.Logf("person-360 GET p95 over %d iterations: %v", iterations, p95)
+	if p95 > 100*time.Millisecond {
+		t.Errorf("p95 %v exceeds PERF-1's 100ms budget", p95)
+	}
+}
+
+// percentileDuration duplicates modules/directory's store_deal_filter_test.go
+// percentile() helper — this package can't import a _test.go symbol across
+// packages, same duplication class as this file's other shared helpers.
+func percentileDuration(d []time.Duration, p int) time.Duration {
+	if len(d) == 0 {
+		return 0
+	}
+	sorted := make([]time.Duration, len(d))
+	copy(sorted, d)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	idx := (p * len(sorted)) / 100
+	if idx >= len(sorted) {
+		idx = len(sorted) - 1
+	}
+	return sorted[idx]
 }
