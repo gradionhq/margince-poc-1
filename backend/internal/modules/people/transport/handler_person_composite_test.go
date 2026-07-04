@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -127,6 +128,60 @@ func TestPersonHandler_Get_Composite360(t *testing.T) {
 }
 
 func stringPtr(s string) *string { return &s }
+
+// TestPersonHandler_Get_EmptyCompositeShowsEmptyArrays_NotNull guards against
+// a regression where relationships/deals/activities marshaled as JSON `null`
+// (or vanished from the body entirely) for a person with zero linked rows,
+// because Person's own `omitempty` composite tags drop a zero-length slice
+// regardless of nil-vs-empty. The get() response must always show `[]`.
+func TestPersonHandler_Get_EmptyCompositeShowsEmptyArrays_NotNull(t *testing.T) {
+	db := openTestDB(t)
+	seedWorkspace(t, db, personCompositeWS)
+	setRLS(t, db, personCompositeWS)
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: personCompositeWS, UserID: "human:test"})
+	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
+
+	personStore := directory.NewPersonStore(db)
+	h := NewPersonHandler(personStore, directory.NewRelationshipStore(db), directory.NewDealStore(db), directory.NewActivityStore(db))
+
+	p, err := personStore.Create(ctx, directory.Person{WorkspaceID: personCompositeWS, FullName: "Lonely Person", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/people/"+p.ID, nil)
+	req = req.WithContext(crmctx.With(req.Context(), crmctx.Principal{TenantID: personCompositeWS, UserID: "human:test"}))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /people/{id}: want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+
+	var got map[string]any
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"relationships", "deals", "activities"} {
+		v, present := got[key]
+		if !present {
+			t.Fatalf("key %q absent from body entirely; want present as []: %s", key, body)
+		}
+		if v == nil {
+			t.Fatalf("key %q is JSON null; want []: %s", key, body)
+		}
+		arr, ok := v.([]any)
+		if !ok || len(arr) != 0 {
+			t.Fatalf("key %q = %v (%T); want empty array []", key, v, v)
+		}
+	}
+	for _, needle := range []string{`"relationships":[]`, `"deals":[]`, `"activities":[]`} {
+		if !strings.Contains(body, needle) {
+			t.Fatalf("body does not contain literal %q: %s", needle, body)
+		}
+	}
+}
 
 func TestPersonHandler_Get_ArchivedStillFetchableWithComposite(t *testing.T) {
 	db := openTestDB(t)

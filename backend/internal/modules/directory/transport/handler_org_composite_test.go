@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -108,6 +109,63 @@ func TestOrganizationHandler_Get_Composite360(t *testing.T) {
 	}
 	if len(got.Activities) != 1 || got.Activities[0].ID != act.ID {
 		t.Fatalf("activities = %+v; want exactly one, id %s", got.Activities, act.ID)
+	}
+}
+
+// TestOrganizationHandler_Get_EmptyCompositeShowsEmptyArrays_NotNull guards
+// against a regression where relationships/deals/activities marshaled as
+// JSON `null` (or vanished from the body entirely) for an organization with
+// zero linked rows, because Organization's own `omitempty` composite tags
+// drop a zero-length slice regardless of nil-vs-empty. The get() response
+// must always show `[]`.
+func TestOrganizationHandler_Get_EmptyCompositeShowsEmptyArrays_NotNull(t *testing.T) {
+	db := openDealTestDB(t)
+	orgHandlerSetRLS(t, db, orgCompositeWS)
+	if _, err := db.Exec(`INSERT INTO workspace (id, name, slug, base_currency) VALUES ($1,$2,$3,'EUR') ON CONFLICT (id) DO NOTHING`, orgCompositeWS, "org-360-ws", "org-360-empty-"+time.Now().Format("20060102150405")); err != nil {
+		t.Fatalf("seed workspace: %v", err)
+	}
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: orgCompositeWS, UserID: "human:test"})
+	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
+
+	orgStore := crmcore.NewOrgStore(db)
+	h := orgHandlerForTest(db, orgStore)
+
+	org, err := orgStore.Create(ctx, crmcore.Organization{WorkspaceID: orgCompositeWS, DisplayName: "Lonely Org", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	if err != nil {
+		t.Fatalf("seed org: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/organizations/"+org.ID, nil)
+	req = withOrgWorkspaceID(req, orgCompositeWS)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /organizations/{id}: want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+
+	var got map[string]any
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"relationships", "deals", "activities"} {
+		v, present := got[key]
+		if !present {
+			t.Fatalf("key %q absent from body entirely; want present as []: %s", key, body)
+		}
+		if v == nil {
+			t.Fatalf("key %q is JSON null; want []: %s", key, body)
+		}
+		arr, ok := v.([]any)
+		if !ok || len(arr) != 0 {
+			t.Fatalf("key %q = %v (%T); want empty array []", key, v, v)
+		}
+	}
+	for _, needle := range []string{`"relationships":[]`, `"deals":[]`, `"activities":[]`} {
+		if !strings.Contains(body, needle) {
+			t.Fatalf("body does not contain literal %q: %s", needle, body)
+		}
 	}
 }
 

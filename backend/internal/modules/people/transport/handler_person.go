@@ -163,6 +163,21 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 	jsonCreated(w, created)
 }
 
+// personDetailResponse is the person-360 composite read — the person itself
+// plus relationships, deals, and activities. Its own Relationships/Deals/
+// Activities fields shadow the embedded Person's `omitempty`-tagged fields of
+// the same Go field name (same class as deals/transport's dealDetailResponse:
+// list responses must omit these keys when unset, but a single-record read
+// must always show `[]`, never `null` or absent, when the composite result
+// set is legitimately empty — not expressible via one struct/tag serving both
+// list and get semantics).
+type personDetailResponse struct {
+	directory.Person
+	Relationships []directory.Relationship `json:"relationships"`
+	Deals         []directory.Deal         `json:"deals"`
+	Activities    []directory.ActivityRef  `json:"activities"`
+}
+
 func (h *PersonHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	wsID := workspaceID(r)
 	p, err := h.store.GetAny(r.Context(), id, wsID)
@@ -178,7 +193,12 @@ func (h *PersonHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		jsonErr(w, err)
 		return
 	}
-	jsonOK(w, p)
+	jsonOK(w, personDetailResponse{
+		Person:        p,
+		Relationships: p.Relationships,
+		Deals:         p.Deals,
+		Activities:    p.Activities,
+	})
 }
 
 // assembleComposite fans out to related stores for the person-360 read.

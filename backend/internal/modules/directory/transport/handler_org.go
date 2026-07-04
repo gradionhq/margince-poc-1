@@ -113,6 +113,21 @@ func (h *OrganizationHandler) create(w http.ResponseWriter, r *http.Request) {
 	jsonCreatedAt(w, created, "/organizations/"+created.ID)
 }
 
+// organizationDetailResponse is the organization-360 composite read — the
+// organization itself plus relationships, deals, and activities. Its own
+// Relationships/Deals/Activities fields shadow the embedded Organization's
+// `omitempty`-tagged fields of the same Go field name (same class as
+// deals/transport's dealDetailResponse: list responses must omit these keys
+// when unset, but a single-record read must always show `[]`, never `null`
+// or absent, when the composite result set is legitimately empty — not
+// expressible via one struct/tag serving both list and get semantics).
+type organizationDetailResponse struct {
+	directory.Organization
+	Relationships []directory.Relationship `json:"relationships"`
+	Deals         []directory.Deal         `json:"deals"`
+	Activities    []directory.ActivityRef  `json:"activities"`
+}
+
 func (h *OrganizationHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	wsID := workspaceID(r)
 	o, err := h.store.GetAny(r.Context(), id, wsID)
@@ -128,7 +143,12 @@ func (h *OrganizationHandler) get(w http.ResponseWriter, r *http.Request, id str
 		jsonErr(w, err)
 		return
 	}
-	jsonOK(w, o)
+	jsonOK(w, organizationDetailResponse{
+		Organization:  o,
+		Relationships: o.Relationships,
+		Deals:         o.Deals,
+		Activities:    o.Activities,
+	})
 }
 
 // assembleComposite fans out to related stores for the organization-360 read.

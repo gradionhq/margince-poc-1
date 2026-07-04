@@ -81,7 +81,7 @@ func (s *ActivityStore) List(ctx context.Context, workspaceID, entityType, entit
 	// carries (occurred_at, id); the row-comparison predicate matches the ordering.
 	curOccurred, curID, hasCursor := decodeKeysetCursor(cursor)
 
-	var out []Activity
+	out := []Activity{}
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		var rows *sql.Rows
 		var err error
