@@ -50,7 +50,6 @@ func (s *OrgStore) Create(ctx context.Context, o Organization) (Organization, er
 	o.ID = ids.New()
 	social := marshalJSON(o.Social)
 	address := marshalJSON(o.Address)
-
 	classification := o.Classification
 	if classification == nil {
 		def := "prospect"
@@ -71,7 +70,6 @@ func (s *OrgStore) Create(ctx context.Context, o Organization) (Organization, er
 	}
 	o.Classification = classification
 	o.Domains = domains
-
 	err := withWorkspaceTx(ctx, s.db, o.WorkspaceID, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO organization (id, workspace_id, name, website, classification, relevance,
@@ -107,7 +105,7 @@ func (s *OrgStore) Create(ctx context.Context, o Organization) (Organization, er
 			}
 		}
 
-		payload, _ := json.Marshal(map[string]any{"organization_id": o.ID})
+		payload, _ := json.Marshal(map[string]any{fieldOrganizationID: o.ID})
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload)
 			 VALUES ($1,$2,$3::uuid,$4)`,
@@ -303,8 +301,9 @@ func (s *OrgStore) listByOrgStrength(ctx context.Context, workspaceID, cursor st
 	return all[offset:end], next, nil
 }
 
-// Update applies partial updates to an organization.
-// When ifMatch==0 the version check is skipped (last-write-wins).
+// Update applies partial updates to an organization, writes one audit_log row
+// and one organization.updated outbox event in the same tx (PO-AC-3,
+// GATE-CORE-3/5). When ifMatch==0 the version check is skipped (last-write-wins).
 func (s *OrgStore) Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (Organization, error) {
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		var res sql.Result
@@ -344,6 +343,17 @@ func (s *OrgStore) Update(ctx context.Context, id, workspaceID string, updates m
 			}
 			return errs.ErrNotFound
 		}
+		payload, _ := json.Marshal(map[string]any{fieldOrganizationID: id})
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
+			workspaceID, "organization.updated", id, payload); err != nil {
+			return fmt.Errorf("org update event: %w", err)
+		}
+		eu := crmaudit.EntryFromPrincipal(ctx, "update", entityTypeOrganization, &id, nil, nil)
+		eu.WorkspaceID = workspaceID
+		if _, err := crmaudit.WriteTx(ctx, tx, eu); err != nil {
+			return fmt.Errorf("org update audit: %w", err)
+		}
 		return nil
 	})
 	if err != nil {
@@ -352,24 +362,42 @@ func (s *OrgStore) Update(ctx context.Context, id, workspaceID string, updates m
 	return s.Get(ctx, id, workspaceID)
 }
 
-// Archive soft-deletes an organization (sets archived_at).
+// Archive soft-deletes an organization, writing one audit_log row and one
+// organization.archived outbox event in the same tx when a row was actually
+// archived (mirrors PersonStore.Archive's n>0 guard).
 func (s *OrgStore) Archive(ctx context.Context, id, workspaceID string) (Organization, error) {
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx,
+		res, err := tx.ExecContext(ctx,
 			`UPDATE organization SET archived_at=now() WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
 			id, workspaceID)
-		return err
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			payload, _ := json.Marshal(map[string]any{fieldOrganizationID: id})
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
+				workspaceID, "organization.archived", id, payload); err != nil {
+				return fmt.Errorf("org archive event: %w", err)
+			}
+			ea := crmaudit.EntryFromPrincipal(ctx, "archive", entityTypeOrganization, &id, nil, nil)
+			ea.WorkspaceID = workspaceID
+			if _, err := crmaudit.WriteTx(ctx, tx, ea); err != nil {
+				return fmt.Errorf("org archive audit: %w", err)
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return Organization{}, err
 	}
-	return s.getAny(ctx, id, workspaceID)
+	return s.GetAny(ctx, id, workspaceID)
 }
 
-// getAny fetches an organization by id regardless of archived_at status.
+// GetAny fetches an organization by id regardless of archived_at status.
 //
 //nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
-func (s *OrgStore) getAny(ctx context.Context, id, workspaceID string) (Organization, error) {
+func (s *OrgStore) GetAny(ctx context.Context, id, workspaceID string) (Organization, error) {
 	var o Organization
 	var socialRaw, addrRaw []byte
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {

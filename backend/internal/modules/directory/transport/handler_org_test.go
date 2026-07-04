@@ -274,3 +274,114 @@ func TestOrganizationHandler_Create_DuplicateDomainReturns409(t *testing.T) {
 		t.Fatalf("want 0 'Second Co' orgs after failed create, got %d", orgCount)
 	}
 }
+
+func TestOrganizationHandler_Get_ArchivedStillFetchable(t *testing.T) {
+	db := openDealTestDB(t)
+	seedOrgHandlerWorkspace(t, db)
+
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: orgHandlerTestWS, UserID: "human:test"})
+	orgStore := crmcore.NewOrgStore(db)
+	org, err := orgStore.Create(ctx, crmcore.Organization{
+		WorkspaceID: orgHandlerTestWS, DisplayName: "Archivable-" + ids.New(),
+		Source: "test", CapturedBy: "human:test",
+	})
+	if err != nil {
+		t.Fatalf("create org: %v", err)
+	}
+	if _, err := orgStore.Archive(ctx, org.ID, orgHandlerTestWS); err != nil {
+		t.Fatalf("archive org: %v", err)
+	}
+
+	h := NewOrganizationHandler(orgStore)
+	req := httptest.NewRequest(http.MethodGet, "/organizations/"+org.ID, nil)
+	req = withOrgWorkspace(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d want 200 (PO-AC-6: archived orgs stay fetchable), body=%s", w.Code, w.Body.String())
+	}
+
+	var eventCount int
+	if err := db.QueryRow(
+		`SELECT count(*) FROM event_outbox WHERE topic='organization.archived' AND entity_id=$1::uuid`,
+		org.ID,
+	).Scan(&eventCount); err != nil {
+		t.Fatalf("count event_outbox: %v", err)
+	}
+	if eventCount != 1 {
+		t.Fatalf("want 1 organization.archived outbox row, got %d", eventCount)
+	}
+	var auditCount int
+	if err := db.QueryRow(
+		`SELECT count(*) FROM audit_log WHERE entity_type='organization' AND entity_id=$1::uuid AND action='archive'`,
+		org.ID,
+	).Scan(&auditCount); err != nil {
+		t.Fatalf("count audit_log: %v", err)
+	}
+	if auditCount != 1 {
+		t.Fatalf("want 1 audit_log archive row, got %d", auditCount)
+	}
+}
+
+func TestOrganizationHandler_Update_StaleIfMatchAndMalformed(t *testing.T) {
+	db := openDealTestDB(t)
+	seedOrgHandlerWorkspace(t, db)
+
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: orgHandlerTestWS, UserID: "human:test"})
+	orgStore := crmcore.NewOrgStore(db)
+	org, err := orgStore.Create(ctx, crmcore.Organization{
+		WorkspaceID: orgHandlerTestWS, DisplayName: "Updatable-" + ids.New(),
+		Source: "test", CapturedBy: "human:test",
+	})
+	if err != nil {
+		t.Fatalf("create org: %v", err)
+	}
+
+	h := NewOrganizationHandler(orgStore)
+
+	reqMalformed := httptest.NewRequest(http.MethodPatch, "/organizations/"+org.ID, strings.NewReader(`{"display_name":"X"}`))
+	reqMalformed.Header.Set("If-Match", "not-a-number")
+	reqMalformed = withOrgWorkspace(reqMalformed)
+	wMalformed := httptest.NewRecorder()
+	h.ServeHTTP(wMalformed, reqMalformed)
+	if wMalformed.Code != http.StatusBadRequest {
+		t.Fatalf("malformed If-Match status=%d want 400, body=%s", wMalformed.Code, wMalformed.Body.String())
+	}
+
+	reqStale := httptest.NewRequest(http.MethodPatch, "/organizations/"+org.ID, strings.NewReader(`{"display_name":"Y"}`))
+	reqStale.Header.Set("If-Match", "999")
+	reqStale = withOrgWorkspace(reqStale)
+	wStale := httptest.NewRecorder()
+	h.ServeHTTP(wStale, reqStale)
+	if wStale.Code != http.StatusConflict {
+		t.Fatalf("stale If-Match status=%d want 409, body=%s", wStale.Code, wStale.Body.String())
+	}
+	var problem map[string]any
+	if err := json.Unmarshal(wStale.Body.Bytes(), &problem); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if problem["code"] != "version_skew" {
+		t.Fatalf("want code=version_skew, got %v", problem)
+	}
+
+	reqOK := httptest.NewRequest(http.MethodPatch, "/organizations/"+org.ID, strings.NewReader(`{"display_name":"Z"}`))
+	reqOK.Header.Set("If-Match", "1")
+	reqOK = withOrgWorkspace(reqOK)
+	wOK := httptest.NewRecorder()
+	h.ServeHTTP(wOK, reqOK)
+	if wOK.Code != http.StatusOK {
+		t.Fatalf("valid If-Match status=%d want 200, body=%s", wOK.Code, wOK.Body.String())
+	}
+
+	var eventCount int
+	if err := db.QueryRow(
+		`SELECT count(*) FROM event_outbox WHERE topic='organization.updated' AND entity_id=$1::uuid`,
+		org.ID,
+	).Scan(&eventCount); err != nil {
+		t.Fatalf("count event_outbox: %v", err)
+	}
+	if eventCount != 1 {
+		t.Fatalf("want 1 organization.updated outbox row, got %d", eventCount)
+	}
+}
