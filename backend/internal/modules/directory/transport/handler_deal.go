@@ -36,6 +36,7 @@ const (
 	codeRequired           = "required"
 	fieldCapturedBy        = "captured_by"
 	fieldSource            = "source"
+	fieldExistingID        = "existing_id"
 )
 
 // stageSemanticReader is the full DealStore seam DealHandler uses — an

@@ -80,7 +80,7 @@ func seedWorkspace(t *testing.T, db *sql.DB, wsID string) {
 func TestPersonHandler_CreateAndGet(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store)
+	h := NewPersonHandler(store, db)
 
 	const wsID = "00000000-0000-0000-0000-000000000001"
 	seedWorkspace(t, db, wsID)
@@ -126,7 +126,7 @@ func TestPersonHandler_CreateAndGet(t *testing.T) {
 func TestPersonHandler_List(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store)
+	h := NewPersonHandler(store, db)
 
 	const wsID = "00000000-0000-0000-0000-000000000001"
 	seedWorkspace(t, db, wsID)
@@ -160,7 +160,7 @@ func TestPersonHandler_List(t *testing.T) {
 func TestPersonHandler_UpdateAndArchive(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store)
+	h := NewPersonHandler(store, db)
 
 	const wsID = "00000000-0000-0000-0000-000000000001"
 	seedWorkspace(t, db, wsID)
@@ -202,7 +202,7 @@ func TestPersonHandler_UpdateAndArchive(t *testing.T) {
 func TestPersonHandler_VersionSkew(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store)
+	h := NewPersonHandler(store, db)
 
 	const wsID = "00000000-0000-0000-0000-000000000001"
 	seedWorkspace(t, db, wsID)
