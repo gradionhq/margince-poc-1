@@ -126,14 +126,24 @@ func (s *DealStore) advanceSideEffects(ctx context.Context, tx *sql.Tx, workspac
 
 	var winProbability int
 	_ = tx.QueryRowContext(ctx, `SELECT win_probability FROM stage WHERE id=$1::uuid`, toStageID).Scan(&winProbability)
+
+	var amountMinorPtr *int64
+	if amountMinor.Valid {
+		amountMinorPtr = &amountMinor.Int64
+	}
+	var currencyPtr *string
+	if currency.Valid {
+		currencyPtr = &currency.String
+	}
+
 	payload, _ := json.Marshal(map[string]any{
 		colDealID:         id,
 		"from_stage_id":   fromStageID,
 		"to_stage_id":     toStageID,
 		"from_status":     fromStatus,
 		"to_status":       toSemantic,
-		"amount_minor":    amountMinor,
-		"currency":        currency,
+		"amount_minor":    amountMinorPtr,
+		"currency":        currencyPtr,
 		"win_probability": winProbability,
 	})
 	if _, err := tx.ExecContext(ctx,

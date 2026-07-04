@@ -5,6 +5,7 @@ package crmcore_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -55,8 +56,17 @@ func TestDealStore_Advance_OpenToWon_SingleWriteEachTable(t *testing.T) {
 	store := crmcore.NewDealStore(db)
 	ctx := context.Background()
 
+	if _, err := db.Exec(`INSERT INTO fx_rate (workspace_id, from_currency, to_currency, rate, rate_date)
+		VALUES ($1, 'EUR', 'EUR', 1, current_date) ON CONFLICT DO NOTHING`, advanceTestWorkspaceID); err != nil {
+		t.Fatalf("seed fx_rate: %v", err)
+	}
+
 	d := crmcore.NewDeal("Deal o2w", pipelineID, openA, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	d.WorkspaceID = advanceTestWorkspaceID
+	amountMinor := int64(10000)
+	currency := "EUR"
+	d.AmountMinor = &amountMinor
+	d.Currency = &currency
 	created, err := store.Create(ctx, d, "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -100,6 +110,25 @@ func TestDealStore_Advance_OpenToWon_SingleWriteEachTable(t *testing.T) {
 	}
 	if eventCount != 1 {
 		t.Fatalf("expected exactly 1 deal.stage_changed event, got %d", eventCount)
+	}
+
+	var payloadBytes []byte
+	if err := db.QueryRow(`SELECT payload FROM event_outbox WHERE entity_id=$1 AND topic='deal.stage_changed'`,
+		created.ID).Scan(&payloadBytes); err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		AmountMinor *int64  `json:"amount_minor"`
+		Currency    *string `json:"currency"`
+	}
+	if err := json.Unmarshal(payloadBytes, &got); err != nil {
+		t.Fatalf("event payload amount_minor/currency must marshal as scalars, not sql.Null wrappers: %v (raw=%s)", err, payloadBytes)
+	}
+	if got.AmountMinor == nil || *got.AmountMinor != amountMinor {
+		t.Fatalf("expected amount_minor=%d in event payload, got %v", amountMinor, got.AmountMinor)
+	}
+	if got.Currency == nil || *got.Currency != currency {
+		t.Fatalf("expected currency=%s in event payload, got %v", currency, got.Currency)
 	}
 }
 
