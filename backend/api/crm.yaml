@@ -586,7 +586,7 @@ paths:
           schema: { type: string, enum: [hosting, consulting, strategic] }
         - name: cert_status
           in: query
-          schema: { type: string, enum: [prospect, in_certification, certified, suspended, churned] }
+          schema: { type: string, enum: [prospect, in_certification, certified, suspended, churned, applied] }
       x-mcp-tool: { verb: search_records, record_type: partner, tier: green }
       responses:
         '200':
@@ -5414,13 +5414,53 @@ components:
       description: |
         First-class partner state as a 1:1 extension of an organization (an org IS a partner iff it
         has a `partner` row + classification='partner'). Company identity is never duplicated.
-      required: [organization_id, partner_role, cert_status, created_at, updated_at]
+      required: [id, organization_id, workspace_id, cert_status, source, captured_by, created_at, updated_at]
       properties:
-        organization_id: { type: string, format: uuid, description: The org this partner record extends (PK = FK). }
-        partner_role: { type: string, enum: [hosting, consulting, strategic], description: Functional role (A44/ADR-0034); implementation + dev are Gradion's turf. }
-        cert_status: { type: string, enum: [prospect, in_certification, certified, suspended, churned] }
-        margin_tier: { type: [string, 'null'], description: Scenario-C margin tier (business/14-partner-program.md). }
-        gate_metrics: { type: [object, 'null'], additionalProperties: true, description: Program gate metrics (certified seats, CSAT, ...). }
+        id: { type: string, format: uuid }
+        workspace_id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid, description: The org this partner record extends (1:1, PO-DDL-6). }
+        cert_status:
+          type: string
+          enum: [prospect, in_certification, certified, suspended, churned, applied]
+          x-extensible-enum: true
+          description: >-
+            PO-DDL-6 target values (applied, certified, suspended) unioned with legacy live
+            values (prospect, in_certification, churned) per the additive-first gate decision
+            (gate issue #58, Option 1) — legacy values are DEPRECATED, not removed; a
+            fast-follow ticket drops them once callers migrate. Program lifecycle (A38/ADR-0030).
+        partner_role:
+          type: [string, 'null']
+          enum: [null, hosting, consulting, strategic]
+          x-extensible-enum: true
+          description: Functional role (A44/ADR-0034), orthogonal to margin_tier; implementation + dev are Gradion's turf. Nullable per PO-DDL-6 (was non-nullable/required; loosening a constraint is additive-safe, no value removed).
+        margin_tier:
+          type: [string, 'null']
+          enum: [null, tier1_15, tier2_20, tier3_25]
+          x-extensible-enum: true
+          description: >-
+            PO-DDL-6 target tier values. The prior contract left this field freeform (no enum
+            constraint, no documented legacy value set to preserve) — this is a net-new,
+            additive constraint, not a removal.
+        gate_metrics:
+          type: [object, 'null']
+          additionalProperties: true
+          description: >-
+            DEPRECATED — kept for backward compatibility per the additive-first gate decision
+            (gate issue #58, Option 1); superseded by certified_staff/retention_rate. Remove in
+            the fast-follow ticket once callers migrate.
+        certified_staff:
+          type: integer
+          default: 0
+          description: Certified-staff headcount; gates the tier. Additive alongside (not replacing) gate_metrics.
+        retention_rate:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 100
+          description: A tier-gate metric (PO-DDL-6). Additive alongside (not replacing) gate_metrics.
+        joined_at: { type: [string, 'null'], format: date }
+        renews_at: { type: [string, 'null'], format: date }
+        source: { type: string }
+        captured_by: { type: string }
         version: { $ref: '#/components/schemas/RowVersion' }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -5428,12 +5468,15 @@ components:
 
     UpsertPartnerRequest:
       type: object
-      required: [partner_role]
       properties:
-        partner_role: { type: string, enum: [hosting, consulting, strategic] }
-        cert_status: { type: string, enum: [prospect, in_certification, certified, suspended, churned] }
+        partner_role: { type: [string, 'null'], enum: [null, hosting, consulting, strategic] }
+        cert_status: { type: string, enum: [prospect, in_certification, certified, suspended, churned, applied] }
         margin_tier: { type: [string, 'null'] }
         gate_metrics: { type: [object, 'null'], additionalProperties: true }
+        certified_staff: { type: integer }
+        retention_rate: { type: [number, 'null'], minimum: 0, maximum: 100 }
+        joined_at: { type: [string, 'null'], format: date }
+        renews_at: { type: [string, 'null'], format: date }
 
     # ---- Per-purpose consent (A22/ADR-0011) ----
     ConsentPurpose:
