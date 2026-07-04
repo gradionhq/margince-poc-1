@@ -51,17 +51,23 @@ type stageSemanticReader interface {
 	ListFiltered(ctx context.Context, workspaceID, cursor string, limit int, filter directory.DealListFilter) ([]directory.Deal, string, error)
 }
 
-// DealHandler routes /deals and /deals/{id} requests to the DealStore.
-type DealHandler struct {
-	store stageSemanticReader
-	db    *sql.DB // used only for VerifyAndConsume on the 🟡 advance path
+type dealStakeholderReader interface {
+	List(ctx context.Context, workspaceID, cursor string, limit int, filter directory.RelationshipListFilter) ([]directory.Relationship, string, error)
 }
 
-// NewDealHandler returns a DealHandler. db is the raw pool the approval-token
-// consumption seam writes through — kept separate from store so store tx
-// boundaries are untouched.
-func NewDealHandler(store *directory.DealStore, db *sql.DB) *DealHandler {
-	return &DealHandler{store: store, db: db}
+// DealHandler routes /deals, /deals/{id}, /deals/{id}/advance, and
+// /deals/{id}/stakeholders requests to the DealStore and relationship store.
+type DealHandler struct {
+	store    stageSemanticReader
+	relStore dealStakeholderReader
+	db       *sql.DB // used only for VerifyAndConsume on the 🟡 advance path
+}
+
+// NewDealHandler returns a DealHandler. relStore backs listDealStakeholders;
+// db is the raw pool the approval-token consumption seam writes through —
+// kept separate from store so store tx boundaries are untouched.
+func NewDealHandler(store *directory.DealStore, relStore *directory.RelationshipStore, db *sql.DB) *DealHandler {
+	return &DealHandler{store: store, relStore: relStore, db: db}
 }
 
 // ServeHTTP dispatches on method + path suffix. Only POST /deals is
@@ -71,6 +77,11 @@ func (h *DealHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/advance") {
 		id := pathID(strings.TrimSuffix(r.URL.Path, "/advance"), "/deals")
 		h.advance(w, r, id)
+		return
+	}
+	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/stakeholders") {
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/stakeholders"), "/deals")
+		h.stakeholders(w, r, id)
 		return
 	}
 	id := pathID(r.URL.Path, "/deals")
@@ -346,6 +357,32 @@ func (h *DealHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 
 	items, next, err := h.store.ListFiltered(r.Context(), wsID, q.Get("cursor"), queryLimit(r, 20), filter)
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, pageResponse(items, next))
+}
+
+// stakeholders serves GET /deals/{id}/stakeholders: the live
+// deal_stakeholder rows for the deal, backed by idx_rel_deal_stakeholders.
+func (h *DealHandler) stakeholders(w http.ResponseWriter, r *http.Request, id string) {
+	wsID, ok := requireWorkspace(w, r)
+	if !ok {
+		return
+	}
+	if _, err := h.store.Get(r.Context(), id, wsID); err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			jsonProblem(w, http.StatusNotFound, "not_found")
+			return
+		}
+		jsonErr(w, err)
+		return
+	}
+	items, next, err := h.relStore.List(r.Context(), wsID, "", 100, directory.RelationshipListFilter{
+		DealID: id,
+		Kind:   "deal_stakeholder",
+	})
 	if err != nil {
 		jsonErr(w, err)
 		return
