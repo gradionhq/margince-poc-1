@@ -170,7 +170,6 @@ func (s *PartnerStore) List(ctx context.Context, workspaceID, cursor string, lim
 			args = append(args, filter.CertStatus)
 			where += fmt.Sprintf(" AND cert_status=$%d", len(args))
 		}
-		//nolint:gosec // where only injects param ordinals; all values are bound via args.
 		rows, err := tx.QueryContext(ctx, `
 			SELECT id, workspace_id, organization_id, cert_status, partner_role, margin_tier,
 			       certified_staff, retention_rate, joined_at, renews_at,
