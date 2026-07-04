@@ -75,7 +75,7 @@ func seedDealFixtures(t *testing.T, db *sql.DB, tag string) (pipelineID, stageID
 func TestDealHandler_Create_Returns201WithLocationAndHistoryRow(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, _ := seedDealFixtures(t, db, "create")
-	h := NewDealHandler(crmcore.NewDealStore(db))
+	h := NewDealHandler(crmcore.NewDealStore(db), db)
 
 	body := map[string]any{
 		"name": "Acme deal", "pipeline_id": pipelineID, "stage_id": stageID,
@@ -105,7 +105,7 @@ func TestDealHandler_Create_Returns201WithLocationAndHistoryRow(t *testing.T) {
 func TestDealHandler_Create_IdempotencyKeyReplay(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, _ := seedDealFixtures(t, db, "replay")
-	h := NewDealHandler(crmcore.NewDealStore(db))
+	h := NewDealHandler(crmcore.NewDealStore(db), db)
 
 	body := map[string]any{
 		"name": "Replay deal", "pipeline_id": pipelineID, "stage_id": stageID,
@@ -148,7 +148,7 @@ func TestDealHandler_Create_IdempotencyKeyReplay(t *testing.T) {
 func TestDealHandler_Create_StageNotInPipeline(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, _, otherStageID := seedDealFixtures(t, db, "stage-check")
-	h := NewDealHandler(crmcore.NewDealStore(db))
+	h := NewDealHandler(crmcore.NewDealStore(db), db)
 
 	body := map[string]any{
 		"name": "Bad deal", "pipeline_id": pipelineID, "stage_id": otherStageID,
@@ -185,7 +185,7 @@ func TestDealHandler_Update_IfMatchVersionSkew(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, _ := seedDealFixtures(t, db, "update-version-skew")
 	store := crmcore.NewDealStore(db)
-	h := NewDealHandler(store)
+	h := NewDealHandler(store, db)
 
 	d := crmcore.NewDeal("Update-me", pipelineID, stageID,
 		provenanceOf("test", "human:test"))
@@ -217,7 +217,7 @@ func TestDealHandler_Update_MalformedIfMatch(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, _ := seedDealFixtures(t, db, "update-malformed")
 	store := crmcore.NewDealStore(db)
-	h := NewDealHandler(store)
+	h := NewDealHandler(store, db)
 
 	d := crmcore.NewDeal("Malformed-if-match", pipelineID, stageID,
 		provenanceOf("test", "human:test"))
@@ -244,7 +244,7 @@ func TestDealHandler_Update_StageNotInPipeline(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, otherStageID := seedDealFixtures(t, db, "update-stage-check")
 	store := crmcore.NewDealStore(db)
-	h := NewDealHandler(store)
+	h := NewDealHandler(store, db)
 
 	d := crmcore.NewDeal("Stage-move", pipelineID, stageID,
 		provenanceOf("test", "human:test"))
@@ -270,7 +270,7 @@ func TestDealHandler_Update_HappyPath(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, _ := seedDealFixtures(t, db, "update-happy")
 	store := crmcore.NewDealStore(db)
-	h := NewDealHandler(store)
+	h := NewDealHandler(store, db)
 
 	d := crmcore.NewDeal("Happy-update", pipelineID, stageID,
 		provenanceOf("test", "human:test"))
@@ -302,7 +302,7 @@ func TestDealHandler_List_FilterAndSort(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, _ := seedDealFixtures(t, db, "list")
 	store := crmcore.NewDealStore(db)
-	h := NewDealHandler(store)
+	h := NewDealHandler(store, db)
 	ctx := context.Background()
 
 	// Seed an organization row: deal.partner_org_id is a hard FK to
@@ -381,7 +381,7 @@ func TestDealHandler_List_FilterAndSort(t *testing.T) {
 func TestDealHandler_FullLifecycle_CreateUpdateList(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, otherStageID := seedDealFixtures(t, db, "lifecycle")
-	h := NewDealHandler(crmcore.NewDealStore(db))
+	h := NewDealHandler(crmcore.NewDealStore(db), db)
 
 	createBody, _ := json.Marshal(map[string]any{
 		"name": "Lifecycle deal", "pipeline_id": pipelineID, "stage_id": stageID,
