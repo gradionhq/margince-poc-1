@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const advanceMutate = vi.fn();
 const refetchDeal = vi.fn();
@@ -100,7 +100,20 @@ function renderPage() {
   return { invalidateSpy };
 }
 
+const originalStageId = dealData.stage_id;
+const originalStatus = dealData.status;
+
 describe("DealDetailPage", () => {
+  beforeEach(() => {
+    advanceMutate.mockReset();
+    refetchDeal.mockReset();
+  });
+
+  afterEach(() => {
+    dealData.stage_id = originalStageId;
+    dealData.status = originalStatus;
+  });
+
   it("renders header, stepper, weighted-value, stakeholders rail, tasks/timeline/history cards", () => {
     renderPage();
     expect(screen.getByText("Acme deal")).toBeInTheDocument();
@@ -130,6 +143,88 @@ describe("DealDetailPage", () => {
     advanceMutate.mockImplementation((_vars, opts) => opts?.onSuccess?.());
     const { invalidateSpy } = renderPage();
     await userEvent.click(screen.getByRole("button", { name: /^advance$/i }));
+    expect(refetchDeal).toHaveBeenCalled();
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["deals", "history", "d1"],
+    });
+  });
+
+  it("Advance into a terminal stage opens OutcomeDialog; confirming Won closes at 100% weighted", async () => {
+    dealData.stage_id = "s3";
+    advanceMutate.mockImplementation((_vars, opts) => opts?.onSuccess?.());
+    renderPage();
+    await userEvent.click(screen.getByRole("button", { name: /^advance$/i }));
+    expect(screen.getByText(/confirm the outcome/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /^won$/i }));
+
+    expect(advanceMutate).toHaveBeenCalledWith(
+      {
+        dealId: "d1",
+        toStageId: "won",
+        status: "won",
+      },
+      expect.anything(),
+    );
+    expect(screen.getByText(/weighted 100%/i)).toBeInTheDocument();
+  });
+
+  it("Advance into a terminal stage, confirming Lost with a reason closes at 0% weighted", async () => {
+    dealData.stage_id = "s3";
+    advanceMutate.mockImplementation((_vars, opts) => opts?.onSuccess?.());
+    renderPage();
+    await userEvent.click(screen.getByRole("button", { name: /^advance$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    const input = screen.getByPlaceholderText(/reason/i);
+    await userEvent.type(input, "Budget cut");
+    await userEvent.click(
+      screen.getByRole("button", { name: /confirm lost/i }),
+    );
+
+    expect(advanceMutate).toHaveBeenCalledWith(
+      {
+        dealId: "d1",
+        toStageId: "lost",
+        status: "lost",
+        lostReason: "Budget cut",
+      },
+      expect.anything(),
+    );
+    expect(screen.getByText(/weighted 0%/i)).toBeInTheDocument();
+  });
+
+  it("a failed terminal-close renders an honest error toast via advanceErrorMessage", async () => {
+    dealData.stage_id = "s3";
+    advanceMutate.mockImplementation((_vars, opts) =>
+      opts?.onError?.({ detail: "Stage locked by another user" }),
+    );
+    renderPage();
+    await userEvent.click(screen.getByRole("button", { name: /^advance$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^won$/i }));
+
+    expect(
+      screen.getByText(/stage locked by another user/i),
+    ).toBeInTheDocument();
+  });
+
+  it("Reopen renders for a closed deal; confirming calls advanceDeal to the first open stage and refreshes detail + history", async () => {
+    dealData.status = "won";
+    advanceMutate.mockImplementation((_vars, opts) => opts?.onSuccess?.());
+    const { invalidateSpy } = renderPage();
+
+    expect(
+      screen.queryByRole("button", { name: /^advance$/i }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^reopen$/i }));
+    expect(screen.getByText(/reopen this deal\?/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /^confirm$/i }));
+
+    expect(advanceMutate).toHaveBeenCalledWith(
+      { dealId: "d1", toStageId: "s1", status: "open" },
+      expect.anything(),
+    );
+    expect(screen.getByText(/deal reopened/i)).toBeInTheDocument();
     expect(refetchDeal).toHaveBeenCalled();
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["deals", "history", "d1"],
