@@ -65,4 +65,12 @@ describe("CompanyDetailPage", () => {
     renderPage();
     expect(screen.getByText(/no signal yet/i)).toBeInTheDocument();
   });
+
+  it("renders honest empty states for PeopleRail and DealRail when there are none", () => {
+    renderPage();
+    expect(screen.getByText("No known contacts yet.")).toBeInTheDocument();
+    expect(
+      screen.getByText("No open or won deals for this org."),
+    ).toBeInTheDocument();
+  });
 });
