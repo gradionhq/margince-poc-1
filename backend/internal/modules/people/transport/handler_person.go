@@ -34,9 +34,16 @@ const (
 	fieldData      = "data"
 	fieldCode      = "code"
 	fieldStatus    = "status"
+	fieldDetails   = "details"
 	codeForbidden  = "forbidden"
 	codeBadRequest = "bad_request"
+	codeValidation = "validation_error"
 )
+
+type fieldError struct {
+	Field string `json:"field"`
+	Code  string `json:"code"`
+}
 
 var personSortValues = map[string]bool{
 	"": true, "id": true, "strength": true, "-strength": true,
@@ -52,9 +59,7 @@ func NewPersonHandler(store *directory.PersonStore) *PersonHandler {
 
 // ServeHTTP dispatches on method + path suffix.
 func (h *PersonHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/strength-breakdown") {
-		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/people/"), "/strength-breakdown")
-		h.strengthBreakdown(w, r, id)
+	if h.serveSuffixRoutes(w, r) {
 		return
 	}
 	id := pathID(r.URL.Path, "/people")
@@ -72,6 +77,20 @@ func (h *PersonHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func (h *PersonHandler) serveSuffixRoutes(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/strength-breakdown") {
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/people/"), "/strength-breakdown")
+		h.strengthBreakdown(w, r, id)
+		return true
+	}
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/restore") {
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/people/"), "/restore")
+		h.restore(w, r, id)
+		return true
+	}
+	return false
 }
 
 func (h *PersonHandler) strengthBreakdown(w http.ResponseWriter, r *http.Request, id string) {
@@ -217,6 +236,39 @@ func (h *PersonHandler) archive(w http.ResponseWriter, r *http.Request, id strin
 	jsonOK(w, archived)
 }
 
+func (h *PersonHandler) restore(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := workspaceID(r)
+	restored, err := h.store.Restore(r.Context(), id, wsID)
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if errors.Is(err, errs.ErrNotArchived) {
+		jsonProblemDetails(w, http.StatusUnprocessableEntity, "validation_error",
+			"person is already live.",
+			map[string]any{"errors": []fieldError{{Field: "archived_at", Code: "not_archived"}}})
+		return
+	}
+	if errors.Is(err, errs.ErrMergedRecord) {
+		jsonProblemDetails(w, http.StatusUnprocessableEntity, "validation_error",
+			"merged_into_id must be cleared before restore.",
+			map[string]any{"errors": []fieldError{{Field: "merged_into_id", Code: "merged_record"}}})
+		return
+	}
+	var dup *directory.ErrDuplicateEmail
+	if errors.As(err, &dup) {
+		jsonProblemDetails(w, http.StatusConflict, "duplicate_email",
+			"An active person already owns this email.",
+			map[string]any{"existing_id": dup.ExistingID, "field": dup.Field})
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, restored)
+}
+
 // ---------------------------------------------------------------------------
 // shared HTTP helpers (unexported, used across handler files in this package)
 // ---------------------------------------------------------------------------
@@ -325,6 +377,17 @@ func jsonProblem(w http.ResponseWriter, status int, code string) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]any{fieldStatus: status, fieldCode: code}) //nolint:errcheck,gosec // best-effort problem body; the status line already conveys the failure
+}
+
+func jsonProblemDetails(w http.ResponseWriter, status int, code, detail string, details map[string]any) {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec // best-effort problem body; the status line already conveys the failure
+		fieldStatus:  status,
+		fieldCode:    code,
+		"detail":     detail,
+		fieldDetails: details,
+	})
 }
 
 // pageResponse wraps a data slice and cursor into the contract's pagination envelope.

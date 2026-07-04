@@ -300,7 +300,7 @@ consumer.
 | `consent.changed` | 1 | `person_id, purpose, new_state, lawful_basis, source, policy_version` (per-purpose; backed by the append-only consent event log) | modules/people | RM, WF (outbound suppression) |
 | `retention.applied` | 1 | `object_type, object_id, action: archive\|anonymize\|erase, policy_id` (nightly evaluator; skips legal hold) | modules/people | RM, AS |
 
-**Organization (4)**
+**Organization (5)**
 
 | ID | v | Payload (key fields) | Emit | Consumers |
 |---|---|---|---|---|
@@ -308,6 +308,7 @@ consumer.
 | `organization.updated` | 1 | `delta: Δ` (incl. enriched firmographics, custom columns) | modules/people | **CG**, RM, WF |
 | `organization.archived` | 1 | `reason?` | modules/people | CG, RM |
 | `organization.merged` | 1 | `merged_from_id, merged_into_id` | modules/people | **CG**, RM |
+| `organization.restored` | 1 | `{}` | modules/people | CG, RM |
 
 **Deal (6)**
 
@@ -397,11 +398,6 @@ overlay datasource adapter), never above the datasource seam (AC-OV-1).
 | `signal.detected` | 1 | `signal_id, kind, source_channel, entity_type, entity_id, resolution_state, resolution_confidence?, severity` | modules/ai / modules/capture | **CG**, RM (warm-room), **ON**, AS |
 | `signal.resolved` | 1 | `signal_id, resolution_state, resolved_org_id?, resolved_person_id?, matched_on?, match_confidence?` | modules/ai | RM, AS |
 | `forecast.period_closed` | 1 | `scope: "owner"\|"team", owner_id?, team_id?, pipeline_id?, period_start, period_end, predicted_minor, actual_minor, currency` (one per closed period per scope; captures a forecast snapshot) | modules/people (scheduled period-close job) | RM (forecast accuracy), AS |
-
-**Catalog-extension note (2026-07-03):** the restore contract extensions
-([[people-and-organizations#PO-EXT-6]], [[deals-and-pipeline#DEAL-EXT-4]]) imply
-`organization.restored` alongside the pinned `person.restored`/`deal.restored`;
-its catalog row lands with that docs change (chain rule — flagged by pilot ticket T17).
 
 ### Events — semantic rules
 Source: contract/events.md#0-why-an-event-catalog-the-load-bearing-decisions; contract/events.md#5-the-catalog; contract/events.md#7-open-questions @ 5a0b29c

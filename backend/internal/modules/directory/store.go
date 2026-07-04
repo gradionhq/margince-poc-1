@@ -164,6 +164,16 @@ type PersonStore struct{ db *sql.DB }
 // NewPersonStore returns a PersonStore backed by db.
 func NewPersonStore(db *sql.DB) *PersonStore { return &PersonStore{db: db} }
 
+// ErrDuplicateEmail reports a live email collision on restore/create.
+type ErrDuplicateEmail struct {
+	ExistingID string
+	Field      string
+}
+
+func (e *ErrDuplicateEmail) Error() string {
+	return fmt.Sprintf("duplicate email: existing_id=%s field=%s", e.ExistingID, e.Field)
+}
+
 // Create inserts a new person row, overwriting the ID with a fresh one. The row
 // INSERT and its audit_log entry run in one workspace-scoped tx (margince_app +
 // app.workspace_id) so they commit atomically under RLS.
@@ -384,6 +394,58 @@ func (s *PersonStore) Archive(ctx context.Context, id, workspaceID string) (Pers
 	return s.getAny(ctx, id, workspaceID)
 }
 
+// Restore re-activates an archived person, writing one person.restored outbox
+// event and one audit_log row in the same workspace-scoped tx. The record must
+// already be archived and must not be a merge target.
+func (s *PersonStore) Restore(ctx context.Context, id, workspaceID string) (Person, error) {
+	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		var archivedAt sql.NullTime
+		var mergedInto sql.NullString
+		if err := tx.QueryRowContext(ctx, `
+			SELECT archived_at, merged_into_id
+			FROM person
+			WHERE id=$1::uuid AND workspace_id=$2::uuid`,
+			id, workspaceID).Scan(&archivedAt, &mergedInto); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return errs.ErrNotFound
+			}
+			return err
+		}
+		if !archivedAt.Valid {
+			return errs.ErrNotArchived
+		}
+		if mergedInto.Valid {
+			return errs.ErrMergedRecord
+		}
+		if err := s.findDuplicateEmail(ctx, tx, workspaceID, id); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE person SET archived_at=NULL
+			 WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NOT NULL`,
+			id, workspaceID); err != nil {
+			return err
+		}
+		payload, _ := json.Marshal(map[string]any{fieldPersonID: id})
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload)
+			 VALUES ($1,$2,$3::uuid,$4)`,
+			workspaceID, "person.restored", id, payload); err != nil {
+			return fmt.Errorf("person restore event: %w", err)
+		}
+		er := crmaudit.EntryFromPrincipal(ctx, "restore", entityTypePerson, &id, nil, nil)
+		er.WorkspaceID = workspaceID
+		if _, err := crmaudit.WriteTx(ctx, tx, er); err != nil {
+			return fmt.Errorf("person restore audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return Person{}, err
+	}
+	return s.getAny(ctx, id, workspaceID)
+}
+
 // getAny fetches a person by id regardless of archived_at status.
 func (s *PersonStore) getAny(ctx context.Context, id, workspaceID string) (Person, error) {
 	var p Person
@@ -414,4 +476,24 @@ func (s *PersonStore) getAny(ctx context.Context, id, workspaceID string) (Perso
 		unmarshalJSON(addrRaw, &p.Address)
 	}
 	return p, nil
+}
+
+func (s *PersonStore) findDuplicateEmail(ctx context.Context, tx *sql.Tx, workspaceID, personID string) error {
+	var existingID string
+	if err := tx.QueryRowContext(ctx, `
+		SELECT pe2.person_id
+		FROM person_email pe1
+		JOIN person_email pe2 ON lower(pe2.email) = lower(pe1.email)
+		  AND pe2.workspace_id = pe1.workspace_id
+		  AND pe2.person_id <> pe1.person_id
+		  AND pe2.archived_at IS NULL
+		WHERE pe1.person_id=$1::uuid AND pe1.workspace_id=$2::uuid AND pe1.archived_at IS NULL
+		LIMIT 1`,
+		personID, workspaceID).Scan(&existingID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+	return &ErrDuplicateEmail{ExistingID: existingID, Field: "email"}
 }
