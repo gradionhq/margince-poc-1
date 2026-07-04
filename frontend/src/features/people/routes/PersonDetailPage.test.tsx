@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../api/person.js", () => ({
   usePerson: vi.fn(),
+  useOrganizationName: vi.fn(() => ({ data: undefined, isLoading: false })),
+  useUpdatePerson: vi.fn(() => ({ mutate: vi.fn(), isPending: false, error: null })),
 }));
 
 import * as personApi from "../api/person.js";
@@ -57,7 +59,15 @@ describe("PersonDetailPage", () => {
 
   it("renders the loaded body once data resolves", () => {
     mockUsePerson.mockReturnValue({
-      data: { id: "p1", full_name: "Alice", source: "manual", captured_by: "human:u1" },
+      data: {
+        id: "p1",
+        full_name: "Alice",
+        source: "manual",
+        captured_by: "human:u1",
+        emails: [],
+        phones: [],
+        relationships: [],
+      },
       isLoading: false,
       isError: false,
       error: null,
