@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { Skeleton } from "../../../shared/ui/forge.js";
+import type { Person } from "../../../lib/api-client/generated/index.js";
+import { Button, Skeleton, StatusDot } from "../../../shared/ui/forge.js";
 import {
   useOrganization,
   useOrgContacts,
@@ -14,8 +16,11 @@ import {
 import { AccountSignalCard } from "../components/AccountSignalCard.js";
 import { ActivityCard } from "../components/ActivityCard.js";
 import { DealRail } from "../components/DealRail.js";
+import { EditOrgModal } from "../components/EditOrgModal.js";
+import { NewDealModal } from "../components/NewDealModal.js";
 import { OrgLogo } from "../components/OrgLogo.js";
 import { OrgStrengthCard } from "../components/OrgStrengthCard.js";
+import { PartnerPanel } from "../components/PartnerPanel.js";
 import { PeopleRail } from "../components/PeopleRail.js";
 import { QuickFactsRail } from "../components/QuickFactsRail.js";
 
@@ -34,8 +39,14 @@ export function CompanyDetailPage() {
   // gating on `partner` being non-null is the honest, type-safe signal rather than re-deriving it
   // from classification here.
   const { data: partner } = useOrgPartner(id);
-  // Not yet rendered (Task 6 wires PartnerPanel) — fetched now so the query is warm.
-  useSourcedDeals(partner ? id : undefined);
+  const { data: sourcedDeals } = useSourcedDeals(partner ? id : undefined);
+
+  const [newDealOpen, setNewDealOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editedFields, setEditedFields] = useState<Set<string>>(new Set());
+  const contactPeople = contacts
+    .map((c) => c.data)
+    .filter((p): p is Person => !!p);
 
   if (isLoading) {
     return (
@@ -73,7 +84,23 @@ export function CompanyDetailPage() {
             {org.display_name}
           </h1>
           <div className="flex gap-gf-md text-gf-caption text-gf-secondary flex-wrap">
-            {org.industry && <span>{org.industry}</span>}
+            {org.industry && (
+              <span>
+                {org.industry}
+                {editedFields.has("industry") && (
+                  <span
+                    className="ml-gf-xs inline-flex items-center"
+                    title="Typed by you this session"
+                  >
+                    <StatusDot
+                      state="success"
+                      size="sm"
+                      ariaLabel="Typed by you this session"
+                    />
+                  </span>
+                )}
+              </span>
+            )}
             {websiteUrl && (
               <a
                 href={websiteUrl}
@@ -84,9 +111,68 @@ export function CompanyDetailPage() {
                 {websiteUrl.replace("https://", "")}
               </a>
             )}
-            {org.size_band && <span>{org.size_band} staff</span>}
-            {location && <span>{location}</span>}
+            {org.size_band && (
+              <span>
+                {org.size_band} staff
+                {editedFields.has("size_band") && (
+                  <span
+                    className="ml-gf-xs inline-flex items-center"
+                    title="Typed by you this session"
+                  >
+                    <StatusDot
+                      state="success"
+                      size="sm"
+                      ariaLabel="Typed by you this session"
+                    />
+                  </span>
+                )}
+              </span>
+            )}
+            {location && (
+              <span>
+                {location}
+                {editedFields.has("location") && (
+                  <span
+                    className="ml-gf-xs inline-flex items-center"
+                    title="Typed by you this session"
+                  >
+                    <StatusDot
+                      state="success"
+                      size="sm"
+                      ariaLabel="Typed by you this session"
+                    />
+                  </span>
+                )}
+              </span>
+            )}
           </div>
+        </div>
+        <div className="ml-auto flex gap-gf-sm">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setEditOpen(true)}
+          >
+            Edit
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setNewDealOpen(true)}
+          >
+            New deal
+          </Button>
+          {/* Native button, not the Forge Button atom: Forge's Button doesn't forward a
+              `title` attribute, and the disabled-honest tooltip explaining why is required
+              here (same pattern as CompaniesPage's rare-path "New" button). */}
+          <button
+            type="button"
+            disabled
+            title="Account summaries ship in a later chapter"
+            className="h-8 px-gf-md rounded-md text-gf-small text-gf-muted bg-transparent border border-gf-subtle disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Summarize this account
+          </button>
         </div>
       </header>
       <main className="p-gf-lg max-w-5xl mx-auto flex flex-col gap-gf-lg">
@@ -104,9 +190,22 @@ export function CompanyDetailPage() {
           <AccountSignalCard org={org} />
           <QuickFactsRail org={org} />
         </div>
-        {/* TASK-6-INSERT: PartnerPanel + top-bar actions (Edit/New deal/Summarize) go here.
-            `partner` above is already wired for it; sourced deals are fetched (unused) above. */}
+        <PartnerPanel partner={partner} sourcedDeals={sourcedDeals ?? []} />
       </main>
+      <NewDealModal
+        open={newDealOpen}
+        onClose={() => setNewDealOpen(false)}
+        org={org}
+        contacts={contactPeople}
+      />
+      <EditOrgModal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        org={org}
+        onSaved={(changed) =>
+          setEditedFields((prev) => new Set([...prev, ...changed]))
+        }
+      />
     </div>
   );
 }

@@ -10,6 +10,7 @@ describe("CompanyList", () => {
         isLoading={false}
         isError={false}
         onRetry={vi.fn()}
+        onRowClick={vi.fn()}
       />,
     );
     expect(screen.queryByRole("row", { name: /./ })).not.toBeInTheDocument();
@@ -22,6 +23,7 @@ describe("CompanyList", () => {
         isLoading={true}
         isError={false}
         onRetry={vi.fn()}
+        onRowClick={vi.fn()}
       />,
     );
     expect(screen.getByTestId("company-list-skeleton")).toBeInTheDocument();
@@ -34,6 +36,7 @@ describe("CompanyList", () => {
         isLoading={false}
         isError={true}
         onRetry={onRetry}
+        onRowClick={vi.fn()}
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /retry/i }));
@@ -60,6 +63,7 @@ describe("CompanyList", () => {
         isLoading={false}
         isError={false}
         onRetry={vi.fn()}
+        onRowClick={vi.fn()}
       />,
     );
     expect(screen.getByText("Acme Inc")).toBeInTheDocument();
@@ -84,6 +88,7 @@ describe("CompanyList", () => {
         isLoading={false}
         isError={false}
         onRetry={vi.fn()}
+        onRowClick={vi.fn()}
       />,
     );
     expect(screen.getByText(/no signal yet/i)).toBeInTheDocument();
@@ -96,9 +101,33 @@ describe("CompanyList", () => {
         isLoading={false}
         isError={true}
         onRetry={onRetry}
+        onRowClick={vi.fn()}
       />,
     );
     expect(screen.getByText(/failed to load/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+  });
+  it("calls onRowClick with the org id when a row is clicked (row click-through)", () => {
+    const onRowClick = vi.fn();
+    render(
+      <CompanyList
+        companies={[
+          {
+            id: "o1",
+            display_name: "Acme Inc",
+            industry: "Software",
+            contact_count: 4,
+            open_deal_count: 2,
+            org_strength: null,
+          } as never,
+        ]}
+        isLoading={false}
+        isError={false}
+        onRetry={vi.fn()}
+        onRowClick={onRowClick}
+      />,
+    );
+    fireEvent.click(screen.getByText("Acme Inc"));
+    expect(onRowClick).toHaveBeenCalledWith("o1");
   });
 });
