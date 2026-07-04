@@ -43,7 +43,7 @@ function renderApp(initialEntry: string) {
 describe("App routes", () => {
   it("mounts PeoplePage at /people", () => {
     renderApp("/people");
-    expect(screen.getAllByText("People").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: /contacts we actually know/i })).toBeInTheDocument();
   });
 
   it("mounts ShellPlaceholderPage for rail routes without a real feature", () => {
