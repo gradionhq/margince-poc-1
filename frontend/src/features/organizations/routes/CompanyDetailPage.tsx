@@ -11,10 +11,13 @@ import {
   getEmploymentContactIds,
   primaryDomainUrl,
 } from "../api/orgSelectors.js";
+import { AccountSignalCard } from "../components/AccountSignalCard.js";
+import { ActivityCard } from "../components/ActivityCard.js";
 import { DealRail } from "../components/DealRail.js";
 import { OrgLogo } from "../components/OrgLogo.js";
 import { OrgStrengthCard } from "../components/OrgStrengthCard.js";
 import { PeopleRail } from "../components/PeopleRail.js";
+import { QuickFactsRail } from "../components/QuickFactsRail.js";
 
 export function CompanyDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -92,7 +95,15 @@ export function CompanyDetailPage() {
           <PeopleRail org={org} contacts={contacts} />
           <DealRail deals={org.deals ?? []} />
         </div>
-        {/* TASK-5-INSERT: ActivityCard + AccountSignalCard + QuickFactsRail go here */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-gf-lg">
+          <ActivityCard
+            activities={org.activities ?? []}
+            source={org.source}
+            capturedBy={org.captured_by}
+          />
+          <AccountSignalCard org={org} />
+          <QuickFactsRail org={org} />
+        </div>
         {/* TASK-6-INSERT: PartnerPanel + top-bar actions (Edit/New deal/Summarize) go here.
             `partner` above is already wired for it; sourced deals are fetched (unused) above. */}
       </main>

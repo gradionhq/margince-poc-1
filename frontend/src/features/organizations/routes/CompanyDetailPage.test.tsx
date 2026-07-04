@@ -73,4 +73,13 @@ describe("CompanyDetailPage", () => {
       screen.getByText("No open or won deals for this org."),
     ).toBeInTheDocument();
   });
+
+  it("renders honest empty states for ActivityCard, AccountSignalCard, and QuickFactsRail", () => {
+    renderPage();
+    expect(screen.getByText(/no activity yet/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/no account signal to flag right now/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/owner/i)).toBeInTheDocument();
+  });
 });
