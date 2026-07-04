@@ -18,31 +18,31 @@ import (
 
 const wsRelStore = "00000000-0000-0000-0000-0000000000b1"
 
-func seedRelWorkspace(t *testing.T, db *sql.DB, wsID string) {
+func seedRelWorkspace(t *testing.T, db *sql.DB) {
 	t.Helper()
 	if _, err := db.Exec(`INSERT INTO workspace (id, name, slug, base_currency) VALUES ($1,'t08-ws',$2,'EUR')
-		ON CONFLICT (id) DO NOTHING`, wsID, "t08-ws-"+ids.New()); err != nil {
+		ON CONFLICT (id) DO NOTHING`, wsRelStore, "t08-ws-"+ids.New()); err != nil {
 		t.Fatalf("seed workspace: %v", err)
 	}
 }
 
-func setRelRLS(t *testing.T, db *sql.DB, wsID string) {
+func setRelRLS(t *testing.T, db *sql.DB) {
 	t.Helper()
-	if _, err := db.Exec(`SELECT set_config('app.workspace_id', $1, false)`, wsID); err != nil {
+	if _, err := db.Exec(`SELECT set_config('app.workspace_id', $1, false)`, wsRelStore); err != nil {
 		t.Fatalf("set RLS: %v", err)
 	}
 }
 
 func strPtr(s string) *string { return &s }
 
-func seedRelPersonOrg(t *testing.T, db *sql.DB, wsID string) (personID, orgID string) {
+func seedRelPersonOrg(t *testing.T, db *sql.DB) (personID, orgID string) {
 	t.Helper()
-	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID, UserID: "human:test"})
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsRelStore, UserID: "human:test"})
 	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
 
 	ps := crmcore.NewPersonStore(db)
 	p, err := ps.Create(ctx, crmcore.Person{
-		WorkspaceID: wsID,
+		WorkspaceID: wsRelStore,
 		FullName:    "Rel Person " + ids.New(),
 		Source:      p0.Source,
 		CapturedBy:  p0.CapturedBy,
@@ -53,7 +53,7 @@ func seedRelPersonOrg(t *testing.T, db *sql.DB, wsID string) (personID, orgID st
 
 	os := crmcore.NewOrgStore(db)
 	o, err := os.Create(ctx, crmcore.Organization{
-		WorkspaceID:    wsID,
+		WorkspaceID:    wsRelStore,
 		DisplayName:    "Rel Org " + ids.New(),
 		Classification: strPtr("prospect"),
 		Source:         p0.Source,
@@ -67,9 +67,9 @@ func seedRelPersonOrg(t *testing.T, db *sql.DB, wsID string) (personID, orgID st
 
 func TestRelationshipStore_CreateEmployment_ThenGet(t *testing.T) {
 	db := sqlDB(t)
-	seedRelWorkspace(t, db, wsRelStore)
-	setRelRLS(t, db, wsRelStore)
-	personID, orgID := seedRelPersonOrg(t, db, wsRelStore)
+	seedRelWorkspace(t, db)
+	setRelRLS(t, db)
+	personID, orgID := seedRelPersonOrg(t, db)
 
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsRelStore, UserID: "human:test"})
 	s := crmcore.NewRelationshipStore(db)
@@ -103,9 +103,9 @@ func TestRelationshipStore_CreateEmployment_ThenGet(t *testing.T) {
 // no relationship row can be captured without source+captured_by.
 func TestRelationshipStore_CreateEmployment_NullProvenanceRejected(t *testing.T) {
 	db := sqlDB(t)
-	seedRelWorkspace(t, db, wsRelStore)
-	setRelRLS(t, db, wsRelStore)
-	personID, orgID := seedRelPersonOrg(t, db, wsRelStore)
+	seedRelWorkspace(t, db)
+	setRelRLS(t, db)
+	personID, orgID := seedRelPersonOrg(t, db)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsRelStore, UserID: "human:test"})
 
 	s := crmcore.NewRelationshipStore(db)
@@ -126,10 +126,10 @@ func TestRelationshipStore_CreateEmployment_NullProvenanceRejected(t *testing.T)
 // readable afterward.
 func TestRelationshipStore_SecondCurrentPrimaryEmployment_Conflicts(t *testing.T) {
 	db := sqlDB(t)
-	seedRelWorkspace(t, db, wsRelStore)
-	setRelRLS(t, db, wsRelStore)
-	personID, orgA := seedRelPersonOrg(t, db, wsRelStore)
-	_, orgB := seedRelPersonOrg(t, db, wsRelStore)
+	seedRelWorkspace(t, db)
+	setRelRLS(t, db)
+	personID, orgA := seedRelPersonOrg(t, db)
+	_, orgB := seedRelPersonOrg(t, db)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsRelStore, UserID: "human:test"})
 	s := crmcore.NewRelationshipStore(db)
 
@@ -169,9 +169,9 @@ func TestRelationshipStore_SecondCurrentPrimaryEmployment_Conflicts(t *testing.T
 // DEAL-AC-9 (uq_rel_deal_person_role).
 func TestRelationshipStore_CreateDealStakeholder_DuplicateRoleConflicts(t *testing.T) {
 	db := sqlDB(t)
-	seedRelWorkspace(t, db, wsRelStore)
-	setRelRLS(t, db, wsRelStore)
-	personID, _ := seedRelPersonOrg(t, db, wsRelStore)
+	seedRelWorkspace(t, db)
+	setRelRLS(t, db)
+	personID, _ := seedRelPersonOrg(t, db)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsRelStore, UserID: "human:test"})
 
 	pstore := deals.NewPipelineStore(db)
@@ -226,9 +226,9 @@ func TestRelationshipStore_CreateDealStakeholder_DuplicateRoleConflicts(t *testi
 // error, never a panic.
 func TestRelationshipStore_Create_ShapeViolation_RejectedNotPanicked(t *testing.T) {
 	db := sqlDB(t)
-	seedRelWorkspace(t, db, wsRelStore)
-	setRelRLS(t, db, wsRelStore)
-	personID, _ := seedRelPersonOrg(t, db, wsRelStore)
+	seedRelWorkspace(t, db)
+	setRelRLS(t, db)
+	personID, _ := seedRelPersonOrg(t, db)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsRelStore, UserID: "human:test"})
 	s := crmcore.NewRelationshipStore(db)
 
@@ -250,9 +250,9 @@ func TestRelationshipStore_Create_ShapeViolation_RejectedNotPanicked(t *testing.
 // case in TestRelationshipStore_Create_AuditAndEventOnOwningStream below.
 func TestRelationshipStore_Create_DealStakeholder_AuditAndEventOnOwningStream(t *testing.T) {
 	db := sqlDB(t)
-	seedRelWorkspace(t, db, wsRelStore)
-	setRelRLS(t, db, wsRelStore)
-	personID, _ := seedRelPersonOrg(t, db, wsRelStore)
+	seedRelWorkspace(t, db)
+	setRelRLS(t, db)
+	personID, _ := seedRelPersonOrg(t, db)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsRelStore, UserID: "human:test"})
 
 	pstore := deals.NewPipelineStore(db)
@@ -318,9 +318,9 @@ func TestRelationshipStore_Create_DealStakeholder_AuditAndEventOnOwningStream(t 
 // deal for stakeholder), not on a "relationship" stream.
 func TestRelationshipStore_Create_AuditAndEventOnOwningStream(t *testing.T) {
 	db := sqlDB(t)
-	seedRelWorkspace(t, db, wsRelStore)
-	setRelRLS(t, db, wsRelStore)
-	personID, orgID := seedRelPersonOrg(t, db, wsRelStore)
+	seedRelWorkspace(t, db)
+	setRelRLS(t, db)
+	personID, orgID := seedRelPersonOrg(t, db)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsRelStore, UserID: "human:test"})
 
 	s := crmcore.NewRelationshipStore(db)
@@ -363,9 +363,9 @@ func TestRelationshipStore_Create_AuditAndEventOnOwningStream(t *testing.T) {
 
 func TestRelationshipStore_List_FiltersByKindAndOrg(t *testing.T) {
 	db := sqlDB(t)
-	seedRelWorkspace(t, db, wsRelStore)
-	setRelRLS(t, db, wsRelStore)
-	personID, orgID := seedRelPersonOrg(t, db, wsRelStore)
+	seedRelWorkspace(t, db)
+	setRelRLS(t, db)
+	personID, orgID := seedRelPersonOrg(t, db)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsRelStore, UserID: "human:test"})
 	s := crmcore.NewRelationshipStore(db)
 
@@ -403,9 +403,9 @@ func TestRelationshipStore_List_FiltersByKindAndOrg(t *testing.T) {
 // If-Match/version convention (409 version_skew on a stale token).
 func TestRelationshipStore_Update_StaleIfMatchVersionSkews(t *testing.T) {
 	db := sqlDB(t)
-	seedRelWorkspace(t, db, wsRelStore)
-	setRelRLS(t, db, wsRelStore)
-	personID, orgID := seedRelPersonOrg(t, db, wsRelStore)
+	seedRelWorkspace(t, db)
+	setRelRLS(t, db)
+	personID, orgID := seedRelPersonOrg(t, db)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsRelStore, UserID: "human:test"})
 	s := crmcore.NewRelationshipStore(db)
 
@@ -438,9 +438,9 @@ func TestRelationshipStore_Update_StaleIfMatchVersionSkews(t *testing.T) {
 
 func TestRelationshipStore_Archive_ExcludedFromDefaultList_VisibleWithIncludeArchived(t *testing.T) {
 	db := sqlDB(t)
-	seedRelWorkspace(t, db, wsRelStore)
-	setRelRLS(t, db, wsRelStore)
-	personID, orgID := seedRelPersonOrg(t, db, wsRelStore)
+	seedRelWorkspace(t, db)
+	setRelRLS(t, db)
+	personID, orgID := seedRelPersonOrg(t, db)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsRelStore, UserID: "human:test"})
 	s := crmcore.NewRelationshipStore(db)
 

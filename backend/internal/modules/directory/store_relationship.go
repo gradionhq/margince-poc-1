@@ -21,6 +21,10 @@ import (
 const (
 	relKindEmployment      = "employment"
 	relKindDealStakeholder = "deal_stakeholder"
+
+	// fieldRelationshipID is the event_outbox payload key for the
+	// relationship id, shared by Create/Update/Archive.
+	fieldRelationshipID = "relationship_id"
 )
 
 // RelationshipStore executes parameterized SQL against the relationship table
@@ -136,7 +140,7 @@ func (s *RelationshipStore) Create(ctx context.Context, rel Relationship) (Relat
 		}
 
 		entityType, entityID := owningStream(rel)
-		payload, _ := json.Marshal(map[string]any{"relationship_id": rel.ID, fieldKind: rel.Kind})
+		payload, _ := json.Marshal(map[string]any{fieldRelationshipID: rel.ID, fieldKind: rel.Kind})
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
 			rel.WorkspaceID, relTopic(rel.Kind, "created"), entityID, payload); err != nil {
@@ -278,7 +282,7 @@ func (s *RelationshipStore) Update(ctx context.Context, id, workspaceID string, 
 		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
 			return fmt.Errorf("relationship update audit: %w", err)
 		}
-		payload, _ := json.Marshal(map[string]any{"relationship_id": id})
+		payload, _ := json.Marshal(map[string]any{fieldRelationshipID: id})
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
 			workspaceID, relTopic(kind, "updated"), entityID, payload); err != nil {
@@ -324,7 +328,7 @@ func (s *RelationshipStore) Archive(ctx context.Context, id, workspaceID string)
 		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
 			return fmt.Errorf("relationship archive audit: %w", err)
 		}
-		payload, _ := json.Marshal(map[string]any{"relationship_id": id})
+		payload, _ := json.Marshal(map[string]any{fieldRelationshipID: id})
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
 			workspaceID, relTopic(kind, "archived"), entityID, payload); err != nil {

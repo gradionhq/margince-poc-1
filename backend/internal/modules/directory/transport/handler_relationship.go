@@ -199,7 +199,7 @@ func (h *RelationshipHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	includeArchived, _ := strconv.ParseBool(q.Get("include_archived"))
-	items, next, err := h.store.List(r.Context(), wsID, q.Get("cursor"), queryLimit(r, 20), directory.RelationshipListFilter{
+	items, next, err := h.store.List(r.Context(), wsID, q.Get("cursor"), queryLimit(r), directory.RelationshipListFilter{
 		Kind:            q.Get("kind"),
 		PersonID:        q.Get("person_id"),
 		OrganizationID:  q.Get("organization_id"),
