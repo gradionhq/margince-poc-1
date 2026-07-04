@@ -382,80 +382,17 @@ func TestDealHandler_List_FilterAndSort(t *testing.T) {
 	}
 }
 
-func TestDealHandler_Get_HappyPathIncludesStakeholdersAndEmptyTimeline(t *testing.T) {
-	db := openDealTestDB(t)
-	pipelineID, stageID, _ := seedDealFixtures(t, db, "get-happy")
-	store := crmcore.NewDealStore(db)
-	h := NewDealHandler(store, crmcore.NewRelationshipStore(db), db)
-	ctx := context.Background()
-
-	d := crmcore.NewDeal("Get-me", pipelineID, stageID,
-		provenanceOf("test", "human:test"))
-	d.WorkspaceID = dealTestWorkspaceID
-	created, err := store.Create(ctx, d, "")
-	if err != nil {
-		t.Fatalf("seed create: %v", err)
-	}
-
-	var personID string
-	if err := db.QueryRow(`INSERT INTO person (id, workspace_id, full_name, source, captured_by)
-		VALUES (uuidv7(), $1, $2, 'test', 'human:test') RETURNING id`,
-		dealTestWorkspaceID, "Get Stakeholder Person").Scan(&personID); err != nil {
-		t.Fatalf("seed person: %v", err)
-	}
-	if _, err := db.Exec(`INSERT INTO relationship (id, workspace_id, kind, person_id, deal_id, role, source, captured_by)
-		VALUES (uuidv7(), $1, 'deal_stakeholder', $2, $3, 'champion', 'test', 'human:test')`,
-		dealTestWorkspaceID, personID, created.ID); err != nil {
-		t.Fatalf("seed relationship: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/deals/"+created.ID, nil)
-	req = withDealWorkspace(req)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
-	}
-	var got struct {
-		crmcore.Deal
-		Stakeholders []crmcore.Relationship `json:"stakeholders"`
-		Timeline     []any                  `json:"timeline"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if got.ID != created.ID {
-		t.Fatalf("id = %s, want %s", got.ID, created.ID)
-	}
-	if got.Name != "Get-me" {
-		t.Fatalf("name = %s, want Get-me", got.Name)
-	}
-	if got.Stakeholders == nil || len(got.Stakeholders) != 1 {
-		t.Fatalf("expected exactly 1 stakeholder, got %v", got.Stakeholders)
-	}
-	if got.Stakeholders[0].PersonID == nil || *got.Stakeholders[0].PersonID != personID {
-		t.Fatalf("expected stakeholder person_id = %s, got %+v", personID, got.Stakeholders[0])
-	}
-	if got.Timeline == nil || len(got.Timeline) != 0 {
-		t.Fatalf("expected empty non-nil timeline, got %v", got.Timeline)
-	}
-}
-
-func TestDealHandler_Get_NotFound(t *testing.T) {
-	db := openDealTestDB(t)
-	seedDealFixtures(t, db, "get-not-found")
-	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), db)
-
-	req := httptest.NewRequest(http.MethodGet, "/deals/00000000-0000-0000-0000-000000000999", nil)
-	req = withDealWorkspace(req)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404, body=%s", w.Code, w.Body.String())
-	}
-}
+// NOTE: T21's own GET /deals/{id} coverage (stakeholders present, timeline
+// contract, 404) used to live here as
+// TestDealHandler_Get_HappyPathIncludesStakeholdersAndEmptyTimeline /
+// TestDealHandler_Get_NotFound. Both are now superseded by main's fuller
+// deal-360 composite read (GetAny + activityStore-backed timeline) merged
+// from a sibling ticket — see TestDealHandler_Get_Composite360,
+// TestDealHandler_Get_NonexistentID_Returns404, and
+// TestDealHandler_Get_ForeignWorkspaceID_Returns404 in
+// handler_deal_get_test.go, which cover the same ground against the current
+// (non-empty) timeline contract. Removed here rather than left stale/
+// duplicated against an obsolete "timeline is always empty" assumption.
 
 func TestDealHandler_FullLifecycle_CreateUpdateList(t *testing.T) {
 	db := openDealTestDB(t)
