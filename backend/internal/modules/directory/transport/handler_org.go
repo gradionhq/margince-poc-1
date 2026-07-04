@@ -98,7 +98,7 @@ func (h *OrganizationHandler) create(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, errs.ErrNullProvenance) {
 			jsonValidationError(w, "source and captured_by are required.",
-				[]fieldError{{Field: "source", Code: codeRequired}, {Field: "captured_by", Code: codeRequired}})
+				[]fieldError{{Field: fieldSource, Code: codeRequired}, {Field: fieldCapturedBy, Code: codeRequired}})
 			return
 		}
 		jsonErr(w, err)

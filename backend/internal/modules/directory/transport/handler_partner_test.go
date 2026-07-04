@@ -55,8 +55,8 @@ func seedPartnerHandlerOrg(t *testing.T, db *sql.DB, tag string) string {
 	return orgID
 }
 
-func withPartnerHandlerPrincipal(r *http.Request, userID string) *http.Request {
-	ctx := crmctx.With(r.Context(), crmctx.Principal{TenantID: partnerHandlerTestWorkspaceID, UserID: userID})
+func withPartnerHandlerPrincipal(r *http.Request) *http.Request {
+	ctx := crmctx.With(r.Context(), crmctx.Principal{TenantID: partnerHandlerTestWorkspaceID, UserID: "human:test"})
 	return r.WithContext(ctx)
 }
 
@@ -72,7 +72,7 @@ func TestPartnerHandler_UpsertThenGetThenList(t *testing.T) {
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPut, "/organizations/"+orgID+"/partner", bytes.NewReader(b))
 	req.SetPathValue("id", orgID)
-	req = withPartnerHandlerPrincipal(req, "human:test")
+	req = withPartnerHandlerPrincipal(req)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -81,7 +81,7 @@ func TestPartnerHandler_UpsertThenGetThenList(t *testing.T) {
 
 	getReq := httptest.NewRequest(http.MethodGet, "/organizations/"+orgID+"/partner", nil)
 	getReq.SetPathValue("id", orgID)
-	getReq = withPartnerHandlerPrincipal(getReq, "human:test")
+	getReq = withPartnerHandlerPrincipal(getReq)
 	getW := httptest.NewRecorder()
 	h.ServeHTTP(getW, getReq)
 	if getW.Code != http.StatusOK {
@@ -89,7 +89,7 @@ func TestPartnerHandler_UpsertThenGetThenList(t *testing.T) {
 	}
 
 	listReq := httptest.NewRequest(http.MethodGet, "/partners?partner_role=hosting&cert_status=applied", nil)
-	listReq = withPartnerHandlerPrincipal(listReq, "human:test")
+	listReq = withPartnerHandlerPrincipal(listReq)
 	listW := httptest.NewRecorder()
 	h.ServeHTTP(listW, listReq)
 	if listW.Code != http.StatusOK {
@@ -119,7 +119,7 @@ func TestPartnerHandler_Get_404WhenNoPartnerRow(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/organizations/"+orgID+"/partner", nil)
 	req.SetPathValue("id", orgID)
-	req = withPartnerHandlerPrincipal(req, "human:test")
+	req = withPartnerHandlerPrincipal(req)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusNotFound {

@@ -53,7 +53,7 @@ func (h *PartnerHandler) upsert(w http.ResponseWriter, r *http.Request, orgID st
 	}
 	if body.Source == "" || body.CapturedBy == "" {
 		jsonValidationError(w, "source and captured_by are required.",
-			[]fieldError{{Field: "source", Code: codeRequired}, {Field: "captured_by", Code: codeRequired}})
+			[]fieldError{{Field: fieldSource, Code: codeRequired}, {Field: fieldCapturedBy, Code: codeRequired}})
 		return
 	}
 
@@ -89,7 +89,7 @@ func (h *PartnerHandler) upsert(w http.ResponseWriter, r *http.Request, orgID st
 	created, err := h.store.Upsert(r.Context(), p)
 	if errors.Is(err, errs.ErrNullProvenance) {
 		jsonValidationError(w, "source and captured_by are required.",
-			[]fieldError{{Field: "source", Code: codeRequired}, {Field: "captured_by", Code: codeRequired}})
+			[]fieldError{{Field: fieldSource, Code: codeRequired}, {Field: fieldCapturedBy, Code: codeRequired}})
 		return
 	}
 	if err != nil {

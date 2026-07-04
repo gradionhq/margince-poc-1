@@ -34,6 +34,8 @@ const (
 	codeStageNotInPipeline = "stage_not_in_pipeline"
 	fieldToStageID         = "to_stage_id"
 	codeRequired           = "required"
+	fieldCapturedBy        = "captured_by"
+	fieldSource            = "source"
 )
 
 // stageSemanticReader is the full DealStore seam DealHandler uses — an
