@@ -33,6 +33,7 @@ const (
 // without Postgres.
 type stageSemanticReader interface {
 	Get(ctx context.Context, id, workspaceID string) (directory.Deal, error)
+	GetAny(ctx context.Context, id, workspaceID string) (directory.Deal, error)
 	StageSemantic(ctx context.Context, stageID, workspaceID string) (string, error)
 	Advance(ctx context.Context, id, workspaceID string, in directory.AdvanceInput, ifMatch int64, changedBy string) (directory.Deal, error)
 	FindByIdempotencyKey(ctx context.Context, workspaceID, key string) (directory.Deal, bool, error)
@@ -48,21 +49,21 @@ type dealStakeholderReader interface {
 // DealHandler routes /deals, /deals/{id}, /deals/{id}/advance, and
 // /deals/{id}/stakeholders requests to the DealStore and relationship store.
 type DealHandler struct {
-	store    stageSemanticReader
-	relStore dealStakeholderReader
-	db       *sql.DB // used only for VerifyAndConsume on the 🟡 advance path
+	store         stageSemanticReader
+	relStore      dealStakeholderReader
+	activityStore *directory.ActivityStore
+	db            *sql.DB // used only for VerifyAndConsume on the 🟡 advance path
 }
 
-// NewDealHandler returns a DealHandler. relStore backs listDealStakeholders;
-// db is the raw pool the approval-token consumption seam writes through —
-// kept separate from store so store tx boundaries are untouched.
-func NewDealHandler(store *directory.DealStore, relStore *directory.RelationshipStore, db *sql.DB) *DealHandler {
-	return &DealHandler{store: store, relStore: relStore, db: db}
+// NewDealHandler returns a DealHandler. relStore backs listDealStakeholders
+// and the deal-360 stakeholders array; activityStore backs the deal-360
+// timeline array; db is the raw pool the approval-token consumption seam
+// writes through — kept separate from store so store tx boundaries are untouched.
+func NewDealHandler(store *directory.DealStore, relStore *directory.RelationshipStore, activityStore *directory.ActivityStore, db *sql.DB) *DealHandler {
+	return &DealHandler{store: store, relStore: relStore, activityStore: activityStore, db: db}
 }
 
-// ServeHTTP dispatches on method + path suffix. Only POST /deals is
-// implemented by this task; PATCH /deals/{id} (Task 2) and GET /deals
-// (Task 3) add their cases below as they land.
+// ServeHTTP dispatches on method + path suffix.
 func (h *DealHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/advance") {
 		id := pathID(strings.TrimSuffix(r.URL.Path, "/advance"), "/deals")
@@ -78,6 +79,8 @@ func (h *DealHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && id == "":
 		h.list(w, r)
+	case r.Method == http.MethodGet && id != "":
+		h.get(w, r, id)
 	case r.Method == http.MethodPost && id == "":
 		h.create(w, r)
 	case r.Method == http.MethodPatch && id != "":
@@ -378,4 +381,61 @@ func (h *DealHandler) stakeholders(w http.ResponseWriter, r *http.Request, id st
 		return
 	}
 	jsonOK(w, pageResponse(items, next))
+}
+
+// dealTimelineRef is DealDetail's timeline entry — identity fields only,
+// never the full activity body (mirrors crm.yaml's DealTimelineRef). Kept
+// local to this package rather than reusing directory.ActivityRef: same
+// shape, deliberately duplicated per this package's established
+// per-package-helper convention.
+type dealTimelineRef struct {
+	ID         string    `json:"id"`
+	Kind       string    `json:"kind"`
+	Subject    *string   `json:"subject"`
+	OccurredAt time.Time `json:"occurred_at"`
+}
+
+// dealDetailResponse is the deal-360 composite read — the deal itself plus
+// stakeholders and timeline.
+type dealDetailResponse struct {
+	directory.Deal
+	Stakeholders []directory.Relationship `json:"stakeholders"`
+	Timeline     []dealTimelineRef        `json:"timeline"`
+}
+
+func (h *DealHandler) get(w http.ResponseWriter, r *http.Request, id string) {
+	wsID, ok := requireWorkspace(w, r)
+	if !ok {
+		return
+	}
+	d, err := h.store.GetAny(r.Context(), id, wsID)
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+
+	stakeholders, _, err := h.relStore.List(r.Context(), wsID, "", 100, directory.RelationshipListFilter{
+		DealID: id,
+		Kind:   "deal_stakeholder",
+	})
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+
+	acts, _, err := h.activityStore.List(r.Context(), wsID, "deal", id, "", 50)
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	timeline := make([]dealTimelineRef, len(acts))
+	for i, a := range acts {
+		timeline[i] = dealTimelineRef{ID: a.ID, Kind: a.Kind, Subject: a.Subject, OccurredAt: a.OccurredAt}
+	}
+
+	jsonOK(w, dealDetailResponse{Deal: d, Stakeholders: stakeholders, Timeline: timeline})
 }

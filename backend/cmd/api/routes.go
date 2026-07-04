@@ -116,7 +116,7 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 	}
 	crud("/people", httpserver.ObjPerson, peopletransport.NewPersonHandler(directory.NewPersonStore(k.db), directory.NewRelationshipStore(k.db), directory.NewDealStore(k.db), directory.NewActivityStore(k.db)))
 	crud("/organizations", httpserver.ObjOrganization, dealtransport.NewOrganizationHandler(directory.NewOrgStore(k.db), directory.NewRelationshipStore(k.db), directory.NewDealStore(k.db), directory.NewActivityStore(k.db)))
-	dealHandler := dealtransport.NewDealHandler(directory.NewDealStore(k.db), directory.NewRelationshipStore(k.db), k.db)
+	dealHandler := dealtransport.NewDealHandler(directory.NewDealStore(k.db), directory.NewRelationshipStore(k.db), directory.NewActivityStore(k.db), k.db)
 	crud("/deals", httpserver.ObjDeal, dealHandler)
 	mux.Handle("POST /deals/{id}/advance", instrument("/deals/advance", k.domainWrap(httpserver.ObjDeal, dealHandler)))
 	mux.Handle("GET /deals/{id}/stakeholders", instrument("/deals/stakeholders", k.domainWrap(httpserver.ObjDeal, dealHandler)))

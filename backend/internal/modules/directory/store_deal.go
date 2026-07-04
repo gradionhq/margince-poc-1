@@ -103,41 +103,7 @@ func (s *DealStore) Create(ctx context.Context, d Deal, idempotencyKey string) (
 
 // Get returns one deal by id, workspace-scoped; ErrNotFound if absent.
 func (s *DealStore) Get(ctx context.Context, id, workspaceID string) (Deal, error) {
-	var d Deal
-	var stageEnteredAt sql.NullTime
-	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `
-			SELECT id, workspace_id, name, pipeline_id, stage_id,
-			       organization_id, owner_id, partner_org_id,
-			       amount_minor, currency, fx_rate_to_base, fx_rate_date,
-			       status, lost_reason, expected_close_date, closed_at,
-			       forecast_category, wait_until, last_activity_at,
-			       version, source, captured_by, created_at, updated_at, archived_at,
-			       (SELECT max(occurred_at) FROM deal_stage_history WHERE deal_id=deal.id) AS stage_entered_at,
-			       (SELECT count(*) FROM relationship WHERE deal_id=deal.id AND kind='deal_stakeholder' AND archived_at IS NULL) AS stakeholder_count
-			FROM deal WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
-			id, workspaceID).Scan(
-			&d.ID, &d.WorkspaceID, &d.Name, &d.PipelineID, &d.StageID,
-			&d.OrganizationID, &d.OwnerID, &d.PartnerOrgID,
-			&d.AmountMinor, &d.Currency, &d.FxRateToBase, &d.FxRateDate,
-			&d.Status, &d.LostReason, &d.ExpectedCloseDate, &d.ClosedAt,
-			&d.ForecastCategory, &d.WaitUntil, &d.LastActivityAt,
-			&d.Version, &d.Source, &d.CapturedBy,
-			&d.CreatedAt, &d.UpdatedAt, &d.ArchivedAt,
-			&stageEnteredAt, &d.StakeholderCount,
-		)
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return d, errs.ErrNotFound
-	}
-	if err != nil {
-		return d, err
-	}
-	if stageEnteredAt.Valid {
-		d.StageEnteredAt = &stageEnteredAt.Time
-	}
-	d.Stalled, _ = IsStalled(d, time.Now().UTC())
-	return d, nil
+	return s.loadDeal(ctx, id, workspaceID, false)
 }
 
 // FindByIdempotencyKey resolves a prior create-action audit row carrying the key
@@ -403,21 +369,32 @@ func (s *DealStore) Archive(ctx context.Context, id, workspaceID string) (Deal, 
 	if err != nil {
 		return Deal{}, err
 	}
-	return s.getAny(ctx, id, workspaceID)
+	return s.loadDeal(ctx, id, workspaceID, true)
 }
 
-// getAny fetches a deal by id regardless of archived_at status.
-func (s *DealStore) getAny(ctx context.Context, id, workspaceID string) (Deal, error) {
+// GetAny fetches a deal by id regardless of archived_at status.
+func (s *DealStore) GetAny(ctx context.Context, id, workspaceID string) (Deal, error) {
+	return s.loadDeal(ctx, id, workspaceID, true)
+}
+
+func (s *DealStore) loadDeal(ctx context.Context, id, workspaceID string, includeArchived bool) (Deal, error) {
 	var d Deal
+	var stageEnteredAt sql.NullTime
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `
+		query := `
 			SELECT id, workspace_id, name, pipeline_id, stage_id,
 			       organization_id, owner_id, partner_org_id,
 			       amount_minor, currency, fx_rate_to_base, fx_rate_date,
 			       status, lost_reason, expected_close_date, closed_at,
 			       forecast_category, wait_until, last_activity_at,
-			       version, source, captured_by, created_at, updated_at, archived_at
-			FROM deal WHERE id=$1::uuid AND workspace_id=$2::uuid`,
+			       version, source, captured_by, created_at, updated_at, archived_at,
+			       (SELECT max(occurred_at) FROM deal_stage_history WHERE deal_id=deal.id) AS stage_entered_at,
+			       (SELECT count(*) FROM relationship WHERE deal_id=deal.id AND kind='deal_stakeholder' AND archived_at IS NULL) AS stakeholder_count
+			FROM deal WHERE id=$1::uuid AND workspace_id=$2::uuid`
+		if !includeArchived {
+			query += " AND archived_at IS NULL"
+		}
+		return tx.QueryRowContext(ctx, query,
 			id, workspaceID).Scan(
 			&d.ID, &d.WorkspaceID, &d.Name, &d.PipelineID, &d.StageID,
 			&d.OrganizationID, &d.OwnerID, &d.PartnerOrgID,
@@ -426,10 +403,18 @@ func (s *DealStore) getAny(ctx context.Context, id, workspaceID string) (Deal, e
 			&d.ForecastCategory, &d.WaitUntil, &d.LastActivityAt,
 			&d.Version, &d.Source, &d.CapturedBy,
 			&d.CreatedAt, &d.UpdatedAt, &d.ArchivedAt,
+			&stageEnteredAt, &d.StakeholderCount,
 		)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return d, errs.ErrNotFound
 	}
-	return d, err
+	if err != nil {
+		return d, err
+	}
+	if stageEnteredAt.Valid {
+		d.StageEnteredAt = &stageEnteredAt.Time
+	}
+	d.Stalled, _ = IsStalled(d, time.Now().UTC())
+	return d, nil
 }
