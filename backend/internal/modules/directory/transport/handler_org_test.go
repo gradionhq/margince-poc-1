@@ -47,7 +47,7 @@ func withOrgWorkspace(r *http.Request) *http.Request {
 }
 
 func orgHandlerForTest(db *sql.DB, store *crmcore.OrgStore) *OrganizationHandler {
-	return NewOrganizationHandler(store, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db))
+	return NewOrganizationHandler(store, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db), db)
 }
 
 func TestOrganizationHandler_List_EmptyWorkspace(t *testing.T) {
@@ -96,7 +96,7 @@ func TestOrganizationHandler_List_WithAggregates(t *testing.T) {
 	personStore := crmcore.NewPersonStore(db)
 	personSeed := crmcore.NewPerson("Agent-"+ids.New(), p0)
 	personSeed.WorkspaceID = orgHandlerTestWS
-	person, err := personStore.Create(ctx, personSeed)
+	person, err := personStore.Create(ctx, personSeed, nil)
 	if err != nil {
 		t.Fatalf("create person: %v", err)
 	}

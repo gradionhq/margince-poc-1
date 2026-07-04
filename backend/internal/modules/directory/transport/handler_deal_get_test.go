@@ -55,7 +55,7 @@ func TestDealHandler_Get_Composite360(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed deal: %v", err)
 	}
-	person, err := crmcore.NewPersonStore(db).Create(ctx, crmcore.Person{WorkspaceID: dealGetTestWS, FullName: "Stakeholder", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	person, err := crmcore.NewPersonStore(db).Create(ctx, crmcore.Person{WorkspaceID: dealGetTestWS, FullName: "Stakeholder", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed person: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestDealHandler_Get_Composite360(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed other deal: %v", err)
 	}
-	otherPerson, err := crmcore.NewPersonStore(db).Create(ctx, crmcore.Person{WorkspaceID: dealGetTestWS, FullName: "Other Stakeholder", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	otherPerson, err := crmcore.NewPersonStore(db).Create(ctx, crmcore.Person{WorkspaceID: dealGetTestWS, FullName: "Other Stakeholder", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed other person: %v", err)
 	}

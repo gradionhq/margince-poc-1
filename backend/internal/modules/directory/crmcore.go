@@ -10,6 +10,15 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
+// PersonEmailInput is one entry of createPerson's emails[] request field
+// (crm.yaml CreatePersonRequest.emails).
+type PersonEmailInput struct {
+	Email     string
+	EmailType string // "work" (default) | "personal" | "other"
+	IsPrimary bool
+	Position  int
+}
+
 // Person is a contact record (data-model §3.1).
 type Person struct {
 	ID                  string          `json:"id"`

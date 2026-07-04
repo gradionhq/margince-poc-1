@@ -29,7 +29,7 @@ func newFakePersonStore() *fakePersonStore {
 	return &fakePersonStore{persons: map[string]crmcore.Person{}}
 }
 
-func (f *fakePersonStore) Create(ctx context.Context, p crmcore.Person) (crmcore.Person, error) {
+func (f *fakePersonStore) Create(ctx context.Context, p crmcore.Person, emails []crmcore.PersonEmailInput) (crmcore.Person, error) {
 	f.lastWS = p.WorkspaceID
 	p.ID = "person-1"
 	f.persons[p.ID] = p
@@ -158,7 +158,7 @@ func (f *fakeLeadStore) List(ctx context.Context, workspaceID, cursor string, li
 // personStoreI mirrors the unexported personStore interface in datasourcebinding.go so
 // test fakes can be passed to newTestProvider without referencing the exported name.
 type personStoreI interface {
-	Create(ctx context.Context, p crmcore.Person) (crmcore.Person, error)
+	Create(ctx context.Context, p crmcore.Person, emails []crmcore.PersonEmailInput) (crmcore.Person, error)
 	Get(ctx context.Context, id, workspaceID string) (crmcore.Person, error)
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (crmcore.Person, error)
 	List(ctx context.Context, workspaceID, cursor string, limit int, sort string) ([]crmcore.Person, string, error)

@@ -44,7 +44,7 @@ func TestOrganizationHandler_Get_Composite360(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed org: %v", err)
 	}
-	person, err := crmcore.NewPersonStore(db).Create(ctx, crmcore.Person{WorkspaceID: orgCompositeWS, FullName: "Employee", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	person, err := crmcore.NewPersonStore(db).Create(ctx, crmcore.Person{WorkspaceID: orgCompositeWS, FullName: "Employee", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed person: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestOrganizationHandler_Get_Composite360(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed other org: %v", err)
 	}
-	otherPerson, err := crmcore.NewPersonStore(db).Create(ctx, crmcore.Person{WorkspaceID: orgCompositeWS, FullName: "Not This Org's Employee", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	otherPerson, err := crmcore.NewPersonStore(db).Create(ctx, crmcore.Person{WorkspaceID: orgCompositeWS, FullName: "Not This Org's Employee", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed other person: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestOrganizationHandler_Get_Composite360_PerfBudgetAndPaginationCap(t *test
 	}
 	personStore := crmcore.NewPersonStore(db)
 	for i := 0; i < 60; i++ {
-		person, err := personStore.Create(ctx, crmcore.Person{WorkspaceID: ws, FullName: "Perf Employee", Source: p0.Source, CapturedBy: p0.CapturedBy})
+		person, err := personStore.Create(ctx, crmcore.Person{WorkspaceID: ws, FullName: "Perf Employee", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 		if err != nil {
 			t.Fatalf("seed person %d: %v", i, err)
 		}

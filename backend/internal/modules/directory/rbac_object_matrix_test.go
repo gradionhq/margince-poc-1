@@ -106,8 +106,8 @@ func buildRBACMux(t *testing.T, db *sql.DB) http.Handler {
 		})
 	}
 	orgStore := crmcore.NewOrgStore(db)
-	mux.Handle("/people", authWrap("person", "read", peopletransport.NewPersonHandler(personStore, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db))))
-	mux.Handle("/organizations", authWrap("organization", "read", directorytransport.NewOrganizationHandler(orgStore, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db))))
+	mux.Handle("/people", authWrap("person", "read", peopletransport.NewPersonHandler(personStore, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db), db)))
+	mux.Handle("/organizations", authWrap("organization", "read", directorytransport.NewOrganizationHandler(orgStore, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db), db)))
 	return mux
 }
 

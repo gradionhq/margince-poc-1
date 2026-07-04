@@ -27,7 +27,7 @@ func TestPersonHandler_StrengthBreakdown(t *testing.T) {
 
 	p := directory.NewPerson("Breakdown Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = wsID
-	created, err := store.Create(ctx, p)
+	created, err := store.Create(ctx, p, nil)
 	if err != nil {
 		t.Fatal("seed:", err)
 	}

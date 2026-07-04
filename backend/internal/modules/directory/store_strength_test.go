@@ -26,7 +26,7 @@ func TestPersonStore_List_AttachesLastActivityAt(t *testing.T) {
 	// person WITH activity
 	withSeed := NewPerson("Alice-Activity-"+uniq(), p0)
 	withSeed.WorkspaceID = strengthTestWS
-	personWith, err := store.Create(ctx, withSeed)
+	personWith, err := store.Create(ctx, withSeed, nil)
 	if err != nil {
 		t.Fatalf("create person with activity: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestPersonStore_List_AttachesLastActivityAt(t *testing.T) {
 	// person WITHOUT activity
 	withoutSeed := NewPerson("Bob-NoActivity-"+uniq(), p0)
 	withoutSeed.WorkspaceID = strengthTestWS
-	personWithout, err := store.Create(ctx, withoutSeed)
+	personWithout, err := store.Create(ctx, withoutSeed, nil)
 	if err != nil {
 		t.Fatalf("create person without activity: %v", err)
 	}

@@ -110,9 +110,12 @@ deps:
     canUse: [pq]
   # people is the person-specific HTTP transport layer only (handler_person.go);
   # it depends on directory for the Person type/store (see directory's note
-  # above) plus the Tier-0 kernel bits its handler uses directly.
+  # above) plus the Tier-0 kernel bits its handler uses directly. T06 adds
+  # approvals (the X-Approval-Token verify/consume seam) — mergePerson's
+  # 🟡 approval-gate check is an HTTP-boundary concern, made here before the
+  # store's tx opens, same shape as dealtransport's advanceDeal above.
   people:
-    mayDependOn: [directory, crmctx, errs, prov]
+    mayDependOn: [directory, crmctx, errs, prov, approvals]
   # dealtransport is the deal module's HTTP transport layer (handler_deal.go, T11);
   # same shape as people above — depends on directory for the Deal type/store plus
   # the Tier-0 kernel bits its handler uses directly. T12 adds deals (ResolveTier,

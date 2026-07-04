@@ -16,6 +16,7 @@ package transport
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -32,11 +33,13 @@ import (
 // contract-envelope field name, this handler needs. Duplicated from
 // directory's consts.go (see package doc above).
 const (
-	fieldData      = "data"
-	fieldCode      = "code"
-	fieldStatus    = "status"
-	codeForbidden  = "forbidden"
-	codeBadRequest = "bad_request"
+	fieldData       = "data"
+	fieldCode       = "code"
+	fieldStatus     = "status"
+	fieldDetails    = "details"
+	fieldExistingID = "existing_id"
+	codeForbidden   = "forbidden"
+	codeBadRequest  = "bad_request"
 )
 
 var personSortValues = map[string]bool{
@@ -49,18 +52,26 @@ type PersonHandler struct {
 	relStore      *directory.RelationshipStore
 	dealStore     *directory.DealStore
 	activityStore *directory.ActivityStore
+	db            *sql.DB // used only for the merge endpoint's VerifyAndConsume (🟡 gate)
 }
 
 // NewPersonHandler returns a PersonHandler.
-func NewPersonHandler(store *directory.PersonStore, relStore *directory.RelationshipStore, dealStore *directory.DealStore, activityStore *directory.ActivityStore) *PersonHandler {
-	return &PersonHandler{store: store, relStore: relStore, dealStore: dealStore, activityStore: activityStore}
+func NewPersonHandler(store *directory.PersonStore, relStore *directory.RelationshipStore, dealStore *directory.DealStore, activityStore *directory.ActivityStore, db *sql.DB) *PersonHandler {
+	return &PersonHandler{store: store, relStore: relStore, dealStore: dealStore, activityStore: activityStore, db: db}
 }
 
 // ServeHTTP dispatches on method + path suffix.
+//
+//nolint:cyclop // HTTP boundary: one branch per suffix/method pair, matching handler_deal.go's advance
 func (h *PersonHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/strength-breakdown") {
 		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/people/"), "/strength-breakdown")
 		h.strengthBreakdown(w, r, id)
+		return
+	}
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/merge") {
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/merge"), "/people")
+		h.merge(w, r, id)
 		return
 	}
 	id := pathID(r.URL.Path, "/people")
@@ -138,6 +149,12 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 		OwnerID    *string `json:"owner_id"`
 		Source     string  `json:"source"`
 		CapturedBy string  `json:"captured_by"`
+		Emails     []struct {
+			Email     string `json:"email"`
+			EmailType string `json:"email_type"`
+			IsPrimary bool   `json:"is_primary"`
+			Position  int    `json:"position"`
+		} `json:"emails"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
@@ -153,8 +170,19 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 	p.LastName = body.LastName
 	p.Title = body.Title
 	p.OwnerID = body.OwnerID
-	created, err := h.store.Create(r.Context(), p)
+	emails := make([]directory.PersonEmailInput, len(body.Emails))
+	for i, e := range body.Emails {
+		emails[i] = directory.PersonEmailInput{Email: e.Email, EmailType: e.EmailType, IsPrimary: e.IsPrimary, Position: e.Position}
+	}
+	created, err := h.store.Create(r.Context(), p, emails)
 	if err != nil {
+		var dup *directory.ErrDuplicateEmail
+		if errors.As(err, &dup) {
+			jsonProblemDetails(w, http.StatusConflict, "duplicate_email",
+				"An active person already owns this email.",
+				map[string]any{fieldExistingID: dup.ExistingID, "field": dup.Field})
+			return
+		}
 		jsonErr(w, err)
 		return
 	}
