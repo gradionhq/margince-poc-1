@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
@@ -24,6 +25,11 @@ func NewOrganizationHandler(store *directory.OrgStore) *OrganizationHandler {
 }
 
 func (h *OrganizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/restore") {
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/restore"), "/organizations")
+		h.restore(w, r, id)
+		return
+	}
 	id := pathID(r.URL.Path, "/organizations")
 	switch {
 	case r.Method == http.MethodGet && id == "":
@@ -163,6 +169,27 @@ func (h *OrganizationHandler) archive(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 	jsonOK(w, archived)
+}
+
+func (h *OrganizationHandler) restore(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := workspaceID(r)
+	restored, err := h.store.Restore(r.Context(), id, wsID)
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	var dup *directory.ErrDuplicateDomain
+	if errors.As(err, &dup) {
+		jsonProblemDetails(w, http.StatusConflict, "duplicate_domain",
+			"An active organization already owns this domain.",
+			map[string]any{"existing_id": dup.ExistingID, "field": dup.Field})
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, restored)
 }
 
 func (h *OrganizationHandler) list(w http.ResponseWriter, r *http.Request) {
