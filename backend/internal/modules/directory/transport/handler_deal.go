@@ -78,6 +78,8 @@ func (h *DealHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && id == "":
 		h.list(w, r)
+	case r.Method == http.MethodGet && id != "":
+		h.get(w, r, id)
 	case r.Method == http.MethodPost && id == "":
 		h.create(w, r)
 	case r.Method == http.MethodPatch && id != "":
@@ -85,6 +87,44 @@ func (h *DealHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// dealDetail is a minimal GET /deals/{id} response: the deal record plus its
+// real stakeholder relationships. timeline is deliberately always empty —
+// the full deal-360 composite (activity/task/message refs) is T16 scope, not
+// this handler's; returning [] here is honest about what this endpoint does
+// NOT yet do, rather than fabricating data.
+type dealDetail struct {
+	directory.Deal
+	Stakeholders []directory.Relationship `json:"stakeholders"`
+	Timeline     []any                    `json:"timeline"`
+}
+
+// get serves GET /deals/{id}: the deal record plus its live stakeholder
+// relationships. timeline is always [] — see dealDetail's doc comment.
+func (h *DealHandler) get(w http.ResponseWriter, r *http.Request, id string) {
+	wsID, ok := requireWorkspace(w, r)
+	if !ok {
+		return
+	}
+	d, err := h.store.Get(r.Context(), id, wsID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			jsonProblem(w, http.StatusNotFound, "not_found")
+			return
+		}
+		jsonErr(w, err)
+		return
+	}
+	stakeholders, _, err := h.relStore.List(r.Context(), wsID, "", 100, directory.RelationshipListFilter{
+		DealID: id,
+		Kind:   "deal_stakeholder",
+	})
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, dealDetail{Deal: d, Stakeholders: stakeholders, Timeline: []any{}})
 }
 
 func (h *DealHandler) create(w http.ResponseWriter, r *http.Request) {
