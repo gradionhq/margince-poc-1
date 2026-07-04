@@ -187,7 +187,7 @@ func (h *OrganizationHandler) list(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	cursor := r.URL.Query().Get("cursor")
-	limit := queryLimit(r, 20)
+	limit := queryLimit(r)
 	items, next, err := h.store.List(r.Context(), wsID, cursor, limit, sortVal, filter)
 	if err != nil {
 		jsonErr(w, err)

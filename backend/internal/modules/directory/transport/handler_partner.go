@@ -123,7 +123,7 @@ func (h *PartnerHandler) list(w http.ResponseWriter, r *http.Request) {
 		PartnerRole: q.Get("partner_role"),
 		CertStatus:  q.Get("cert_status"),
 	}
-	items, next, err := h.store.List(r.Context(), wsID, q.Get("cursor"), queryLimit(r, 20), filter)
+	items, next, err := h.store.List(r.Context(), wsID, q.Get("cursor"), queryLimit(r), filter)
 	if err != nil {
 		jsonErr(w, err)
 		return
