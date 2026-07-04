@@ -8,6 +8,7 @@ vi.mock("../api/person.js", () => ({
   useOrganizationName: vi.fn(() => ({ data: undefined, isLoading: false })),
   useUpdatePerson: vi.fn(() => ({ mutate: vi.fn(), isPending: false, error: null })),
   usePersonStrengthBreakdown: vi.fn(() => ({ data: undefined, isLoading: false })),
+  usePersonDeals: vi.fn(() => ({ data: [], isLoading: false, isError: false })),
 }));
 
 import * as personApi from "../api/person.js";
