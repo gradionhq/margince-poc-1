@@ -21,6 +21,10 @@ func (f *fakeStageSemanticReader) Get(_ context.Context, _, _ string) (directory
 	return f.deal, nil
 }
 
+func (f *fakeStageSemanticReader) GetAny(_ context.Context, _, _ string) (directory.Deal, error) {
+	return f.deal, nil
+}
+
 func (f *fakeStageSemanticReader) StageSemantic(_ context.Context, stageID, _ string) (string, error) {
 	return f.semanticByID[stageID], nil
 }

@@ -32,7 +32,7 @@ func TestDealHandler_Restore_HappyPath200(t *testing.T) {
 		t.Fatalf("archive deal: %v", err)
 	}
 
-	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), db)
+	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
 	req := httptest.NewRequest(http.MethodPost, "/deals/"+d.ID+"/restore", nil)
 	req = withDealWorkspace(req)
 	w := httptest.NewRecorder()
@@ -65,7 +65,7 @@ func TestDealHandler_Restore_LiveRecordReturns422(t *testing.T) {
 		t.Fatalf("create deal: %v", err)
 	}
 
-	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), db)
+	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
 	req := httptest.NewRequest(http.MethodPost, "/deals/"+d.ID+"/restore", nil)
 	req = withDealWorkspace(req)
 	w := httptest.NewRecorder()

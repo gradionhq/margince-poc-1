@@ -42,7 +42,7 @@ func withRestoreWorkspace(r *http.Request, wsID string) *http.Request {
 func TestPersonHandler_Restore_ArchivedPerson(t *testing.T) {
 	db := openPersonHandlerRestoreTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store, db)
+	h := NewPersonHandler(store, directory.NewRelationshipStore(db), directory.NewDealStore(db), directory.NewActivityStore(db), db)
 
 	seedWorkspace(t, db, personRestoreHandlerWS)
 	setRLS(t, db, personRestoreHandlerWS)
@@ -81,7 +81,7 @@ func TestPersonHandler_Restore_ArchivedPerson(t *testing.T) {
 func TestPersonHandler_Restore_RefusesLiveRecord(t *testing.T) {
 	db := openPersonHandlerRestoreTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store, db)
+	h := NewPersonHandler(store, directory.NewRelationshipStore(db), directory.NewDealStore(db), directory.NewActivityStore(db), db)
 
 	seedWorkspace(t, db, personRestoreHandlerWS)
 	setRLS(t, db, personRestoreHandlerWS)
@@ -132,7 +132,7 @@ func TestPersonHandler_Restore_RefusesLiveRecord(t *testing.T) {
 func TestPersonHandler_Restore_RefusesMergedRecord(t *testing.T) {
 	db := openPersonHandlerRestoreTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store, db)
+	h := NewPersonHandler(store, directory.NewRelationshipStore(db), directory.NewDealStore(db), directory.NewActivityStore(db), db)
 
 	seedWorkspace(t, db, personRestoreHandlerWS)
 	setRLS(t, db, personRestoreHandlerWS)
