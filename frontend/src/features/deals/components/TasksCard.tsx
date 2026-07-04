@@ -33,7 +33,9 @@ function TaskRow({
           }}
         />
         <div>
-          <p className="text-gf-body text-gf-primary">{task.subject ?? "Task"}</p>
+          <p className="text-gf-body text-gf-primary">
+            {task.subject ?? "Task"}
+          </p>
           <p className="text-gf-caption text-gf-secondary">
             <span>{assignee?.full_name ?? "Unassigned"}</span>
             {task.due_at && (
@@ -65,20 +67,32 @@ export function TasksCard({
   onTaskDone: () => void;
 }) {
   return (
-    <div data-testid="tasks-card" className="rounded-lg border border-gf-subtle bg-gf-card p-gf-md">
-      <h3 className="text-gf-body font-semibold text-gf-primary mb-gf-sm">Tasks</h3>
+    <div
+      data-testid="tasks-card"
+      className="rounded-lg border border-gf-subtle bg-gf-card p-gf-md"
+    >
+      <h3 className="text-gf-body font-semibold text-gf-primary mb-gf-sm">
+        Tasks
+      </h3>
       {isLoading ? (
         <div data-testid="tasks-card-skeleton">
           <Skeleton height="60px" />
         </div>
       ) : isError ? (
-        <p className="text-gf-body text-gf-status-danger">Failed to load tasks.</p>
+        <p className="text-gf-body text-gf-status-danger">
+          Failed to load tasks.
+        </p>
       ) : tasks.length === 0 ? (
         <p className="text-gf-body text-gf-secondary">No tasks yet</p>
       ) : (
         <ul>
           {tasks.map((t) => (
-            <TaskRow key={t.id} task={t} dealId={dealId} onToggled={onTaskDone} />
+            <TaskRow
+              key={t.id}
+              task={t}
+              dealId={dealId}
+              onToggled={onTaskDone}
+            />
           ))}
         </ul>
       )}

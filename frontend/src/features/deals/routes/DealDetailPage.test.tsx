@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
@@ -25,14 +25,49 @@ const dealData = {
 
 vi.mock("../api/deals.js", () => ({
   dealsKeys: { history: (id?: string) => ["deals", "history", id] },
-  useDeal: () => ({ data: dealData, isLoading: false, isError: false, refetch: refetchDeal }),
+  useDeal: () => ({
+    data: dealData,
+    isLoading: false,
+    isError: false,
+    refetch: refetchDeal,
+  }),
   useStages: () => ({
     data: [
-      { id: "s1", name: "New", position: 0, semantic: "open", win_probability: 10 },
-      { id: "s2", name: "Discovery", position: 1, semantic: "open", win_probability: 40 },
-      { id: "s3", name: "Proposal", position: 2, semantic: "open", win_probability: 60 },
-      { id: "won", name: "Closed Won", position: 100, semantic: "won", win_probability: 100 },
-      { id: "lost", name: "Closed Lost", position: 101, semantic: "lost", win_probability: 0 },
+      {
+        id: "s1",
+        name: "New",
+        position: 0,
+        semantic: "open",
+        win_probability: 10,
+      },
+      {
+        id: "s2",
+        name: "Discovery",
+        position: 1,
+        semantic: "open",
+        win_probability: 40,
+      },
+      {
+        id: "s3",
+        name: "Proposal",
+        position: 2,
+        semantic: "open",
+        win_probability: 60,
+      },
+      {
+        id: "won",
+        name: "Closed Won",
+        position: 100,
+        semantic: "won",
+        win_probability: 100,
+      },
+      {
+        id: "lost",
+        name: "Closed Lost",
+        position: 101,
+        semantic: "lost",
+        win_probability: 0,
+      },
     ],
     isLoading: false,
   }),

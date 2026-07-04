@@ -27,9 +27,13 @@ describe("WeightedValueExplainer", () => {
         stageName="Discovery"
       />,
     );
-    const trigger = screen.getByRole("button", { name: /explain this number/i });
+    const trigger = screen.getByRole("button", {
+      name: /explain this number/i,
+    });
     await userEvent.click(trigger);
-    expect(screen.getByTestId("weighted-value-explainer-popover")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("weighted-value-explainer-popover"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/\$10,000\.00 × 40% = \$4,000\.00/),
     ).toBeInTheDocument();

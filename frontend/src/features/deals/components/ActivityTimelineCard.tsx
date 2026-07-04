@@ -11,7 +11,10 @@ export function ActivityTimelineCard({
   isError: boolean;
 }) {
   return (
-    <div data-testid="activity-timeline-card" className="rounded-lg border border-gf-subtle bg-gf-card p-gf-md">
+    <div
+      data-testid="activity-timeline-card"
+      className="rounded-lg border border-gf-subtle bg-gf-card p-gf-md"
+    >
       <h3 className="text-gf-body font-semibold text-gf-primary mb-gf-sm">
         Timeline
       </h3>

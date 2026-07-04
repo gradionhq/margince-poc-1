@@ -44,7 +44,12 @@ export function StageStepper({
       className="flex items-center gap-gf-xs overflow-x-auto"
     >
       {ordered.map((stage) => {
-        const state = stateFor(stage, currentStageId, currentPosition, dealStatus);
+        const state = stateFor(
+          stage,
+          currentStageId,
+          currentPosition,
+          dealStatus,
+        );
         return (
           <li
             key={stage.id}

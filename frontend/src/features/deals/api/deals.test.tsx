@@ -297,7 +297,10 @@ describe("deal-360 read layer", () => {
       "/activities",
       expect.objectContaining({
         params: expect.objectContaining({
-          query: expect.objectContaining({ entity_type: "deal", entity_id: "d1" }),
+          query: expect.objectContaining({
+            entity_type: "deal",
+            entity_id: "d1",
+          }),
         }),
       }),
     );
@@ -308,8 +311,18 @@ describe("deal-360 read layer", () => {
     (apiClient.GET as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       data: {
         data: [
-          { id: "h1", action: "create", occurred_at: "2026-01-01T00:00:00Z", summary: "Devin created the deal" },
-          { id: "h2", action: "advance_stage", occurred_at: "2026-01-03T00:00:00Z", summary: "Devin changed Stage from Discovery to Proposal" },
+          {
+            id: "h1",
+            action: "create",
+            occurred_at: "2026-01-01T00:00:00Z",
+            summary: "Devin created the deal",
+          },
+          {
+            id: "h2",
+            action: "advance_stage",
+            occurred_at: "2026-01-03T00:00:00Z",
+            summary: "Devin changed Stage from Discovery to Proposal",
+          },
         ],
       },
     });
@@ -325,7 +338,9 @@ describe("deal-360 read layer", () => {
   });
 
   it("useUpdateActivity PATCHes the activity and invalidates the deal's activities query", async () => {
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
     (apiClient.PATCH as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       data: { id: "a2", kind: "task", is_done: true },
@@ -333,7 +348,9 @@ describe("deal-360 read layer", () => {
     function localWrapper({ children }: { children: ReactNode }) {
       return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
     }
-    const { result } = renderHook(() => useUpdateActivity(), { wrapper: localWrapper });
+    const { result } = renderHook(() => useUpdateActivity(), {
+      wrapper: localWrapper,
+    });
     await act(async () => {
       await result.current.mutateAsync({
         activityId: "a2",

@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ReopenConfirmDialog, firstOpenStageId } from "./ReopenConfirmDialog.js";
+import {
+  firstOpenStageId,
+  ReopenConfirmDialog,
+} from "./ReopenConfirmDialog.js";
 
 describe("firstOpenStageId", () => {
   it("returns the lowest-position open stage, ignoring terminal stages", () => {
@@ -14,7 +17,11 @@ describe("firstOpenStageId", () => {
   });
 
   it("returns undefined when there are no open stages", () => {
-    expect(firstOpenStageId([{ id: "won", position: 0, semantic: "won" }] as never[])).toBeUndefined();
+    expect(
+      firstOpenStageId([
+        { id: "won", position: 0, semantic: "won" },
+      ] as never[]),
+    ).toBeUndefined();
   });
 });
 

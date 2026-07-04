@@ -11,7 +11,10 @@ export function StageHistoryCard({
   isError: boolean;
 }) {
   return (
-    <div data-testid="stage-history-card" className="rounded-lg border border-gf-subtle bg-gf-card p-gf-md">
+    <div
+      data-testid="stage-history-card"
+      className="rounded-lg border border-gf-subtle bg-gf-card p-gf-md"
+    >
       <h3 className="text-gf-body font-semibold text-gf-primary mb-gf-sm">
         Stage history
       </h3>
@@ -24,9 +27,7 @@ export function StageHistoryCard({
           Failed to load stage history.
         </p>
       ) : entries.length === 0 ? (
-        <p className="text-gf-body text-gf-secondary">
-          No stage history yet.
-        </p>
+        <p className="text-gf-body text-gf-secondary">No stage history yet.</p>
       ) : (
         <ul>
           {entries.map((e) => (

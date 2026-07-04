@@ -2,9 +2,10 @@ import type { Relationship } from "../../../lib/api-client/generated/index.js";
 import { StatusBadge } from "../../../shared/ui/forge.js";
 import { usePerson } from "../../people/api/people.js";
 
-export function roleBadge(
-  role: string | null | undefined,
-): { label: string; variant: "accent" | "info" | "error" } {
+export function roleBadge(role: string | null | undefined): {
+  label: string;
+  variant: "accent" | "info" | "error";
+} {
   if (role === "champion") return { label: "Champion", variant: "accent" };
   if (role === "blocker") return { label: "Blocker", variant: "error" };
   // economic_buyer, influencer, user, and any other/unknown role render as "Stakeholder".
@@ -12,7 +13,9 @@ export function roleBadge(
 }
 
 function StakeholderRow({ relationship }: { relationship: Relationship }) {
-  const { data: person, isLoading } = usePerson(relationship.person_id ?? undefined);
+  const { data: person, isLoading } = usePerson(
+    relationship.person_id ?? undefined,
+  );
   const badge = roleBadge(relationship.role);
   return (
     <li
@@ -28,7 +31,9 @@ function StakeholderRow({ relationship }: { relationship: Relationship }) {
               {person?.full_name ?? "Unknown"}
             </p>
             {person?.title && (
-              <p className="text-gf-caption text-gf-secondary">{person.title}</p>
+              <p className="text-gf-caption text-gf-secondary">
+                {person.title}
+              </p>
             )}
           </>
         )}
@@ -45,11 +50,16 @@ export function StakeholdersRail({
   stakeholders: Relationship[];
   stakeholderCount: number | undefined;
 }) {
-  const hasEconomicBuyer = stakeholders.some((s) => s.role === "economic_buyer");
+  const hasEconomicBuyer = stakeholders.some(
+    (s) => s.role === "economic_buyer",
+  );
   const count = stakeholderCount ?? stakeholders.length;
 
   return (
-    <div data-testid="stakeholders-rail" className="rounded-lg border border-gf-subtle bg-gf-card p-gf-md">
+    <div
+      data-testid="stakeholders-rail"
+      className="rounded-lg border border-gf-subtle bg-gf-card p-gf-md"
+    >
       <h3 className="text-gf-body font-semibold text-gf-primary mb-gf-sm">
         Stakeholders
       </h3>

@@ -6,20 +6,22 @@ describe("StageHistoryCard", () => {
   it("lists create + advance_stage entries with date + summary, creation row included", () => {
     render(
       <StageHistoryCard
-        entries={[
-          {
-            id: "h1",
-            action: "create",
-            occurred_at: "2026-01-01T00:00:00Z",
-            summary: "Devin created the deal",
-          },
-          {
-            id: "h2",
-            action: "advance_stage",
-            occurred_at: "2026-01-03T00:00:00Z",
-            summary: "Devin changed Stage from Discovery to Proposal",
-          },
-        ] as never[]}
+        entries={
+          [
+            {
+              id: "h1",
+              action: "create",
+              occurred_at: "2026-01-01T00:00:00Z",
+              summary: "Devin created the deal",
+            },
+            {
+              id: "h2",
+              action: "advance_stage",
+              occurred_at: "2026-01-03T00:00:00Z",
+              summary: "Devin changed Stage from Discovery to Proposal",
+            },
+          ] as never[]
+        }
         isLoading={false}
         isError={false}
       />,

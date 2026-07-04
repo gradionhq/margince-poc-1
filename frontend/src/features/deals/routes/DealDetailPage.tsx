@@ -14,8 +14,14 @@ import {
 } from "../api/deals.js";
 import { ActivityTimelineCard } from "../components/ActivityTimelineCard.js";
 import { OutcomeDialog } from "../components/OutcomeDialog.js";
-import { advanceErrorMessage, nextStageId } from "../components/PipelineBoard.js";
-import { ReopenConfirmDialog, firstOpenStageId } from "../components/ReopenConfirmDialog.js";
+import {
+  advanceErrorMessage,
+  nextStageId,
+} from "../components/PipelineBoard.js";
+import {
+  firstOpenStageId,
+  ReopenConfirmDialog,
+} from "../components/ReopenConfirmDialog.js";
 import { StageHistoryCard } from "../components/StageHistoryCard.js";
 import { StageStepper } from "../components/StageStepper.js";
 import { StakeholdersRail } from "../components/StakeholdersRail.js";
@@ -30,10 +36,19 @@ export function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
   const { data: deal, isLoading, isError, refetch } = useDeal(id);
-  const { data: allStages, isLoading: stagesLoading } = useStages(deal?.pipeline_id);
-  const { data: activities, isLoading: activitiesLoading, isError: activitiesError } =
-    useDealActivities(id);
-  const { data: history, isLoading: historyLoading, isError: historyError } = useDealHistory(id);
+  const { data: allStages, isLoading: stagesLoading } = useStages(
+    deal?.pipeline_id,
+  );
+  const {
+    data: activities,
+    isLoading: activitiesLoading,
+    isError: activitiesError,
+  } = useDealActivities(id);
+  const {
+    data: history,
+    isLoading: historyLoading,
+    isError: historyError,
+  } = useDealHistory(id);
   const advance = useAdvanceDeal(deal?.pipeline_id);
   const [outcomeOpen, setOutcomeOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
@@ -78,7 +93,8 @@ export function DealDetailPage() {
 
   const stages: Stage[] = allStages ?? [];
   const target = nextStageId(deal.stage_id, stages);
-  const targetIsTerminal = stages.find((s) => s.id === target)?.semantic !== "open";
+  const targetIsTerminal =
+    stages.find((s) => s.id === target)?.semantic !== "open";
   const currentStage = stages.find((s) => s.id === deal.stage_id);
 
   function handleAdvanceClick() {
@@ -103,7 +119,9 @@ export function DealDetailPage() {
   const lostStage = stages.find((s) => s.semantic === "lost");
   const reopenTarget = firstOpenStageId(stages);
 
-  const timelineActivities = (activities ?? []).filter((a) => TIMELINE_KINDS.has(a.kind));
+  const timelineActivities = (activities ?? []).filter((a) =>
+    TIMELINE_KINDS.has(a.kind),
+  );
   const taskActivities = (activities ?? []).filter((a) => a.kind === "task");
   const historyEntries = (history ?? []).filter(
     (h) => h.action === "create" || h.action === "advance_stage",
@@ -113,7 +131,9 @@ export function DealDetailPage() {
     <div className="p-gf-lg grid grid-cols-1 lg:grid-cols-3 gap-gf-lg">
       <div className="lg:col-span-2 flex flex-col gap-gf-lg">
         <header className="rounded-lg border border-gf-subtle bg-gf-card p-gf-lg">
-          <h1 className="text-gf-title font-semibold text-gf-primary">{deal.name}</h1>
+          <h1 className="text-gf-title font-semibold text-gf-primary">
+            {deal.name}
+          </h1>
           {deal.organization_id && (
             <Link
               to={`/companies/${deal.organization_id}`}
@@ -202,7 +222,12 @@ export function DealDetailPage() {
         onLost={(reason) => {
           if (!lostStage) return;
           advance.mutate(
-            { dealId: deal.id, toStageId: lostStage.id, status: "lost", lostReason: reason },
+            {
+              dealId: deal.id,
+              toStageId: lostStage.id,
+              status: "lost",
+              lostReason: reason,
+            },
             {
               onSuccess: () => {
                 pushToast("success", "Deal closed — weighted 0%");

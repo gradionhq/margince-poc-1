@@ -4,12 +4,36 @@ import { StageStepper } from "./StageStepper.js";
 
 const stages = [
   { id: "s1", name: "New", position: 0, semantic: "open", win_probability: 10 },
-  { id: "s2", name: "Discovery", position: 1, semantic: "open", win_probability: 40 },
-  { id: "s3", name: "Proposal", position: 2, semantic: "open", win_probability: 60 },
+  {
+    id: "s2",
+    name: "Discovery",
+    position: 1,
+    semantic: "open",
+    win_probability: 40,
+  },
+  {
+    id: "s3",
+    name: "Proposal",
+    position: 2,
+    semantic: "open",
+    win_probability: 60,
+  },
 ] as const;
 const terminal = [
-  { id: "won", name: "Closed Won", position: 100, semantic: "won", win_probability: 100 },
-  { id: "lost", name: "Closed Lost", position: 101, semantic: "lost", win_probability: 0 },
+  {
+    id: "won",
+    name: "Closed Won",
+    position: 100,
+    semantic: "won",
+    win_probability: 100,
+  },
+  {
+    id: "lost",
+    name: "Closed Lost",
+    position: 101,
+    semantic: "lost",
+    win_probability: 0,
+  },
 ] as const;
 
 describe("StageStepper", () => {

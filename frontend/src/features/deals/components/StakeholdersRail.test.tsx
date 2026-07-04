@@ -14,7 +14,7 @@ vi.mock("../../people/api/people.js", () => ({
   }),
 }));
 
-import { StakeholdersRail, roleBadge } from "./StakeholdersRail.js";
+import { roleBadge, StakeholdersRail } from "./StakeholdersRail.js";
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient();
@@ -38,9 +38,12 @@ describe("StakeholdersRail", () => {
   ] as never[];
 
   it("lists each stakeholder with name/title + role badge, multi-threaded framing", () => {
-    render(<StakeholdersRail stakeholders={stakeholders} stakeholderCount={2} />, {
-      wrapper,
-    });
+    render(
+      <StakeholdersRail stakeholders={stakeholders} stakeholderCount={2} />,
+      {
+        wrapper,
+      },
+    );
     expect(screen.getByText("Dana Lee")).toBeInTheDocument();
     expect(screen.getByText("VP Sales")).toBeInTheDocument();
     expect(screen.getByText("Sam Ito")).toBeInTheDocument();
@@ -53,18 +56,24 @@ describe("StakeholdersRail", () => {
   it("shows the No-economic-buyer notice when no economic_buyer role exists", () => {
     render(
       <StakeholdersRail
-        stakeholders={[{ id: "r2", person_id: "p2", role: "blocker" }] as never[]}
+        stakeholders={
+          [{ id: "r2", person_id: "p2", role: "blocker" }] as never[]
+        }
         stakeholderCount={1}
       />,
       { wrapper },
     );
-    expect(screen.getByText("No economic buyer identified yet")).toBeInTheDocument();
+    expect(
+      screen.getByText("No economic buyer identified yet"),
+    ).toBeInTheDocument();
   });
 
   it("shows single-threaded risk framing when stakeholderCount is 1", () => {
     render(
       <StakeholdersRail
-        stakeholders={[{ id: "r2", person_id: "p2", role: "champion" }] as never[]}
+        stakeholders={
+          [{ id: "r2", person_id: "p2", role: "champion" }] as never[]
+        }
         stakeholderCount={1}
       />,
       { wrapper },
@@ -73,7 +82,9 @@ describe("StakeholdersRail", () => {
   });
 
   it("honest-empty when there are no stakeholders — never claims single-threaded on zero", () => {
-    render(<StakeholdersRail stakeholders={[]} stakeholderCount={0} />, { wrapper });
+    render(<StakeholdersRail stakeholders={[]} stakeholderCount={0} />, {
+      wrapper,
+    });
     expect(screen.getByText(/no stakeholders captured/i)).toBeInTheDocument();
     expect(screen.queryByText(/single-threaded/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/multi-threaded/i)).not.toBeInTheDocument();

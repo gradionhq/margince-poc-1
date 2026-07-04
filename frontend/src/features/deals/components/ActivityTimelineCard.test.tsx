@@ -6,15 +6,17 @@ describe("ActivityTimelineCard", () => {
   it("lists activities with timestamp + source_system provenance", () => {
     render(
       <ActivityTimelineCard
-        activities={[
-          {
-            id: "a1",
-            kind: "email",
-            subject: "Intro call follow-up",
-            occurred_at: "2026-01-05T10:00:00Z",
-            source_system: "gmail",
-          },
-        ] as never[]}
+        activities={
+          [
+            {
+              id: "a1",
+              kind: "email",
+              subject: "Intro call follow-up",
+              occurred_at: "2026-01-05T10:00:00Z",
+              source_system: "gmail",
+            },
+          ] as never[]
+        }
         isLoading={false}
         isError={false}
       />,
@@ -24,7 +26,13 @@ describe("ActivityTimelineCard", () => {
   });
 
   it("honest-empty footer when there are no logged activities", () => {
-    render(<ActivityTimelineCard activities={[]} isLoading={false} isError={false} />);
+    render(
+      <ActivityTimelineCard
+        activities={[]}
+        isLoading={false}
+        isError={false}
+      />,
+    );
     expect(screen.getByText("You logged none of this")).toBeInTheDocument();
   });
 
@@ -32,8 +40,12 @@ describe("ActivityTimelineCard", () => {
     const { rerender } = render(
       <ActivityTimelineCard activities={[]} isLoading={true} isError={false} />,
     );
-    expect(screen.getByTestId("activity-timeline-skeleton")).toBeInTheDocument();
-    rerender(<ActivityTimelineCard activities={[]} isLoading={false} isError={true} />);
+    expect(
+      screen.getByTestId("activity-timeline-skeleton"),
+    ).toBeInTheDocument();
+    rerender(
+      <ActivityTimelineCard activities={[]} isLoading={false} isError={true} />,
+    );
     expect(screen.getByText(/failed to load/i)).toBeInTheDocument();
   });
 });
