@@ -17,6 +17,11 @@ import (
 // DealStore
 // ---------------------------------------------------------------------------
 
+// fieldPartnerOrgID is the map-key / JSON-payload field name for a deal's
+// partner_org_id, shared by the update-map lookup and the audit/event payloads
+// below so the raw string literal isn't repeated across the file.
+const fieldPartnerOrgID = "partner_org_id"
+
 // DealStore manages deal rows, including stage transitions and FX freeze.
 type DealStore struct{ db *sql.DB }
 
@@ -170,22 +175,36 @@ func (s *DealStore) FindByIdempotencyKey(ctx context.Context, workspaceID, key s
 
 // Update applies partial updates. When status moves to won/lost it freezes the FX rate.
 func (s *DealStore) Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (Deal, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		return s.applyUpdate(ctx, tx, id, workspaceID, updates, ifMatch)
+	})
 	if err != nil {
 		return Deal{}, err
 	}
-	defer tx.Rollback() //nolint:errcheck
+	return s.Get(ctx, id, workspaceID)
+}
 
-	if _, err := tx.ExecContext(ctx, `SET LOCAL ROLE margince_app`); err != nil {
-		return Deal{}, err
-	}
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.workspace_id', $1, true)`, workspaceID); err != nil {
-		return Deal{}, err
-	}
-
+// applyUpdate runs the write side of Update inside an already-scoped tx (role
+// + app.workspace_id GUC set by withWorkspaceTx): the stage-in-pipeline guard,
+// the partner_org_id before/after capture, the FX freeze, the UPDATE itself,
+// and the stage-history / partner-reassignment side effects. Split out of
+// Update to keep the outer function's cognitive complexity within budget.
+func (s *DealStore) applyUpdate(ctx context.Context, tx *sql.Tx, id, workspaceID string, updates map[string]any, ifMatch int64) error {
 	if stageID, ok := updates["stage_id"].(string); ok && stageID != "" {
 		if err := s.checkStageInPipeline(ctx, tx, id, workspaceID, stageID); err != nil {
-			return Deal{}, err
+			return err
+		}
+	}
+
+	// Capture the previous partner_org_id before the row changes so a later
+	// partner reassignment can be audited with both sides of the diff.
+	_, partnerOrgIDProvided := updates[fieldPartnerOrgID]
+	var priorPartnerOrgID sql.NullString
+	if partnerOrgIDProvided {
+		var err error
+		priorPartnerOrgID, err = s.capturePriorPartnerOrgID(ctx, tx, id, workspaceID)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -207,9 +226,10 @@ func (s *DealStore) Update(ctx context.Context, id, workspaceID string, updates 
 		    fx_rate_date        = COALESCE($8, fx_rate_date),
 		    expected_close_date = COALESCE($9, expected_close_date),
 		    owner_id            = COALESCE($10::uuid, owner_id),
+		    partner_org_id      = COALESCE($11::uuid, partner_org_id),
 		    updated_at          = now()
 		WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL
-		  AND ($11 = 0 OR version = $11)`,
+		  AND ($12 = 0 OR version = $12)`,
 		id, workspaceID,
 		nullStr(updates, "name"),
 		nullStr(updates, "stage_id"),
@@ -219,31 +239,91 @@ func (s *DealStore) Update(ctx context.Context, id, workspaceID string, updates 
 		fxRateDate,
 		nullStr(updates, "expected_close_date"),
 		nullStr(updates, "owner_id"),
+		nullStr(updates, fieldPartnerOrgID),
 		ifMatch)
 	if err != nil {
-		return Deal{}, err
+		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		if ifMatch != 0 {
-			return Deal{}, errs.ErrVersionSkew
+			return errs.ErrVersionSkew
 		}
-		return Deal{}, errs.ErrNotFound
+		return errs.ErrNotFound
 	}
 
-	// If stage changed, write deal_stage_history
-	if stageID := nullStr(updates, "stage_id"); stageID != nil {
-		var fromStageID string
-		_ = tx.QueryRowContext(ctx, `SELECT stage_id FROM deal WHERE id=$1::uuid`, id).Scan(&fromStageID)
-		_, _ = tx.ExecContext(ctx, `
-			INSERT INTO deal_stage_history (workspace_id, deal_id, from_stage_id, to_stage_id, changed_by)
-			VALUES ($1::uuid, $2::uuid, NULLIF($3,'')::uuid, $4::uuid, $5)`,
-			workspaceID, id, fromStageID, *stageID, workspaceID)
+	s.writeStageHistoryOnChange(ctx, tx, id, workspaceID, updates)
+
+	// Only write the partner reassignment side effects when the supplied value
+	// actually changes. That keeps the audit/outbox noise aligned with the field.
+	if newPartnerOrgID := nullStr(updates, fieldPartnerOrgID); partnerOrgIDProvided && newPartnerOrgID != nil {
+		if err := s.auditPartnerOrgIDChange(ctx, tx, id, workspaceID, priorPartnerOrgID, *newPartnerOrgID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeStageHistoryOnChange inserts a deal_stage_history row when updates
+// carries a non-empty stage_id, recording the deal's stage before the UPDATE
+// ran as from_stage_id. Best-effort: history-write failures do not fail the
+// surrounding update, matching the pre-refactor inline behavior.
+func (s *DealStore) writeStageHistoryOnChange(ctx context.Context, tx *sql.Tx, id, workspaceID string, updates map[string]any) {
+	stageID := nullStr(updates, "stage_id")
+	if stageID == nil {
+		return
+	}
+	var fromStageID string
+	_ = tx.QueryRowContext(ctx, `SELECT stage_id FROM deal WHERE id=$1::uuid`, id).Scan(&fromStageID)
+	_, _ = tx.ExecContext(ctx, `
+		INSERT INTO deal_stage_history (workspace_id, deal_id, from_stage_id, to_stage_id, changed_by)
+		VALUES ($1::uuid, $2::uuid, NULLIF($3,'')::uuid, $4::uuid, $5)`,
+		workspaceID, id, fromStageID, *stageID, workspaceID)
+}
+
+// capturePriorPartnerOrgID reads the deal's current partner_org_id inside tx,
+// before the UPDATE runs, so a later partner reassignment can be audited with
+// both sides of the diff. sql.ErrNoRows is treated as "no prior value" rather
+// than an error since the row-existence check happens later, in the UPDATE.
+func (s *DealStore) capturePriorPartnerOrgID(ctx context.Context, tx *sql.Tx, id, workspaceID string) (sql.NullString, error) {
+	var prior sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT partner_org_id FROM deal WHERE id=$1::uuid AND workspace_id=$2::uuid`,
+		id, workspaceID).Scan(&prior); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return sql.NullString{}, err
+	}
+	return prior, nil
+}
+
+// auditPartnerOrgIDChange writes the deal.partner_assigned outbox event and
+// the matching audit_log row when newVal differs from prior. It is a no-op
+// when the value is unchanged, keeping the audit/outbox noise aligned with
+// the field actually changing.
+func (s *DealStore) auditPartnerOrgIDChange(ctx context.Context, tx *sql.Tx, id, workspaceID string, prior sql.NullString, newVal string) error {
+	priorStr := ""
+	if prior.Valid {
+		priorStr = prior.String
+	}
+	if priorStr == newVal {
+		return nil
 	}
 
-	if err := tx.Commit(); err != nil {
-		return Deal{}, err
+	payload, _ := json.Marshal(map[string]any{"deal_id": id, fieldPartnerOrgID: newVal})
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
+		workspaceID, "deal.partner_assigned", id, payload); err != nil {
+		return fmt.Errorf("deal update partner event: %w", err)
 	}
-	return s.Get(ctx, id, workspaceID)
+
+	before := map[string]any{fieldPartnerOrgID: prior.String}
+	if !prior.Valid {
+		before = map[string]any{fieldPartnerOrgID: nil}
+	}
+	after := map[string]any{fieldPartnerOrgID: newVal}
+	e := crmaudit.EntryFromPrincipal(ctx, "update", entityTypeDeal, &id, before, after)
+	e.WorkspaceID = workspaceID
+	if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+		return fmt.Errorf("deal update partner audit: %w", err)
+	}
+	return nil
 }
 
 // checkStageInPipeline verifies that stageID belongs to the pipeline the deal
