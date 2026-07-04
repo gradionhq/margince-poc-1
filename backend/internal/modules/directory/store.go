@@ -381,11 +381,16 @@ func (s *PersonStore) Archive(ctx context.Context, id, workspaceID string) (Pers
 	if err != nil {
 		return Person{}, err
 	}
-	return s.getAny(ctx, id, workspaceID)
+	return s.getAnyPerson(ctx, id, workspaceID)
+}
+
+// GetAny fetches a person by id regardless of archived_at status.
+func (s *PersonStore) GetAny(ctx context.Context, id, workspaceID string) (Person, error) {
+	return s.getAnyPerson(ctx, id, workspaceID)
 }
 
 // getAny fetches a person by id regardless of archived_at status.
-func (s *PersonStore) getAny(ctx context.Context, id, workspaceID string) (Person, error) {
+func (s *PersonStore) getAnyPerson(ctx context.Context, id, workspaceID string) (Person, error) {
 	var p Person
 	var socialRaw, addrRaw []byte
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
@@ -405,6 +410,14 @@ func (s *PersonStore) getAny(ctx context.Context, id, workspaceID string) (Perso
 		return p, errs.ErrNotFound
 	}
 	if err != nil {
+		return p, err
+	}
+	if err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		if err := s.attachStrength(ctx, tx, workspaceID, []*Person{&p}); err != nil {
+			return err
+		}
+		return s.attachLastActivity(ctx, tx, workspaceID, []*Person{&p})
+	}); err != nil {
 		return p, err
 	}
 	p.Social = map[string]any{}

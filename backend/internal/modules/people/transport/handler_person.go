@@ -15,6 +15,7 @@
 package transport
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -43,11 +44,16 @@ var personSortValues = map[string]bool{
 }
 
 // PersonHandler routes /people and /people/{id} requests to the PersonStore.
-type PersonHandler struct{ store *directory.PersonStore }
+type PersonHandler struct {
+	store         *directory.PersonStore
+	relStore      *directory.RelationshipStore
+	dealStore     *directory.DealStore
+	activityStore *directory.ActivityStore
+}
 
 // NewPersonHandler returns a PersonHandler.
-func NewPersonHandler(store *directory.PersonStore) *PersonHandler {
-	return &PersonHandler{store: store}
+func NewPersonHandler(store *directory.PersonStore, relStore *directory.RelationshipStore, dealStore *directory.DealStore, activityStore *directory.ActivityStore) *PersonHandler {
+	return &PersonHandler{store: store, relStore: relStore, dealStore: dealStore, activityStore: activityStore}
 }
 
 // ServeHTTP dispatches on method + path suffix.
@@ -159,7 +165,7 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 
 func (h *PersonHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	wsID := workspaceID(r)
-	p, err := h.store.Get(r.Context(), id, wsID)
+	p, err := h.store.GetAny(r.Context(), id, wsID)
 	if errors.Is(err, errs.ErrNotFound) {
 		jsonProblem(w, http.StatusNotFound, "not_found")
 		return
@@ -168,7 +174,37 @@ func (h *PersonHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		jsonErr(w, err)
 		return
 	}
+	if err := h.assembleComposite(r.Context(), wsID, &p); err != nil {
+		jsonErr(w, err)
+		return
+	}
 	jsonOK(w, p)
+}
+
+// assembleComposite fans out to related stores for the person-360 read.
+func (h *PersonHandler) assembleComposite(ctx context.Context, wsID string, p *directory.Person) error {
+	rels, _, err := h.relStore.List(ctx, wsID, "", 50, directory.RelationshipListFilter{PersonID: p.ID})
+	if err != nil {
+		return err
+	}
+	p.Relationships = rels
+
+	deals, _, err := h.dealStore.ListFiltered(ctx, wsID, "", 50, directory.DealListFilter{PersonID: p.ID})
+	if err != nil {
+		return err
+	}
+	p.Deals = deals
+
+	acts, _, err := h.activityStore.List(ctx, wsID, "person", p.ID, "", 50)
+	if err != nil {
+		return err
+	}
+	refs := make([]directory.ActivityRef, len(acts))
+	for i, a := range acts {
+		refs[i] = directory.ToActivityRef(a)
+	}
+	p.Activities = refs
+	return nil
 }
 
 func (h *PersonHandler) update(w http.ResponseWriter, r *http.Request, id string) {
