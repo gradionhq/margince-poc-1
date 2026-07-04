@@ -19,6 +19,8 @@ var (
 	ErrWinProbabilityOutOfRange  = errors.New("win_probability out of range")         // -> 422 (validation: 0-100)
 	ErrFXRateUnavailable         = errors.New("fx rate unavailable")                  // -> 422 (no stored rate for as-of lookup)
 	ErrSuppressed                = errors.New("suppressed")                           // -> 451 (GDPR erasure suppression)
+	ErrNotArchived               = errors.New("not archived")                         // -> 422 (restore refused: record is already live)
+	ErrMergedRecord              = errors.New("merged record")                        // -> 422 (restore refused: merged_into_id set, PO-AC-18)
 	ErrApprovalTokenInvalid      = errors.New("approval token invalid")               // -> 403 (expired, replayed, or mis-bound token — API-ERR-11)
 	ErrApprovalRequired          = errors.New("approval required")                    // -> 403 (agent on a 🟡 transition, no token — API-ERR-10)
 	ErrStatusMismatch            = errors.New("status mismatch")                      // -> 422 (explicit status != target stage's derived semantic)
@@ -50,6 +52,8 @@ func HTTPStatus(err error) int {
 		errors.Is(err, ErrTerminalProbabilityPinned),
 		errors.Is(err, ErrWinProbabilityOutOfRange),
 		errors.Is(err, ErrFXRateUnavailable),
+		errors.Is(err, ErrNotArchived),
+		errors.Is(err, ErrMergedRecord),
 		errors.Is(err, ErrStatusMismatch),
 		errors.Is(err, ErrLostReasonRequired):
 		return 422

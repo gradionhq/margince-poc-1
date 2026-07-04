@@ -38,9 +38,16 @@ const (
 	fieldStatus     = "status"
 	fieldDetails    = "details"
 	fieldExistingID = "existing_id"
+	fieldErrors     = "errors"
 	codeForbidden   = "forbidden"
 	codeBadRequest  = "bad_request"
+	codeValidation  = "validation_error"
 )
+
+type fieldError struct {
+	Field string `json:"field"`
+	Code  string `json:"code"`
+}
 
 var personSortValues = map[string]bool{
 	"": true, "id": true, "strength": true, "-strength": true,
@@ -61,12 +68,8 @@ func NewPersonHandler(store *directory.PersonStore, relStore *directory.Relation
 }
 
 // ServeHTTP dispatches on method + path suffix.
-//
-//nolint:cyclop // HTTP boundary: one branch per suffix/method pair, matching handler_deal.go's advance
 func (h *PersonHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/strength-breakdown") {
-		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/people/"), "/strength-breakdown")
-		h.strengthBreakdown(w, r, id)
+	if h.serveSuffixRoutes(w, r) {
 		return
 	}
 	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/merge") {
@@ -89,6 +92,20 @@ func (h *PersonHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func (h *PersonHandler) serveSuffixRoutes(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/strength-breakdown") {
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/people/"), "/strength-breakdown")
+		h.strengthBreakdown(w, r, id)
+		return true
+	}
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/restore") {
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/people/"), "/restore")
+		h.restore(w, r, id)
+		return true
+	}
+	return false
 }
 
 func (h *PersonHandler) strengthBreakdown(w http.ResponseWriter, r *http.Request, id string) {

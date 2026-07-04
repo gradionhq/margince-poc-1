@@ -25,11 +25,6 @@ func jsonProblemDetails(w http.ResponseWriter, status int, code, detail string, 
 	json.NewEncoder(w).Encode(map[string]any{fieldStatus: status, fieldCode: code, "detail": detail, fieldDetails: details}) //nolint:errcheck,gosec
 }
 
-type fieldError struct {
-	Field string `json:"field"`
-	Code  string `json:"code"`
-}
-
 // jsonValidationError writes a 422 problem+json body with the field-level
 // details.errors shape the contract's ValidationError schema declares.
 // Duplicated from directory/transport's handler_deal.go (see package doc above).

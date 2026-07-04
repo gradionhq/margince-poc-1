@@ -117,10 +117,13 @@ export interface paths {
         /**
          * Restore (un-archive) a soft-deleted person.
          * @description Inverse of `archivePerson`: clears `archived_at`, restoring the person to default
-         *     list visibility. Triggers `person.restored`. Restoring an already-live person is a
-         *     no-op success (idempotent read-modify-write); restoring a person that was never
-         *     archived still returns 200 with the unchanged person. 🟢 — undoing a soft-delete
-         *     carries no data-loss risk, unlike `archivePerson` (🟡).
+         *     list visibility. Triggers `person.restored`. Restoring an already-live person is
+         *     refused with a 422 validation error (not a no-op) — the client must check
+         *     `archived_at` first. Also refused (422) when `merged_into_id` is set (PO-AC-18:
+         *     merge reversal is a separate recovery path), and refused (409) when a live email on
+         *     this person now collides with another live person's email (the live-scoped
+         *     `uq_person_email` index). 🟢 — undoing a soft-delete carries no data-loss risk,
+         *     unlike `archivePerson` (🟡).
          */
         post: operations["restorePerson"];
         delete?: never;
@@ -238,14 +241,13 @@ export interface paths {
         /**
          * Restore (un-archive) a soft-deleted organization.
          * @description Inverse of `archiveOrganization`: clears `archived_at`, restoring the organization to
-         *     default list visibility. Restoring an already-live organization is a no-op success
-         *     (idempotent read-modify-write); restoring an organization that was never archived
-         *     still returns 200 with the unchanged organization. 🟢 — undoing a soft-delete carries
-         *     no data-loss risk, unlike `archiveOrganization` (🟡). Note: `organization.restored` is
-         *     not in the pinned event catalog (only `organization.created/updated/archived/merged`
-         *     are) — this operation performs the restore without emitting a new event; adding
-         *     `organization.restored` to the catalog is separate, uncited scope, tracked outside this
-         *     ticket.
+         *     default list visibility. Triggers `organization.restored` (newly added to the event
+         *     catalog by this ticket, docs/architecture/event-bus.md). Restoring an already-live
+         *     organization is refused with a 422 validation error (not a no-op) — the client must
+         *     check `archived_at` first. Also refused (422) when `merged_into_id` is set (PO-AC-18),
+         *     and refused (409) when a domain on this organization now collides with another live
+         *     organization's domain (the live-scoped `uq_org_domain_primary` index). 🟢 — undoing a
+         *     soft-delete carries no data-loss risk, unlike `archiveOrganization` (🟡).
          */
         post: operations["restoreOrganization"];
         delete?: never;
@@ -357,9 +359,10 @@ export interface paths {
          * Restore (un-archive) a soft-deleted deal.
          * @description Inverse of `archiveDeal`: clears `archived_at`, restoring the deal to default
          *     list visibility. Triggers `deal.restored` (DEAL-EVT-6). Restoring an already-live
-         *     deal is a no-op success (idempotent read-modify-write); restoring a deal that was
-         *     never archived still returns 200 with the unchanged deal. 🟢 — undoing a soft-delete
-         *     carries no data-loss risk, unlike `archiveDeal` (🟡).
+         *     deal is refused with a 422 validation error (not a no-op) — the client must check
+         *     `archived_at` first. Deals are never merge targets, so there is no `merged_into_id`
+         *     boundary for this op. 🟢 — undoing a soft-delete carries no data-loss risk, unlike
+         *     `archiveDeal` (🟡).
          */
         post: operations["restoreDeal"];
         delete?: never;
@@ -5074,6 +5077,16 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description A live email on this person now collides with another live person. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
         };
     };
     getPersonStrengthBreakdown: {
@@ -5392,6 +5405,16 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description A domain on this organization now collides with another live organization. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
         };
     };
     getPartner: {
@@ -5728,6 +5751,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
         };
     };
     advanceDeal: {

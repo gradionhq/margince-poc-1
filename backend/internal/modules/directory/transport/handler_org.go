@@ -35,9 +35,7 @@ func NewOrganizationHandler(store *directory.OrgStore, relStore *directory.Relat
 }
 
 func (h *OrganizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/merge") {
-		id := pathID(strings.TrimSuffix(r.URL.Path, "/merge"), "/organizations")
-		h.merge(w, r, id)
+	if h.serveSuffixRoutes(w, r) {
 		return
 	}
 	id := pathID(r.URL.Path, "/organizations")
@@ -55,6 +53,23 @@ func (h *OrganizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// serveSuffixRoutes dispatches the /restore and /merge suffix routes, keeping
+// ServeHTTP's cyclomatic complexity within the T1 lint budget (mirrors
+// people/transport's handler_person.go serveSuffixRoutes).
+func (h *OrganizationHandler) serveSuffixRoutes(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/restore") {
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/restore"), "/organizations")
+		h.restore(w, r, id)
+		return true
+	}
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/merge") {
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/merge"), "/organizations")
+		h.merge(w, r, id)
+		return true
+	}
+	return false
 }
 
 // merge implements POST /organizations/{id}/merge (mergeOrganization,
@@ -295,6 +310,27 @@ func (h *OrganizationHandler) archive(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 	jsonOK(w, archived)
+}
+
+func (h *OrganizationHandler) restore(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := workspaceID(r)
+	restored, err := h.store.Restore(r.Context(), id, wsID)
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	var dup *directory.ErrDuplicateDomain
+	if errors.As(err, &dup) {
+		jsonProblemDetails(w, http.StatusConflict, "duplicate_domain",
+			"An active organization already owns this domain.",
+			map[string]any{"existing_id": dup.ExistingID, "field": dup.Field})
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, restored)
 }
 
 func (h *OrganizationHandler) list(w http.ResponseWriter, r *http.Request) {

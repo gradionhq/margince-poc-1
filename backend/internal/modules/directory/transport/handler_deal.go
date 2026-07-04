@@ -41,6 +41,7 @@ type stageSemanticReader interface {
 	Create(ctx context.Context, d directory.Deal, idempotencyKey string) (directory.Deal, error)
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (directory.Deal, error)
 	ListFiltered(ctx context.Context, workspaceID, cursor string, limit int, filter directory.DealListFilter) ([]directory.Deal, string, error)
+	Restore(ctx context.Context, id, workspaceID string) (directory.Deal, error)
 }
 
 type dealStakeholderReader interface {
@@ -66,14 +67,7 @@ func NewDealHandler(store *directory.DealStore, relStore *directory.Relationship
 
 // ServeHTTP dispatches on method + path suffix.
 func (h *DealHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/advance") {
-		id := pathID(strings.TrimSuffix(r.URL.Path, "/advance"), "/deals")
-		h.advance(w, r, id)
-		return
-	}
-	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/stakeholders") {
-		id := pathID(strings.TrimSuffix(r.URL.Path, "/stakeholders"), "/deals")
-		h.stakeholders(w, r, id)
+	if h.serveSuffixRoutes(w, r) {
 		return
 	}
 	id := pathID(r.URL.Path, "/deals")
@@ -89,6 +83,28 @@ func (h *DealHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// serveSuffixRoutes handles the /deals/{id}/advance, /deals/{id}/stakeholders,
+// and /deals/{id}/restore sub-resource routes, reporting whether it handled
+// the request (mirrors people/transport's PersonHandler.serveSuffixRoutes).
+func (h *DealHandler) serveSuffixRoutes(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/advance") {
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/advance"), "/deals")
+		h.advance(w, r, id)
+		return true
+	}
+	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/stakeholders") {
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/stakeholders"), "/deals")
+		h.stakeholders(w, r, id)
+		return true
+	}
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/restore") {
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/restore"), "/deals")
+		h.restore(w, r, id)
+		return true
+	}
+	return false
 }
 
 func (h *DealHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -189,6 +205,20 @@ func (h *DealHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 	jsonOK(w, d)
+}
+
+func (h *DealHandler) restore(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := workspaceID(r)
+	restored, err := h.store.Restore(r.Context(), id, wsID)
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, restored)
 }
 
 //nolint:cyclop // HTTP boundary: each advance error maps to a distinct status code; 16 is 1 over the lint max
