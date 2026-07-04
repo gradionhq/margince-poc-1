@@ -13,6 +13,7 @@ import (
 	_ "github.com/lib/pq"
 
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
+	directorytransport "github.com/gradionhq/margince/backend/internal/modules/directory/transport"
 	crmauth "github.com/gradionhq/margince/backend/internal/modules/identity"
 	peopletransport "github.com/gradionhq/margince/backend/internal/modules/people/transport"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
@@ -104,7 +105,9 @@ func buildRBACMux(t *testing.T, db *sql.DB) http.Handler {
 			h.ServeHTTP(w, r)
 		})
 	}
+	orgStore := crmcore.NewOrgStore(db)
 	mux.Handle("/people", authWrap("person", "read", peopletransport.NewPersonHandler(personStore)))
+	mux.Handle("/organizations", authWrap("organization", "read", directorytransport.NewOrganizationHandler(orgStore)))
 	return mux
 }
 
@@ -122,7 +125,7 @@ func seedRBACFixtures(ctx context.Context, t *testing.T, db *sql.DB, wsID string
 	}
 
 	rolePerms := map[string]string{
-		"admin":     `{"person":{"read":{"row_scope":"all"},"create":{"row_scope":"all"},"update":{"row_scope":"all"},"archive":{"row_scope":"all"}},"deal":{"read":{"row_scope":"all"},"create":{"row_scope":"all"},"archive":{"row_scope":"all"}},"pipeline":{"read":{"row_scope":"all"}},"report":{"read":{"row_scope":"all"}}}`,
+		"admin":     `{"person":{"read":{"row_scope":"all"},"create":{"row_scope":"all"},"update":{"row_scope":"all"},"archive":{"row_scope":"all"}},"organization":{"read":{"row_scope":"all"}},"deal":{"read":{"row_scope":"all"},"create":{"row_scope":"all"},"archive":{"row_scope":"all"}},"pipeline":{"read":{"row_scope":"all"}},"report":{"read":{"row_scope":"all"}}}`,
 		"rep":       `{"person":{"read":{"row_scope":"own"},"create":{"row_scope":"own"}},"deal":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"archive":{"row_scope":"own"}}}`,
 		"read_only": `{"person":{"read":{"row_scope":"all"}},"deal":{"read":{"row_scope":"all"}},"report":{"read":{"row_scope":"all"}}}`,
 		"ops":       `{"pipeline":{"read":{"row_scope":"all"}},"report":{"read":{"row_scope":"all"}}}`,
@@ -184,6 +187,12 @@ func TestRBACObjectMatrix(t *testing.T) {
 		{role: "ops", object: "pipeline", action: "create", method: "POST", path: "/people", wantStatus: 403},
 		// ops/report/read → allowed
 		{role: "ops", object: "report", action: "read", method: "GET", path: "/people", wantStatus: 200},
+		// admin/organization/read → allowed (admin has organization:read)
+		{role: "admin", object: "organization", action: "read", method: "GET", path: "/organizations", wantStatus: 200},
+		// rep/organization/read → denied (rep has no organization key)
+		{role: "rep", object: "organization", action: "read", method: "GET", path: "/organizations", wantStatus: 403},
+		// ops/person/read → denied (ops has no person key) — explicit unambiguous person-read-deny
+		{role: "ops", object: "person", action: "read", method: "GET", path: "/people", wantStatus: 403},
 	}
 
 	// User IDs: admin=...001, rep=...002, read_only=...003, ops=...004
@@ -215,19 +224,25 @@ func TestRBACObjectMatrix(t *testing.T) {
 				t.Errorf("role %q must NOT be allowed %q on %q", tc.role, tc.action, tc.object)
 			}
 
-			// HTTP-level check via mux for the read path (the mux guards person/read).
+			// HTTP-level check: send the request through the mux and assert the
+			// response matches what the route's guard permits for this principal.
 			req := httptest.NewRequest(tc.method, tc.path, nil)
 			rctx := crmctx.With(req.Context(), crmctx.Principal{UserID: userID, TenantID: wsID})
 			req = req.WithContext(rctx)
 			w := httptest.NewRecorder()
 			mux.ServeHTTP(w, req)
-			// The mux enforces person/read; assert it matches the read decision.
-			readAllowed := userCanDo(ctx, db, wsID, userID, "person", "read")
-			if readAllowed && w.Code == http.StatusForbidden {
-				t.Errorf("mux returned 403 but read is allowed for role %q (body: %s)", tc.role, w.Body.String())
+			// routeGuards maps each registered mux path to the (object, action) that gates it.
+			routeGuards := map[string][2]string{
+				"/people":        {"person", "read"},
+				"/organizations": {"organization", "read"},
 			}
-			if !readAllowed && w.Code != http.StatusForbidden {
-				t.Errorf("mux must return 403 for role %q without person/read, got %d", tc.role, w.Code)
+			g := routeGuards[tc.path]
+			routeAllowed := userCanDo(ctx, db, wsID, userID, g[0], g[1])
+			if routeAllowed && w.Code == http.StatusForbidden {
+				t.Errorf("mux returned 403 but %s/%s is allowed for role %q (body: %s)", g[0], g[1], tc.role, w.Body.String())
+			}
+			if !routeAllowed && w.Code != http.StatusForbidden {
+				t.Errorf("mux must return 403 for role %q without %s/%s, got %d", tc.role, g[0], g[1], w.Code)
 			}
 		})
 	}

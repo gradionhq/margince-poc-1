@@ -129,6 +129,10 @@ const ObjPerson = "person"
 // admin-perms seed and the /deals route wiring.
 const ObjDeal = "deal"
 
+// ObjOrganization is the canonical RBAC object name for organizations, shared
+// by the /organizations route registration and its RBAC checks.
+const ObjOrganization = "organization"
+
 // ObjPipeline is the canonical RBAC object name for pipelines, shared by the
 // admin-perms seed and the /pipelines route wiring.
 const ObjPipeline = "pipeline"
