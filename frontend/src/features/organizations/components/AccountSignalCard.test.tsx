@@ -22,16 +22,27 @@ describe("AccountSignalCard", () => {
           org={{
             ...baseOrg,
             deals: [
-              { id: "d1", workspace_id: "w1", name: "Renewal", pipeline_id: "p1", stage_id: "s1", status: "open", stalled: true, source: "manual", captured_by: "human:u1", created_at: "", updated_at: "" },
+              {
+                id: "d1",
+                workspace_id: "w1",
+                name: "Renewal",
+                pipeline_id: "p1",
+                stage_id: "s1",
+                status: "open",
+                stalled: true,
+                source: "manual",
+                captured_by: "human:u1",
+                created_at: "",
+                updated_at: "",
+              },
             ],
           }}
         />
       </MemoryRouter>,
     );
-    expect(screen.getByRole("link", { name: /open the deal/i })).toHaveAttribute(
-      "href",
-      "/deals/d1",
-    );
+    expect(
+      screen.getByRole("link", { name: /open the deal/i }),
+    ).toHaveAttribute("href", "/deals/d1");
   });
 
   it("omits the stalled sub-line entirely when nothing is grounded (STATE-5)", () => {
@@ -40,6 +51,8 @@ describe("AccountSignalCard", () => {
         <AccountSignalCard org={{ ...baseOrg, deals: [] }} />
       </MemoryRouter>,
     );
-    expect(screen.queryByRole("link", { name: /open the deal/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /open the deal/i }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -16,7 +16,9 @@ export function AccountSignalCard({ org }: { org: Organization }) {
           </Link>
         </p>
       ) : (
-        <p className="mt-gf-sm text-gf-body text-gf-muted">No account signal to flag right now.</p>
+        <p className="mt-gf-sm text-gf-body text-gf-muted">
+          No account signal to flag right now.
+        </p>
       )}
     </div>
   );

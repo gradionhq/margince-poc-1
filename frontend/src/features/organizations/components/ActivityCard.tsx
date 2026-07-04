@@ -25,7 +25,9 @@ export function ActivityCard({
         <ul className="mt-gf-sm flex flex-col gap-gf-sm">
           {activities.map((a) => (
             <li key={a.id} className="flex items-center justify-between">
-              <span className="text-gf-body text-gf-primary">{a.subject ?? a.kind}</span>
+              <span className="text-gf-body text-gf-primary">
+                {a.subject ?? a.kind}
+              </span>
               <SourceChip source={source} capturedBy={capturedBy} />
             </li>
           ))}

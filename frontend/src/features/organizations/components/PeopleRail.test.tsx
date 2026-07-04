@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
-import type { Organization, Relationship } from "../../../lib/api-client/generated/index.js";
+import type {
+  Organization,
+  Relationship,
+} from "../../../lib/api-client/generated/index.js";
 import { PeopleRail } from "./PeopleRail.js";
 
 const org: Organization = {
@@ -12,9 +15,34 @@ const org: Organization = {
   captured_by: "human:u1",
   created_at: "",
   updated_at: "",
-  deals: [{ id: "d1", workspace_id: "w1", name: "Deal", pipeline_id: "p1", stage_id: "s1", status: "open", source: "manual", captured_by: "human:u1", created_at: "", updated_at: "" }],
+  deals: [
+    {
+      id: "d1",
+      workspace_id: "w1",
+      name: "Deal",
+      pipeline_id: "p1",
+      stage_id: "s1",
+      status: "open",
+      source: "manual",
+      captured_by: "human:u1",
+      created_at: "",
+      updated_at: "",
+    },
+  ],
   relationships: [
-    { id: "r1", workspace_id: "w1", kind: "deal_stakeholder", person_id: "p1", deal_id: "d1", role: "champion", is_current_primary: false, source: "manual", captured_by: "human:u1", created_at: "", updated_at: "" } as Relationship,
+    {
+      id: "r1",
+      workspace_id: "w1",
+      kind: "deal_stakeholder",
+      person_id: "p1",
+      deal_id: "d1",
+      role: "champion",
+      is_current_primary: false,
+      source: "manual",
+      captured_by: "human:u1",
+      created_at: "",
+      updated_at: "",
+    } as Relationship,
   ],
 };
 
@@ -31,14 +59,25 @@ describe("PeopleRail", () => {
                 id: "p1",
                 full_name: "Jordan Ellis",
                 title: "VP Sales",
-                strength: { score: 91, bucket: "strong", recency: 0, frequency: 0, reciprocity: 0 },
+                strength: {
+                  score: 91,
+                  bucket: "strong",
+                  recency: 0,
+                  frequency: 0,
+                  reciprocity: 0,
+                },
               } as never,
               isLoading: false,
               isError: false,
             },
             {
               id: "p2",
-              data: { id: "p2", full_name: "Sam Lowe", title: null, strength: null } as never,
+              data: {
+                id: "p2",
+                full_name: "Sam Lowe",
+                title: null,
+                strength: null,
+              } as never,
               isLoading: false,
               isError: false,
             },

@@ -1,5 +1,8 @@
 import { Link } from "react-router-dom";
-import type { Organization, Person } from "../../../lib/api-client/generated/index.js";
+import type {
+  Organization,
+  Person,
+} from "../../../lib/api-client/generated/index.js";
 import { SectionHeader } from "../../../shared/ui/forge.js";
 import { isChampion } from "../api/orgSelectors.js";
 import { OrgLogo } from "./OrgLogo.js";
@@ -25,7 +28,9 @@ export function PeopleRail({
     <div className="p-gf-lg rounded-lg border border-gf-subtle bg-gf-card">
       <SectionHeader label="People" />
       {contacts.length === 0 && (
-        <p className="mt-gf-sm text-gf-body text-gf-muted">No known contacts yet.</p>
+        <p className="mt-gf-sm text-gf-body text-gf-muted">
+          No known contacts yet.
+        </p>
       )}
       <ul className="mt-gf-sm flex flex-col gap-gf-sm">
         {contacts.map((c) => {
@@ -61,13 +66,19 @@ export function PeopleRail({
                     {person.full_name}
                   </p>
                   {person.title && (
-                    <p className="text-gf-caption text-gf-secondary">{person.title}</p>
+                    <p className="text-gf-caption text-gf-secondary">
+                      {person.title}
+                    </p>
                   )}
                 </div>
                 {champion ? (
-                  <span className="text-gf-caption text-gf-accent font-medium">Champion</span>
+                  <span className="text-gf-caption text-gf-accent font-medium">
+                    Champion
+                  </span>
                 ) : (
-                  <span className="text-gf-caption text-gf-muted">Stakeholder</span>
+                  <span className="text-gf-caption text-gf-muted">
+                    Stakeholder
+                  </span>
                 )}
                 <span className="text-gf-caption text-gf-secondary">
                   {score != null ? `${score}/100` : "no signal yet"}

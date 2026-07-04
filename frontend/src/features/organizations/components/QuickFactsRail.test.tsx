@@ -1,6 +1,5 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { Organization } from "../../../lib/api-client/generated/index.js";
 import { QuickFactsRail } from "./QuickFactsRail.js";
 
 describe("QuickFactsRail", () => {
@@ -19,7 +18,20 @@ describe("QuickFactsRail", () => {
           created_at: "2026-01-01T00:00:00Z",
           updated_at: "2026-06-01T00:00:00Z",
           deals: [
-            { id: "d1", workspace_id: "w1", name: "Won deal", pipeline_id: "p1", stage_id: "s1", status: "won", amount_minor: 100_000, currency: "EUR", source: "manual", captured_by: "human:u1", created_at: "", updated_at: "" },
+            {
+              id: "d1",
+              workspace_id: "w1",
+              name: "Won deal",
+              pipeline_id: "p1",
+              stage_id: "s1",
+              status: "won",
+              amount_minor: 100_000,
+              currency: "EUR",
+              source: "manual",
+              captured_by: "human:u1",
+              created_at: "",
+              updated_at: "",
+            },
           ],
         }}
       />,

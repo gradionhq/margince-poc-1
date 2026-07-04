@@ -6,7 +6,14 @@ describe("ActivityCard", () => {
   it("tags each row with a SourceChip and shows the fixed footer", () => {
     render(
       <ActivityCard
-        activities={[{ id: "a1", kind: "email", subject: "Intro call", occurred_at: "2026-06-01T00:00:00Z" }]}
+        activities={[
+          {
+            id: "a1",
+            kind: "email",
+            subject: "Intro call",
+            occurred_at: "2026-06-01T00:00:00Z",
+          },
+        ]}
         source="email:gmail"
         capturedBy="connector:gmail"
       />,
@@ -19,7 +26,9 @@ describe("ActivityCard", () => {
   });
 
   it("renders an honest empty state with no activities", () => {
-    render(<ActivityCard activities={[]} source="manual" capturedBy="human:u1" />);
+    render(
+      <ActivityCard activities={[]} source="manual" capturedBy="human:u1" />,
+    );
     expect(screen.getByText(/no activity yet/i)).toBeInTheDocument();
   });
 });

@@ -17,7 +17,6 @@ beforeEach(() => {
 import { apiClient } from "../../../lib/api-client/client.js";
 import {
   useOrganization,
-  useOrganizations,
   useOrgContacts,
   useOrgPartner,
   useSourcedDeals,
@@ -84,7 +83,7 @@ describe("useOrgPartner (STATE-1 on 404, never STATE-3)", () => {
 describe("useOrgContacts (bounded N+1)", () => {
   it("fires one getPerson call per id, in parallel", async () => {
     (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation(
-      (path: string, opts: { params: { path: { id: string } } }) =>
+      (_path: string, opts: { params: { path: { id: string } } }) =>
         Promise.resolve({
           data: {
             id: opts.params.path.id,
