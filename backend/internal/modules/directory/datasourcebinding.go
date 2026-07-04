@@ -27,7 +27,7 @@ type orgStore interface {
 	Create(ctx context.Context, o Organization) (Organization, error)
 	Get(ctx context.Context, id, workspaceID string) (Organization, error)
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (Organization, error)
-	List(ctx context.Context, workspaceID, cursor string, limit int) ([]Organization, string, error)
+	List(ctx context.Context, workspaceID, cursor string, limit int, sort string) ([]Organization, string, error)
 }
 
 type dealStore interface {
@@ -268,7 +268,7 @@ func (p *DatasourceProvider) Search(ctx context.Context, query datasource.Search
 			records = append(records, item)
 		}
 	case datasource.EntityOrganization:
-		list, _, err := p.orgs.List(ctx, p.workspaceID, "", limit)
+		list, _, err := p.orgs.List(ctx, p.workspaceID, "", limit, "")
 		if err != nil {
 			return datasource.SearchResult{}, err
 		}

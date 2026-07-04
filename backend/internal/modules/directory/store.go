@@ -207,7 +207,10 @@ func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (Person, 
 		if err != nil {
 			return err
 		}
-		return s.attachStrength(ctx, tx, workspaceID, []*Person{&p})
+		if err := s.attachStrength(ctx, tx, workspaceID, []*Person{&p}); err != nil {
+			return err
+		}
+		return s.attachLastActivity(ctx, tx, workspaceID, []*Person{&p})
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return p, errs.ErrNotFound
@@ -276,7 +279,10 @@ func (s *PersonStore) listByID(ctx context.Context, workspaceID, cursor string, 
 		for i := range out {
 			ptrs[i] = &out[i]
 		}
-		return s.attachStrength(ctx, tx, workspaceID, ptrs)
+		if err := s.attachStrength(ctx, tx, workspaceID, ptrs); err != nil {
+			return err
+		}
+		return s.attachLastActivity(ctx, tx, workspaceID, ptrs)
 	})
 	if err != nil {
 		return nil, "", err
