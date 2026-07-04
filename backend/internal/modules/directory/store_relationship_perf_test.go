@@ -33,7 +33,7 @@ func TestRelationshipList_OrgEmployment_P95AndExplain(t *testing.T) {
 	ps := NewPersonStore(db)
 	s := NewRelationshipStore(db)
 	for i := 0; i < 50; i++ {
-		p, err := ps.Create(ctx, Person{WorkspaceID: wsRelPerf, FullName: "Perf Person " + uniq(), Source: p0.Source, CapturedBy: p0.CapturedBy})
+		p, err := ps.Create(ctx, Person{WorkspaceID: wsRelPerf, FullName: "Perf Person " + uniq(), Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 		if err != nil {
 			t.Fatalf("seed person %d: %v", i, err)
 		}
@@ -144,7 +144,7 @@ func TestRelationshipList_DealStakeholders_P95AndExplain(t *testing.T) {
 	s := NewRelationshipStore(db)
 	roles := []string{"champion", "economic_buyer", "blocker", "influencer", "user"}
 	for i := 0; i < 50; i++ {
-		p, err := ps.Create(ctx, Person{WorkspaceID: wsRelPerf, FullName: "Stakeholder " + uniq(), Source: p0.Source, CapturedBy: p0.CapturedBy})
+		p, err := ps.Create(ctx, Person{WorkspaceID: wsRelPerf, FullName: "Stakeholder " + uniq(), Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 		if err != nil {
 			t.Fatalf("seed person %d: %v", i, err)
 		}

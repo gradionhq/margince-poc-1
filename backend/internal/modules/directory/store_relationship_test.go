@@ -46,7 +46,7 @@ func seedRelPersonOrg(t *testing.T, db *sql.DB) (personID, orgID string) {
 		FullName:    "Rel Person " + ids.New(),
 		Source:      p0.Source,
 		CapturedBy:  p0.CapturedBy,
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("seed person: %v", err)
 	}
