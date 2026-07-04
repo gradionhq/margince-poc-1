@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 // jsdom does not implement the native <dialog> modal methods that Forge's Modal/ConfirmDialog
@@ -100,6 +100,10 @@ describe("MergePersonDialog", () => {
     await user.type(screen.getByLabelText(/target person id/i), "p2");
     await user.click(screen.getByRole("button", { name: /continue/i }));
     await user.click(screen.getByRole("button", { name: /^confirm$/i }));
-    expect(screen.getByText(/lost the race/i)).toBeInTheDocument();
+    // The failure message must render inside the dialog's own top layer (the
+    // native <dialog> element), not as a base-document sibling — otherwise a
+    // real browser's ::backdrop hides it behind the still-open modal.
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/lost the race/i)).toBeInTheDocument();
   });
 });

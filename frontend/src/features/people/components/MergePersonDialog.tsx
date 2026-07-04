@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, ConfirmDialog, Modal } from "../../../shared/ui/forge.js";
+import { Button, Modal } from "../../../shared/ui/forge.js";
 import { useMergePerson } from "../api/person.js";
 
 // mergePerson's 409 uses the generic Conflict schema, not a dedicated VersionConflict — this
@@ -94,22 +94,48 @@ export function MergePersonDialog({
 
   const failure = error ? mergeErrorMessage(error) : undefined;
 
+  // ConfirmDialog only takes a plain `description` string with no slot for
+  // extra content, so the failure banner is rendered via Modal directly
+  // (mirroring ConfirmDialog's own body/footer structure) rather than as a
+  // ConfirmDialog + sibling <p>. Modal opens a native <dialog> via
+  // showModal(), which puts it in the browser's top layer with its own
+  // ::backdrop — any failure message rendered as a document-level sibling of
+  // ConfirmDialog would sit behind that backdrop and never be visible to the
+  // user. Rendering it as a child of Modal keeps it inside the dialog's own
+  // top-layer content, so it's actually visible on failure (PO-AC-M3/M4/M5).
   return (
-    <>
-      <ConfirmDialog
-        open={open}
-        onClose={handleClose}
-        onConfirm={() => mutate({ targetId }, { onSuccess: handleClose })}
-        title="Confirm merge"
-        description="The target record survives; this record is archived. On any primary-email/primary-phone/current-employer conflict, the survivor's values win — this record's conflicting primary rows are demoted to non-primary."
-        confirmLabel="Confirm"
-        isLoading={isPending}
-      />
-      {failure && (
-        <p role="alert" className="text-gf-body text-gf-status-danger px-gf-xl">
-          {failure.message}
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title="Confirm merge"
+      width="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => mutate({ targetId }, { onSuccess: handleClose })}
+            loading={isPending}
+          >
+            Confirm
+          </Button>
+        </>
+      }
+    >
+      <div className="px-gf-xl py-gf-lg flex flex-col gap-gf-md">
+        <p className="text-gf-body text-gf-secondary">
+          The target record survives; this record is archived. On any
+          primary-email/primary-phone/current-employer conflict, the survivor's
+          values win — this record's conflicting primary rows are demoted to
+          non-primary.
         </p>
-      )}
-    </>
+        {failure && (
+          <p role="alert" className="text-gf-body text-gf-status-danger">
+            {failure.message}
+          </p>
+        )}
+      </div>
+    </Modal>
   );
 }
