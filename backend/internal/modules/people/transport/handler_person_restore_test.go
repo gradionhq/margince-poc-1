@@ -128,3 +128,72 @@ func TestPersonHandler_Restore_RefusesLiveRecord(t *testing.T) {
 		t.Fatalf("code=%v want not_archived", first["code"])
 	}
 }
+
+func TestPersonHandler_Restore_RefusesMergedRecord(t *testing.T) {
+	db := openPersonHandlerRestoreTestDB(t)
+	store := directory.NewPersonStore(db)
+	h := NewPersonHandler(store)
+
+	seedWorkspace(t, db, personRestoreHandlerWS)
+	setRLS(t, db, personRestoreHandlerWS)
+
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: personRestoreHandlerWS, UserID: "human:test"})
+	survivor, err := store.Create(ctx, directory.Person{
+		WorkspaceID: personRestoreHandlerWS,
+		FullName:    "Survivor Person",
+		Source:      "test",
+		CapturedBy:  "human:test",
+	})
+	if err != nil {
+		t.Fatalf("create survivor person: %v", err)
+	}
+	merged, err := store.Create(ctx, directory.Person{
+		WorkspaceID: personRestoreHandlerWS,
+		FullName:    "Merged Handler Person",
+		Source:      "test",
+		CapturedBy:  "human:test",
+	})
+	if err != nil {
+		t.Fatalf("create merged person: %v", err)
+	}
+
+	if _, err := db.Exec(
+		`UPDATE person
+		 SET archived_at = now(), merged_into_id = $1::uuid
+		 WHERE id = $2::uuid AND workspace_id = $3::uuid`,
+		survivor.ID, merged.ID, personRestoreHandlerWS,
+	); err != nil {
+		t.Fatalf("seed merged person state: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/people/"+merged.ID+"/restore", bytes.NewReader(nil))
+	req = withRestoreWorkspace(req, personRestoreHandlerWS)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("POST /people/{id}/restore status=%d want 422, body=%s", w.Code, w.Body.String())
+	}
+	var problem map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&problem); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if problem["code"] != "validation_error" {
+		t.Fatalf("problem code=%v want validation_error", problem["code"])
+	}
+	details, ok := problem["details"].(map[string]any)
+	if !ok {
+		t.Fatalf("problem details missing: %v", problem)
+	}
+	errList, ok := details["errors"].([]any)
+	if !ok || len(errList) != 1 {
+		t.Fatalf("problem details.errors=%v want one entry", details["errors"])
+	}
+	first := errList[0].(map[string]any)
+	if first["field"] != "merged_into_id" {
+		t.Fatalf("field=%v want merged_into_id", first["field"])
+	}
+	if first["code"] != "merged_record" {
+		t.Fatalf("code=%v want merged_record", first["code"])
+	}
+}
