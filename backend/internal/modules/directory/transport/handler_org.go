@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -16,11 +17,16 @@ var orgSortAllowed = map[string]bool{
 
 // OrganizationHandler routes /organizations and /organizations/{id} requests
 // to the OrgStore.
-type OrganizationHandler struct{ store *directory.OrgStore }
+type OrganizationHandler struct {
+	store         *directory.OrgStore
+	relStore      *directory.RelationshipStore
+	dealStore     *directory.DealStore
+	activityStore *directory.ActivityStore
+}
 
 // NewOrganizationHandler returns an OrganizationHandler.
-func NewOrganizationHandler(store *directory.OrgStore) *OrganizationHandler {
-	return &OrganizationHandler{store: store}
+func NewOrganizationHandler(store *directory.OrgStore, relStore *directory.RelationshipStore, dealStore *directory.DealStore, activityStore *directory.ActivityStore) *OrganizationHandler {
+	return &OrganizationHandler{store: store, relStore: relStore, dealStore: dealStore, activityStore: activityStore}
 }
 
 func (h *OrganizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -118,7 +124,37 @@ func (h *OrganizationHandler) get(w http.ResponseWriter, r *http.Request, id str
 		jsonErr(w, err)
 		return
 	}
+	if err := h.assembleComposite(r.Context(), wsID, &o); err != nil {
+		jsonErr(w, err)
+		return
+	}
 	jsonOK(w, o)
+}
+
+// assembleComposite fans out to related stores for the organization-360 read.
+func (h *OrganizationHandler) assembleComposite(ctx context.Context, wsID string, o *directory.Organization) error {
+	rels, _, err := h.relStore.List(ctx, wsID, "", 50, directory.RelationshipListFilter{OrganizationID: o.ID})
+	if err != nil {
+		return err
+	}
+	o.Relationships = rels
+
+	deals, _, err := h.dealStore.ListFiltered(ctx, wsID, "", 50, directory.DealListFilter{OrganizationID: o.ID})
+	if err != nil {
+		return err
+	}
+	o.Deals = deals
+
+	acts, _, err := h.activityStore.List(ctx, wsID, "organization", o.ID, "", 50)
+	if err != nil {
+		return err
+	}
+	refs := make([]directory.ActivityRef, len(acts))
+	for i, a := range acts {
+		refs[i] = directory.ToActivityRef(a)
+	}
+	o.Activities = refs
+	return nil
 }
 
 func (h *OrganizationHandler) update(w http.ResponseWriter, r *http.Request, id string) {
