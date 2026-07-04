@@ -19,6 +19,7 @@ var (
 	ErrWinProbabilityOutOfRange  = errors.New("win_probability out of range")         // -> 422 (validation: 0-100)
 	ErrFXRateUnavailable         = errors.New("fx rate unavailable")                  // -> 422 (no stored rate for as-of lookup)
 	ErrSuppressed                = errors.New("suppressed")                           // -> 451 (GDPR erasure suppression)
+	ErrApprovalTokenInvalid      = errors.New("approval token invalid")               // -> 403 (expired, replayed, or mis-bound token — API-ERR-11)
 )
 
 // HTTPStatus maps a domain error to its HTTP status code — the single sentinel→status
@@ -35,7 +36,8 @@ func HTTPStatus(err error) int {
 		errors.Is(err, ErrVersionSkew):
 		return 409
 	case errors.Is(err, ErrScopeExceeded),
-		errors.Is(err, ErrForbidden):
+		errors.Is(err, ErrForbidden),
+		errors.Is(err, ErrApprovalTokenInvalid):
 		return 403
 	case errors.Is(err, ErrBudgetExceeded):
 		return 429
