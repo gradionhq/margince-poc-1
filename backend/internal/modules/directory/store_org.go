@@ -61,6 +61,7 @@ func (s *OrgStore) Create(ctx context.Context, o Organization) (Organization, er
 	}
 	o.Classification = classification
 	o.Domains = domains
+	var reviewFlag *DedupeReviewFlag
 	err := withWorkspaceTx(ctx, s.db, o.WorkspaceID, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO organization (id, workspace_id, name, website, classification, relevance,
@@ -75,6 +76,13 @@ func (s *OrgStore) Create(ctx context.Context, o Organization) (Organization, er
 		if err := insertOrgDomains(ctx, tx, o.WorkspaceID, o.ID, domains); err != nil {
 			return err
 		}
+		// PO-AC-19: the name-only fuzzy tier only runs once the exact-domain
+		// tier has already succeeded (no 409) — a non-blocking review-flag.
+		flag, err := s.fuzzyDedupe(ctx, tx, o.WorkspaceID, o.ID, o.DisplayName)
+		if err != nil {
+			return err
+		}
+		reviewFlag = flag
 		payload, _ := json.Marshal(map[string]any{fieldOrganizationID: o.ID})
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload)
@@ -92,7 +100,12 @@ func (s *OrgStore) Create(ctx context.Context, o Organization) (Organization, er
 	if err != nil {
 		return Organization{}, err
 	}
-	return s.Get(ctx, o.ID, o.WorkspaceID)
+	created, err := s.Get(ctx, o.ID, o.WorkspaceID)
+	if err != nil {
+		return Organization{}, err
+	}
+	created.ReviewFlag = reviewFlag
+	return created, nil
 }
 
 func insertOrgDomains(ctx context.Context, tx *sql.Tx, workspaceID, orgID string, domains []OrganizationDomain) error {
