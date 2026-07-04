@@ -4,7 +4,7 @@ import { RoleBadge } from "../../../shared/ui/RoleBadge.js";
 import { useAuthStore } from "../../identity/store/authStore.js";
 import { useOrganizations } from "../api/organizations.js";
 import { CompanyList } from "../components/CompanyList.js";
-import { useStrengthSort } from "../hooks/useStrengthSort.js";
+import { useStrengthSort } from "../../../shared/hooks/useStrengthSort.js";
 
 export function CompaniesPage() {
   const { sort, toggle } = useStrengthSort();

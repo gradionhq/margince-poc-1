@@ -6,7 +6,7 @@ import { useAuthStore } from "../../identity/store/authStore.js";
 import { usePeople } from "../api/people.js";
 import { PersonList } from "../components/PersonList.js";
 import { classifySource } from "../components/SourceChip.js";
-import { useStrengthSort } from "../hooks/useStrengthSort.js";
+import { useStrengthSort } from "../../../shared/hooks/useStrengthSort.js";
 
 export function PeoplePage() {
   const [q, setQ] = useState("");
