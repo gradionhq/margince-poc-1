@@ -189,6 +189,17 @@ func (s *DealStore) Update(ctx context.Context, id, workspaceID string, updates 
 		}
 	}
 
+	// Capture the previous partner_org_id before the row changes so a later
+	// partner reassignment can be audited with both sides of the diff.
+	_, partnerOrgIDProvided := updates["partner_org_id"]
+	var priorPartnerOrgID sql.NullString
+	if partnerOrgIDProvided {
+		if err := tx.QueryRowContext(ctx, `SELECT partner_org_id FROM deal WHERE id=$1::uuid AND workspace_id=$2::uuid`,
+			id, workspaceID).Scan(&priorPartnerOrgID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return Deal{}, err
+		}
+	}
+
 	newStatus, _ := updates["status"].(string)
 
 	// If closing (won/lost), freeze the FX rate against the deal's current currency.
@@ -207,9 +218,10 @@ func (s *DealStore) Update(ctx context.Context, id, workspaceID string, updates 
 		    fx_rate_date        = COALESCE($8, fx_rate_date),
 		    expected_close_date = COALESCE($9, expected_close_date),
 		    owner_id            = COALESCE($10::uuid, owner_id),
+		    partner_org_id      = COALESCE($11::uuid, partner_org_id),
 		    updated_at          = now()
 		WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL
-		  AND ($11 = 0 OR version = $11)`,
+		  AND ($12 = 0 OR version = $12)`,
 		id, workspaceID,
 		nullStr(updates, "name"),
 		nullStr(updates, "stage_id"),
@@ -219,6 +231,7 @@ func (s *DealStore) Update(ctx context.Context, id, workspaceID string, updates 
 		fxRateDate,
 		nullStr(updates, "expected_close_date"),
 		nullStr(updates, "owner_id"),
+		nullStr(updates, "partner_org_id"),
 		ifMatch)
 	if err != nil {
 		return Deal{}, err
@@ -238,6 +251,33 @@ func (s *DealStore) Update(ctx context.Context, id, workspaceID string, updates 
 			INSERT INTO deal_stage_history (workspace_id, deal_id, from_stage_id, to_stage_id, changed_by)
 			VALUES ($1::uuid, $2::uuid, NULLIF($3,'')::uuid, $4::uuid, $5)`,
 			workspaceID, id, fromStageID, *stageID, workspaceID)
+	}
+
+	// Only write the partner reassignment side effects when the supplied value
+	// actually changes. That keeps the audit/outbox noise aligned with the field.
+	if newPartnerOrgID := nullStr(updates, "partner_org_id"); partnerOrgIDProvided && newPartnerOrgID != nil {
+		prior := ""
+		if priorPartnerOrgID.Valid {
+			prior = priorPartnerOrgID.String
+		}
+		if prior != *newPartnerOrgID {
+			payload, _ := json.Marshal(map[string]any{"deal_id": id, "partner_org_id": *newPartnerOrgID})
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
+				workspaceID, "deal.partner_assigned", id, payload); err != nil {
+				return Deal{}, fmt.Errorf("deal update partner event: %w", err)
+			}
+			before := map[string]any{"partner_org_id": priorPartnerOrgID.String}
+			if !priorPartnerOrgID.Valid {
+				before = map[string]any{"partner_org_id": nil}
+			}
+			after := map[string]any{"partner_org_id": *newPartnerOrgID}
+			e := crmaudit.EntryFromPrincipal(ctx, "update", entityTypeDeal, &id, before, after)
+			e.WorkspaceID = workspaceID
+			if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+				return Deal{}, fmt.Errorf("deal update partner audit: %w", err)
+			}
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
