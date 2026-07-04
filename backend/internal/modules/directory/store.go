@@ -374,8 +374,6 @@ func (s *PersonStore) Archive(ctx context.Context, id, workspaceID string) (Pers
 }
 
 // getAny fetches a person by id regardless of archived_at status.
-//
-//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
 func (s *PersonStore) getAny(ctx context.Context, id, workspaceID string) (Person, error) {
 	var p Person
 	var socialRaw, addrRaw []byte

@@ -33,6 +33,7 @@ const (
 	codeValidation         = "validation_error"
 	codeStageNotInPipeline = "stage_not_in_pipeline"
 	fieldToStageID         = "to_stage_id"
+	codeRequired           = "required"
 )
 
 // stageSemanticReader is the full DealStore seam DealHandler uses — an
@@ -196,7 +197,7 @@ func (h *DealHandler) advance(w http.ResponseWriter, r *http.Request, id string)
 		LostReason *string `json:"lost_reason"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ToStageID == "" {
-		jsonValidationError(w, fieldToStageID+" is required.", []fieldError{{Field: fieldToStageID, Code: "required"}})
+		jsonValidationError(w, fieldToStageID+" is required.", []fieldError{{Field: fieldToStageID, Code: codeRequired}})
 		return
 	}
 
