@@ -145,6 +145,12 @@ const ObjStage = "stage"
 // shared by the /organizations/{id}/partner and /partners routes.
 const ObjPartner = "partner"
 
+// ObjRelationship is the canonical RBAC object name for the generic
+// employment/deal_stakeholder edge, shared by the /relationships route
+// wiring. GET /deals/{id}/stakeholders uses ObjDeal instead because it is a
+// deal-scoped read.
+const ObjRelationship = "relationship"
+
 // MethodToAction maps an HTTP method to the canonical RBAC action name.
 func MethodToAction(method string) string {
 	switch strings.ToUpper(method) {

@@ -1,9 +1,9 @@
 // Package transport holds the deal module's HTTP handler for /deals
 // (createDeal, updateDeal, listDeals — T11). Mirrors
 // modules/people/transport's package layout and its documented
-// minimal-duplication convention: small HTTP helpers below are deliberately
-// duplicated from people/transport rather than exported solely for this
-// handler's benefit.
+// minimal-duplication convention: the shared HTTP helpers in handler_http.go
+// are deliberately duplicated from people/transport rather than exported
+// solely for this handler's benefit.
 package transport
 
 import (
@@ -21,21 +21,11 @@ import (
 	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
-	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
 const (
-	fieldData              = "data"
-	fieldCode              = "code"
-	fieldStatus            = "status"
-	fieldDetails           = "details"
-	codeBadRequest         = "bad_request"
-	codeValidation         = "validation_error"
 	codeStageNotInPipeline = "stage_not_in_pipeline"
 	fieldToStageID         = "to_stage_id"
-	codeRequired           = "required"
-	fieldCapturedBy        = "captured_by"
-	fieldSource            = "source"
 	fieldExistingID        = "existing_id"
 )
 
@@ -52,17 +42,23 @@ type stageSemanticReader interface {
 	ListFiltered(ctx context.Context, workspaceID, cursor string, limit int, filter directory.DealListFilter) ([]directory.Deal, string, error)
 }
 
-// DealHandler routes /deals and /deals/{id} requests to the DealStore.
-type DealHandler struct {
-	store stageSemanticReader
-	db    *sql.DB // used only for VerifyAndConsume on the 🟡 advance path
+type dealStakeholderReader interface {
+	List(ctx context.Context, workspaceID, cursor string, limit int, filter directory.RelationshipListFilter) ([]directory.Relationship, string, error)
 }
 
-// NewDealHandler returns a DealHandler. db is the raw pool the approval-token
-// consumption seam writes through — kept separate from store so store tx
-// boundaries are untouched.
-func NewDealHandler(store *directory.DealStore, db *sql.DB) *DealHandler {
-	return &DealHandler{store: store, db: db}
+// DealHandler routes /deals, /deals/{id}, /deals/{id}/advance, and
+// /deals/{id}/stakeholders requests to the DealStore and relationship store.
+type DealHandler struct {
+	store    stageSemanticReader
+	relStore dealStakeholderReader
+	db       *sql.DB // used only for VerifyAndConsume on the 🟡 advance path
+}
+
+// NewDealHandler returns a DealHandler. relStore backs listDealStakeholders;
+// db is the raw pool the approval-token consumption seam writes through —
+// kept separate from store so store tx boundaries are untouched.
+func NewDealHandler(store *directory.DealStore, relStore *directory.RelationshipStore, db *sql.DB) *DealHandler {
+	return &DealHandler{store: store, relStore: relStore, db: db}
 }
 
 // ServeHTTP dispatches on method + path suffix. Only POST /deals is
@@ -72,6 +68,11 @@ func (h *DealHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/advance") {
 		id := pathID(strings.TrimSuffix(r.URL.Path, "/advance"), "/deals")
 		h.advance(w, r, id)
+		return
+	}
+	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/stakeholders") {
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/stakeholders"), "/deals")
+		h.stakeholders(w, r, id)
 		return
 	}
 	id := pathID(r.URL.Path, "/deals")
@@ -346,7 +347,7 @@ func (h *DealHandler) list(w http.ResponseWriter, r *http.Request) {
 		Sort:             sort,
 	}
 
-	items, next, err := h.store.ListFiltered(r.Context(), wsID, q.Get("cursor"), queryLimit(r, 20), filter)
+	items, next, err := h.store.ListFiltered(r.Context(), wsID, q.Get("cursor"), queryLimit(r), filter)
 	if err != nil {
 		jsonErr(w, err)
 		return
@@ -354,135 +355,28 @@ func (h *DealHandler) list(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, pageResponse(items, next))
 }
 
-// ---------------------------------------------------------------------------
-// shared HTTP helpers (unexported, used across handler files in this package)
-// ---------------------------------------------------------------------------
-
-func pathID(path, prefix string) string {
-	rest := strings.TrimPrefix(path, prefix)
-	rest = strings.TrimPrefix(rest, "/")
-	if i := strings.Index(rest, "/"); i >= 0 {
-		rest = rest[:i]
+// stakeholders serves GET /deals/{id}/stakeholders: the live
+// deal_stakeholder rows for the deal, backed by idx_rel_deal_stakeholders.
+func (h *DealHandler) stakeholders(w http.ResponseWriter, r *http.Request, id string) {
+	wsID, ok := requireWorkspace(w, r)
+	if !ok {
+		return
 	}
-	return rest
-}
-
-func workspaceID(r *http.Request) string {
-	p, _ := crmctx.From(r.Context())
-	return p.TenantID
-}
-
-func requireWorkspace(w http.ResponseWriter, r *http.Request) (string, bool) {
-	id := workspaceID(r)
-	if id == "" {
-		jsonProblem(w, http.StatusBadRequest, "missing_workspace")
-		return "", false
-	}
-	return id, true
-}
-
-func queryLimit(r *http.Request, def int) int {
-	if s := r.URL.Query().Get("limit"); s != "" {
-		if n, err := strconv.Atoi(s); err == nil {
-			return n
+	if _, err := h.store.Get(r.Context(), id, wsID); err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			jsonProblem(w, http.StatusNotFound, "not_found")
+			return
 		}
+		jsonErr(w, err)
+		return
 	}
-	return def
-}
-
-// parseIfMatch mirrors people/transport's helper of the same name exactly
-// (see that file's doc comment for the three-way contract).
-func parseIfMatch(r *http.Request) (version int64, malformed bool) {
-	s := r.Header.Get("If-Match")
-	if s == "" {
-		return 0, false
-	}
-	v, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		return 0, true
-	}
-	return v, false
-}
-
-func jsonOK(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(v) //nolint:errcheck,gosec
-}
-
-// jsonCreatedAt writes 201 with a Location header pointing at the created
-// resource, per createDeal's contract response.
-func jsonCreatedAt(w http.ResponseWriter, v any, location string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Location", location)
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(v) //nolint:errcheck,gosec
-}
-
-type fieldError struct {
-	Field string `json:"field"`
-	Code  string `json:"code"`
-}
-
-// jsonValidationError writes a 422 problem+json body with the field-level
-// details.errors shape the contract's ValidationError schema declares.
-func jsonValidationError(w http.ResponseWriter, detail string, errs []fieldError) {
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(http.StatusUnprocessableEntity)
-	json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
-		fieldStatus:  http.StatusUnprocessableEntity,
-		fieldCode:    codeValidation,
-		"detail":     detail,
-		fieldDetails: map[string]any{"errors": errs},
+	items, next, err := h.relStore.List(r.Context(), wsID, "", 100, directory.RelationshipListFilter{
+		DealID: id,
+		Kind:   "deal_stakeholder",
 	})
-}
-
-func jsonErr(w http.ResponseWriter, err error) {
-	status := errs.HTTPStatus(err)
-	jsonProblem(w, status, problemCode(status))
-}
-
-func problemCode(status int) string {
-	switch status {
-	case http.StatusNotFound:
-		return "not_found"
-	case http.StatusConflict:
-		return "conflict"
-	case http.StatusForbidden:
-		return "forbidden"
-	case http.StatusTooManyRequests:
-		return "budget_exceeded"
-	case http.StatusUnprocessableEntity:
-		return codeValidation
-	case http.StatusUnavailableForLegalReasons:
-		return "suppressed"
-	case http.StatusBadRequest:
-		return codeBadRequest
-	default:
-		return "internal_error"
+	if err != nil {
+		jsonErr(w, err)
+		return
 	}
-}
-
-func jsonProblem(w http.ResponseWriter, status int, code string) {
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]any{fieldStatus: status, fieldCode: code}) //nolint:errcheck,gosec
-}
-
-func pageResponse(data any, nextCursor string) map[string]any {
-	var next any
-	hasMore := nextCursor != ""
-	if hasMore {
-		next = nextCursor
-	}
-	return map[string]any{
-		fieldData: data,
-		"page": map[string]any{
-			"next_cursor": next,
-			"has_more":    hasMore,
-		},
-	}
-}
-
-func provenanceOf(source, capturedBy string) prov.Provenance {
-	return prov.Provenance{Source: source, CapturedBy: capturedBy}
+	jsonOK(w, pageResponse(items, next))
 }

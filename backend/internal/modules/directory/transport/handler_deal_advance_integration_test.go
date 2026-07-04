@@ -119,7 +119,7 @@ func postAdvance(t *testing.T, h *DealHandler, dealID string, body map[string]an
 
 func TestAdvanceDeal_UAT1_OpenToOpen_NoTokenNeeded(t *testing.T) {
 	db := openDealTestDB(t)
-	h := NewDealHandler(crmcore.NewDealStore(db), db)
+	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), db)
 	pipelineID, openA, openB, _, _ := seedAdvHandlerFixtures(t, db, "uat1")
 	created := createAdvHandlerDeal(t, h, pipelineID, openA)
 	dealID := created["id"].(string)
@@ -141,7 +141,7 @@ func TestAdvanceDeal_UAT1_OpenToOpen_NoTokenNeeded(t *testing.T) {
 
 func TestAdvanceDeal_UAT2_AgentWithoutToken_403ApprovalRequired(t *testing.T) {
 	db := openDealTestDB(t)
-	h := NewDealHandler(crmcore.NewDealStore(db), db)
+	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), db)
 	pipelineID, openA, _, won, _ := seedAdvHandlerFixtures(t, db, "uat2")
 	created := createAdvHandlerDeal(t, h, pipelineID, openA)
 	dealID := created["id"].(string)
@@ -168,7 +168,7 @@ func TestAdvanceDeal_UAT2_AgentWithoutToken_403ApprovalRequired(t *testing.T) {
 func TestAdvanceDeal_UAT3_AgentWithValidToken_SucceedsThenReplayRejected(t *testing.T) {
 	t.Setenv("APPROVAL_TOKEN_SIGNING_SECRET", "handler-it-secret")
 	db := openDealTestDB(t)
-	h := NewDealHandler(crmcore.NewDealStore(db), db)
+	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), db)
 	pipelineID, openA, _, won, _ := seedAdvHandlerFixtures(t, db, "uat3")
 	created := createAdvHandlerDeal(t, h, pipelineID, openA)
 	dealID := created["id"].(string)
@@ -210,7 +210,7 @@ func TestAdvanceDeal_UAT3_AgentWithValidToken_SucceedsThenReplayRejected(t *test
 
 func TestAdvanceDeal_UAT4_LostWithoutReason_422(t *testing.T) {
 	db := openDealTestDB(t)
-	h := NewDealHandler(crmcore.NewDealStore(db), db)
+	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), db)
 	pipelineID, openA, _, _, lost := seedAdvHandlerFixtures(t, db, "uat4")
 	created := createAdvHandlerDeal(t, h, pipelineID, openA)
 	dealID := created["id"].(string)
@@ -226,7 +226,7 @@ func TestAdvanceDeal_UAT4_LostWithoutReason_422(t *testing.T) {
 func TestAdvanceDeal_UAT5_Reopen_AgentGatedThenClearsOnSuccess(t *testing.T) {
 	t.Setenv("APPROVAL_TOKEN_SIGNING_SECRET", "handler-it-secret")
 	db := openDealTestDB(t)
-	h := NewDealHandler(crmcore.NewDealStore(db), db)
+	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), db)
 	pipelineID, openA, _, _, lost := seedAdvHandlerFixtures(t, db, "uat5")
 	created := createAdvHandlerDeal(t, h, pipelineID, openA)
 	dealID := created["id"].(string)
@@ -268,7 +268,7 @@ func TestAdvanceDeal_UAT5_Reopen_AgentGatedThenClearsOnSuccess(t *testing.T) {
 
 func TestAdvanceDeal_UAT6_RenamedStageSemanticStillGoverned(t *testing.T) {
 	db := openDealTestDB(t)
-	h := NewDealHandler(crmcore.NewDealStore(db), db)
+	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), db)
 	pipelineID, openA, _, won, _ := seedAdvHandlerFixtures(t, db, "uat6")
 	created := createAdvHandlerDeal(t, h, pipelineID, openA)
 	dealID := created["id"].(string)

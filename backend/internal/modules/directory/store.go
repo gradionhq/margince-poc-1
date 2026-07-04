@@ -135,6 +135,17 @@ func nullTime(m map[string]any, key string) *time.Time {
 	return nil
 }
 
+// nullBool reads a bool out of an updates map, returning nil (binds SQL NULL,
+// leaving a COALESCE target untouched) when the key is absent or not a bool.
+func nullBool(m map[string]any, key string) any {
+	if v, ok := m[key]; ok {
+		if b, ok := v.(bool); ok {
+			return b
+		}
+	}
+	return nil
+}
+
 // boolVal safely dereferences a *bool, returning false for nil.
 func boolVal(b *bool) bool {
 	if b == nil {
