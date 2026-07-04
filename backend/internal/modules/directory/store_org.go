@@ -3,9 +3,13 @@ package crmcore
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
+	"strings"
 
+	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	"github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 )
@@ -25,7 +29,20 @@ func NewOrgStore(db *sql.DB) *OrgStore {
 	return &OrgStore{db: db, personStore: NewPersonStore(db)}
 }
 
-// Create inserts an organization in one workspace-scoped tx.
+// ErrDuplicateDomain is returned by OrgStore.Create when a normalized domain in
+// the request already maps to another live (archived_at IS NULL)
+// organization_domain row in the same workspace. Mirrors ErrLeadEmailDuplicate
+// (store_lead.go) - a request-scoped collision, not a fixed Tier-0 sentinel.
+type ErrDuplicateDomain struct {
+	ExistingID string
+	Field      string
+}
+
+func (e *ErrDuplicateDomain) Error() string {
+	return fmt.Sprintf("duplicate domain: existing_id=%s field=%s", e.ExistingID, e.Field)
+}
+
+// Create inserts an organization and its domains in one workspace-scoped tx.
 func (s *OrgStore) Create(ctx context.Context, o Organization) (Organization, error) {
 	if err := requireProvenance(o.Source, o.CapturedBy); err != nil {
 		return Organization{}, err
@@ -33,15 +50,77 @@ func (s *OrgStore) Create(ctx context.Context, o Organization) (Organization, er
 	o.ID = ids.New()
 	social := marshalJSON(o.Social)
 	address := marshalJSON(o.Address)
+
+	classification := o.Classification
+	if classification == nil {
+		def := "prospect"
+		classification = &def
+	}
+
+	domains := make([]OrganizationDomain, len(o.Domains))
+	copy(domains, o.Domains)
+	hasPrimary := false
+	for i := range domains {
+		domains[i].Domain = strings.ToLower(strings.TrimSpace(domains[i].Domain))
+		if domains[i].IsPrimary {
+			hasPrimary = true
+		}
+	}
+	if len(domains) > 0 && !hasPrimary {
+		domains[0].IsPrimary = true
+	}
+	o.Classification = classification
+	o.Domains = domains
+
 	err := withWorkspaceTx(ctx, s.db, o.WorkspaceID, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO organization (id, workspace_id, name, website, classification, relevance,
 			    owner_id, social, address, source, captured_by, version)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,1)`,
-			o.ID, o.WorkspaceID, o.DisplayName, o.Website, o.Classification, o.Relevance,
+			o.ID, o.WorkspaceID, o.DisplayName, o.Website, classification, o.Relevance,
 			o.OwnerID, social, address,
 			o.Source, o.CapturedBy)
-		return err
+		if err != nil {
+			return err
+		}
+
+		for i, d := range domains {
+			var existingID string
+			scanErr := tx.QueryRowContext(ctx, `
+				SELECT organization_id FROM organization_domain
+				WHERE workspace_id=$1::uuid AND domain=$2 AND archived_at IS NULL`,
+				o.WorkspaceID, d.Domain).Scan(&existingID)
+			if scanErr == nil {
+				return &ErrDuplicateDomain{
+					ExistingID: existingID,
+					Field:      fmt.Sprintf("domains[%d].domain", i),
+				}
+			}
+			if !errors.Is(scanErr, sql.ErrNoRows) {
+				return scanErr
+			}
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO organization_domain (workspace_id, organization_id, domain, is_primary)
+				VALUES ($1,$2,$3,$4)`,
+				o.WorkspaceID, o.ID, d.Domain, d.IsPrimary); err != nil {
+				return fmt.Errorf("org create domain: %w", err)
+			}
+		}
+
+		payload, _ := json.Marshal(map[string]any{"organization_id": o.ID})
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload)
+			 VALUES ($1,$2,$3::uuid,$4)`,
+			o.WorkspaceID, "organization.created", o.ID, payload); err != nil {
+			return fmt.Errorf("org create event: %w", err)
+		}
+
+		e := crmaudit.EntryFromPrincipal(ctx, "create", entityTypeOrganization, &o.ID, nil, o)
+		e.WorkspaceID = o.WorkspaceID
+		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+			return fmt.Errorf("org create audit: %w", err)
+		}
+		return nil
 	})
 	if err != nil {
 		return Organization{}, err
@@ -56,7 +135,7 @@ func (s *OrgStore) Get(ctx context.Context, id, workspaceID string) (Organizatio
 	var o Organization
 	var socialRaw, addrRaw []byte
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `
+		err := tx.QueryRowContext(ctx, `
 			SELECT id, workspace_id, name, website, classification, relevance,
 			       owner_id, social, address, parent_org_id, merged_into_id,
 			       version, source, captured_by, created_at, updated_at, archived_at
@@ -67,6 +146,13 @@ func (s *OrgStore) Get(ctx context.Context, id, workspaceID string) (Organizatio
 			&o.Version, &o.Source, &o.CapturedBy,
 			&o.CreatedAt, &o.UpdatedAt, &o.ArchivedAt,
 		)
+		if err != nil {
+			return err
+		}
+		if err := attachOrgDomains(ctx, tx, workspaceID, &o); err != nil {
+			return err
+		}
+		return nil
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return o, errs.ErrNotFound
@@ -287,7 +373,7 @@ func (s *OrgStore) getAny(ctx context.Context, id, workspaceID string) (Organiza
 	var o Organization
 	var socialRaw, addrRaw []byte
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `
+		err := tx.QueryRowContext(ctx, `
 			SELECT id, workspace_id, name, website, classification, relevance,
 			       owner_id, social, address, parent_org_id, merged_into_id,
 			       version, source, captured_by, created_at, updated_at, archived_at
@@ -298,6 +384,13 @@ func (s *OrgStore) getAny(ctx context.Context, id, workspaceID string) (Organiza
 			&o.Version, &o.Source, &o.CapturedBy,
 			&o.CreatedAt, &o.UpdatedAt, &o.ArchivedAt,
 		)
+		if err != nil {
+			return err
+		}
+		if err := attachOrgDomains(ctx, tx, workspaceID, &o); err != nil {
+			return err
+		}
+		return nil
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return o, errs.ErrNotFound
@@ -312,4 +405,35 @@ func (s *OrgStore) getAny(ctx context.Context, id, workspaceID string) (Organiza
 		unmarshalJSON(addrRaw, &o.Address)
 	}
 	return o, nil
+}
+
+// attachOrgDomains loads live organization_domain rows for org o and assigns
+// them to o.Domains. Called by Get/getAny (the single-record read path) -
+// List/listBy* leave Domains nil, matching the contract's "populated on
+// getOrganization only" convention already used for relationships/deals/activities.
+func attachOrgDomains(ctx context.Context, tx *sql.Tx, workspaceID string, o *Organization) error {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, organization_id, domain, is_primary, created_at, updated_at, archived_at
+		FROM organization_domain
+		WHERE workspace_id=$1::uuid AND organization_id=$2::uuid AND archived_at IS NULL
+		ORDER BY is_primary DESC, domain`,
+		workspaceID, o.ID)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	domains := []OrganizationDomain{}
+	for rows.Next() {
+		var d OrganizationDomain
+		if err := rows.Scan(&d.ID, &d.OrganizationID, &d.Domain, &d.IsPrimary,
+			&d.CreatedAt, &d.UpdatedAt, &d.ArchivedAt); err != nil {
+			return err
+		}
+		domains = append(domains, d)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	o.Domains = domains
+	return nil
 }

@@ -37,28 +37,43 @@ type Person struct {
 
 // Organization is a company record (data-model §4.1).
 type Organization struct {
-	ID             string            `json:"id"`
-	WorkspaceID    string            `json:"workspace_id"`
-	DisplayName    string            `json:"display_name"`
-	Website        *string           `json:"website"`
-	Classification *string           `json:"classification"`
-	Relevance      int               `json:"relevance"`
-	OwnerID        *string           `json:"owner_id"`
-	ParentOrgID    *string           `json:"parent_org_id"`
-	MergedIntoID   *string           `json:"merged_into_id"`
-	Social         map[string]any    `json:"social"`
-	Address        map[string]any    `json:"address"`
-	ContactCount   int               `json:"contact_count"`
-	OpenDealCount  int               `json:"open_deal_count"`
-	Strength       *OrgStrengthBlock `json:"org_strength"`
-	Version        int64             `json:"version"`
-	Source         string            `json:"source"`
-	CapturedBy     string            `json:"captured_by"`
+	ID             string               `json:"id"`
+	WorkspaceID    string               `json:"workspace_id"`
+	DisplayName    string               `json:"display_name"`
+	Website        *string              `json:"website"`
+	Classification *string              `json:"classification"`
+	Relevance      int                  `json:"relevance"`
+	OwnerID        *string              `json:"owner_id"`
+	ParentOrgID    *string              `json:"parent_org_id"`
+	MergedIntoID   *string              `json:"merged_into_id"`
+	Social         map[string]any       `json:"social"`
+	Address        map[string]any       `json:"address"`
+	Domains        []OrganizationDomain `json:"domains"`
+	ContactCount   int                  `json:"contact_count"`
+	OpenDealCount  int                  `json:"open_deal_count"`
+	Strength       *OrgStrengthBlock    `json:"org_strength"`
+	Version        int64                `json:"version"`
+	Source         string               `json:"source"`
+	CapturedBy     string               `json:"captured_by"`
 	// Provenance is kept for internal use; not serialised directly.
 	Provenance prov.Provenance `json:"-"`
 	CreatedAt  time.Time       `json:"created_at"`
 	UpdatedAt  time.Time       `json:"updated_at"`
 	ArchivedAt *time.Time      `json:"archived_at"`
+}
+
+// OrganizationDomain is a normalized domain owned by an organization
+// (data-model §4.2). The backing table (`organization_domain`, migration
+// 000006) has no source/captured_by columns - this type only carries the
+// columns that exist; do not add provenance columns here (out of scope).
+type OrganizationDomain struct {
+	ID             string     `json:"id"`
+	OrganizationID string     `json:"organization_id"`
+	Domain         string     `json:"domain"`
+	IsPrimary      bool       `json:"is_primary"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	ArchivedAt     *time.Time `json:"archived_at"`
 }
 
 // Deal is a sales opportunity (data-model §6.3).

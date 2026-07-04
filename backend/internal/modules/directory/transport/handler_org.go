@@ -1,17 +1,19 @@
 package transport
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 
 	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
+	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 )
 
 var orgSortAllowed = map[string]bool{
 	"": true, "id": true, "strength": true, "-strength": true,
 }
 
-// OrganizationHandler routes GET /organizations to OrgStore.List.
-// Create/get-by-id/update/archive are deferred (org-360 flow, not T18 scope).
+// OrganizationHandler routes GET /organizations and POST /organizations.
 type OrganizationHandler struct{ store *directory.OrgStore }
 
 // NewOrganizationHandler returns an OrganizationHandler.
@@ -21,11 +23,83 @@ func NewOrganizationHandler(store *directory.OrgStore) *OrganizationHandler {
 
 func (h *OrganizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id := pathID(r.URL.Path, "/organizations")
-	if r.Method == http.MethodGet && id == "" {
+	switch {
+	case r.Method == http.MethodGet && id == "":
 		h.list(w, r)
+	case r.Method == http.MethodPost && id == "":
+		h.create(w, r)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func (h *OrganizationHandler) create(w http.ResponseWriter, r *http.Request) {
+	wsID, ok := requireWorkspace(w, r)
+	if !ok {
 		return
 	}
-	http.NotFound(w, r)
+
+	var body struct {
+		DisplayName string  `json:"display_name"`
+		Website     *string `json:"website,omitempty"`
+		Source      string  `json:"source"`
+		CapturedBy  string  `json:"captured_by"`
+		Domains     []struct {
+			Domain    string `json:"domain"`
+			IsPrimary *bool  `json:"is_primary,omitempty"`
+		} `json:"domains,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
+		return
+	}
+	if body.DisplayName == "" || body.Source == "" || body.CapturedBy == "" {
+		jsonProblem(w, http.StatusBadRequest, "missing_required_fields")
+		return
+	}
+
+	org := directory.Organization{
+		WorkspaceID: wsID,
+		DisplayName: body.DisplayName,
+		Website:     body.Website,
+		Source:      body.Source,
+		CapturedBy:  body.CapturedBy,
+	}
+	if len(body.Domains) > 0 {
+		org.Domains = make([]directory.OrganizationDomain, len(body.Domains))
+		for i, d := range body.Domains {
+			org.Domains[i] = directory.OrganizationDomain{
+				Domain:    d.Domain,
+				IsPrimary: d.IsPrimary != nil && *d.IsPrimary,
+			}
+		}
+	}
+
+	created, err := h.store.Create(r.Context(), org)
+	if err != nil {
+		var dup *directory.ErrDuplicateDomain
+		if errors.As(err, &dup) {
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				fieldStatus: http.StatusConflict,
+				fieldCode:   "duplicate_domain",
+				fieldDetails: map[string]any{
+					"existing_id": dup.ExistingID,
+					"field":       dup.Field,
+				},
+			})
+			return
+		}
+		if errors.Is(err, errs.ErrNullProvenance) {
+			jsonValidationError(w, "source and captured_by are required.",
+				[]fieldError{{Field: "source", Code: "required"}, {Field: "captured_by", Code: "required"}})
+			return
+		}
+		jsonErr(w, err)
+		return
+	}
+	jsonCreatedAt(w, created, "/organizations/"+created.ID)
 }
 
 func (h *OrganizationHandler) list(w http.ResponseWriter, r *http.Request) {
