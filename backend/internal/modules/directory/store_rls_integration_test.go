@@ -42,7 +42,7 @@ func TestStoreRLSCrossWorkspaceReadEmpty(t *testing.T) {
 
 	pA := crmcore.NewPerson("Alice-RLS", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	pA.WorkspaceID = wsA
-	created, err := people.Create(appCtx(wsA), pA)
+	created, err := people.Create(appCtx(wsA), pA, nil)
 	if err != nil {
 		t.Fatalf("create person in A: %v", err)
 	}

@@ -42,7 +42,7 @@ func withRestoreWorkspace(r *http.Request, wsID string) *http.Request {
 func TestPersonHandler_Restore_ArchivedPerson(t *testing.T) {
 	db := openPersonHandlerRestoreTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store)
+	h := NewPersonHandler(store, db)
 
 	seedWorkspace(t, db, personRestoreHandlerWS)
 	setRLS(t, db, personRestoreHandlerWS)
@@ -53,7 +53,7 @@ func TestPersonHandler_Restore_ArchivedPerson(t *testing.T) {
 		FullName:    "Handler Restore",
 		Source:      "test",
 		CapturedBy:  "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create person: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestPersonHandler_Restore_ArchivedPerson(t *testing.T) {
 func TestPersonHandler_Restore_RefusesLiveRecord(t *testing.T) {
 	db := openPersonHandlerRestoreTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store)
+	h := NewPersonHandler(store, db)
 
 	seedWorkspace(t, db, personRestoreHandlerWS)
 	setRLS(t, db, personRestoreHandlerWS)
@@ -92,7 +92,7 @@ func TestPersonHandler_Restore_RefusesLiveRecord(t *testing.T) {
 		FullName:    "Live Handler Restore",
 		Source:      "test",
 		CapturedBy:  "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create person: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestPersonHandler_Restore_RefusesLiveRecord(t *testing.T) {
 func TestPersonHandler_Restore_RefusesMergedRecord(t *testing.T) {
 	db := openPersonHandlerRestoreTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store)
+	h := NewPersonHandler(store, db)
 
 	seedWorkspace(t, db, personRestoreHandlerWS)
 	setRLS(t, db, personRestoreHandlerWS)
@@ -143,7 +143,7 @@ func TestPersonHandler_Restore_RefusesMergedRecord(t *testing.T) {
 		FullName:    "Survivor Person",
 		Source:      "test",
 		CapturedBy:  "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create survivor person: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestPersonHandler_Restore_RefusesMergedRecord(t *testing.T) {
 		FullName:    "Merged Handler Person",
 		Source:      "test",
 		CapturedBy:  "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create merged person: %v", err)
 	}

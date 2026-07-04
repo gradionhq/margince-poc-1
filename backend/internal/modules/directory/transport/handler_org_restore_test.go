@@ -54,7 +54,7 @@ func TestOrganizationHandler_Restore_HappyPath200(t *testing.T) {
 		t.Fatalf("archive org: %v", err)
 	}
 
-	h := NewOrganizationHandler(orgStore)
+	h := NewOrganizationHandler(orgStore, db)
 	req := httptest.NewRequest(http.MethodPost, "/organizations/"+org.ID+"/restore", nil)
 	req = withOrgRestoreWorkspace(req)
 	w := httptest.NewRecorder()
@@ -88,7 +88,7 @@ func TestOrganizationHandler_Restore_LiveRecordReturns422(t *testing.T) {
 		t.Fatalf("create org: %v", err)
 	}
 
-	h := NewOrganizationHandler(orgStore)
+	h := NewOrganizationHandler(orgStore, db)
 	req := httptest.NewRequest(http.MethodPost, "/organizations/"+org.ID+"/restore", nil)
 	req = withOrgRestoreWorkspace(req)
 	w := httptest.NewRecorder()
@@ -133,7 +133,7 @@ func TestOrganizationHandler_Restore_RefusesMergedRecord(t *testing.T) {
 		t.Fatalf("seed merged organization state: %v", err)
 	}
 
-	h := NewOrganizationHandler(orgStore)
+	h := NewOrganizationHandler(orgStore, db)
 	req := httptest.NewRequest(http.MethodPost, "/organizations/"+merged.ID+"/restore", nil)
 	req = withOrgRestoreWorkspace(req)
 	w := httptest.NewRecorder()

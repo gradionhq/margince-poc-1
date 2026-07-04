@@ -26,6 +26,7 @@ import (
 const (
 	codeStageNotInPipeline = "stage_not_in_pipeline"
 	fieldToStageID         = "to_stage_id"
+	fieldExistingID        = "existing_id"
 )
 
 // stageSemanticReader is the full DealStore seam DealHandler uses — an

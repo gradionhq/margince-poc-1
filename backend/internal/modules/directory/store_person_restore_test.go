@@ -47,7 +47,7 @@ func TestPersonStore_Restore_ArchivedPersonWritesEventAndAudit(t *testing.T) {
 		FullName:    "Restore Target",
 		Source:      "test",
 		CapturedBy:  "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create person: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestPersonStore_Restore_RefusesLiveAndMergedRecords(t *testing.T) {
 		FullName:    "Live Person",
 		Source:      "test",
 		CapturedBy:  "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create live person: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestPersonStore_Restore_RefusesLiveAndMergedRecords(t *testing.T) {
 		FullName:    "Merged Person",
 		Source:      "test",
 		CapturedBy:  "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create merged person: %v", err)
 	}

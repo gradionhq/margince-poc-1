@@ -53,7 +53,7 @@ func seedPersonActivity(t *testing.T, db *sql.DB, wsID, personID, kind, directio
 func TestPersonHandler_Get_StrengthNoSignalYet(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store)
+	h := NewPersonHandler(store, db)
 
 	const wsID = testWorkspaceID
 	seedWorkspace(t, db, wsID)
@@ -62,7 +62,7 @@ func TestPersonHandler_Get_StrengthNoSignalYet(t *testing.T) {
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID})
 	p := directory.NewPerson("NoSignal Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = wsID
-	created, err := store.Create(ctx, p)
+	created, err := store.Create(ctx, p, nil)
 	if err != nil {
 		t.Fatal("seed:", err)
 	}
@@ -86,7 +86,7 @@ func TestPersonHandler_Get_StrengthNoSignalYet(t *testing.T) {
 func TestPersonHandler_Get_StrengthNoRecentActivity(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store)
+	h := NewPersonHandler(store, db)
 
 	const wsID = testWorkspaceID
 	seedWorkspace(t, db, wsID)
@@ -95,7 +95,7 @@ func TestPersonHandler_Get_StrengthNoRecentActivity(t *testing.T) {
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID})
 	p := directory.NewPerson("Stale Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = wsID
-	created, err := store.Create(ctx, p)
+	created, err := store.Create(ctx, p, nil)
 	if err != nil {
 		t.Fatal("seed:", err)
 	}
@@ -136,7 +136,7 @@ func TestPersonHandler_Get_StrengthNoRecentActivity(t *testing.T) {
 func TestPersonHandler_Get_StrengthGoldenExample(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store)
+	h := NewPersonHandler(store, db)
 
 	const wsID = testWorkspaceID
 	seedWorkspace(t, db, wsID)
@@ -145,7 +145,7 @@ func TestPersonHandler_Get_StrengthGoldenExample(t *testing.T) {
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID})
 	p := directory.NewPerson("Golden Example Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = wsID
-	created, err := store.Create(ctx, p)
+	created, err := store.Create(ctx, p, nil)
 	if err != nil {
 		t.Fatal("seed:", err)
 	}
@@ -183,7 +183,7 @@ func TestPersonHandler_Get_StrengthGoldenExample(t *testing.T) {
 func TestPersonHandler_List_SortStrength(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store)
+	h := NewPersonHandler(store, db)
 
 	const wsID = testWorkspaceID
 	seedWorkspace(t, db, wsID)
@@ -193,7 +193,7 @@ func TestPersonHandler_List_SortStrength(t *testing.T) {
 	mkPerson := func(name string) directory.Person {
 		p := directory.NewPerson(name, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 		p.WorkspaceID = wsID
-		created, err := store.Create(ctx, p)
+		created, err := store.Create(ctx, p, nil)
 		if err != nil {
 			t.Fatal("seed:", err)
 		}
@@ -271,7 +271,7 @@ func TestPersonHandler_List_SortStrength(t *testing.T) {
 func TestPersonHandler_List_SortStrength_EmptyWorkspace(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store)
+	h := NewPersonHandler(store, db)
 
 	const wsID = "00000000-0000-0000-0000-000000000002"
 	seedWorkspace(t, db, wsID)

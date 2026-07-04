@@ -17,7 +17,7 @@ import (
 // ---------------------------------------------------------------------------
 
 type personStore interface {
-	Create(ctx context.Context, p Person) (Person, error)
+	Create(ctx context.Context, p Person, emails []PersonEmailInput) (Person, error)
 	Get(ctx context.Context, id, workspaceID string) (Person, error)
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (Person, error)
 	List(ctx context.Context, workspaceID, cursor string, limit int, sort string) ([]Person, string, error)
@@ -117,7 +117,7 @@ func (p *DatasourceProvider) Create(ctx context.Context, in datasource.CreateInp
 		person.WorkspaceID = p.workspaceID
 		person.Source = in.Source
 		person.CapturedBy = in.CapturedBy
-		created, err := p.persons.Create(ctx, person)
+		created, err := p.persons.Create(ctx, person, nil)
 		if err != nil {
 			return datasource.EntityRef{}, err
 		}

@@ -158,13 +158,8 @@ func boolVal(b *bool) bool {
 // PersonStore
 // ---------------------------------------------------------------------------
 
-// PersonStore executes parameterized SQL against the person table.
-type PersonStore struct{ db *sql.DB }
-
-// NewPersonStore returns a PersonStore backed by db.
-func NewPersonStore(db *sql.DB) *PersonStore { return &PersonStore{db: db} }
-
-// ErrDuplicateEmail reports a live email collision on restore/create.
+// ErrDuplicateEmail reports a normalized-email collision during Create
+// (PO-AC-16). Mirrors OrgStore's ErrDuplicateDomain (store_org.go).
 type ErrDuplicateEmail struct {
 	ExistingID string
 	Field      string
@@ -174,10 +169,17 @@ func (e *ErrDuplicateEmail) Error() string {
 	return fmt.Sprintf("duplicate email: existing_id=%s field=%s", e.ExistingID, e.Field)
 }
 
+// PersonStore executes parameterized SQL against the person table.
+type PersonStore struct{ db *sql.DB }
+
+// NewPersonStore returns a PersonStore backed by db.
+func NewPersonStore(db *sql.DB) *PersonStore { return &PersonStore{db: db} }
+
 // Create inserts a new person row, overwriting the ID with a fresh one. The row
-// INSERT and its audit_log entry run in one workspace-scoped tx (margince_app +
-// app.workspace_id) so they commit atomically under RLS.
-func (s *PersonStore) Create(ctx context.Context, p Person) (Person, error) {
+// INSERT, optional email rows, and audit_log entry run in one workspace-scoped tx
+// (margince_app + app.workspace_id) so they commit atomically under RLS.
+// Pass nil for emails when the caller does not supply any (PO-AC-16).
+func (s *PersonStore) Create(ctx context.Context, p Person, emails []PersonEmailInput) (Person, error) {
 	if err := requireProvenance(p.Source, p.CapturedBy); err != nil {
 		return Person{}, err
 	}
@@ -196,6 +198,9 @@ func (s *PersonStore) Create(ctx context.Context, p Person) (Person, error) {
 			p.Source, p.CapturedBy); err != nil {
 			return err
 		}
+		if err := insertPersonEmails(ctx, tx, p.WorkspaceID, p.ID, p.Source, p.CapturedBy, emails); err != nil {
+			return err
+		}
 		e := crmaudit.EntryFromPrincipal(ctx, "create", entityTypePerson, &p.ID, nil, p)
 		e.WorkspaceID = p.WorkspaceID
 		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
@@ -209,7 +214,42 @@ func (s *PersonStore) Create(ctx context.Context, p Person) (Person, error) {
 	return s.Get(ctx, p.ID, p.WorkspaceID)
 }
 
+// insertPersonEmails writes createPerson's emails[] rows, 409-ing on the first
+// email that already maps to another live person in the workspace
+// (uq_person_email, PO-AC-16). source/captured_by come from the person row
+// itself — email rows share the parent's provenance, there is no separate
+// per-email capture UI yet.
+func insertPersonEmails(ctx context.Context, tx *sql.Tx, workspaceID, personID, source, capturedBy string, emails []PersonEmailInput) error {
+	for i, e := range emails {
+		normalized := strings.ToLower(strings.TrimSpace(e.Email))
+		var existingID string
+		scanErr := tx.QueryRowContext(ctx, `
+			SELECT person_id FROM person_email
+			WHERE workspace_id=$1::uuid AND lower(email)=$2 AND archived_at IS NULL`,
+			workspaceID, normalized).Scan(&existingID)
+		if scanErr == nil {
+			return &ErrDuplicateEmail{ExistingID: existingID, Field: fmt.Sprintf("emails[%d].email", i)}
+		}
+		if !errors.Is(scanErr, sql.ErrNoRows) {
+			return scanErr
+		}
+		emailType := e.EmailType
+		if emailType == "" {
+			emailType = "work"
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO person_email (workspace_id, person_id, email, email_type, is_primary, position, source, captured_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+			workspaceID, personID, normalized, emailType, e.IsPrimary, e.Position, source, capturedBy); err != nil {
+			return fmt.Errorf("person create email: %w", err)
+		}
+	}
+	return nil
+}
+
 // Get returns a live person by ID + workspace.
+//
+//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
 func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (Person, error) {
 	var p Person
 	var socialRaw, addrRaw []byte
@@ -219,6 +259,50 @@ func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (Person, 
 			       owner_id, social, address, merged_into_id, converted_from_lead_id,
 			       version, source, captured_by, created_at, updated_at, archived_at
 			FROM person WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
+			id, workspaceID).Scan(
+			&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
+			&p.OwnerID, &socialRaw, &addrRaw, &p.MergedIntoID, &p.ConvertedFromLeadID,
+			&p.Version, &p.Source, &p.CapturedBy,
+			&p.CreatedAt, &p.UpdatedAt, &p.ArchivedAt,
+		)
+		if err != nil {
+			return err
+		}
+		if err := s.attachStrength(ctx, tx, workspaceID, []*Person{&p}); err != nil {
+			return err
+		}
+		return s.attachLastActivity(ctx, tx, workspaceID, []*Person{&p})
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return p, errs.ErrNotFound
+	}
+	if err != nil {
+		return p, err
+	}
+	p.Social = map[string]any{}
+	unmarshalJSON(socialRaw, &p.Social)
+	if addrRaw != nil {
+		p.Address = map[string]any{}
+		unmarshalJSON(addrRaw, &p.Address)
+	}
+	return p, nil
+}
+
+// GetAny returns a person by ID + workspace regardless of archived state
+// (crm.yaml getPerson: "Fetchable by id even when archived"), mirroring
+// OrgStore.GetAny. Other callers (list/update/merge) keep using the
+// live-only Get — this is only for the single-record detail-read path.
+//
+//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
+func (s *PersonStore) GetAny(ctx context.Context, id, workspaceID string) (Person, error) {
+	var p Person
+	var socialRaw, addrRaw []byte
+	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		err := tx.QueryRowContext(ctx, `
+			SELECT id, workspace_id, full_name, first_name, last_name, title,
+			       owner_id, social, address, merged_into_id, converted_from_lead_id,
+			       version, source, captured_by, created_at, updated_at, archived_at
+			FROM person WHERE id=$1::uuid AND workspace_id=$2::uuid`,
 			id, workspaceID).Scan(
 			&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
 			&p.OwnerID, &socialRaw, &addrRaw, &p.MergedIntoID, &p.ConvertedFromLeadID,
@@ -391,109 +475,5 @@ func (s *PersonStore) Archive(ctx context.Context, id, workspaceID string) (Pers
 	if err != nil {
 		return Person{}, err
 	}
-	return s.getAny(ctx, id, workspaceID)
-}
-
-// Restore re-activates an archived person, writing one person.restored outbox
-// event and one audit_log row in the same workspace-scoped tx. The record must
-// already be archived and must not be a merge target.
-func (s *PersonStore) Restore(ctx context.Context, id, workspaceID string) (Person, error) {
-	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		var archivedAt sql.NullTime
-		var mergedInto sql.NullString
-		if err := tx.QueryRowContext(ctx, `
-			SELECT archived_at, merged_into_id
-			FROM person
-			WHERE id=$1::uuid AND workspace_id=$2::uuid`,
-			id, workspaceID).Scan(&archivedAt, &mergedInto); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return errs.ErrNotFound
-			}
-			return err
-		}
-		if !archivedAt.Valid {
-			return errs.ErrNotArchived
-		}
-		if mergedInto.Valid {
-			return errs.ErrMergedRecord
-		}
-		if err := s.findDuplicateEmail(ctx, tx, workspaceID, id); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE person SET archived_at=NULL
-			 WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NOT NULL`,
-			id, workspaceID); err != nil {
-			return err
-		}
-		payload, _ := json.Marshal(map[string]any{fieldPersonID: id})
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload)
-			 VALUES ($1,$2,$3::uuid,$4)`,
-			workspaceID, "person.restored", id, payload); err != nil {
-			return fmt.Errorf("person restore event: %w", err)
-		}
-		er := crmaudit.EntryFromPrincipal(ctx, "restore", entityTypePerson, &id, nil, nil)
-		er.WorkspaceID = workspaceID
-		if _, err := crmaudit.WriteTx(ctx, tx, er); err != nil {
-			return fmt.Errorf("person restore audit: %w", err)
-		}
-		return nil
-	})
-	if err != nil {
-		return Person{}, err
-	}
-	return s.getAny(ctx, id, workspaceID)
-}
-
-// getAny fetches a person by id regardless of archived_at status.
-func (s *PersonStore) getAny(ctx context.Context, id, workspaceID string) (Person, error) {
-	var p Person
-	var socialRaw, addrRaw []byte
-	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `
-			SELECT id, workspace_id, full_name, first_name, last_name, title,
-			       owner_id, social, address, merged_into_id, converted_from_lead_id,
-			       version, source, captured_by, created_at, updated_at, archived_at
-			FROM person WHERE id=$1::uuid AND workspace_id=$2::uuid`,
-			id, workspaceID).Scan(
-			&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
-			&p.OwnerID, &socialRaw, &addrRaw, &p.MergedIntoID, &p.ConvertedFromLeadID,
-			&p.Version, &p.Source, &p.CapturedBy,
-			&p.CreatedAt, &p.UpdatedAt, &p.ArchivedAt,
-		)
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return p, errs.ErrNotFound
-	}
-	if err != nil {
-		return p, err
-	}
-	p.Social = map[string]any{}
-	unmarshalJSON(socialRaw, &p.Social)
-	if addrRaw != nil {
-		p.Address = map[string]any{}
-		unmarshalJSON(addrRaw, &p.Address)
-	}
-	return p, nil
-}
-
-func (s *PersonStore) findDuplicateEmail(ctx context.Context, tx *sql.Tx, workspaceID, personID string) error {
-	var existingID string
-	if err := tx.QueryRowContext(ctx, `
-		SELECT pe2.person_id
-		FROM person_email pe1
-		JOIN person_email pe2 ON lower(pe2.email) = lower(pe1.email)
-		  AND pe2.workspace_id = pe1.workspace_id
-		  AND pe2.person_id <> pe1.person_id
-		  AND pe2.archived_at IS NULL
-		WHERE pe1.person_id=$1::uuid AND pe1.workspace_id=$2::uuid AND pe1.archived_at IS NULL
-		LIMIT 1`,
-		personID, workspaceID).Scan(&existingID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		return err
-	}
-	return &ErrDuplicateEmail{ExistingID: existingID, Field: "email"}
+	return s.GetAny(ctx, id, workspaceID)
 }

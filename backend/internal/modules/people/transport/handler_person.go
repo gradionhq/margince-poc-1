@@ -15,12 +15,14 @@
 package transport
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
@@ -31,13 +33,15 @@ import (
 // contract-envelope field name, this handler needs. Duplicated from
 // directory's consts.go (see package doc above).
 const (
-	fieldData      = "data"
-	fieldCode      = "code"
-	fieldStatus    = "status"
-	fieldDetails   = "details"
-	codeForbidden  = "forbidden"
-	codeBadRequest = "bad_request"
-	codeValidation = "validation_error"
+	fieldData       = "data"
+	fieldCode       = "code"
+	fieldStatus     = "status"
+	fieldDetails    = "details"
+	fieldExistingID = "existing_id"
+	fieldErrors     = "errors"
+	codeForbidden   = "forbidden"
+	codeBadRequest  = "bad_request"
+	codeValidation  = "validation_error"
 )
 
 type fieldError struct {
@@ -50,16 +54,24 @@ var personSortValues = map[string]bool{
 }
 
 // PersonHandler routes /people and /people/{id} requests to the PersonStore.
-type PersonHandler struct{ store *directory.PersonStore }
+type PersonHandler struct {
+	store *directory.PersonStore
+	db    *sql.DB // used only for the merge endpoint's VerifyAndConsume (🟡 gate)
+}
 
 // NewPersonHandler returns a PersonHandler.
-func NewPersonHandler(store *directory.PersonStore) *PersonHandler {
-	return &PersonHandler{store: store}
+func NewPersonHandler(store *directory.PersonStore, db *sql.DB) *PersonHandler {
+	return &PersonHandler{store: store, db: db}
 }
 
 // ServeHTTP dispatches on method + path suffix.
 func (h *PersonHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.serveSuffixRoutes(w, r) {
+		return
+	}
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/merge") {
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/merge"), "/people")
+		h.merge(w, r, id)
 		return
 	}
 	id := pathID(r.URL.Path, "/people")
@@ -151,6 +163,12 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 		OwnerID    *string `json:"owner_id"`
 		Source     string  `json:"source"`
 		CapturedBy string  `json:"captured_by"`
+		Emails     []struct {
+			Email     string `json:"email"`
+			EmailType string `json:"email_type"`
+			IsPrimary bool   `json:"is_primary"`
+			Position  int    `json:"position"`
+		} `json:"emails"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
@@ -166,8 +184,19 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 	p.LastName = body.LastName
 	p.Title = body.Title
 	p.OwnerID = body.OwnerID
-	created, err := h.store.Create(r.Context(), p)
+	emails := make([]directory.PersonEmailInput, len(body.Emails))
+	for i, e := range body.Emails {
+		emails[i] = directory.PersonEmailInput{Email: e.Email, EmailType: e.EmailType, IsPrimary: e.IsPrimary, Position: e.Position}
+	}
+	created, err := h.store.Create(r.Context(), p, emails)
 	if err != nil {
+		var dup *directory.ErrDuplicateEmail
+		if errors.As(err, &dup) {
+			jsonProblemDetails(w, http.StatusConflict, "duplicate_email",
+				"An active person already owns this email.",
+				map[string]any{fieldExistingID: dup.ExistingID, "field": dup.Field})
+			return
+		}
 		jsonErr(w, err)
 		return
 	}
@@ -176,9 +205,89 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 	jsonCreated(w, created)
 }
 
+// jsonValidationError writes a 422 problem+json body with the field-level
+// details.errors shape the contract's ValidationError schema declares.
+// Duplicated from directory/transport's handler_deal.go (see package doc above).
+func jsonValidationError(w http.ResponseWriter, detail string, errs []fieldError) {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
+		fieldStatus:  http.StatusUnprocessableEntity,
+		fieldCode:    "validation_error",
+		"detail":     detail,
+		fieldDetails: map[string]any{fieldErrors: errs},
+	})
+}
+
+// merge implements POST /people/{id}/merge (mergePerson, APPR-WIRE-1, x-mcp-tool
+// merge_records/person/yellow). A human principal's direct call is itself the
+// approval — no token required, mirroring checkApprovalGate's human bypass in
+// directory/transport/handler_deal.go. An agent principal must present a
+// single-use X-Approval-Token bound to this exact (workspace, tool, diff).
+func (h *PersonHandler) merge(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := workspaceID(r)
+	var body struct {
+		TargetID string `json:"target_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.TargetID == "" {
+		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
+		return
+	}
+	p, _ := crmctx.From(r.Context())
+	if p.IsAgent {
+		token := r.Header.Get("X-Approval-Token")
+		if token == "" {
+			jsonProblem(w, http.StatusForbidden, "approval_required")
+			return
+		}
+		diffHash := crmapprovals.HashDiff(map[string]any{"person_id": id, "target_id": body.TargetID})
+		if err := crmapprovals.VerifyAndConsume(r.Context(), h.db, token, crmapprovals.Binding{
+			// Tool MUST be the contract's declared x-mcp-tool verb ("merge_records",
+			// crm.yaml:335), not a per-entity string — a real minted token carries the
+			// declared verb and VerifyAndConsume exact-matches it (token.go:146).
+			// Person vs. org is disambiguated by diff_hash (person_id/target_id here)
+			// alone, exactly as the org handler's mirror does for organization_id.
+			WorkspaceID: wsID, Tool: "merge_records", DiffHash: diffHash,
+		}); err != nil {
+			jsonProblem(w, http.StatusForbidden, "approval_token_invalid")
+			return
+		}
+	}
+	merged, err := h.store.Merge(r.Context(), id, body.TargetID, wsID)
+	if errors.Is(err, directory.ErrSelfMerge) {
+		jsonValidationError(w, "target_id must not equal id.", []fieldError{{Field: "target_id", Code: "self_merge"}})
+		return
+	}
+	var already *directory.ErrAlreadyMerged
+	if errors.As(err, &already) {
+		jsonProblemDetails(w, http.StatusUnprocessableEntity, "already_merged",
+			"This record was already merged.", map[string]any{fieldExistingID: already.SurvivorID})
+		return
+	}
+	var targetInvalid *directory.ErrMergeTargetInvalid
+	if errors.As(err, &targetInvalid) {
+		jsonProblemDetails(w, http.StatusUnprocessableEntity, "merge_target_invalid",
+			"The merge target is archived or itself already merged.", map[string]any{fieldExistingID: targetInvalid.SurvivorID})
+		return
+	}
+	if errors.Is(err, errs.ErrVersionSkew) {
+		jsonProblem(w, http.StatusConflict, "version_skew")
+		return
+	}
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, merged)
+}
+
 func (h *PersonHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	wsID := workspaceID(r)
-	p, err := h.store.Get(r.Context(), id, wsID)
+	p, err := h.store.GetAny(r.Context(), id, wsID)
 	if errors.Is(err, errs.ErrNotFound) {
 		jsonProblem(w, http.StatusNotFound, "not_found")
 		return
@@ -234,39 +343,6 @@ func (h *PersonHandler) archive(w http.ResponseWriter, r *http.Request, id strin
 	}
 	// Audit written by PersonStore.Archive (store layer).
 	jsonOK(w, archived)
-}
-
-func (h *PersonHandler) restore(w http.ResponseWriter, r *http.Request, id string) {
-	wsID := workspaceID(r)
-	restored, err := h.store.Restore(r.Context(), id, wsID)
-	if errors.Is(err, errs.ErrNotFound) {
-		jsonProblem(w, http.StatusNotFound, "not_found")
-		return
-	}
-	if errors.Is(err, errs.ErrNotArchived) {
-		jsonProblemDetails(w, http.StatusUnprocessableEntity, "validation_error",
-			"person is already live.",
-			map[string]any{"errors": []fieldError{{Field: "archived_at", Code: "not_archived"}}})
-		return
-	}
-	if errors.Is(err, errs.ErrMergedRecord) {
-		jsonProblemDetails(w, http.StatusUnprocessableEntity, "validation_error",
-			"merged_into_id must be cleared before restore.",
-			map[string]any{"errors": []fieldError{{Field: "merged_into_id", Code: "merged_record"}}})
-		return
-	}
-	var dup *directory.ErrDuplicateEmail
-	if errors.As(err, &dup) {
-		jsonProblemDetails(w, http.StatusConflict, "duplicate_email",
-			"An active person already owns this email.",
-			map[string]any{"existing_id": dup.ExistingID, "field": dup.Field})
-		return
-	}
-	if err != nil {
-		jsonErr(w, err)
-		return
-	}
-	jsonOK(w, restored)
 }
 
 // ---------------------------------------------------------------------------
