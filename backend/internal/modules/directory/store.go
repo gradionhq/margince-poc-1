@@ -237,6 +237,8 @@ func insertPersonEmails(ctx context.Context, tx *sql.Tx, workspaceID, personID, 
 }
 
 // Get returns a live person by ID + workspace.
+//
+//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
 func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (Person, error) {
 	var p Person
 	var socialRaw, addrRaw []byte
@@ -246,6 +248,50 @@ func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (Person, 
 			       owner_id, social, address, merged_into_id, converted_from_lead_id,
 			       version, source, captured_by, created_at, updated_at, archived_at
 			FROM person WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
+			id, workspaceID).Scan(
+			&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
+			&p.OwnerID, &socialRaw, &addrRaw, &p.MergedIntoID, &p.ConvertedFromLeadID,
+			&p.Version, &p.Source, &p.CapturedBy,
+			&p.CreatedAt, &p.UpdatedAt, &p.ArchivedAt,
+		)
+		if err != nil {
+			return err
+		}
+		if err := s.attachStrength(ctx, tx, workspaceID, []*Person{&p}); err != nil {
+			return err
+		}
+		return s.attachLastActivity(ctx, tx, workspaceID, []*Person{&p})
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return p, errs.ErrNotFound
+	}
+	if err != nil {
+		return p, err
+	}
+	p.Social = map[string]any{}
+	unmarshalJSON(socialRaw, &p.Social)
+	if addrRaw != nil {
+		p.Address = map[string]any{}
+		unmarshalJSON(addrRaw, &p.Address)
+	}
+	return p, nil
+}
+
+// GetAny returns a person by ID + workspace regardless of archived state
+// (crm.yaml getPerson: "Fetchable by id even when archived"), mirroring
+// OrgStore.GetAny. Other callers (list/update/merge) keep using the
+// live-only Get — this is only for the single-record detail-read path.
+//
+//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
+func (s *PersonStore) GetAny(ctx context.Context, id, workspaceID string) (Person, error) {
+	var p Person
+	var socialRaw, addrRaw []byte
+	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		err := tx.QueryRowContext(ctx, `
+			SELECT id, workspace_id, full_name, first_name, last_name, title,
+			       owner_id, social, address, merged_into_id, converted_from_lead_id,
+			       version, source, captured_by, created_at, updated_at, archived_at
+			FROM person WHERE id=$1::uuid AND workspace_id=$2::uuid`,
 			id, workspaceID).Scan(
 			&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
 			&p.OwnerID, &socialRaw, &addrRaw, &p.MergedIntoID, &p.ConvertedFromLeadID,
@@ -418,37 +464,5 @@ func (s *PersonStore) Archive(ctx context.Context, id, workspaceID string) (Pers
 	if err != nil {
 		return Person{}, err
 	}
-	return s.getAny(ctx, id, workspaceID)
-}
-
-// getAny fetches a person by id regardless of archived_at status.
-func (s *PersonStore) getAny(ctx context.Context, id, workspaceID string) (Person, error) {
-	var p Person
-	var socialRaw, addrRaw []byte
-	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `
-			SELECT id, workspace_id, full_name, first_name, last_name, title,
-			       owner_id, social, address, merged_into_id, converted_from_lead_id,
-			       version, source, captured_by, created_at, updated_at, archived_at
-			FROM person WHERE id=$1::uuid AND workspace_id=$2::uuid`,
-			id, workspaceID).Scan(
-			&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
-			&p.OwnerID, &socialRaw, &addrRaw, &p.MergedIntoID, &p.ConvertedFromLeadID,
-			&p.Version, &p.Source, &p.CapturedBy,
-			&p.CreatedAt, &p.UpdatedAt, &p.ArchivedAt,
-		)
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return p, errs.ErrNotFound
-	}
-	if err != nil {
-		return p, err
-	}
-	p.Social = map[string]any{}
-	unmarshalJSON(socialRaw, &p.Social)
-	if addrRaw != nil {
-		p.Address = map[string]any{}
-		unmarshalJSON(addrRaw, &p.Address)
-	}
-	return p, nil
+	return s.GetAny(ctx, id, workspaceID)
 }

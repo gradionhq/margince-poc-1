@@ -283,7 +283,7 @@ func (h *PersonHandler) merge(w http.ResponseWriter, r *http.Request, id string)
 
 func (h *PersonHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	wsID := workspaceID(r)
-	p, err := h.store.Get(r.Context(), id, wsID)
+	p, err := h.store.GetAny(r.Context(), id, wsID)
 	if errors.Is(err, errs.ErrNotFound) {
 		jsonProblem(w, http.StatusNotFound, "not_found")
 		return

@@ -199,6 +199,55 @@ func TestPersonHandler_UpdateAndArchive(t *testing.T) {
 	}
 }
 
+// T06 UAT step 2 / crm.yaml getPerson's "Fetchable by id even when archived"
+// description: after a merge archives the loser, GET /people/{loserID} must
+// still 200, not 404, mirroring OrgStore.GetAny's contract.
+func TestPersonHandler_GetArchivedAfterMerge(t *testing.T) {
+	db := openTestDB(t)
+	store := directory.NewPersonStore(db)
+	h := NewPersonHandler(store, db)
+
+	const wsID = "00000000-0000-0000-0000-000000000001"
+	seedWorkspace(t, db, wsID)
+	setRLS(t, db, wsID)
+
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID, UserID: "human:test"})
+	loser := directory.NewPerson("Loser Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	loser.WorkspaceID = wsID
+	createdLoser, err := store.Create(ctx, loser, nil)
+	if err != nil {
+		t.Fatal("create loser:", err)
+	}
+	target := directory.NewPerson("Target Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	target.WorkspaceID = wsID
+	createdTarget, err := store.Create(ctx, target, nil)
+	if err != nil {
+		t.Fatal("create target:", err)
+	}
+	if _, err := store.Merge(ctx, createdLoser.ID, createdTarget.ID, wsID); err != nil {
+		t.Fatal("merge:", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/people/"+createdLoser.ID, nil)
+	req = withWorkspace(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /people/{archived loser id}: want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["archived_at"] == nil {
+		t.Fatalf("expected archived_at set on merged loser, got %v", body)
+	}
+	if body["merged_into_id"] != createdTarget.ID {
+		t.Fatalf("expected merged_into_id=%s, got %v", createdTarget.ID, body["merged_into_id"])
+	}
+}
+
 func TestPersonHandler_VersionSkew(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
