@@ -1,11 +1,22 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../api/organizations.js", () => ({
   useOrganizations: () => ({
-    data: { data: [] },
+    data: {
+      data: [
+        {
+          id: "o1",
+          display_name: "Acme Inc",
+          industry: "Software",
+          contact_count: 1,
+          open_deal_count: 0,
+          org_strength: null,
+        },
+      ],
+    },
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -60,5 +71,23 @@ describe("CompaniesPage", () => {
     renderPage();
     expect(screen.queryByText(/capture/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/banner/i)).not.toBeInTheDocument();
+  });
+  it("navigates to /companies/:id when a row is clicked (row click-through)", () => {
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/companies"]}>
+          <Routes>
+            <Route path="/companies" element={<CompaniesPage />} />
+            <Route
+              path="/companies/:id"
+              element={<div>Company detail o1</div>}
+            />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByText("Acme Inc"));
+    expect(screen.getByText("Company detail o1")).toBeInTheDocument();
   });
 });

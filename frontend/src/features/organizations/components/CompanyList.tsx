@@ -9,6 +9,7 @@ interface CompanyListProps {
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
+  onRowClick: (id: string) => void;
 }
 
 export function CompanyList({
@@ -16,6 +17,7 @@ export function CompanyList({
   isLoading,
   isError,
   onRetry,
+  onRowClick,
 }: CompanyListProps) {
   if (isLoading) {
     return (
@@ -72,7 +74,11 @@ export function CompanyList({
         </thead>
         <tbody>
           {companies.map((org) => (
-            <CompanyRow key={org.id} org={org} />
+            <CompanyRow
+              key={org.id}
+              org={org}
+              onClick={() => onRowClick(org.id)}
+            />
           ))}
         </tbody>
       </table>

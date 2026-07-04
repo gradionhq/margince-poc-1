@@ -3,6 +3,7 @@ import { DealDetailPage } from "../features/deals/routes/DealDetailPage.js";
 import { PipelinePage } from "../features/deals/routes/PipelinePage.js";
 import { LoginPage } from "../features/identity/routes/LoginPage.js";
 import { CompaniesPage } from "../features/organizations/routes/CompaniesPage.js";
+import { CompanyDetailPage } from "../features/organizations/routes/CompanyDetailPage.js";
 import { PeoplePage } from "../features/people/routes/PeoplePage.js";
 import { PersonDetailPage } from "../features/people/routes/PersonDetailPage.js";
 import { ProtectedRoute } from "./ProtectedRoute.js";
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/people" element={<PeoplePage />} />
         <Route path="/people/:id" element={<PersonDetailPage />} />
         <Route path="/companies" element={<CompaniesPage />} />
+        <Route path="/companies/:id" element={<CompanyDetailPage />} />
         <Route path="/leads" element={<ShellPlaceholderPage title="Leads" />} />
         <Route path="/deals" element={<PipelinePage />} />
         <Route path="/deals/:id" element={<DealDetailPage />} />
