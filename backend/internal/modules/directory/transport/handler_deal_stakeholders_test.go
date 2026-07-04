@@ -37,7 +37,7 @@ func TestDealHandler_ListStakeholders_ReturnsBothRoles_DuplicateRoleConflicts(t 
 	db := openDealTestDB(t)
 	dealID, personA, personB := seedStakeholderDealFixtures(t, db, time.Now().Format("150405.000000000"))
 	relStore := crmcore.NewRelationshipStore(db)
-	dealHandler := NewDealHandler(crmcore.NewDealStore(db), relStore, db)
+	dealHandler := dealHandlerForTest(db, crmcore.NewDealStore(db))
 
 	create := func(personID, role string) *httptest.ResponseRecorder {
 		relHandler := NewRelationshipHandler(relStore)
@@ -81,8 +81,7 @@ func TestDealHandler_ListStakeholders_ReturnsBothRoles_DuplicateRoleConflicts(t 
 func TestDealHandler_ListStakeholders_UnknownDeal_Returns404(t *testing.T) {
 	db := openDealTestDB(t)
 	seedDealFixtures(t, db, "unknown-deal")
-	relStore := crmcore.NewRelationshipStore(db)
-	dealHandler := NewDealHandler(crmcore.NewDealStore(db), relStore, db)
+	dealHandler := dealHandlerForTest(db, crmcore.NewDealStore(db))
 
 	req := withDealWorkspace(httptest.NewRequest(http.MethodGet, "/deals/00000000-0000-0000-0000-0000000000ff/stakeholders", nil))
 	w := httptest.NewRecorder()

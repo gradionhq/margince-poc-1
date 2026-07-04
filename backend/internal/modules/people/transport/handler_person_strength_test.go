@@ -53,7 +53,7 @@ func seedPersonActivity(t *testing.T, db *sql.DB, wsID, personID, kind, directio
 func TestPersonHandler_Get_StrengthNoSignalYet(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store, db)
+	h := personHandlerForTest(db, store)
 
 	const wsID = testWorkspaceID
 	seedWorkspace(t, db, wsID)
@@ -86,7 +86,7 @@ func TestPersonHandler_Get_StrengthNoSignalYet(t *testing.T) {
 func TestPersonHandler_Get_StrengthNoRecentActivity(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store, db)
+	h := personHandlerForTest(db, store)
 
 	const wsID = testWorkspaceID
 	seedWorkspace(t, db, wsID)
@@ -136,7 +136,7 @@ func TestPersonHandler_Get_StrengthNoRecentActivity(t *testing.T) {
 func TestPersonHandler_Get_StrengthGoldenExample(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store, db)
+	h := personHandlerForTest(db, store)
 
 	const wsID = testWorkspaceID
 	seedWorkspace(t, db, wsID)
@@ -183,7 +183,7 @@ func TestPersonHandler_Get_StrengthGoldenExample(t *testing.T) {
 func TestPersonHandler_List_SortStrength(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store, db)
+	h := personHandlerForTest(db, store)
 
 	const wsID = testWorkspaceID
 	seedWorkspace(t, db, wsID)
@@ -271,7 +271,7 @@ func TestPersonHandler_List_SortStrength(t *testing.T) {
 func TestPersonHandler_List_SortStrength_EmptyWorkspace(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store, db)
+	h := personHandlerForTest(db, store)
 
 	const wsID = "00000000-0000-0000-0000-000000000002"
 	seedWorkspace(t, db, wsID)
