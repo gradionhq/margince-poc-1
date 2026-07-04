@@ -1,4 +1,5 @@
 import type { Stage } from "../../../lib/api-client/generated/index.js";
+import { Icon } from "../../../shared/ui/forge.js";
 
 type StageState = "done" | "current" | "upcoming" | "muted";
 
@@ -57,7 +58,9 @@ export function StageStepper({
             data-stage-state={state}
             className={`rounded-full border px-gf-sm py-gf-xs text-gf-caption whitespace-nowrap ${stateClasses[state]}`}
           >
-            {state === "done" && "✓ "}
+            {state === "done" && (
+              <Icon name="Check" size={14} className="inline mr-gf-xs" />
+            )}
             {stage.name}
           </li>
         );
