@@ -406,6 +406,49 @@ func (s *DealStore) Archive(ctx context.Context, id, workspaceID string) (Deal, 
 	return s.getAny(ctx, id, workspaceID)
 }
 
+// Restore clears archived_at, restoring a deal to default list visibility.
+// Refuses errs.ErrNotArchived if already live. Deals have no merged_into_id
+// column and no dedupe-key unique index to preflight here.
+func (s *DealStore) Restore(ctx context.Context, id, workspaceID string) (Deal, error) {
+	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		var archivedAt sql.NullTime
+		if err := tx.QueryRowContext(ctx,
+			`SELECT archived_at FROM deal WHERE id=$1::uuid AND workspace_id=$2::uuid`,
+			id, workspaceID).Scan(&archivedAt); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return errs.ErrNotFound
+			}
+			return err
+		}
+		if !archivedAt.Valid {
+			return errs.ErrNotArchived
+		}
+
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE deal SET archived_at=NULL WHERE id=$1::uuid AND workspace_id=$2::uuid`,
+			id, workspaceID); err != nil {
+			return err
+		}
+		payload, _ := json.Marshal(map[string]any{colDealID: id})
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload)
+			 VALUES ($1,$2,$3::uuid,$4)`,
+			workspaceID, "deal.restored", id, payload); err != nil {
+			return fmt.Errorf("deal restore event: %w", err)
+		}
+		e := crmaudit.EntryFromPrincipal(ctx, "restore", entityTypeDeal, &id, nil, nil)
+		e.WorkspaceID = workspaceID
+		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+			return fmt.Errorf("deal restore audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return Deal{}, err
+	}
+	return s.getAny(ctx, id, workspaceID)
+}
+
 // getAny fetches a deal by id regardless of archived_at status.
 func (s *DealStore) getAny(ctx context.Context, id, workspaceID string) (Deal, error) {
 	var d Deal

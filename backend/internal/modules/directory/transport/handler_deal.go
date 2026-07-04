@@ -74,6 +74,11 @@ func (h *DealHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.stakeholders(w, r, id)
 		return
 	}
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/restore") {
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/restore"), "/deals")
+		h.restore(w, r, id)
+		return
+	}
 	id := pathID(r.URL.Path, "/deals")
 	switch {
 	case r.Method == http.MethodGet && id == "":
@@ -185,6 +190,27 @@ func (h *DealHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 	jsonOK(w, d)
+}
+
+func (h *DealHandler) restore(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := workspaceID(r)
+	restorer, ok := any(h.store).(interface {
+		Restore(context.Context, string, string) (directory.Deal, error)
+	})
+	if !ok {
+		jsonErr(w, errs.ErrNotFound)
+		return
+	}
+	restored, err := restorer.Restore(r.Context(), id, wsID)
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, restored)
 }
 
 //nolint:cyclop // HTTP boundary: each advance error maps to a distinct status code; 16 is 1 over the lint max
