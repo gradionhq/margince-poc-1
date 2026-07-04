@@ -5483,7 +5483,7 @@ components:
       description: |
         First-class partner state as a 1:1 extension of an organization (an org IS a partner iff it
         has a `partner` row + classification='partner'). Company identity is never duplicated.
-      required: [id, organization_id, workspace_id, cert_status, source, captured_by, created_at, updated_at]
+      required: [id, organization_id, workspace_id, partner_role, cert_status, source, captured_by, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         workspace_id: { type: string, format: uuid }
@@ -5498,10 +5498,10 @@ components:
             (gate issue #58, Option 1) — legacy values are DEPRECATED, not removed; a
             fast-follow ticket drops them once callers migrate. Program lifecycle (A38/ADR-0030).
         partner_role:
-          type: [string, 'null']
-          enum: [null, hosting, consulting, strategic]
+          type: string
+          enum: [hosting, consulting, strategic]
           x-extensible-enum: true
-          description: Functional role (A44/ADR-0034), orthogonal to margin_tier; implementation + dev are Gradion's turf. Nullable per PO-DDL-6 (was non-nullable/required; loosening a constraint is additive-safe, no value removed).
+          description: Functional role (A44/ADR-0034), orthogonal to margin_tier; implementation + dev are Gradion's turf. NOTE — PO-DDL-6 has this nullable at DB layer but making the response property nullable is an oasdiff ERR (response-property-became-nullable); left non-nullable here pending coordinator decision on the fast-follow ticket.
         margin_tier:
           type: [string, 'null']
           enum: [null, tier1_15, tier2_20, tier3_25]
