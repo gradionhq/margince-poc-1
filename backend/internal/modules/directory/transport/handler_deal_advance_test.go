@@ -46,6 +46,10 @@ func (f *fakeStageSemanticReader) ListFiltered(_ context.Context, _, _ string, _
 	return nil, "", nil
 }
 
+func (f *fakeStageSemanticReader) Restore(_ context.Context, _, _ string) (directory.Deal, error) {
+	return directory.Deal{}, nil
+}
+
 func TestDealHandler_Advance_AgentWithoutTokenOnYellowTransition_403(t *testing.T) {
 	fake := &fakeStageSemanticReader{
 		deal:         directory.Deal{ID: "deal-1", StageID: "open-stage"},

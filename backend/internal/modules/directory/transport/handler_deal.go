@@ -40,6 +40,7 @@ type stageSemanticReader interface {
 	Create(ctx context.Context, d directory.Deal, idempotencyKey string) (directory.Deal, error)
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (directory.Deal, error)
 	ListFiltered(ctx context.Context, workspaceID, cursor string, limit int, filter directory.DealListFilter) ([]directory.Deal, string, error)
+	Restore(ctx context.Context, id, workspaceID string) (directory.Deal, error)
 }
 
 type dealStakeholderReader interface {
@@ -195,14 +196,7 @@ func (h *DealHandler) update(w http.ResponseWriter, r *http.Request, id string) 
 
 func (h *DealHandler) restore(w http.ResponseWriter, r *http.Request, id string) {
 	wsID := workspaceID(r)
-	restorer, ok := any(h.store).(interface {
-		Restore(context.Context, string, string) (directory.Deal, error)
-	})
-	if !ok {
-		jsonErr(w, errs.ErrNotFound)
-		return
-	}
-	restored, err := restorer.Restore(r.Context(), id, wsID)
+	restored, err := h.store.Restore(r.Context(), id, wsID)
 	if errors.Is(err, errs.ErrNotFound) {
 		jsonProblem(w, http.StatusNotFound, "not_found")
 		return
