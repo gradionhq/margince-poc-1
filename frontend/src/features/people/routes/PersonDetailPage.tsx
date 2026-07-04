@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 import { Skeleton } from "../../../shared/ui/forge.js";
 import { usePerson } from "../api/person.js";
 import { PersonHeader } from "../components/PersonHeader.js";
+import { StrengthCard } from "../components/StrengthCard.js";
 
 export function PersonDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -46,7 +47,8 @@ export function PersonDetailPage() {
   return (
     <div data-testid="person-detail-loaded" className="p-gf-lg max-w-4xl mx-auto flex flex-col gap-gf-lg">
       <PersonHeader person={person} />
-      {/* StrengthCard/Tabs/Merge are wired in Tasks 4-7. */}
+      <StrengthCard personId={person.id} strength={person.strength} />
+      {/* Tabs/Merge are wired in Tasks 5-7. */}
     </div>
   );
 }
