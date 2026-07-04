@@ -5,7 +5,11 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../api/person.js", () => ({
   useOrganizationName: vi.fn(() => ({ data: undefined, isLoading: false })),
-  useUpdatePerson: vi.fn(() => ({ mutate: vi.fn(), isPending: false, error: null })),
+  useUpdatePerson: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+  })),
 }));
 
 import { PersonHeader } from "./PersonHeader.js";

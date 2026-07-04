@@ -20,15 +20,25 @@ function renderTab() {
 
 describe("PersonDealsTab", () => {
   it("renders a Skeleton while loading (STATE-2)", () => {
-    mockDeals.mockReturnValue({ data: undefined, isLoading: true, isError: false } as never);
+    mockDeals.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    } as never);
     renderTab();
     expect(screen.getByTestId("person-deals-loading")).toBeInTheDocument();
   });
 
   it("renders the honest empty state with no deals (STATE-1)", () => {
-    mockDeals.mockReturnValue({ data: [], isLoading: false, isError: false } as never);
+    mockDeals.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+    } as never);
     renderTab();
-    expect(screen.getByText(/no deals for this person yet/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/no deals for this person yet/i),
+    ).toBeInTheDocument();
   });
 
   it("renders a read-only deal row: name, status badge, formatted amount", () => {

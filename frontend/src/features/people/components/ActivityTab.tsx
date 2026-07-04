@@ -12,7 +12,10 @@ type ActivityRef = components["schemas"]["ActivityRef"];
 export function ActivityTab({ activities }: { activities: ActivityRef[] }) {
   if (activities.length === 0) {
     return (
-      <p data-testid="activity-tab-empty" className="text-gf-body text-gf-secondary">
+      <p
+        data-testid="activity-tab-empty"
+        className="text-gf-body text-gf-secondary"
+      >
         No activity captured yet.
       </p>
     );
@@ -28,7 +31,9 @@ export function ActivityTab({ activities }: { activities: ActivityRef[] }) {
             <span className="text-gf-caption font-medium text-gf-primary capitalize">
               {a.kind}
             </span>
-            <span className="text-gf-body text-gf-primary">{a.subject ?? "(no subject)"}</span>
+            <span className="text-gf-body text-gf-primary">
+              {a.subject ?? "(no subject)"}
+            </span>
           </div>
           <span className="text-gf-label text-gf-secondary">
             {new Date(a.occurred_at).toISOString().slice(0, 10)}

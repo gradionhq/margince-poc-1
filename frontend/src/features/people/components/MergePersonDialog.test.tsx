@@ -6,12 +6,16 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 // rely on — polyfill them so the merge dialog can actually mount and be exercised.
 beforeAll(() => {
   if (!HTMLDialogElement.prototype.showModal) {
-    HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+    HTMLDialogElement.prototype.showModal = function showModal(
+      this: HTMLDialogElement,
+    ) {
       this.open = true;
     };
   }
   if (!HTMLDialogElement.prototype.close) {
-    HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+    HTMLDialogElement.prototype.close = function close(
+      this: HTMLDialogElement,
+    ) {
       this.open = false;
     };
   }
@@ -24,7 +28,9 @@ import { MergePersonDialog, mergeErrorMessage } from "./MergePersonDialog.js";
 
 const mockMerge = vi.mocked(personApi.useMergePerson);
 
-function renderDialog(mutateOverrides: Partial<ReturnType<typeof personApi.useMergePerson>> = {}) {
+function renderDialog(
+  mutateOverrides: Partial<ReturnType<typeof personApi.useMergePerson>> = {},
+) {
   const mutate = vi.fn();
   mockMerge.mockReturnValue({
     mutate,
@@ -51,7 +57,10 @@ describe("mergeErrorMessage", () => {
   });
 
   it("renders self-merge/archived-target 422 detail honestly (PO-AC-M3/M4), no paraphrase", () => {
-    const result = mergeErrorMessage({ code: "validation_error", detail: "Cannot merge a person into themself" });
+    const result = mergeErrorMessage({
+      code: "validation_error",
+      detail: "Cannot merge a person into themself",
+    });
     expect(result.isVersionSkew).toBe(false);
     expect(result.message).toBe("Cannot merge a person into themself");
   });
@@ -85,7 +94,9 @@ describe("MergePersonDialog", () => {
   it("renders the actual problem code on failure without silently retrying", async () => {
     const { default: userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();
-    renderDialog({ error: { code: "version_skew", detail: "lost the race" } as never });
+    renderDialog({
+      error: { code: "version_skew", detail: "lost the race" } as never,
+    });
     await user.type(screen.getByLabelText(/target person id/i), "p2");
     await user.click(screen.getByRole("button", { name: /continue/i }));
     await user.click(screen.getByRole("button", { name: /^confirm$/i }));

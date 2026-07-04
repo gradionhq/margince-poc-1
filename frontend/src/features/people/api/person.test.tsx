@@ -92,9 +92,12 @@ describe("person API", () => {
   });
 
   it("useOrganizationName is disabled without an id and fetches display_name with one", async () => {
-    const { result: disabled } = renderHook(() => useOrganizationName(undefined), {
-      wrapper,
-    });
+    const { result: disabled } = renderHook(
+      () => useOrganizationName(undefined),
+      {
+        wrapper,
+      },
+    );
     expect(disabled.current.fetchStatus).toBe("idle");
 
     (apiClient.GET as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
@@ -121,7 +124,9 @@ describe("person API", () => {
         body: { target_id: "p2" },
       }),
     );
-    expect((result.current.error as { code?: string }).code).toBe("version_skew");
+    expect((result.current.error as { code?: string }).code).toBe(
+      "version_skew",
+    );
   });
 
   it("useUpdatePerson sends If-Match when a version is supplied", async () => {

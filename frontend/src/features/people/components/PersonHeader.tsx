@@ -22,14 +22,17 @@ export function PersonHeader({ person }: { person: Person }) {
   );
   const { mutate: save, isPending } = useUpdatePerson(person.id);
 
-  const primaryEmail = person.emails?.find((e) => e.is_primary) ?? person.emails?.[0];
-  const primaryPhone = person.phones?.find((p) => p.is_primary) ?? person.phones?.[0];
+  const primaryEmail =
+    person.emails?.find((e) => e.is_primary) ?? person.emails?.[0];
+  const primaryPhone =
+    person.phones?.find((p) => p.is_primary) ?? person.phones?.[0];
 
   function handleSave() {
     save(
       {
         body: { full_name: fullName, title: title || null },
-        ifMatch: person.version !== undefined ? String(person.version) : undefined,
+        ifMatch:
+          person.version !== undefined ? String(person.version) : undefined,
       },
       { onSuccess: () => setEditing(false) },
     );
@@ -40,13 +43,23 @@ export function PersonHeader({ person }: { person: Person }) {
       <div className="flex items-start justify-between">
         <div className="flex flex-col gap-gf-xs">
           {editing ? (
-            <TextInput value={fullName} onChange={setFullName} placeholder="Full name" />
+            <TextInput
+              value={fullName}
+              onChange={setFullName}
+              placeholder="Full name"
+            />
           ) : (
-            <h1 className="text-gf-title font-semibold text-gf-primary">{person.full_name}</h1>
+            <h1 className="text-gf-title font-semibold text-gf-primary">
+              {person.full_name}
+            </h1>
           )}
           <div className="flex items-center gap-gf-xs text-gf-body text-gf-secondary">
             {editing ? (
-              <TextInput value={title} onChange={setTitle} placeholder="Title" />
+              <TextInput
+                value={title}
+                onChange={setTitle}
+                placeholder="Title"
+              />
             ) : (
               person.title && <span>{person.title}</span>
             )}
@@ -62,7 +75,10 @@ export function PersonHeader({ person }: { person: Person }) {
                 </a>
               </>
             )}
-            <SourceChip source={person.source} capturedBy={person.captured_by} />
+            <SourceChip
+              source={person.source}
+              capturedBy={person.captured_by}
+            />
             <span className="text-gf-label text-gf-secondary">
               {formatCaptureDate(person.created_at)}
             </span>
@@ -71,7 +87,11 @@ export function PersonHeader({ person }: { person: Person }) {
         <div className="flex items-center gap-gf-sm">
           {editing ? (
             <>
-              <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setEditing(false)}
+              >
                 Cancel
               </Button>
               <Button size="sm" onClick={handleSave} disabled={isPending}>
@@ -99,7 +119,10 @@ export function PersonHeader({ person }: { person: Person }) {
         {primaryEmail && (
           <div className="flex items-center gap-gf-xs text-gf-body font-mono text-gf-primary">
             <span>{primaryEmail.email}</span>
-            <SourceChip source={primaryEmail.source} capturedBy={primaryEmail.captured_by} />
+            <SourceChip
+              source={primaryEmail.source}
+              capturedBy={primaryEmail.captured_by}
+            />
             <span className="text-gf-label text-gf-secondary">
               {formatCaptureDate(primaryEmail.created_at)}
             </span>
@@ -108,7 +131,10 @@ export function PersonHeader({ person }: { person: Person }) {
         {primaryPhone && (
           <div className="flex items-center gap-gf-xs text-gf-body font-mono text-gf-primary">
             <span>{primaryPhone.phone}</span>
-            <SourceChip source={primaryPhone.source} capturedBy={primaryPhone.captured_by} />
+            <SourceChip
+              source={primaryPhone.source}
+              capturedBy={primaryPhone.captured_by}
+            />
             <span className="text-gf-label text-gf-secondary">
               {formatCaptureDate(primaryPhone.created_at)}
             </span>

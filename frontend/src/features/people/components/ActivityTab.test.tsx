@@ -29,7 +29,9 @@ describe("ActivityTab", () => {
     // rendered (the gap is flagged in a code comment + the PR description instead of faked).
     expect(screen.queryByText(/connector ·/i)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/you logged none of this — every row carries its source/i),
+      screen.getByText(
+        /you logged none of this — every row carries its source/i,
+      ),
     ).toBeInTheDocument();
   });
 });

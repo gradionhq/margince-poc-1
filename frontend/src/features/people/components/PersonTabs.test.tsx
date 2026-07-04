@@ -21,7 +21,9 @@ describe("PersonTabs", () => {
   it("defaults to the Activity pane and renders only the active pane (AC-person-7)", () => {
     renderTabs([]);
     expect(screen.getByText(/no activity captured yet/i)).toBeInTheDocument();
-    expect(screen.queryByText(/no deals for this person yet/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/no deals for this person yet/i),
+    ).not.toBeInTheDocument();
   });
 
   it("switches to Deals, then Notes, on click", async () => {
@@ -29,7 +31,9 @@ describe("PersonTabs", () => {
     const user = userEvent.setup();
     renderTabs([]);
     await user.click(screen.getByRole("tab", { name: /deals/i }));
-    expect(screen.getByText(/no deals for this person yet/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/no deals for this person yet/i),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: /notes/i }));
     expect(screen.getByText(/no notes yet/i)).toBeInTheDocument();
   });

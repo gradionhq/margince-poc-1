@@ -14,7 +14,10 @@ describe("NotesTab", () => {
     render(<NotesTab />);
     const saveBtn = screen.getByRole("button", { name: /save/i });
     expect(saveBtn).toBeDisabled();
-    await user.type(screen.getByLabelText(/will be typed-by-you/i), "Follow up next week");
+    await user.type(
+      screen.getByLabelText(/will be typed-by-you/i),
+      "Follow up next week",
+    );
     expect(saveBtn).toBeEnabled();
   });
 
@@ -22,10 +25,15 @@ describe("NotesTab", () => {
     const { default: userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();
     render(<NotesTab />);
-    await user.type(screen.getByLabelText(/will be typed-by-you/i), "Follow up next week");
+    await user.type(
+      screen.getByLabelText(/will be typed-by-you/i),
+      "Follow up next week",
+    );
     await user.click(screen.getByRole("button", { name: /save/i }));
     expect(screen.getByText("Follow up next week")).toBeInTheDocument();
     expect(screen.getByText(/typed by you/i)).toBeInTheDocument();
-    expect(screen.getByText(/not yet persisted to the backend/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/not yet persisted to the backend/i),
+    ).toBeInTheDocument();
   });
 });

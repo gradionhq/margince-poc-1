@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../../lib/api-client/client.js";
 import type {
+  components,
   Deal,
   Person,
-  components,
 } from "../../../lib/api-client/generated/index.js";
 
 // PersonStrengthBreakdown has no named alias in generated/index.ts (unlike Person/Deal/

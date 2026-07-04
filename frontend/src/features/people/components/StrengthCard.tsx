@@ -27,10 +27,15 @@ export function StrengthCard({
   }
 
   return (
-    <div data-testid="strength-card" className="bg-gf-card border border-gf-subtle rounded-md p-gf-md flex flex-col gap-gf-sm">
+    <div
+      data-testid="strength-card"
+      className="bg-gf-card border border-gf-subtle rounded-md p-gf-md flex flex-col gap-gf-sm"
+    >
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-gf-body font-semibold text-gf-primary">Relationship strength</h3>
+          <h3 className="text-gf-body font-semibold text-gf-primary">
+            Relationship strength
+          </h3>
           <p className="text-gf-label text-gf-secondary">Team-wide</p>
         </div>
         <span className="inline-flex items-center px-gf-sm py-gf-xs rounded-full text-gf-caption font-medium bg-gf-card border border-gf-subtle text-gf-secondary">
@@ -39,9 +44,14 @@ export function StrengthCard({
       </div>
       <div className="flex items-center gap-gf-sm">
         <div className="flex-1 h-1.5 bg-gf-subtle rounded-full overflow-hidden">
-          <div className="h-full bg-gf-accent rounded-full" style={{ width: `${strength.score}%` }} />
+          <div
+            className="h-full bg-gf-accent rounded-full"
+            style={{ width: `${strength.score}%` }}
+          />
         </div>
-        <span className="text-gf-body font-medium text-gf-primary">{strength.score}/100</span>
+        <span className="text-gf-body font-medium text-gf-primary">
+          {strength.score}/100
+        </span>
       </div>
       <div className="grid grid-cols-3 gap-gf-sm">
         <div>
@@ -50,7 +60,9 @@ export function StrengthCard({
         </div>
         <div>
           <FactorBar label="Frequency" value={strength.frequency} />
-          <p className="text-gf-label text-gf-secondary">saturates at 20 interactions/90d</p>
+          <p className="text-gf-label text-gf-secondary">
+            saturates at 20 interactions/90d
+          </p>
         </div>
         <div>
           <FactorBar label="Reciprocity" value={strength.reciprocity} />

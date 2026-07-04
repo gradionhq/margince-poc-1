@@ -22,15 +22,27 @@ function renderCard(strength: Parameters<typeof StrengthCard>[0]["strength"]) {
 
 describe("StrengthCard", () => {
   it("renders the honest no-signal state when strength is null (STATE-1)", () => {
-    mockBreakdown.mockReturnValue({ data: undefined, isLoading: false } as never);
+    mockBreakdown.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+    } as never);
     renderCard(null);
     expect(screen.getByText(/no signal yet/i)).toBeInTheDocument();
     expect(screen.queryByText("Recency")).not.toBeInTheDocument();
   });
 
   it("renders score/100, the deterministic chip, Team-wide caption, and 3 factor tiles (AC-person-2/3)", () => {
-    mockBreakdown.mockReturnValue({ data: undefined, isLoading: false } as never);
-    renderCard({ score: 72, bucket: "strong", recency: 0.9, frequency: 0.6, reciprocity: 0.8 });
+    mockBreakdown.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+    } as never);
+    renderCard({
+      score: 72,
+      bucket: "strong",
+      recency: 0.9,
+      frequency: 0.6,
+      reciprocity: 0.8,
+    });
     expect(screen.getByText("72/100")).toBeInTheDocument();
     expect(screen.getByText(/computed · deterministic/i)).toBeInTheDocument();
     expect(screen.getByText(/team-wide/i)).toBeInTheDocument();
@@ -52,12 +64,23 @@ describe("StrengthCard", () => {
         frequency: 0.6,
         reciprocity: 0.8,
         contributing_activities: [
-          { id: "a1", kind: "email", subject: "Intro", occurred_at: "2026-05-01T00:00:00Z" },
+          {
+            id: "a1",
+            kind: "email",
+            subject: "Intro",
+            occurred_at: "2026-05-01T00:00:00Z",
+          },
         ],
       },
       isLoading: false,
     } as never);
-    renderCard({ score: 72, bucket: "strong", recency: 0.9, frequency: 0.6, reciprocity: 0.8 });
+    renderCard({
+      score: 72,
+      bucket: "strong",
+      recency: 0.9,
+      frequency: 0.6,
+      reciprocity: 0.8,
+    });
 
     expect(mockBreakdown).toHaveBeenCalledWith("p1", false);
     const trigger = screen.getByRole("button", {
@@ -71,7 +94,9 @@ describe("StrengthCard", () => {
     expect(screen.getByText("Intro")).toBeInTheDocument();
     expect(screen.getByText(/formula §4/i)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /hide the activities behind this score/i }),
+      screen.getByRole("button", {
+        name: /hide the activities behind this score/i,
+      }),
     ).toBeInTheDocument();
   });
 });

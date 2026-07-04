@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, ConfirmDialog, Modal, TextInput } from "../../../shared/ui/forge.js";
+import { Button, ConfirmDialog, Modal } from "../../../shared/ui/forge.js";
 import { useMergePerson } from "../api/person.js";
 
 // mergePerson's 409 uses the generic Conflict schema, not a dedicated VersionConflict — this
@@ -12,7 +12,8 @@ export function mergeErrorMessage(error: unknown): {
   if (error && typeof error === "object") {
     const problem = error as { code?: unknown; detail?: unknown };
     const code = typeof problem.code === "string" ? problem.code : undefined;
-    const detail = typeof problem.detail === "string" ? problem.detail : undefined;
+    const detail =
+      typeof problem.detail === "string" ? problem.detail : undefined;
     if (code === "version_skew") {
       // Canned concurrent-merge copy — the raw `detail` is often a terse technical string; the
       // PO-AC-M5 affordance is the human-readable "lost the race" message.
@@ -22,7 +23,8 @@ export function mergeErrorMessage(error: unknown): {
       };
     }
     if (detail) return { isVersionSkew: false, message: detail };
-    if (code) return { isVersionSkew: false, message: `Merge failed (${code}).` };
+    if (code)
+      return { isVersionSkew: false, message: `Merge failed (${code}).` };
   }
   return { isVersionSkew: false, message: "Merge failed — please try again." };
 }
@@ -51,22 +53,37 @@ export function MergePersonDialog({
 
   if (step === "input") {
     return (
-      <Modal open={open} onClose={handleClose} title="Merge this contact" width="sm">
+      <Modal
+        open={open}
+        onClose={handleClose}
+        title="Merge this contact"
+        width="sm"
+      >
         <div className="px-gf-xl py-gf-lg flex flex-col gap-gf-md">
-          {/* Label wraps the input so it associates with the Forge TextInput (which takes no id). */}
-          <label className="flex flex-col gap-gf-xs text-gf-caption text-gf-secondary">
+          {/* Native input with htmlFor/id — the Forge TextInput takes no id, so a real
+              label→control association (needed for a11y + getByLabelText) uses a raw input,
+              mirroring NotesTab's labeled textarea. */}
+          <label
+            htmlFor="merge-target-id"
+            className="flex flex-col gap-gf-xs text-gf-caption text-gf-secondary"
+          >
             Target person id
-            <TextInput
+            <input
+              id="merge-target-id"
               value={targetId}
-              onChange={setTargetId}
+              onChange={(e) => setTargetId(e.target.value)}
               placeholder="Surviving person's UUID"
+              className="h-10 w-full rounded-md bg-gf-elevated border border-gf-subtle text-gf-body text-gf-primary placeholder:text-gf-muted px-gf-md focus:border-gf-accent focus:ring-1 focus:ring-gf-accent focus:outline-none"
             />
           </label>
           <div className="flex justify-end gap-gf-sm">
             <Button variant="secondary" onClick={handleClose}>
               Cancel
             </Button>
-            <Button onClick={() => setStep("confirm")} disabled={targetId.trim().length === 0}>
+            <Button
+              onClick={() => setStep("confirm")}
+              disabled={targetId.trim().length === 0}
+            >
               Continue
             </Button>
           </div>

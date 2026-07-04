@@ -8,7 +8,9 @@ export function FactorBar({ label, value }: { label: string; value: number }) {
           style={{ width: `${Math.round(value * 100)}%` }}
         />
       </div>
-      <span className="text-gf-label text-gf-secondary">{Math.round(value * 100)}</span>
+      <span className="text-gf-label text-gf-secondary">
+        {Math.round(value * 100)}
+      </span>
     </div>
   );
 }
