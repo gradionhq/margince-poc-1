@@ -7,6 +7,7 @@ import type {
   DealListResponse,
   Pipeline,
   PipelineRollup,
+  RelationshipListResponse,
   Stage,
 } from "../../../lib/api-client/generated/index.js";
 
@@ -231,6 +232,33 @@ export function useRecentActivityCount(organizationId: string | undefined) {
       });
       if (error) throw error;
       return data?.data.length ?? 0;
+    },
+  });
+}
+
+// AC-pipeline-9/10's "stakeholders pre-attached" — the org's current employment
+// relationships (people who work there), fetched so New-deal creation can turn each into a
+// deal_stakeholder relationship once the deal exists. Read side only; the write side (batched
+// createRelationship POSTs) lives in NewDealModal, fired only after a successful deal create.
+export function useOrgEmploymentRelationships(
+  organizationId: string | undefined,
+) {
+  return useQuery<RelationshipListResponse>({
+    queryKey: ["deals", "org-employment", organizationId],
+    enabled: !!organizationId,
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET("/relationships", {
+        params: {
+          query: {
+            organization_id: organizationId,
+            kind: "employment",
+            limit: 50,
+          },
+        },
+      });
+      if (error) throw error;
+      if (!data) throw new Error("empty response");
+      return data;
     },
   });
 }

@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { apiClient } from "../../../lib/api-client/client.js";
 import { Button, Modal } from "../../../shared/ui/forge.js";
 import { useAuthStore } from "../../identity/store/authStore.js";
 import { useOrganizations } from "../../organizations/api/organizations.js";
 import {
   useCreateDeal,
   useOpenDealsForOrg,
+  useOrgEmploymentRelationships,
   useRecentActivityCount,
 } from "../api/deals.js";
 
@@ -31,8 +33,13 @@ export function NewDealModal({
   const [name, setName] = useState("");
   const { data: existingOpen } = useOpenDealsForOrg(organizationId);
   const { data: activityCount } = useRecentActivityCount(organizationId);
+  const { data: employmentRelationships } =
+    useOrgEmploymentRelationships(organizationId);
   const createDeal = useCreateDeal();
   const hasDuplicate = (existingOpen?.data.length ?? 0) > 0;
+  const stakeholderPersonIds = (employmentRelationships?.data ?? [])
+    .map((r) => r.person_id)
+    .filter((id): id is string => !!id);
 
   // Once an org is picked/preset for the first time, seed the suggested deal name — but never
   // clobber a name the rep has already started editing.
@@ -61,14 +68,32 @@ export function NewDealModal({
               variant="primary"
               loading={createDeal.isPending}
               onClick={async () => {
-                await createDeal.mutateAsync({
+                const capturedBy = `human:${user?.id ?? "unknown"}`;
+                const deal = await createDeal.mutateAsync({
                   name,
                   organization_id: organizationId,
                   pipeline_id: defaultPipelineId,
                   stage_id: defaultStageId,
                   source: "manual",
-                  captured_by: `human:${user?.id ?? "unknown"}`,
+                  captured_by: capturedBy,
                 });
+                // AC-pipeline-9/10: pre-attach the org's current employment relationships as
+                // deal_stakeholder edges once the deal exists — one createRelationship POST per
+                // person, batched, fired only after the deal create succeeds.
+                await Promise.all(
+                  stakeholderPersonIds.map((personId) =>
+                    apiClient.POST("/relationships", {
+                      body: {
+                        kind: "deal_stakeholder",
+                        deal_id: deal.id,
+                        person_id: personId,
+                        source: "manual",
+                        captured_by: capturedBy,
+                        is_current_primary: false,
+                      },
+                    }),
+                  ),
+                );
                 onCreated();
               }}
             >
@@ -119,6 +144,11 @@ export function NewDealModal({
             </label>
             <p className="text-gf-caption text-gf-secondary">
               {activityCount ?? 0} recent activities will be linked.
+            </p>
+            <p className="text-gf-caption text-gf-secondary">
+              {stakeholderPersonIds.length} stakeholder
+              {stakeholderPersonIds.length === 1 ? "" : "s"} will be
+              pre-attached.
             </p>
           </>
         )}

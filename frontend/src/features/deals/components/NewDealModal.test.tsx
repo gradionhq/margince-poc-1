@@ -3,6 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 const mutateAsync = vi.fn().mockResolvedValue({ id: "d9" });
+const employmentRelationships = [
+  { person_id: "p1", kind: "employment" },
+  { person_id: "p2", kind: "employment" },
+];
 vi.mock("../api/deals.js", () => ({
   useCreateDeal: () => ({ mutateAsync, isPending: false }),
   useOpenDealsForOrg: (orgId: string | undefined) => ({
@@ -11,6 +15,10 @@ vi.mock("../api/deals.js", () => ({
   }),
   useRecentActivityCount: (orgId: string | undefined) => ({
     data: orgId ? 3 : undefined,
+    isLoading: false,
+  }),
+  useOrgEmploymentRelationships: (orgId: string | undefined) => ({
+    data: orgId ? { data: employmentRelationships } : undefined,
     isLoading: false,
   }),
 }));
@@ -27,6 +35,12 @@ vi.mock("../../organizations/api/organizations.js", () => ({
 }));
 vi.mock("../../identity/store/authStore.js", () => ({
   useAuthStore: () => ({ user: { id: "u1" } }),
+}));
+const relationshipPost = vi.fn().mockResolvedValue({ data: { id: "r1" } });
+vi.mock("../../../lib/api-client/client.js", () => ({
+  apiClient: {
+    POST: (...args: unknown[]) => relationshipPost(...args),
+  },
 }));
 
 import { NewDealModal } from "./NewDealModal.js";
@@ -94,6 +108,61 @@ describe("NewDealModal — organizationId prop already provided (pre-linked cont
       }),
     );
     expect(onCreated).toHaveBeenCalled();
+  });
+
+  it("shows an honest pre-attach stakeholder count from the org's employment relationships (AC-pipeline-9/10)", () => {
+    render(
+      <NewDealModal
+        open={true}
+        onClose={vi.fn()}
+        organizationId="o1"
+        defaultPipelineId="p1"
+        defaultStageId="s0"
+        onCreated={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByText(/2 stakeholders will be pre-attached/i),
+    ).toBeInTheDocument();
+  });
+
+  it("Confirm & create pre-attaches one deal_stakeholder relationship per employment relationship's person_id", async () => {
+    relationshipPost.mockClear();
+    mutateAsync.mockResolvedValueOnce({ id: "d9" });
+    render(
+      <NewDealModal
+        open={true}
+        onClose={vi.fn()}
+        organizationId="o1"
+        defaultPipelineId="p1"
+        defaultStageId="s0"
+        onCreated={vi.fn()}
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /confirm & create/i }),
+    );
+    expect(relationshipPost).toHaveBeenCalledTimes(2);
+    expect(relationshipPost).toHaveBeenCalledWith(
+      "/relationships",
+      expect.objectContaining({
+        body: expect.objectContaining({
+          kind: "deal_stakeholder",
+          deal_id: "d9",
+          person_id: "p1",
+        }),
+      }),
+    );
+    expect(relationshipPost).toHaveBeenCalledWith(
+      "/relationships",
+      expect.objectContaining({
+        body: expect.objectContaining({
+          kind: "deal_stakeholder",
+          deal_id: "d9",
+          person_id: "p2",
+        }),
+      }),
+    );
   });
 
   it("Cancel makes no server call and changes nothing", async () => {
