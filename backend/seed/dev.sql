@@ -91,7 +91,7 @@ INSERT INTO role (id, workspace_id, key, is_system, permissions) VALUES
   '00000000-0000-0000-0020-000000000002',
   '00000000-0000-0000-0000-000000000001',
   'rep', false,
-  '{"person":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"},"archive":{"row_scope":"own"}},"organization":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"}},"deal":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"},"archive":{"row_scope":"own"}},"relationship":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"},"archive":{"row_scope":"own"}},"stage":{"read":{"row_scope":"all"}},"activity":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"}},"lead":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"}},"product":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"}},"invoice":{"read":{"row_scope":"own"},"create":{"row_scope":"own"}},"approval":{"read":{"row_scope":"all"}},"drafting_asset":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"}},"conversation_link":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"archive":{"row_scope":"own"}},"automation":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"},"archive":{"row_scope":"own"}}}'
+  '{"person":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"},"archive":{"row_scope":"own"}},"organization":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"}},"deal":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"},"archive":{"row_scope":"own"}},"relationship":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"},"archive":{"row_scope":"own"}},"pipeline":{"read":{"row_scope":"own"}},"stage":{"read":{"row_scope":"all"}},"activity":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"}},"lead":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"}},"product":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"}},"invoice":{"read":{"row_scope":"own"},"create":{"row_scope":"own"}},"approval":{"read":{"row_scope":"all"}},"drafting_asset":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"}},"conversation_link":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"archive":{"row_scope":"own"}},"automation":{"read":{"row_scope":"own"},"create":{"row_scope":"own"},"update":{"row_scope":"own"},"archive":{"row_scope":"own"}}}'
 ),
 (
   '00000000-0000-0000-0020-000000000003',
@@ -156,22 +156,55 @@ VALUES
    '00000000-0000-0000-0040-000000000001', 'Closed Lost', 7, 'lost', 0)
 ON CONFLICT (id) DO NOTHING;
 
--- ─── Sample deals (one owned by rep, one by admin) ──────────
--- Gives the EP03 row-scope guides "own" vs "all" data to work with.
+-- ─── Sample organization ─────────────────────────────────────
+-- T21 live-UAT needs at least one seeded organization to link deals to.
 
-INSERT INTO deal (id, workspace_id, name, pipeline_id, stage_id, owner_id, source, captured_by)
+INSERT INTO organization (id, workspace_id, name, source, captured_by)
+VALUES ('00000000-0000-0000-0044-000000000001', '00000000-0000-0000-0000-000000000001',
+        'Acme Corp', 'seed', 'human:dev')
+ON CONFLICT (id) DO NOTHING;
+
+-- ─── Sample deals (one owned by rep, one by admin) ──────────
+-- Gives the EP03 row-scope guides "own" vs "all" data to work with. T21 adds
+-- one open deal per remaining open stage (Discovery/Proposal/Negotiation) plus
+-- a genuinely stalled deal, per workspace/manual-test/t21.md's prereqs.
+
+INSERT INTO deal (id, workspace_id, name, pipeline_id, stage_id, owner_id, organization_id, amount_minor, currency, source, captured_by)
 VALUES
   ('00000000-0000-0000-0042-000000000001', '00000000-0000-0000-0000-000000000001',
    'Acme Expansion', '00000000-0000-0000-0040-000000000001',
-   '00000000-0000-0000-0041-000000000001', '00000000-0000-0000-0010-000000000002', 'seed', 'human:dev'),
+   '00000000-0000-0000-0041-000000000001', '00000000-0000-0000-0010-000000000002',
+   '00000000-0000-0000-0044-000000000001', 500000, 'EUR', 'seed', 'human:dev'),
   ('00000000-0000-0000-0042-000000000002', '00000000-0000-0000-0000-000000000001',
    'Globex Renewal', '00000000-0000-0000-0040-000000000001',
-   '00000000-0000-0000-0041-000000000002', '00000000-0000-0000-0010-000000000001', 'seed', 'human:dev')
+   '00000000-0000-0000-0041-000000000002', '00000000-0000-0000-0010-000000000001',
+   NULL, 750000, 'EUR', 'seed', 'human:dev'),
+  ('00000000-0000-0000-0042-000000000003', '00000000-0000-0000-0000-000000000001',
+   'Initech Discovery Call', '00000000-0000-0000-0040-000000000001',
+   '00000000-0000-0000-0041-000000000003', '00000000-0000-0000-0010-000000000002',
+   NULL, 300000, 'EUR', 'seed', 'human:dev'),
+  ('00000000-0000-0000-0042-000000000004', '00000000-0000-0000-0000-000000000001',
+   'Umbrella Proposal', '00000000-0000-0000-0040-000000000001',
+   '00000000-0000-0000-0041-000000000004', '00000000-0000-0000-0010-000000000002',
+   NULL, 900000, 'EUR', 'seed', 'human:dev'),
+  ('00000000-0000-0000-0042-000000000005', '00000000-0000-0000-0000-000000000001',
+   'Stark Negotiation', '00000000-0000-0000-0040-000000000001',
+   '00000000-0000-0000-0041-000000000005', '00000000-0000-0000-0010-000000000002',
+   NULL, 1200000, 'EUR', 'seed', 'human:dev')
 ON CONFLICT (id) DO NOTHING;
 
--- ─── Deal stakeholder relationship (B-E09.9 UAT seed) ───────
+-- Back-fill last_activity_at so the "Stark Negotiation" deal is genuinely
+-- stalled (DEAL-FORM-3: open + idle > 60 days, no wait_until suppression) —
+-- ON CONFLICT DO NOTHING on the INSERT above can't set this, so it's a
+-- separate idempotent UPDATE guarded by a WHERE that only ever tightens.
+UPDATE deal SET last_activity_at = now() - interval '90 days'
+WHERE id = '00000000-0000-0000-0042-000000000005'
+  AND (last_activity_at IS NULL OR last_activity_at > now() - interval '60 days');
+
+-- ─── Deal stakeholder relationships (B-E09.9 / T21 UAT seed) ─
 -- Gives the stakeholders-per-deal cross-object report + its "Explain This Number"
--- drill-through a non-empty result to resolve (swarm/manual-test/b-e09-9.md Step 4).
+-- drill-through a non-empty result to resolve (swarm/manual-test/b-e09-9.md Step 4),
+-- and gives T21's board a single-threaded (exactly one stakeholder) deal to flag.
 
 INSERT INTO relationship (id, workspace_id, kind, person_id, deal_id, role, source, captured_by)
 VALUES
