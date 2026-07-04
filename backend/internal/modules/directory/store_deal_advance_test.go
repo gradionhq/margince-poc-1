@@ -132,6 +132,77 @@ func TestDealStore_Advance_OpenToWon_SingleWriteEachTable(t *testing.T) {
 	}
 }
 
+// basecurNoFXWorkspaceID is a dedicated workspace (distinct from
+// advanceTestWorkspaceID) so this test's "zero fx_rate rows on file" premise
+// can't be invalidated by other Advance tests inserting fx_rate rows into a
+// shared workspace within the same test-DB run.
+const basecurNoFXWorkspaceID = "00000000-0000-0000-0000-000000000a13"
+
+func TestDealStore_Advance_OpenToWon_BaseCurrencyNoFXRateRow_DefaultsToOne(t *testing.T) {
+	db := openCreateTestDB(t)
+	tag := fmt.Sprintf("basecur-nofx-%d", time.Now().UnixNano())
+	if _, err := db.Exec(`INSERT INTO workspace (id, name, slug, base_currency) VALUES ($1,'t21-basecur-ws',$2,'EUR')
+		ON CONFLICT (id) DO NOTHING`, basecurNoFXWorkspaceID, "t21-basecur-ws-"+tag); err != nil {
+		t.Fatalf("seed workspace: %v", err)
+	}
+	if _, err := db.Exec(`SELECT set_config('app.workspace_id', $1, false)`, basecurNoFXWorkspaceID); err != nil {
+		t.Fatalf("set rls: %v", err)
+	}
+	var pipelineID, openA, wonA string
+	if err := db.QueryRow(`INSERT INTO pipeline (id, workspace_id, name) VALUES (uuidv7(), $1, $2) RETURNING id`,
+		basecurNoFXWorkspaceID, "Pipeline "+tag).Scan(&pipelineID); err != nil {
+		t.Fatalf("seed pipeline: %v", err)
+	}
+	if err := db.QueryRow(`INSERT INTO stage (id, workspace_id, pipeline_id, name, position, semantic, win_probability)
+		VALUES (uuidv7(), $1, $2, 'Open '||$3, 1, 'open', 20) RETURNING id`,
+		basecurNoFXWorkspaceID, pipelineID, tag).Scan(&openA); err != nil {
+		t.Fatalf("seed open stage: %v", err)
+	}
+	if err := db.QueryRow(`INSERT INTO stage (id, workspace_id, pipeline_id, name, position, semantic, win_probability)
+		VALUES (uuidv7(), $1, $2, 'Won '||$3, 2, 'won', 100) RETURNING id`,
+		basecurNoFXWorkspaceID, pipelineID, tag).Scan(&wonA); err != nil {
+		t.Fatalf("seed won stage: %v", err)
+	}
+
+	// This workspace has never had an fx_rate row inserted (unlike the shared
+	// advanceTestWorkspaceID used elsewhere in this file), so a deal
+	// denominated in the workspace's own base currency must still close.
+	var fxRateCount int
+	if err := db.QueryRow(`SELECT count(*) FROM fx_rate WHERE workspace_id=$1`, basecurNoFXWorkspaceID).Scan(&fxRateCount); err != nil {
+		t.Fatal(err)
+	}
+	if fxRateCount != 0 {
+		t.Fatalf("test setup invariant: expected zero fx_rate rows, got %d", fxRateCount)
+	}
+
+	store := crmcore.NewDealStore(db)
+	ctx := context.Background()
+
+	d := crmcore.NewDeal("Deal basecur-nofx", pipelineID, openA, prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	d.WorkspaceID = basecurNoFXWorkspaceID
+	amountMinor := int64(10000)
+	currency := "EUR"
+	d.AmountMinor = &amountMinor
+	d.Currency = &currency
+	created, err := store.Create(ctx, d, "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	updated, err := store.Advance(ctx, created.ID, basecurNoFXWorkspaceID, crmcore.AdvanceInput{
+		ToStageID: wonA, Status: "won",
+	}, 0, "human:test")
+	if err != nil {
+		t.Fatalf("Advance to won with no fx_rate row on file should succeed for a base-currency deal: %v", err)
+	}
+	if updated.FxRateToBase == nil || *updated.FxRateToBase != 1.0 {
+		t.Fatalf("expected fx_rate_to_base=1.0 for base-currency close, got %v", updated.FxRateToBase)
+	}
+	if updated.FxRateDate == nil {
+		t.Fatal("expected fx_rate_date to be set for base-currency close")
+	}
+}
+
 func TestDealStore_Advance_StatusMismatchRejected(t *testing.T) {
 	db := openCreateTestDB(t)
 	pipelineID, openA, wonA, _ := setupAdvanceFixtures(t, db, "mismatch")
