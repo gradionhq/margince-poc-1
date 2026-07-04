@@ -14,6 +14,8 @@
     "test:storybook": "vitest run --project storybook"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
     "@shared/token": "file:../vendor/forge/shared-token-0.2.0.tgz",
     "@shared/ui": "file:../vendor/forge/shared-ui-0.2.1.tgz",
     "@tanstack/react-query": "^5.100.9",
