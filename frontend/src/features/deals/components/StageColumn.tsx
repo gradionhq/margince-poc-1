@@ -1,19 +1,19 @@
+import { useDroppable } from "@dnd-kit/core";
 import type { Deal, Stage } from "../../../lib/api-client/generated/index.js";
-import { DealCard, formatMoney, weightedValue } from "./DealCard.js";
+import { DraggableDealCard, formatMoney, weightedValue } from "./DealCard.js";
 
 export function StageColumn({
   stage,
   deals,
   isTransient = false,
-  isDropTarget = false,
   onCardClick,
 }: {
   stage: Stage;
   deals: Deal[];
   isTransient?: boolean;
-  isDropTarget?: boolean;
   onCardClick: (dealId: string) => void;
 }) {
+  const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   const raw = deals.reduce((sum, d) => sum + (d.amount_minor ?? 0), 0);
   const weighted = deals.reduce(
     (sum, d) => sum + weightedValue(d.amount_minor, stage.win_probability),
@@ -25,12 +25,13 @@ export function StageColumn({
 
   return (
     <div
+      ref={setNodeRef}
       data-testid={`stage-column-${stage.id}`}
       className={`flex flex-col min-w-[260px] rounded-lg border p-gf-sm gap-gf-sm ${
         isTransient
           ? "border-dashed border-gf-accent bg-gf-accent-subtle"
           : "border-gf-subtle"
-      } ${isDropTarget ? "ring-2 ring-gf-accent" : ""}`}
+      } ${isOver ? "ring-2 ring-gf-accent" : ""}`}
     >
       <div className="px-gf-xs">
         <p className="text-gf-body font-semibold text-gf-primary">
@@ -46,7 +47,7 @@ export function StageColumn({
           <p className="text-gf-caption text-gf-muted p-gf-sm">Drop a card here</p>
         )}
         {sorted.map((deal) => (
-          <DealCard key={deal.id} deal={deal} onClick={() => onCardClick(deal.id)} />
+          <DraggableDealCard key={deal.id} deal={deal} onClick={() => onCardClick(deal.id)} />
         ))}
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../../lib/api-client/client.js";
 import type {
   Deal,
@@ -98,6 +98,65 @@ export function useDeal(id: string | undefined) {
       if (error) throw error;
       if (!data) throw new Error("empty response");
       return data;
+    },
+  });
+}
+
+export function useAdvanceDeal(pipelineId: string | undefined) {
+  const qc = useQueryClient();
+  const listKey = dealsKeys.list(pipelineId, undefined, "open");
+
+  return useMutation<
+    Deal,
+    unknown,
+    {
+      dealId: string;
+      toStageId: string;
+      status?: "open" | "won" | "lost";
+      lostReason?: string | null;
+    },
+    { previous: DealListResponse | undefined }
+  >({
+    mutationFn: async ({ dealId, toStageId, status, lostReason }) => {
+      // Stage moves call advanceDeal, not updateDeal — advanceDeal is the verb that writes
+      // deal_stage_history + emits deal.stage_changed (DEAL-WIRE-4/DEAL-WIRE-9). KNOWN CONTRACT
+      // GAP: advanceDeal carries no If-Match/version param (crm.d.ts ~L5729-5788), so this call
+      // cannot send the deal's version despite DEAL-AC-B2 — flagged in the PR description with a
+      // follow-up ticket to add If-Match to advanceDeal in crm.yaml. We do not fabricate a
+      // version field the contract doesn't accept.
+      const { data, error } = await apiClient.POST("/deals/{id}/advance", {
+        params: { path: { id: dealId } },
+        body: { to_stage_id: toStageId, status, lost_reason: lostReason ?? undefined },
+      });
+      if (error) throw error;
+      if (!data) throw new Error("empty response");
+      return data;
+    },
+    onMutate: async ({ dealId, toStageId }) => {
+      const previous = qc.getQueryData<DealListResponse>(listKey);
+      if (previous) {
+        qc.setQueryData<DealListResponse>(listKey, {
+          ...previous,
+          data: previous.data.map((d) =>
+            d.id === dealId
+              ? { ...d, stage_id: toStageId, stage_entered_at: new Date().toISOString() }
+              : d,
+          ),
+        });
+      }
+      // Cancellation doesn't need to block the synchronous cache patch above — the
+      // optimistic value must be visible to the caller the instant mutate() returns.
+      qc.cancelQueries({ queryKey: listKey });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        qc.setQueryData(listKey, context.previous);
+      }
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: listKey });
+      qc.invalidateQueries({ queryKey: dealsKeys.rollup(pipelineId) });
     },
   });
 }

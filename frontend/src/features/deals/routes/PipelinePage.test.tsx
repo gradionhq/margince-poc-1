@@ -12,6 +12,7 @@ vi.mock("../api/deals.js", () => ({
   }),
   useDeals: () => ({ data: { data: [] }, isLoading: false, isError: false, refetch: vi.fn() }),
   usePipelineRollup: () => ({ data: undefined, isLoading: false, isError: false }),
+  useAdvanceDeal: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 import { PipelinePage } from "./PipelinePage.js";

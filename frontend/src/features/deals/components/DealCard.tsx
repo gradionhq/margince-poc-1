@@ -1,3 +1,4 @@
+import { useDraggable } from "@dnd-kit/core";
 import type { Deal } from "../../../lib/api-client/generated/index.js";
 
 export function formatMoney(
@@ -72,6 +73,26 @@ export function DealCard({
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+export function DraggableDealCard({
+  deal,
+  onClick,
+}: {
+  deal: Deal;
+  onClick: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: deal.id,
+  });
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined;
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
+      <DealCard deal={deal} onClick={onClick} dragging={isDragging} />
     </div>
   );
 }

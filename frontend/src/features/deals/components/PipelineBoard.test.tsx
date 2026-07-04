@@ -1,7 +1,16 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Deal, Stage } from "../../../lib/api-client/generated/index.js";
 import { PipelineBoard } from "./PipelineBoard.js";
+
+// Vitest hoists vi.mock factories above imports, but allows referencing identifiers prefixed
+// `mock` inside them — declared once here so every test in this file (including later tasks'
+// Advance-button tests) can assert against the same mutate spy instead of each declaring its own.
+const mockAdvanceMutate = vi.fn();
+vi.mock("../api/deals.js", () => ({
+  useAdvanceDeal: () => ({ mutate: mockAdvanceMutate, isPending: false }),
+}));
 
 const stages: Stage[] = [
   { id: "s0", workspace_id: "w1", pipeline_id: "p1", name: "New", position: 0, semantic: "open", win_probability: 10, created_at: "", updated_at: "" },
@@ -94,3 +103,27 @@ describe("PipelineBoard", () => {
     expect(onRetry).toHaveBeenCalled();
   });
 });
+
+describe("PipelineBoard drag mechanics", () => {
+  it("navigates on a plain click (no drag)", async () => {
+    const onCardClick = vi.fn();
+    render(
+      <PipelineBoard
+        pipelineId="p1"
+        stages={stages}
+        deals={deals}
+        isLoading={false}
+        isError={false}
+        onRetry={vi.fn()}
+        onCardClick={onCardClick}
+      />,
+    );
+    await userEvent.click(screen.getByTestId("deal-card-d1"));
+    expect(onCardClick).toHaveBeenCalledWith("d1");
+  });
+});
+
+// dnd-kit's pointer-sensor activation-distance behavior is inherently hard to unit-test through
+// jsdom pointer events with full fidelity — the click-vs-drag-tail distinction itself is
+// asserted at the live-UAT layer (workspace/manual-test/t21.md step 4). The test above only pins
+// the non-drag click path so a regression here is still caught fast.

@@ -1,16 +1,19 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../../../lib/api-client/client.js", () => ({
   apiClient: {
     GET: vi.fn(),
+    POST: vi.fn(),
   },
 }));
 
 import { apiClient } from "../../../lib/api-client/client.js";
 import {
+  dealsKeys,
+  useAdvanceDeal,
   useDeal,
   useDeals,
   useDefaultPipeline,
@@ -113,5 +116,68 @@ describe("deals read API", () => {
       "/deals/d1",
       expect.anything(),
     );
+  });
+});
+
+describe("useAdvanceDeal (optimistic mutation)", () => {
+  it("patches the cache in onMutate before the network resolves", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(dealsKeys.list("p1", undefined, "open"), {
+      data: [{ id: "d1", stage_id: "s0", stage_entered_at: "2020-01-01T00:00:00Z" }],
+      page: {},
+    });
+    let resolvePost!: (v: unknown) => void;
+    (apiClient.POST as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      new Promise((r) => {
+        resolvePost = r;
+      }),
+    );
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useAdvanceDeal("p1"), { wrapper: localWrapper });
+
+    act(() => {
+      result.current.mutate({ dealId: "d1", toStageId: "s1" });
+    });
+
+    // Optimistic patch is synchronous — check before the network resolves.
+    const optimistic = qc.getQueryData<{ data: Array<{ id: string; stage_id: string }> }>(
+      dealsKeys.list("p1", undefined, "open"),
+    );
+    expect(optimistic?.data[0].stage_id).toBe("s1");
+
+    resolvePost({ data: { id: "d1", stage_id: "s1" }, error: undefined });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  });
+
+  it("rolls back the cache onError and surfaces the server-named cause", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(dealsKeys.list("p1", undefined, "open"), {
+      data: [{ id: "d1", stage_id: "s0" }],
+      page: {},
+    });
+    (apiClient.POST as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: undefined,
+      error: { code: "validation_error", detail: "stage not in pipeline" },
+    });
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useAdvanceDeal("p1"), { wrapper: localWrapper });
+
+    await act(async () => {
+      try {
+        await result.current.mutateAsync({ dealId: "d1", toStageId: "s1" });
+      } catch {
+        // expected — asserted via result.current.isError below
+      }
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    const rolledBack = qc.getQueryData<{ data: Array<{ id: string; stage_id: string }> }>(
+      dealsKeys.list("p1", undefined, "open"),
+    );
+    expect(rolledBack?.data[0].stage_id).toBe("s0");
   });
 });
