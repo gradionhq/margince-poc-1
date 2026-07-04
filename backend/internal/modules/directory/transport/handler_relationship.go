@@ -156,23 +156,7 @@ func (h *RelationshipHandler) update(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 	rel, err := h.store.Update(r.Context(), id, wsID, body, ifMatch)
-	if errors.Is(err, errs.ErrConflict) {
-		jsonProblem(w, http.StatusConflict, "conflict")
-		return
-	}
-	if errors.Is(err, errs.ErrVersionSkew) {
-		jsonProblem(w, http.StatusConflict, "version_skew")
-		return
-	}
-	if errors.Is(err, errs.ErrNotFound) {
-		jsonProblem(w, http.StatusNotFound, "not_found")
-		return
-	}
-	if err != nil {
-		jsonErr(w, err)
-		return
-	}
-	jsonOK(w, rel)
+	writeUpdateResult(w, rel, err)
 }
 
 // archive is intentionally If-Match-free. The contract op carries no version
