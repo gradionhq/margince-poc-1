@@ -102,6 +102,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/people/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore (un-archive) a soft-deleted person.
+         * @description Inverse of `archivePerson`: clears `archived_at`, restoring the person to default
+         *     list visibility. Triggers `person.restored`. Restoring an already-live person is a
+         *     no-op success (idempotent read-modify-write); restoring a person that was never
+         *     archived still returns 200 with the unchanged person. 🟢 — undoing a soft-delete
+         *     carries no data-loss risk, unlike `archivePerson` (🟡).
+         */
+        post: operations["restorePerson"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/people/{id}/strength-breakdown": {
         parameters: {
             query?: never;
@@ -190,6 +217,37 @@ export interface paths {
          *     the org half of the `merge_records` MCP verb.
          */
         post: operations["mergeOrganization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organizations/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore (un-archive) a soft-deleted organization.
+         * @description Inverse of `archiveOrganization`: clears `archived_at`, restoring the organization to
+         *     default list visibility. Restoring an already-live organization is a no-op success
+         *     (idempotent read-modify-write); restoring an organization that was never archived
+         *     still returns 200 with the unchanged organization. 🟢 — undoing a soft-delete carries
+         *     no data-loss risk, unlike `archiveOrganization` (🟡). Note: `organization.restored` is
+         *     not in the pinned event catalog (only `organization.created/updated/archived/merged`
+         *     are) — this operation performs the restore without emitting a new event; adding
+         *     `organization.restored` to the catalog is separate, uncited scope, tracked outside this
+         *     ticket.
+         */
+        post: operations["restoreOrganization"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2442,10 +2500,16 @@ export interface components {
             merged_into_id?: string | null;
             domains?: components["schemas"]["OrganizationDomain"][];
             /**
-             * @description An org IS a partner iff classification='partner' AND it has a `partner` row (A41/ADR-0032).
+             * @description PO-DDL-4 target values (agency, reseller, tech_vendor, platform, competitor, plus prospect/customer/partner/other) unioned with legacy live values (vendor) per the additive-first gate decision (gate issue #58, Option 1) — legacy values are DEPRECATED, not removed; a fast-follow ticket drops them + adds NOT NULL DEFAULT 'prospect' after a deprecation window. An org IS a partner iff classification='partner' AND it has a `partner` row (A41/ADR-0032).
              * @enum {string|null}
              */
-            classification?: null | "customer" | "prospect" | "partner" | "vendor" | "other";
+            classification?: null | "customer" | "prospect" | "partner" | "vendor" | "other" | "agency" | "reseller" | "tech_vendor" | "platform" | "competitor";
+            /** @description Evidence-backed relevance score (PO-DDL-4); null when not yet computed. */
+            relevance?: number | null;
+            /** @description Object-store base key for the resolved logo (sm/md/lg variants derived); null → render a deterministic monogram (A55). */
+            logo_object_key?: string | null;
+            /** @description Resolved source URL the logo was pulled from (logo-specific provenance, beyond row source/captured_by). */
+            logo_origin?: string | null;
             source: string;
             captured_by: string;
             raw?: {
@@ -4096,24 +4160,47 @@ export interface components {
          *     has a `partner` row + classification='partner'). Company identity is never duplicated.
          */
         Partner: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            workspace_id: string;
             /**
              * Format: uuid
-             * @description The org this partner record extends (PK = FK).
+             * @description The org this partner record extends (1:1
              */
             organization_id: string;
             /**
-             * @description Functional role (A44/ADR-0034); implementation + dev are Gradion's turf.
+             * @description PO-DDL-6 target values (applied, certified, suspended) unioned with legacy live values (prospect, in_certification, churned) per the additive-first gate decision (gate issue #58, Option 1) — legacy values are DEPRECATED, not removed; a fast-follow ticket drops them once callers migrate. Program lifecycle (A38/ADR-0030).
+             * @enum {string}
+             */
+            cert_status: "prospect" | "in_certification" | "certified" | "suspended" | "churned" | "applied";
+            /**
+             * @description Functional role (A44/ADR-0034), orthogonal to margin_tier; implementation + dev are Gradion's turf. NOTE — PO-DDL-6 has this nullable at DB layer but making the response property nullable is an oasdiff ERR (response-property-became-nullable); left non-nullable here pending coordinator decision on the fast-follow ticket.
              * @enum {string}
              */
             partner_role: "hosting" | "consulting" | "strategic";
-            /** @enum {string} */
-            cert_status: "prospect" | "in_certification" | "certified" | "suspended" | "churned";
-            /** @description Scenario-C margin tier (business/14-partner-program.md). */
-            margin_tier?: string | null;
-            /** @description Program gate metrics (certified seats */
+            /**
+             * @description PO-DDL-6 target tier values. The prior contract left this field freeform (no enum constraint, no documented legacy value set to preserve) — this is a net-new, additive constraint, not a removal.
+             * @enum {string|null}
+             */
+            margin_tier?: null | "tier1_15" | "tier2_20" | "tier3_25";
+            /** @description DEPRECATED — kept for backward compatibility per the additive-first gate decision (gate issue #58, Option 1); superseded by certified_staff/retention_rate. Remove in the fast-follow ticket once callers migrate. */
             gate_metrics?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * @description Certified-staff headcount; gates the tier. Additive alongside (not replacing) gate_metrics.
+             * @default 0
+             */
+            certified_staff: number;
+            /** @description A tier-gate metric (PO-DDL-6). Additive alongside (not replacing) gate_metrics. */
+            retention_rate?: number | null;
+            /** Format: date */
+            joined_at?: string | null;
+            /** Format: date */
+            renews_at?: string | null;
+            source: string;
+            captured_by: string;
             version?: components["schemas"]["RowVersion"];
             /** Format: date-time */
             created_at: string;
@@ -4123,14 +4210,20 @@ export interface components {
             archived_at?: string | null;
         };
         UpsertPartnerRequest: {
+            /** @enum {string|null} */
+            partner_role?: null | "hosting" | "consulting" | "strategic";
             /** @enum {string} */
-            partner_role: "hosting" | "consulting" | "strategic";
-            /** @enum {string} */
-            cert_status?: "prospect" | "in_certification" | "certified" | "suspended" | "churned";
+            cert_status?: "prospect" | "in_certification" | "certified" | "suspended" | "churned" | "applied";
             margin_tier?: string | null;
             gate_metrics?: {
                 [key: string]: unknown;
             } | null;
+            certified_staff?: number;
+            retention_rate?: number | null;
+            /** Format: date */
+            joined_at?: string | null;
+            /** Format: date */
+            renews_at?: string | null;
         };
         ConsentPurpose: {
             /** Format: uuid */
@@ -4901,6 +4994,16 @@ export interface operations {
                  *     (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
                  */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description A signed, single-use approval token (see schema `ApprovalToken`) minted by
+                 *     POST /approvals/{id}/approve, authorizing exactly one 🟡 confirm-first operation. It is a
+                 *     compact JWS whose claims **bind** the token to a specific approval, effect, tenant and
+                 *     principal — it is NOT a bare opaque string (ADR-0036). The server rejects a token that is
+                 *     expired, already consumed, or whose `diff_hash`/`workspace_id`/`passport_id`/`tool` does not
+                 *     match the operation being executed (`403 code: approval_token_invalid`). Required when an
+                 *     AGENT principal invokes a 🟡 operation; a human's direct call is itself the approval.
+                 */
+                "X-Approval-Token"?: components["parameters"]["ApprovalToken"];
             };
             path: {
                 /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
@@ -4933,6 +5036,43 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+        };
+    };
+    restorePerson: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+                 *     `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+                 *     returns the original status + body. Reusing the same key with a *different* request body
+                 *     returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+                 *     **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+                 *     retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+                 *     (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Restored person (now carries `archived_at: null`). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Person"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getPersonStrengthBreakdown: {
@@ -4988,6 +5128,9 @@ export interface operations {
                 owner_id?: string;
                 /** @description Lookup by normalized domain (the employer-inference index). */
                 domain?: string;
+                classification?: "customer" | "prospect" | "partner" | "vendor" | "other" | "agency" | "reseller" | "tech_vendor" | "platform" | "competitor";
+                /** @description Lower bound (inclusive) on `relevance`. */
+                relevance_gte?: number;
                 q?: string;
             };
             header?: never;
@@ -5045,7 +5188,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            /** @description A domain already maps to another organization. */
+            /** @description A domain on the request already maps to another live organization. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5210,6 +5353,43 @@ export interface operations {
             422: components["responses"]["ValidationError"];
         };
     };
+    restoreOrganization: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+                 *     `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+                 *     returns the original status + body. Reusing the same key with a *different* request body
+                 *     returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+                 *     **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+                 *     retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+                 *     (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Restored organization (now carries `archived_at: null`). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     getPartner: {
         parameters: {
             query?: never;
@@ -5286,7 +5466,7 @@ export interface operations {
                  */
                 sort?: components["parameters"]["Sort"];
                 partner_role?: "hosting" | "consulting" | "strategic";
-                cert_status?: "prospect" | "in_certification" | "certified" | "suspended" | "churned";
+                cert_status?: "prospect" | "in_certification" | "certified" | "suspended" | "churned" | "applied";
             };
             header?: never;
             path?: never;

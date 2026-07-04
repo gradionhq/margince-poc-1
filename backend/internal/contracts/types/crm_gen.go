@@ -1559,17 +1559,26 @@ func (e MemberStatus) Valid() bool {
 
 // Defines values for OrganizationClassification.
 const (
+	OrganizationClassificationAgency      OrganizationClassification = "agency"
+	OrganizationClassificationCompetitor  OrganizationClassification = "competitor"
 	OrganizationClassificationCustomer    OrganizationClassification = "customer"
 	OrganizationClassificationLessThannil OrganizationClassification = "<nil>"
 	OrganizationClassificationOther       OrganizationClassification = "other"
 	OrganizationClassificationPartner     OrganizationClassification = "partner"
+	OrganizationClassificationPlatform    OrganizationClassification = "platform"
 	OrganizationClassificationProspect    OrganizationClassification = "prospect"
+	OrganizationClassificationReseller    OrganizationClassification = "reseller"
+	OrganizationClassificationTechVendor  OrganizationClassification = "tech_vendor"
 	OrganizationClassificationVendor      OrganizationClassification = "vendor"
 )
 
 // Valid indicates whether the value is a known member of the OrganizationClassification enum.
 func (e OrganizationClassification) Valid() bool {
 	switch e {
+	case OrganizationClassificationAgency:
+		return true
+	case OrganizationClassificationCompetitor:
+		return true
 	case OrganizationClassificationCustomer:
 		return true
 	case OrganizationClassificationLessThannil:
@@ -1578,7 +1587,13 @@ func (e OrganizationClassification) Valid() bool {
 		return true
 	case OrganizationClassificationPartner:
 		return true
+	case OrganizationClassificationPlatform:
+		return true
 	case OrganizationClassificationProspect:
+		return true
+	case OrganizationClassificationReseller:
+		return true
+	case OrganizationClassificationTechVendor:
 		return true
 	case OrganizationClassificationVendor:
 		return true
@@ -1646,6 +1661,7 @@ func (e OrganizationSizeBand) Valid() bool {
 
 // Defines values for PartnerCertStatus.
 const (
+	PartnerCertStatusApplied         PartnerCertStatus = "applied"
 	PartnerCertStatusCertified       PartnerCertStatus = "certified"
 	PartnerCertStatusChurned         PartnerCertStatus = "churned"
 	PartnerCertStatusInCertification PartnerCertStatus = "in_certification"
@@ -1656,6 +1672,8 @@ const (
 // Valid indicates whether the value is a known member of the PartnerCertStatus enum.
 func (e PartnerCertStatus) Valid() bool {
 	switch e {
+	case PartnerCertStatusApplied:
+		return true
 	case PartnerCertStatusCertified:
 		return true
 	case PartnerCertStatusChurned:
@@ -1665,6 +1683,30 @@ func (e PartnerCertStatus) Valid() bool {
 	case PartnerCertStatusProspect:
 		return true
 	case PartnerCertStatusSuspended:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PartnerMarginTier.
+const (
+	PartnerMarginTierLessThannil PartnerMarginTier = "<nil>"
+	PartnerMarginTierTier115     PartnerMarginTier = "tier1_15"
+	PartnerMarginTierTier220     PartnerMarginTier = "tier2_20"
+	PartnerMarginTierTier325     PartnerMarginTier = "tier3_25"
+)
+
+// Valid indicates whether the value is a known member of the PartnerMarginTier enum.
+func (e PartnerMarginTier) Valid() bool {
+	switch e {
+	case PartnerMarginTierLessThannil:
+		return true
+	case PartnerMarginTierTier115:
+		return true
+	case PartnerMarginTierTier220:
+		return true
+	case PartnerMarginTierTier325:
 		return true
 	default:
 		return false
@@ -2141,34 +2183,34 @@ func (e UpdateLeadRequestStatus) Valid() bool {
 
 // Defines values for UpdateOrganizationRequestSizeBand.
 const (
-	LessThannil UpdateOrganizationRequestSizeBand = "<nil>"
-	N10015000   UpdateOrganizationRequestSizeBand = "1001-5000"
-	N110        UpdateOrganizationRequestSizeBand = "1-10"
-	N1150       UpdateOrganizationRequestSizeBand = "11-50"
-	N201500     UpdateOrganizationRequestSizeBand = "201-500"
-	N5000       UpdateOrganizationRequestSizeBand = "5000+"
-	N5011000    UpdateOrganizationRequestSizeBand = "501-1000"
-	N51200      UpdateOrganizationRequestSizeBand = "51-200"
+	UpdateOrganizationRequestSizeBandLessThannil UpdateOrganizationRequestSizeBand = "<nil>"
+	UpdateOrganizationRequestSizeBandN10015000   UpdateOrganizationRequestSizeBand = "1001-5000"
+	UpdateOrganizationRequestSizeBandN110        UpdateOrganizationRequestSizeBand = "1-10"
+	UpdateOrganizationRequestSizeBandN1150       UpdateOrganizationRequestSizeBand = "11-50"
+	UpdateOrganizationRequestSizeBandN201500     UpdateOrganizationRequestSizeBand = "201-500"
+	UpdateOrganizationRequestSizeBandN5000       UpdateOrganizationRequestSizeBand = "5000+"
+	UpdateOrganizationRequestSizeBandN5011000    UpdateOrganizationRequestSizeBand = "501-1000"
+	UpdateOrganizationRequestSizeBandN51200      UpdateOrganizationRequestSizeBand = "51-200"
 )
 
 // Valid indicates whether the value is a known member of the UpdateOrganizationRequestSizeBand enum.
 func (e UpdateOrganizationRequestSizeBand) Valid() bool {
 	switch e {
-	case LessThannil:
+	case UpdateOrganizationRequestSizeBandLessThannil:
 		return true
-	case N10015000:
+	case UpdateOrganizationRequestSizeBandN10015000:
 		return true
-	case N110:
+	case UpdateOrganizationRequestSizeBandN110:
 		return true
-	case N1150:
+	case UpdateOrganizationRequestSizeBandN1150:
 		return true
-	case N201500:
+	case UpdateOrganizationRequestSizeBandN201500:
 		return true
-	case N5000:
+	case UpdateOrganizationRequestSizeBandN5000:
 		return true
-	case N5011000:
+	case UpdateOrganizationRequestSizeBandN5011000:
 		return true
-	case N51200:
+	case UpdateOrganizationRequestSizeBandN51200:
 		return true
 	default:
 		return false
@@ -2198,6 +2240,7 @@ func (e UpdateStageRequestSemantic) Valid() bool {
 
 // Defines values for UpsertPartnerRequestCertStatus.
 const (
+	UpsertPartnerRequestCertStatusApplied         UpsertPartnerRequestCertStatus = "applied"
 	UpsertPartnerRequestCertStatusCertified       UpsertPartnerRequestCertStatus = "certified"
 	UpsertPartnerRequestCertStatusChurned         UpsertPartnerRequestCertStatus = "churned"
 	UpsertPartnerRequestCertStatusInCertification UpsertPartnerRequestCertStatus = "in_certification"
@@ -2208,6 +2251,8 @@ const (
 // Valid indicates whether the value is a known member of the UpsertPartnerRequestCertStatus enum.
 func (e UpsertPartnerRequestCertStatus) Valid() bool {
 	switch e {
+	case UpsertPartnerRequestCertStatusApplied:
+		return true
 	case UpsertPartnerRequestCertStatusCertified:
 		return true
 	case UpsertPartnerRequestCertStatusChurned:
@@ -2225,9 +2270,10 @@ func (e UpsertPartnerRequestCertStatus) Valid() bool {
 
 // Defines values for UpsertPartnerRequestPartnerRole.
 const (
-	UpsertPartnerRequestPartnerRoleConsulting UpsertPartnerRequestPartnerRole = "consulting"
-	UpsertPartnerRequestPartnerRoleHosting    UpsertPartnerRequestPartnerRole = "hosting"
-	UpsertPartnerRequestPartnerRoleStrategic  UpsertPartnerRequestPartnerRole = "strategic"
+	UpsertPartnerRequestPartnerRoleConsulting  UpsertPartnerRequestPartnerRole = "consulting"
+	UpsertPartnerRequestPartnerRoleHosting     UpsertPartnerRequestPartnerRole = "hosting"
+	UpsertPartnerRequestPartnerRoleLessThannil UpsertPartnerRequestPartnerRole = "<nil>"
+	UpsertPartnerRequestPartnerRoleStrategic   UpsertPartnerRequestPartnerRole = "strategic"
 )
 
 // Valid indicates whether the value is a known member of the UpsertPartnerRequestPartnerRole enum.
@@ -2236,6 +2282,8 @@ func (e UpsertPartnerRequestPartnerRole) Valid() bool {
 	case UpsertPartnerRequestPartnerRoleConsulting:
 		return true
 	case UpsertPartnerRequestPartnerRoleHosting:
+		return true
+	case UpsertPartnerRequestPartnerRoleLessThannil:
 		return true
 	case UpsertPartnerRequestPartnerRoleStrategic:
 		return true
@@ -2409,6 +2457,48 @@ func (e ListListsParamsEntityType) Valid() bool {
 	}
 }
 
+// Defines values for ListOrganizationsParamsClassification.
+const (
+	ListOrganizationsParamsClassificationAgency     ListOrganizationsParamsClassification = "agency"
+	ListOrganizationsParamsClassificationCompetitor ListOrganizationsParamsClassification = "competitor"
+	ListOrganizationsParamsClassificationCustomer   ListOrganizationsParamsClassification = "customer"
+	ListOrganizationsParamsClassificationOther      ListOrganizationsParamsClassification = "other"
+	ListOrganizationsParamsClassificationPartner    ListOrganizationsParamsClassification = "partner"
+	ListOrganizationsParamsClassificationPlatform   ListOrganizationsParamsClassification = "platform"
+	ListOrganizationsParamsClassificationProspect   ListOrganizationsParamsClassification = "prospect"
+	ListOrganizationsParamsClassificationReseller   ListOrganizationsParamsClassification = "reseller"
+	ListOrganizationsParamsClassificationTechVendor ListOrganizationsParamsClassification = "tech_vendor"
+	ListOrganizationsParamsClassificationVendor     ListOrganizationsParamsClassification = "vendor"
+)
+
+// Valid indicates whether the value is a known member of the ListOrganizationsParamsClassification enum.
+func (e ListOrganizationsParamsClassification) Valid() bool {
+	switch e {
+	case ListOrganizationsParamsClassificationAgency:
+		return true
+	case ListOrganizationsParamsClassificationCompetitor:
+		return true
+	case ListOrganizationsParamsClassificationCustomer:
+		return true
+	case ListOrganizationsParamsClassificationOther:
+		return true
+	case ListOrganizationsParamsClassificationPartner:
+		return true
+	case ListOrganizationsParamsClassificationPlatform:
+		return true
+	case ListOrganizationsParamsClassificationProspect:
+		return true
+	case ListOrganizationsParamsClassificationReseller:
+		return true
+	case ListOrganizationsParamsClassificationTechVendor:
+		return true
+	case ListOrganizationsParamsClassificationVendor:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListPartnersParamsPartnerRole.
 const (
 	Consulting ListPartnersParamsPartnerRole = "consulting"
@@ -2432,6 +2522,7 @@ func (e ListPartnersParamsPartnerRole) Valid() bool {
 
 // Defines values for ListPartnersParamsCertStatus.
 const (
+	ListPartnersParamsCertStatusApplied         ListPartnersParamsCertStatus = "applied"
 	ListPartnersParamsCertStatusCertified       ListPartnersParamsCertStatus = "certified"
 	ListPartnersParamsCertStatusChurned         ListPartnersParamsCertStatus = "churned"
 	ListPartnersParamsCertStatusInCertification ListPartnersParamsCertStatus = "in_certification"
@@ -2442,6 +2533,8 @@ const (
 // Valid indicates whether the value is a known member of the ListPartnersParamsCertStatus enum.
 func (e ListPartnersParamsCertStatus) Valid() bool {
 	switch e {
+	case ListPartnersParamsCertStatusApplied:
+		return true
 	case ListPartnersParamsCertStatusCertified:
 		return true
 	case ListPartnersParamsCertStatusChurned:
@@ -3966,7 +4059,7 @@ type Organization struct {
 	ArchivedAt *time.Time `json:"archived_at,omitempty"`
 	CapturedBy string     `json:"captured_by"`
 
-	// Classification An org IS a partner iff classification='partner' AND it has a `partner` row (A41/ADR-0032).
+	// Classification PO-DDL-4 target values (agency, reseller, tech_vendor, platform, competitor, plus prospect/customer/partner/other) unioned with legacy live values (vendor) per the additive-first gate decision (gate issue #58, Option 1) — legacy values are DEPRECATED, not removed; a fast-follow ticket drops them + adds NOT NULL DEFAULT 'prospect' after a deprecation window. An org IS a partner iff classification='partner' AND it has a `partner` row (A41/ADR-0032).
 	Classification *OrganizationClassification `json:"classification,omitempty"`
 
 	// ContactCount Count of people with a live `employment` relationship to this
@@ -3975,13 +4068,19 @@ type Organization struct {
 	CreatedAt    time.Time `json:"created_at"`
 
 	// Deals PO-EXT-3 — deals attributed to this organization. Populated on `getOrganization` only.
-	Deals        *[]Deal               `json:"deals,omitempty"`
-	DisplayName  string                `json:"display_name"`
-	Domains      *[]OrganizationDomain `json:"domains,omitempty"`
-	Id           openapi_types.UUID    `json:"id"`
-	Industry     *string               `json:"industry,omitempty"`
-	LegalName    *string               `json:"legal_name,omitempty"`
-	MergedIntoId *openapi_types.UUID   `json:"merged_into_id,omitempty"`
+	Deals       *[]Deal               `json:"deals,omitempty"`
+	DisplayName string                `json:"display_name"`
+	Domains     *[]OrganizationDomain `json:"domains,omitempty"`
+	Id          openapi_types.UUID    `json:"id"`
+	Industry    *string               `json:"industry,omitempty"`
+	LegalName   *string               `json:"legal_name,omitempty"`
+
+	// LogoObjectKey Object-store base key for the resolved logo (sm/md/lg variants derived); null → render a deterministic monogram (A55).
+	LogoObjectKey *string `json:"logo_object_key,omitempty"`
+
+	// LogoOrigin Resolved source URL the logo was pulled from (logo-specific provenance, beyond row source/captured_by).
+	LogoOrigin   *string             `json:"logo_origin,omitempty"`
+	MergedIntoId *openapi_types.UUID `json:"merged_into_id,omitempty"`
 
 	// OpenDealCount Count of this organization's live deals with status=open
 	// (server-computed, AC-companies-3).
@@ -4011,10 +4110,13 @@ type Organization struct {
 	// Relationships PO-EXT-3 organization-360 composite read — this org's relationship edges
 	// (employment, partner edges). Populated on the single-record read
 	// (`getOrganization`); omitted on list rows (`listOrganizations`).
-	Relationships *[]Relationship       `json:"relationships,omitempty"`
-	SizeBand      *OrganizationSizeBand `json:"size_band,omitempty"`
-	Source        string                `json:"source"`
-	UpdatedAt     time.Time             `json:"updated_at"`
+	Relationships *[]Relationship `json:"relationships,omitempty"`
+
+	// Relevance Evidence-backed relevance score (PO-DDL-4); null when not yet computed.
+	Relevance *int                  `json:"relevance,omitempty"`
+	SizeBand  *OrganizationSizeBand `json:"size_band,omitempty"`
+	Source    string                `json:"source"`
+	UpdatedAt time.Time             `json:"updated_at"`
 
 	// Version Monotonic row version, incremented by the server on every mutation (data-model §1.7).
 	// Echoed back as the `version` field on every mutable entity. To make a write conditional,
@@ -4026,7 +4128,7 @@ type Organization struct {
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
-// OrganizationClassification An org IS a partner iff classification='partner' AND it has a `partner` row (A41/ADR-0032).
+// OrganizationClassification PO-DDL-4 target values (agency, reseller, tech_vendor, platform, competitor, plus prospect/customer/partner/other) unioned with legacy live values (vendor) per the additive-first gate decision (gate issue #58, Option 1) — legacy values are DEPRECATED, not removed; a fast-follow ticket drops them + adds NOT NULL DEFAULT 'prospect' after a deprecation window. An org IS a partner iff classification='partner' AND it has a `partner` row (A41/ADR-0032).
 type OrganizationClassification string
 
 // OrganizationOrgStrengthBucket defines model for Organization.OrgStrength.Bucket.
@@ -4073,35 +4175,52 @@ type PageInfo struct {
 // Partner First-class partner state as a 1:1 extension of an organization (an org IS a partner iff it
 // has a `partner` row + classification='partner'). Company identity is never duplicated.
 type Partner struct {
-	ArchivedAt *time.Time        `json:"archived_at,omitempty"`
+	ArchivedAt *time.Time `json:"archived_at,omitempty"`
+	CapturedBy string     `json:"captured_by"`
+
+	// CertStatus PO-DDL-6 target values (applied, certified, suspended) unioned with legacy live values (prospect, in_certification, churned) per the additive-first gate decision (gate issue #58, Option 1) — legacy values are DEPRECATED, not removed; a fast-follow ticket drops them once callers migrate. Program lifecycle (A38/ADR-0030).
 	CertStatus PartnerCertStatus `json:"cert_status"`
-	CreatedAt  time.Time         `json:"created_at"`
 
-	// GateMetrics Program gate metrics (certified seats
+	// CertifiedStaff Certified-staff headcount; gates the tier. Additive alongside (not replacing) gate_metrics.
+	CertifiedStaff *int      `json:"certified_staff,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+
+	// GateMetrics DEPRECATED — kept for backward compatibility per the additive-first gate decision (gate issue #58, Option 1); superseded by certified_staff/retention_rate. Remove in the fast-follow ticket once callers migrate.
 	GateMetrics *map[string]interface{} `json:"gate_metrics,omitempty"`
+	Id          openapi_types.UUID      `json:"id"`
+	JoinedAt    *openapi_types.Date     `json:"joined_at,omitempty"`
 
-	// MarginTier Scenario-C margin tier (business/14-partner-program.md).
-	MarginTier *string `json:"margin_tier,omitempty"`
+	// MarginTier PO-DDL-6 target tier values. The prior contract left this field freeform (no enum constraint, no documented legacy value set to preserve) — this is a net-new, additive constraint, not a removal.
+	MarginTier *PartnerMarginTier `json:"margin_tier,omitempty"`
 
-	// OrganizationId The org this partner record extends (PK = FK).
+	// OrganizationId The org this partner record extends (1:1
 	OrganizationId openapi_types.UUID `json:"organization_id"`
 
-	// PartnerRole Functional role (A44/ADR-0034); implementation + dev are Gradion's turf.
-	PartnerRole PartnerPartnerRole `json:"partner_role"`
-	UpdatedAt   time.Time          `json:"updated_at"`
+	// PartnerRole Functional role (A44/ADR-0034), orthogonal to margin_tier; implementation + dev are Gradion's turf. NOTE — PO-DDL-6 has this nullable at DB layer but making the response property nullable is an oasdiff ERR (response-property-became-nullable); left non-nullable here pending coordinator decision on the fast-follow ticket.
+	PartnerRole PartnerPartnerRole  `json:"partner_role"`
+	RenewsAt    *openapi_types.Date `json:"renews_at,omitempty"`
+
+	// RetentionRate A tier-gate metric (PO-DDL-6). Additive alongside (not replacing) gate_metrics.
+	RetentionRate *float32  `json:"retention_rate,omitempty"`
+	Source        string    `json:"source"`
+	UpdatedAt     time.Time `json:"updated_at"`
 
 	// Version Monotonic row version, incremented by the server on every mutation (data-model §1.7).
 	// Echoed back as the `version` field on every mutable entity. To make a write conditional,
 	// send the last-seen value in `If-Match`; a mismatch returns `409 code: version_skew`
 	// (ErrVersionSkew) so the client re-reads before retrying. Applies to the native path,
 	// not only overlay mode.
-	Version *RowVersion `json:"version,omitempty"`
+	Version     *RowVersion        `json:"version,omitempty"`
+	WorkspaceId openapi_types.UUID `json:"workspace_id"`
 }
 
-// PartnerCertStatus defines model for Partner.CertStatus.
+// PartnerCertStatus PO-DDL-6 target values (applied, certified, suspended) unioned with legacy live values (prospect, in_certification, churned) per the additive-first gate decision (gate issue #58, Option 1) — legacy values are DEPRECATED, not removed; a fast-follow ticket drops them once callers migrate. Program lifecycle (A38/ADR-0030).
 type PartnerCertStatus string
 
-// PartnerPartnerRole Functional role (A44/ADR-0034); implementation + dev are Gradion's turf.
+// PartnerMarginTier PO-DDL-6 target tier values. The prior contract left this field freeform (no enum constraint, no documented legacy value set to preserve) — this is a net-new, additive constraint, not a removal.
+type PartnerMarginTier string
+
+// PartnerPartnerRole Functional role (A44/ADR-0034), orthogonal to margin_tier; implementation + dev are Gradion's turf. NOTE — PO-DDL-6 has this nullable at DB layer but making the response property nullable is an oasdiff ERR (response-property-became-nullable); left non-nullable here pending coordinator decision on the fast-follow ticket.
 type PartnerPartnerRole string
 
 // PassportCreateRequest defines model for PassportCreateRequest.
@@ -4932,10 +5051,14 @@ type UpdateStageRequestSemantic string
 
 // UpsertPartnerRequest defines model for UpsertPartnerRequest.
 type UpsertPartnerRequest struct {
-	CertStatus  *UpsertPartnerRequestCertStatus `json:"cert_status,omitempty"`
-	GateMetrics *map[string]interface{}         `json:"gate_metrics,omitempty"`
-	MarginTier  *string                         `json:"margin_tier,omitempty"`
-	PartnerRole UpsertPartnerRequestPartnerRole `json:"partner_role"`
+	CertStatus     *UpsertPartnerRequestCertStatus  `json:"cert_status,omitempty"`
+	CertifiedStaff *int                             `json:"certified_staff,omitempty"`
+	GateMetrics    *map[string]interface{}          `json:"gate_metrics,omitempty"`
+	JoinedAt       *openapi_types.Date              `json:"joined_at,omitempty"`
+	MarginTier     *string                          `json:"margin_tier,omitempty"`
+	PartnerRole    *UpsertPartnerRequestPartnerRole `json:"partner_role,omitempty"`
+	RenewsAt       *openapi_types.Date              `json:"renews_at,omitempty"`
+	RetentionRate  *float32                         `json:"retention_rate,omitempty"`
 }
 
 // UpsertPartnerRequestCertStatus defines model for UpsertPartnerRequest.CertStatus.
@@ -5539,9 +5662,16 @@ type ListOrganizationsParams struct {
 	OwnerId              *openapi_types.UUID   `form:"owner_id,omitempty" json:"owner_id,omitempty"`
 
 	// Domain Lookup by normalized domain (the employer-inference index).
-	Domain *string `form:"domain,omitempty" json:"domain,omitempty"`
-	Q      *string `form:"q,omitempty" json:"q,omitempty"`
+	Domain         *string                                `form:"domain,omitempty" json:"domain,omitempty"`
+	Classification *ListOrganizationsParamsClassification `form:"classification,omitempty" json:"classification,omitempty"`
+
+	// RelevanceGte Lower bound (inclusive) on `relevance`.
+	RelevanceGte *int    `form:"relevance_gte,omitempty" json:"relevance_gte,omitempty"`
+	Q            *string `form:"q,omitempty" json:"q,omitempty"`
 }
+
+// ListOrganizationsParamsClassification defines parameters for ListOrganizations.
+type ListOrganizationsParamsClassification string
 
 // CreateOrganizationParams defines parameters for CreateOrganization.
 type CreateOrganizationParams struct {
@@ -5599,6 +5729,18 @@ type MergeOrganizationParams struct {
 	// match the operation being executed (`403 code: approval_token_invalid`). Required when an
 	// AGENT principal invokes a 🟡 operation; a human's direct call is itself the approval.
 	ApprovalTokenParam *ApprovalTokenParam `json:"X-Approval-Token,omitempty"`
+}
+
+// RestoreOrganizationParams defines parameters for RestoreOrganization.
+type RestoreOrganizationParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
 }
 
 // ListPartnersParams defines parameters for ListPartners.
@@ -5714,6 +5856,27 @@ type MergePersonJSONBody struct {
 
 // MergePersonParams defines parameters for MergePerson.
 type MergePersonParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+
+	// ApprovalTokenParam A signed, single-use approval token (see schema `ApprovalToken`) minted by
+	// POST /approvals/{id}/approve, authorizing exactly one 🟡 confirm-first operation. It is a
+	// compact JWS whose claims **bind** the token to a specific approval, effect, tenant and
+	// principal — it is NOT a bare opaque string (ADR-0036). The server rejects a token that is
+	// expired, already consumed, or whose `diff_hash`/`workspace_id`/`passport_id`/`tool` does not
+	// match the operation being executed (`403 code: approval_token_invalid`). Required when an
+	// AGENT principal invokes a 🟡 operation; a human's direct call is itself the approval.
+	ApprovalTokenParam *ApprovalTokenParam `json:"X-Approval-Token,omitempty"`
+}
+
+// RestorePersonParams defines parameters for RestorePerson.
+type RestorePersonParams struct {
 	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
 	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
 	// returns the original status + body. Reusing the same key with a *different* request body
@@ -7952,6 +8115,22 @@ func (a *Organization) UnmarshalJSON(b []byte) error {
 		delete(object, "legal_name")
 	}
 
+	if raw, found := object["logo_object_key"]; found {
+		err = json.Unmarshal(raw, &a.LogoObjectKey)
+		if err != nil {
+			return fmt.Errorf("error reading 'logo_object_key': %w", err)
+		}
+		delete(object, "logo_object_key")
+	}
+
+	if raw, found := object["logo_origin"]; found {
+		err = json.Unmarshal(raw, &a.LogoOrigin)
+		if err != nil {
+			return fmt.Errorf("error reading 'logo_origin': %w", err)
+		}
+		delete(object, "logo_origin")
+	}
+
 	if raw, found := object["merged_into_id"]; found {
 		err = json.Unmarshal(raw, &a.MergedIntoId)
 		if err != nil {
@@ -8014,6 +8193,14 @@ func (a *Organization) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("error reading 'relationships': %w", err)
 		}
 		delete(object, "relationships")
+	}
+
+	if raw, found := object["relevance"]; found {
+		err = json.Unmarshal(raw, &a.Relevance)
+		if err != nil {
+			return fmt.Errorf("error reading 'relevance': %w", err)
+		}
+		delete(object, "relevance")
 	}
 
 	if raw, found := object["size_band"]; found {
@@ -8158,6 +8345,20 @@ func (a Organization) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if a.LogoObjectKey != nil {
+		object["logo_object_key"], err = json.Marshal(a.LogoObjectKey)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'logo_object_key': %w", err)
+		}
+	}
+
+	if a.LogoOrigin != nil {
+		object["logo_origin"], err = json.Marshal(a.LogoOrigin)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'logo_origin': %w", err)
+		}
+	}
+
 	if a.MergedIntoId != nil {
 		object["merged_into_id"], err = json.Marshal(a.MergedIntoId)
 		if err != nil {
@@ -8211,6 +8412,13 @@ func (a Organization) MarshalJSON() ([]byte, error) {
 		object["relationships"], err = json.Marshal(a.Relationships)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'relationships': %w", err)
+		}
+	}
+
+	if a.Relevance != nil {
+		object["relevance"], err = json.Marshal(a.Relevance)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'relevance': %w", err)
 		}
 	}
 
