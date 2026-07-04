@@ -81,7 +81,7 @@ func withHandlerDealPartnerWorkspace(r *http.Request) *http.Request {
 func TestDealHandler_CreateUpdateAndList_RoundTripPartnerOrgID(t *testing.T) {
 	db := openHandlerDealPartnerTestDB(t)
 	pipelineID, stageID, orgA, orgB := seedHandlerDealPartnerFixtures(t, db, "roundtrip")
-	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), db)
+	h := dealHandlerForTest(db, crmcore.NewDealStore(db))
 
 	createBody := map[string]any{
 		"name": "Deal via partner", "pipeline_id": pipelineID, "stage_id": stageID,

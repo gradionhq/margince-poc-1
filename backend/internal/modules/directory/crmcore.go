@@ -10,6 +10,15 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
+// PersonEmailInput is one entry of createPerson's emails[] request field
+// (crm.yaml CreatePersonRequest.emails).
+type PersonEmailInput struct {
+	Email     string
+	EmailType string // "work" (default) | "personal" | "other"
+	IsPrimary bool
+	Position  int
+}
+
 // Person is a contact record (data-model §3.1).
 type Person struct {
 	ID                  string          `json:"id"`
@@ -29,10 +38,13 @@ type Person struct {
 	Source              string          `json:"source"`
 	CapturedBy          string          `json:"captured_by"`
 	// Provenance is kept for internal use (audit etc.); not serialised directly.
-	Provenance prov.Provenance `json:"-"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
-	ArchivedAt *time.Time      `json:"archived_at"`
+	Provenance    prov.Provenance `json:"-"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+	ArchivedAt    *time.Time      `json:"archived_at"`
+	Relationships []Relationship  `json:"relationships,omitempty"`
+	Deals         []Deal          `json:"deals,omitempty"`
+	Activities    []ActivityRef   `json:"activities,omitempty"`
 }
 
 // Organization is a company record (data-model §4.1).
@@ -56,10 +68,13 @@ type Organization struct {
 	Source         string               `json:"source"`
 	CapturedBy     string               `json:"captured_by"`
 	// Provenance is kept for internal use; not serialised directly.
-	Provenance prov.Provenance `json:"-"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
-	ArchivedAt *time.Time      `json:"archived_at"`
+	Provenance    prov.Provenance `json:"-"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+	ArchivedAt    *time.Time      `json:"archived_at"`
+	Relationships []Relationship  `json:"relationships,omitempty"`
+	Deals         []Deal          `json:"deals,omitempty"`
+	Activities    []ActivityRef   `json:"activities,omitempty"`
 }
 
 // OrganizationDomain is a normalized domain owned by an organization

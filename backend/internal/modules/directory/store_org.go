@@ -255,6 +255,72 @@ func (s *OrgStore) Archive(ctx context.Context, id, workspaceID string) (Organiz
 	return s.GetAny(ctx, id, workspaceID)
 }
 
+// Restore clears archived_at, restoring an organization to default list visibility.
+// It refuses live records, merged records, and restores that would collide with an
+// active domain on another organization.
+func (s *OrgStore) Restore(ctx context.Context, id, workspaceID string) (Organization, error) {
+	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		var archivedAt sql.NullTime
+		var mergedInto sql.NullString
+		if err := tx.QueryRowContext(ctx, `
+			SELECT archived_at, merged_into_id
+			FROM organization
+			WHERE id=$1::uuid AND workspace_id=$2::uuid`,
+			id, workspaceID).Scan(&archivedAt, &mergedInto); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return errs.ErrNotFound
+			}
+			return err
+		}
+		if !archivedAt.Valid {
+			return errs.ErrNotArchived
+		}
+		if mergedInto.Valid {
+			return errs.ErrMergedRecord
+		}
+
+		var existingID string
+		err := tx.QueryRowContext(ctx, `
+			SELECT od2.organization_id
+			FROM organization_domain od1
+			JOIN organization_domain od2 ON od2.domain = od1.domain
+			  AND od2.workspace_id = od1.workspace_id
+			  AND od2.organization_id <> od1.organization_id
+			  AND od2.archived_at IS NULL
+			WHERE od1.organization_id=$1::uuid AND od1.workspace_id=$2::uuid AND od1.archived_at IS NULL
+			LIMIT 1`,
+			id, workspaceID).Scan(&existingID)
+		if err == nil {
+			return &ErrDuplicateDomain{ExistingID: existingID, Field: "domain"}
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE organization SET archived_at=NULL WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NOT NULL`,
+			id, workspaceID); err != nil {
+			return err
+		}
+		payload, _ := json.Marshal(map[string]any{fieldOrganizationID: id})
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
+			workspaceID, "organization.restored", id, payload); err != nil {
+			return fmt.Errorf("org restore event: %w", err)
+		}
+		er := crmaudit.EntryFromPrincipal(ctx, "restore", entityTypeOrganization, &id, nil, nil)
+		er.WorkspaceID = workspaceID
+		if _, err := crmaudit.WriteTx(ctx, tx, er); err != nil {
+			return fmt.Errorf("org restore audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return Organization{}, err
+	}
+	return s.GetAny(ctx, id, workspaceID)
+}
+
 // GetAny fetches an organization by id regardless of archived_at status.
 //
 //nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form

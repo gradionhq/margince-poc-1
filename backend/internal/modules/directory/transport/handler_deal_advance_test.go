@@ -21,6 +21,10 @@ func (f *fakeStageSemanticReader) Get(_ context.Context, _, _ string) (directory
 	return f.deal, nil
 }
 
+func (f *fakeStageSemanticReader) GetAny(_ context.Context, _, _ string) (directory.Deal, error) {
+	return f.deal, nil
+}
+
 func (f *fakeStageSemanticReader) StageSemantic(_ context.Context, stageID, _ string) (string, error) {
 	return f.semanticByID[stageID], nil
 }
@@ -44,6 +48,10 @@ func (f *fakeStageSemanticReader) Update(_ context.Context, _, _ string, _ map[s
 
 func (f *fakeStageSemanticReader) ListFiltered(_ context.Context, _, _ string, _ int, _ directory.DealListFilter) ([]directory.Deal, string, error) {
 	return nil, "", nil
+}
+
+func (f *fakeStageSemanticReader) Restore(_ context.Context, _, _ string) (directory.Deal, error) {
+	return directory.Deal{}, nil
 }
 
 func TestDealHandler_Advance_AgentWithoutTokenOnYellowTransition_403(t *testing.T) {

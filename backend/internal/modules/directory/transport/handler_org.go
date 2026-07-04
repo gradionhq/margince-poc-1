@@ -1,13 +1,18 @@
 package transport
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
 
 var orgSortAllowed = map[string]bool{
@@ -16,14 +21,23 @@ var orgSortAllowed = map[string]bool{
 
 // OrganizationHandler routes /organizations and /organizations/{id} requests
 // to the OrgStore.
-type OrganizationHandler struct{ store *directory.OrgStore }
+type OrganizationHandler struct {
+	store         *directory.OrgStore
+	relStore      *directory.RelationshipStore
+	dealStore     *directory.DealStore
+	activityStore *directory.ActivityStore
+	db            *sql.DB // used only for the merge endpoint's VerifyAndConsume (🟡 gate)
+}
 
 // NewOrganizationHandler returns an OrganizationHandler.
-func NewOrganizationHandler(store *directory.OrgStore) *OrganizationHandler {
-	return &OrganizationHandler{store: store}
+func NewOrganizationHandler(store *directory.OrgStore, relStore *directory.RelationshipStore, dealStore *directory.DealStore, activityStore *directory.ActivityStore, db *sql.DB) *OrganizationHandler {
+	return &OrganizationHandler{store: store, relStore: relStore, dealStore: dealStore, activityStore: activityStore, db: db}
 }
 
 func (h *OrganizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h.serveSuffixRoutes(w, r) {
+		return
+	}
 	id := pathID(r.URL.Path, "/organizations")
 	switch {
 	case r.Method == http.MethodGet && id == "":
@@ -39,6 +53,89 @@ func (h *OrganizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// serveSuffixRoutes dispatches the /restore and /merge suffix routes, keeping
+// ServeHTTP's cyclomatic complexity within the T1 lint budget (mirrors
+// people/transport's handler_person.go serveSuffixRoutes).
+func (h *OrganizationHandler) serveSuffixRoutes(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/restore") {
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/restore"), "/organizations")
+		h.restore(w, r, id)
+		return true
+	}
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/merge") {
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/merge"), "/organizations")
+		h.merge(w, r, id)
+		return true
+	}
+	return false
+}
+
+// merge implements POST /organizations/{id}/merge (mergeOrganization,
+// APPR-WIRE-1, x-mcp-tool merge_records/organization/yellow). A human
+// principal's direct call is itself the approval — no token required,
+// mirroring checkApprovalGate's human bypass in handler_deal.go. An agent
+// principal must present a single-use X-Approval-Token bound to this exact
+// (workspace, tool, diff).
+func (h *OrganizationHandler) merge(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := workspaceID(r)
+	var body struct {
+		TargetID string `json:"target_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.TargetID == "" {
+		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
+		return
+	}
+	p, _ := crmctx.From(r.Context())
+	if p.IsAgent {
+		token := r.Header.Get("X-Approval-Token")
+		if token == "" {
+			jsonProblem(w, http.StatusForbidden, "approval_required")
+			return
+		}
+		diffHash := crmapprovals.HashDiff(map[string]any{"organization_id": id, "target_id": body.TargetID})
+		if err := crmapprovals.VerifyAndConsume(r.Context(), h.db, token, crmapprovals.Binding{
+			// Tool MUST be the contract's declared x-mcp-tool verb ("merge_records",
+			// crm.yaml:557), not a per-entity string — see handler_person.go's merge
+			// for the full rationale. Person vs. org is disambiguated by diff_hash
+			// (organization_id/target_id here) alone.
+			WorkspaceID: wsID, Tool: "merge_records", DiffHash: diffHash,
+		}); err != nil {
+			jsonProblem(w, http.StatusForbidden, "approval_token_invalid")
+			return
+		}
+	}
+	merged, err := h.store.Merge(r.Context(), id, body.TargetID, wsID)
+	if errors.Is(err, directory.ErrSelfMerge) {
+		jsonValidationError(w, "target_id must not equal id.", []fieldError{{Field: "target_id", Code: "self_merge"}})
+		return
+	}
+	var already *directory.ErrAlreadyMerged
+	if errors.As(err, &already) {
+		jsonProblemDetails(w, http.StatusUnprocessableEntity, "already_merged",
+			"This record was already merged.", map[string]any{fieldExistingID: already.SurvivorID})
+		return
+	}
+	var targetInvalid *directory.ErrMergeTargetInvalid
+	if errors.As(err, &targetInvalid) {
+		jsonProblemDetails(w, http.StatusUnprocessableEntity, "merge_target_invalid",
+			"The merge target is archived or itself already merged.", map[string]any{fieldExistingID: targetInvalid.SurvivorID})
+		return
+	}
+	if errors.Is(err, errs.ErrVersionSkew) {
+		jsonProblem(w, http.StatusConflict, "version_skew")
+		return
+	}
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, merged)
 }
 
 func (h *OrganizationHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +190,7 @@ func (h *OrganizationHandler) create(w http.ResponseWriter, r *http.Request) {
 		if errors.As(err, &dup) {
 			jsonProblemDetails(w, http.StatusConflict, "duplicate_domain",
 				"An active organization already owns this domain.",
-				map[string]any{"existing_id": dup.ExistingID, "field": dup.Field})
+				map[string]any{fieldExistingID: dup.ExistingID, "field": dup.Field})
 			return
 		}
 		if errors.Is(err, errs.ErrNullProvenance) {
@@ -107,6 +204,21 @@ func (h *OrganizationHandler) create(w http.ResponseWriter, r *http.Request) {
 	jsonCreatedAt(w, created, "/organizations/"+created.ID)
 }
 
+// organizationDetailResponse is the organization-360 composite read — the
+// organization itself plus relationships, deals, and activities. Its own
+// Relationships/Deals/Activities fields shadow the embedded Organization's
+// `omitempty`-tagged fields of the same Go field name (same class as
+// deals/transport's dealDetailResponse: list responses must omit these keys
+// when unset, but a single-record read must always show `[]`, never `null`
+// or absent, when the composite result set is legitimately empty — not
+// expressible via one struct/tag serving both list and get semantics).
+type organizationDetailResponse struct {
+	directory.Organization
+	Relationships []directory.Relationship `json:"relationships"`
+	Deals         []directory.Deal         `json:"deals"`
+	Activities    []directory.ActivityRef  `json:"activities"`
+}
+
 func (h *OrganizationHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	wsID := workspaceID(r)
 	o, err := h.store.GetAny(r.Context(), id, wsID)
@@ -118,7 +230,42 @@ func (h *OrganizationHandler) get(w http.ResponseWriter, r *http.Request, id str
 		jsonErr(w, err)
 		return
 	}
-	jsonOK(w, o)
+	if err := h.assembleComposite(r.Context(), wsID, &o); err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, organizationDetailResponse{
+		Organization:  o,
+		Relationships: o.Relationships,
+		Deals:         o.Deals,
+		Activities:    o.Activities,
+	})
+}
+
+// assembleComposite fans out to related stores for the organization-360 read.
+func (h *OrganizationHandler) assembleComposite(ctx context.Context, wsID string, o *directory.Organization) error {
+	rels, _, err := h.relStore.List(ctx, wsID, "", 50, directory.RelationshipListFilter{OrganizationID: o.ID})
+	if err != nil {
+		return err
+	}
+	o.Relationships = rels
+
+	deals, _, err := h.dealStore.ListFiltered(ctx, wsID, "", 50, directory.DealListFilter{OrganizationID: o.ID})
+	if err != nil {
+		return err
+	}
+	o.Deals = deals
+
+	acts, _, err := h.activityStore.List(ctx, wsID, "organization", o.ID, "", 50)
+	if err != nil {
+		return err
+	}
+	refs := make([]directory.ActivityRef, len(acts))
+	for i, a := range acts {
+		refs[i] = directory.ToActivityRef(a)
+	}
+	o.Activities = refs
+	return nil
 }
 
 func (h *OrganizationHandler) update(w http.ResponseWriter, r *http.Request, id string) {
@@ -163,6 +310,27 @@ func (h *OrganizationHandler) archive(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 	jsonOK(w, archived)
+}
+
+func (h *OrganizationHandler) restore(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := workspaceID(r)
+	restored, err := h.store.Restore(r.Context(), id, wsID)
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	var dup *directory.ErrDuplicateDomain
+	if errors.As(err, &dup) {
+		jsonProblemDetails(w, http.StatusConflict, "duplicate_domain",
+			"An active organization already owns this domain.",
+			map[string]any{"existing_id": dup.ExistingID, "field": dup.Field})
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, restored)
 }
 
 func (h *OrganizationHandler) list(w http.ResponseWriter, r *http.Request) {

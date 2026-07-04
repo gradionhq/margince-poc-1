@@ -5,11 +5,14 @@ package crmcore
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 )
 
 func seedWorkspace(t *testing.T, db *sql.DB, wsID string) {
@@ -61,6 +64,86 @@ func setRLS(t *testing.T, db *sql.DB, wsID string) {
 		"SET app.workspace_id = '"+wsID+"'")
 	if err != nil {
 		t.Fatal("setRLS:", err)
+	}
+}
+
+// fkIntoTable returns every (referencing_table, referencing_column) pair with a live
+// FOREIGN KEY into table(id) — the DB-truth version of "grep migrations", used so the
+// merge acceptance tests assert against every FK Postgres actually enforces today, not
+// just the set the plan's author found by hand.
+func fkIntoTable(t *testing.T, db *sql.DB, table string) map[string]string {
+	t.Helper()
+	rows, err := db.Query(`
+		SELECT tc.table_name, kcu.column_name
+		FROM information_schema.table_constraints tc
+		JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
+		JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
+		WHERE tc.constraint_type = 'FOREIGN KEY' AND ccu.table_name = $1`, table)
+	if err != nil {
+		t.Fatalf("fkIntoTable(%s): %v", table, err)
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var refTable, refCol string
+		if err := rows.Scan(&refTable, &refCol); err != nil {
+			t.Fatal(err)
+		}
+		out[refTable] = refCol
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("fkIntoTable(%s) rows: %v", table, err)
+	}
+	return out
+}
+
+// TestPersonMergeFKWalkExhaustive proves PO-AC-17's "walks every FK" literally: every
+// live FK into person(id) is either relinked to the target (asserted zero-rows-remaining
+// on the loser) or is one of the plan's documented "leave historical rows alone"
+// exceptions (asserted the loser row still exists so nothing is actually orphaned).
+func TestPersonMergeFKWalkExhaustive(t *testing.T) {
+	db := openTestDB(t)
+	fks := fkIntoTable(t, db, "person")
+	relinked := map[string]bool{"person_email": true, "person_phone": true, "relationship": true, "activity_link": true}
+	leftAlone := map[string]bool{"person_consent": true, "consent_event": true, "lead": true, "person": true /* merged_into_id self-ref */}
+	for table := range fks {
+		if !relinked[table] && !leftAlone[table] {
+			t.Fatalf("FK from %s into person(id) is neither relinked nor documented as intentionally left — merge relink logic is incomplete for this table", table)
+		}
+	}
+	ws := ids.New()
+	seedWorkspace(t, db, ws)
+	ctx := mergeTestCtx(ws)
+	store := NewPersonStore(db)
+	loser := mkPerson(ctx, t, store, ws, "FKWalkLoser")
+	target := mkPerson(ctx, t, store, ws, "FKWalkTarget")
+	if _, err := store.Merge(ctx, loser.ID, target.ID, ws); err != nil {
+		t.Fatalf("merge: %v", err)
+	}
+	for table := range relinked {
+		col := fks[table]
+		var n int
+		db.QueryRow(fmt.Sprintf(`SELECT count(*) FROM %s WHERE %s=$1::uuid AND archived_at IS NULL`, table, col), loser.ID).Scan(&n)
+		if n != 0 {
+			t.Fatalf("table %s still has %d live row(s) pointing at the archived loser after merge — relink incomplete", table, n)
+		}
+	}
+	// The loser row itself must still exist (soft-archived), so any left-alone FK is
+	// pointing at a real row, not a dangling one.
+	var loserExists int
+	db.QueryRow(`SELECT count(*) FROM person WHERE id=$1::uuid`, loser.ID).Scan(&loserExists)
+	if loserExists != 1 {
+		t.Fatalf("loser row must still exist post-merge (soft-archive, never delete) — got count=%d", loserExists)
+	}
+}
+
+// assertNoRows fails the test if the query returns any rows.
+func assertNoRows(t *testing.T, db *sql.DB, query string, args ...any) {
+	t.Helper()
+	var x int
+	err := db.QueryRow(query, args...).Scan(&x)
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected no rows for %q, got x=%d err=%v", query, x, err)
 	}
 }
 

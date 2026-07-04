@@ -41,6 +41,10 @@ func withDealWorkspace(r *http.Request) *http.Request {
 	return r.WithContext(ctx)
 }
 
+func dealHandlerForTest(db *sql.DB, store *crmcore.DealStore) *DealHandler {
+	return NewDealHandler(store, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
+}
+
 func seedDealFixtures(t *testing.T, db *sql.DB, tag string) (pipelineID, stageID, otherStageID string) {
 	t.Helper()
 	tag = tag + "-" + time.Now().Format("20060102150405.000000000")
@@ -75,7 +79,7 @@ func seedDealFixtures(t *testing.T, db *sql.DB, tag string) (pipelineID, stageID
 func TestDealHandler_Create_Returns201WithLocationAndHistoryRow(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, _ := seedDealFixtures(t, db, "create")
-	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), db)
+	h := dealHandlerForTest(db, crmcore.NewDealStore(db))
 
 	body := map[string]any{
 		"name": "Acme deal", "pipeline_id": pipelineID, "stage_id": stageID,
@@ -105,7 +109,7 @@ func TestDealHandler_Create_Returns201WithLocationAndHistoryRow(t *testing.T) {
 func TestDealHandler_Create_IdempotencyKeyReplay(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, _ := seedDealFixtures(t, db, "replay")
-	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), db)
+	h := dealHandlerForTest(db, crmcore.NewDealStore(db))
 
 	body := map[string]any{
 		"name": "Replay deal", "pipeline_id": pipelineID, "stage_id": stageID,
@@ -148,7 +152,7 @@ func TestDealHandler_Create_IdempotencyKeyReplay(t *testing.T) {
 func TestDealHandler_Create_StageNotInPipeline(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, _, otherStageID := seedDealFixtures(t, db, "stage-check")
-	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), db)
+	h := dealHandlerForTest(db, crmcore.NewDealStore(db))
 
 	body := map[string]any{
 		"name": "Bad deal", "pipeline_id": pipelineID, "stage_id": otherStageID,
@@ -185,7 +189,7 @@ func TestDealHandler_Update_IfMatchVersionSkew(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, _ := seedDealFixtures(t, db, "update-version-skew")
 	store := crmcore.NewDealStore(db)
-	h := NewDealHandler(store, crmcore.NewRelationshipStore(db), db)
+	h := dealHandlerForTest(db, store)
 
 	d := crmcore.NewDeal("Update-me", pipelineID, stageID,
 		provenanceOf("test", "human:test"))
@@ -217,7 +221,7 @@ func TestDealHandler_Update_MalformedIfMatch(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, _ := seedDealFixtures(t, db, "update-malformed")
 	store := crmcore.NewDealStore(db)
-	h := NewDealHandler(store, crmcore.NewRelationshipStore(db), db)
+	h := dealHandlerForTest(db, store)
 
 	d := crmcore.NewDeal("Malformed-if-match", pipelineID, stageID,
 		provenanceOf("test", "human:test"))
@@ -244,7 +248,7 @@ func TestDealHandler_Update_StageNotInPipeline(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, otherStageID := seedDealFixtures(t, db, "update-stage-check")
 	store := crmcore.NewDealStore(db)
-	h := NewDealHandler(store, crmcore.NewRelationshipStore(db), db)
+	h := dealHandlerForTest(db, store)
 
 	d := crmcore.NewDeal("Stage-move", pipelineID, stageID,
 		provenanceOf("test", "human:test"))
@@ -270,7 +274,7 @@ func TestDealHandler_Update_HappyPath(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, _ := seedDealFixtures(t, db, "update-happy")
 	store := crmcore.NewDealStore(db)
-	h := NewDealHandler(store, crmcore.NewRelationshipStore(db), db)
+	h := dealHandlerForTest(db, store)
 
 	d := crmcore.NewDeal("Happy-update", pipelineID, stageID,
 		provenanceOf("test", "human:test"))
@@ -302,7 +306,7 @@ func TestDealHandler_List_FilterAndSort(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, _ := seedDealFixtures(t, db, "list")
 	store := crmcore.NewDealStore(db)
-	h := NewDealHandler(store, crmcore.NewRelationshipStore(db), db)
+	h := dealHandlerForTest(db, store)
 	ctx := context.Background()
 
 	// Seed an organization row: deal.partner_org_id is a hard FK to
@@ -456,7 +460,7 @@ func TestDealHandler_Get_NotFound(t *testing.T) {
 func TestDealHandler_FullLifecycle_CreateUpdateList(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, otherStageID := seedDealFixtures(t, db, "lifecycle")
-	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), db)
+	h := dealHandlerForTest(db, crmcore.NewDealStore(db))
 
 	createBody, _ := json.Marshal(map[string]any{
 		"name": "Lifecycle deal", "pipeline_id": pipelineID, "stage_id": stageID,

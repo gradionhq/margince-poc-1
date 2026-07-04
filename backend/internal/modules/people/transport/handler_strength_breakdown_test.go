@@ -18,7 +18,7 @@ import (
 func TestPersonHandler_StrengthBreakdown(t *testing.T) {
 	db := openTestDB(t)
 	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store)
+	h := personHandlerForTest(db, store)
 
 	const wsID = "00000000-0000-0000-0000-000000000001"
 	seedWorkspace(t, db, wsID)
@@ -27,7 +27,7 @@ func TestPersonHandler_StrengthBreakdown(t *testing.T) {
 
 	p := directory.NewPerson("Breakdown Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = wsID
-	created, err := store.Create(ctx, p)
+	created, err := store.Create(ctx, p, nil)
 	if err != nil {
 		t.Fatal("seed:", err)
 	}

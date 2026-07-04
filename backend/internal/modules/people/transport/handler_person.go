@@ -15,6 +15,8 @@
 package transport
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -31,30 +33,48 @@ import (
 // contract-envelope field name, this handler needs. Duplicated from
 // directory's consts.go (see package doc above).
 const (
-	fieldData      = "data"
-	fieldCode      = "code"
-	fieldStatus    = "status"
-	codeForbidden  = "forbidden"
-	codeBadRequest = "bad_request"
+	fieldData       = "data"
+	fieldCode       = "code"
+	fieldStatus     = "status"
+	fieldDetails    = "details"
+	fieldExistingID = "existing_id"
+	fieldErrors     = "errors"
+	codeForbidden   = "forbidden"
+	codeBadRequest  = "bad_request"
+	codeValidation  = "validation_error"
 )
+
+type fieldError struct {
+	Field string `json:"field"`
+	Code  string `json:"code"`
+}
 
 var personSortValues = map[string]bool{
 	"": true, "id": true, "strength": true, "-strength": true,
 }
 
 // PersonHandler routes /people and /people/{id} requests to the PersonStore.
-type PersonHandler struct{ store *directory.PersonStore }
+type PersonHandler struct {
+	store         *directory.PersonStore
+	relStore      *directory.RelationshipStore
+	dealStore     *directory.DealStore
+	activityStore *directory.ActivityStore
+	db            *sql.DB // used only for the merge endpoint's VerifyAndConsume (🟡 gate)
+}
 
 // NewPersonHandler returns a PersonHandler.
-func NewPersonHandler(store *directory.PersonStore) *PersonHandler {
-	return &PersonHandler{store: store}
+func NewPersonHandler(store *directory.PersonStore, relStore *directory.RelationshipStore, dealStore *directory.DealStore, activityStore *directory.ActivityStore, db *sql.DB) *PersonHandler {
+	return &PersonHandler{store: store, relStore: relStore, dealStore: dealStore, activityStore: activityStore, db: db}
 }
 
 // ServeHTTP dispatches on method + path suffix.
 func (h *PersonHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/strength-breakdown") {
-		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/people/"), "/strength-breakdown")
-		h.strengthBreakdown(w, r, id)
+	if h.serveSuffixRoutes(w, r) {
+		return
+	}
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/merge") {
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/merge"), "/people")
+		h.merge(w, r, id)
 		return
 	}
 	id := pathID(r.URL.Path, "/people")
@@ -72,6 +92,20 @@ func (h *PersonHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func (h *PersonHandler) serveSuffixRoutes(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/strength-breakdown") {
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/people/"), "/strength-breakdown")
+		h.strengthBreakdown(w, r, id)
+		return true
+	}
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/restore") {
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/people/"), "/restore")
+		h.restore(w, r, id)
+		return true
+	}
+	return false
 }
 
 func (h *PersonHandler) strengthBreakdown(w http.ResponseWriter, r *http.Request, id string) {
@@ -132,6 +166,12 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 		OwnerID    *string `json:"owner_id"`
 		Source     string  `json:"source"`
 		CapturedBy string  `json:"captured_by"`
+		Emails     []struct {
+			Email     string `json:"email"`
+			EmailType string `json:"email_type"`
+			IsPrimary bool   `json:"is_primary"`
+			Position  int    `json:"position"`
+		} `json:"emails"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
@@ -147,8 +187,19 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 	p.LastName = body.LastName
 	p.Title = body.Title
 	p.OwnerID = body.OwnerID
-	created, err := h.store.Create(r.Context(), p)
+	emails := make([]directory.PersonEmailInput, len(body.Emails))
+	for i, e := range body.Emails {
+		emails[i] = directory.PersonEmailInput{Email: e.Email, EmailType: e.EmailType, IsPrimary: e.IsPrimary, Position: e.Position}
+	}
+	created, err := h.store.Create(r.Context(), p, emails)
 	if err != nil {
+		var dup *directory.ErrDuplicateEmail
+		if errors.As(err, &dup) {
+			jsonProblemDetails(w, http.StatusConflict, "duplicate_email",
+				"An active person already owns this email.",
+				map[string]any{fieldExistingID: dup.ExistingID, "field": dup.Field})
+			return
+		}
 		jsonErr(w, err)
 		return
 	}
@@ -157,9 +208,24 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 	jsonCreated(w, created)
 }
 
+// personDetailResponse is the person-360 composite read — the person itself
+// plus relationships, deals, and activities. Its own Relationships/Deals/
+// Activities fields shadow the embedded Person's `omitempty`-tagged fields of
+// the same Go field name (same class as deals/transport's dealDetailResponse:
+// list responses must omit these keys when unset, but a single-record read
+// must always show `[]`, never `null` or absent, when the composite result
+// set is legitimately empty — not expressible via one struct/tag serving both
+// list and get semantics).
+type personDetailResponse struct {
+	directory.Person
+	Relationships []directory.Relationship `json:"relationships"`
+	Deals         []directory.Deal         `json:"deals"`
+	Activities    []directory.ActivityRef  `json:"activities"`
+}
+
 func (h *PersonHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	wsID := workspaceID(r)
-	p, err := h.store.Get(r.Context(), id, wsID)
+	p, err := h.store.GetAny(r.Context(), id, wsID)
 	if errors.Is(err, errs.ErrNotFound) {
 		jsonProblem(w, http.StatusNotFound, "not_found")
 		return
@@ -168,7 +234,42 @@ func (h *PersonHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		jsonErr(w, err)
 		return
 	}
-	jsonOK(w, p)
+	if err := h.assembleComposite(r.Context(), wsID, &p); err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, personDetailResponse{
+		Person:        p,
+		Relationships: p.Relationships,
+		Deals:         p.Deals,
+		Activities:    p.Activities,
+	})
+}
+
+// assembleComposite fans out to related stores for the person-360 read.
+func (h *PersonHandler) assembleComposite(ctx context.Context, wsID string, p *directory.Person) error {
+	rels, _, err := h.relStore.List(ctx, wsID, "", 50, directory.RelationshipListFilter{PersonID: p.ID})
+	if err != nil {
+		return err
+	}
+	p.Relationships = rels
+
+	deals, _, err := h.dealStore.ListFiltered(ctx, wsID, "", 50, directory.DealListFilter{PersonID: p.ID})
+	if err != nil {
+		return err
+	}
+	p.Deals = deals
+
+	acts, _, err := h.activityStore.List(ctx, wsID, "person", p.ID, "", 50)
+	if err != nil {
+		return err
+	}
+	refs := make([]directory.ActivityRef, len(acts))
+	for i, a := range acts {
+		refs[i] = directory.ToActivityRef(a)
+	}
+	p.Activities = refs
+	return nil
 }
 
 func (h *PersonHandler) update(w http.ResponseWriter, r *http.Request, id string) {
