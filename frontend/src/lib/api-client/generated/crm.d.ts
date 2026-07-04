@@ -2320,6 +2320,14 @@ export interface components {
                 reciprocity: number;
             } | null;
             /**
+             * Format: date-time
+             * @description Most recent live activity/interaction timestamp for this person (any
+             *     activity kind, not just email/call/meeting), server-computed on every
+             *     read. Null when the person has no recorded activity — an honest
+             *     omission, never a fabricated value.
+             */
+            readonly last_activity_at?: string | null;
+            /**
              * @description PO-EXT-3 person-360 composite read — this person's relationship edges
              *     (employment, deal-stakeholder roles, etc.). Populated on the single-record read
              *     (`getPerson`); omitted on list rows (`listPeople`) for payload economy, mirroring
@@ -2461,6 +2469,31 @@ export interface components {
             readonly deals?: components["schemas"]["Deal"][];
             /** @description PO-EXT-3 — timeline activity refs linked to this organization, most recent first. Populated on `getOrganization` only. */
             readonly activities?: components["schemas"]["ActivityRef"][];
+            /**
+             * @description Count of people with a live `employment` relationship to this
+             *     organization (server-computed, AC-companies-3).
+             */
+            readonly contact_count?: number;
+            /**
+             * @description Count of this organization's live deals with status=open
+             *     (server-computed, AC-companies-3).
+             */
+            readonly open_deal_count?: number;
+            /**
+             * @description PO-N-ORGSTRENGTH roll-up: the plain max over this org's contacts'
+             *     relationship-strength scores (org_strength.go's OrgStrength(), wired
+             *     unmodified) — never an average, never capped/normalized. Null when no
+             *     contact at this org has a computed strength yet (honest no-signal,
+             *     AC-companies-4/5).
+             */
+            readonly org_strength?: {
+                score: number;
+                /** @enum {string} */
+                bucket: "weak" | "moderate" | "strong";
+                /** Format: uuid */
+                top_person_id: string;
+                top_person_name: string;
+            } | null;
         } & {
             [key: string]: unknown;
         };

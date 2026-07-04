@@ -1587,6 +1587,27 @@ func (e OrganizationClassification) Valid() bool {
 	}
 }
 
+// Defines values for OrganizationOrgStrengthBucket.
+const (
+	OrganizationOrgStrengthBucketModerate OrganizationOrgStrengthBucket = "moderate"
+	OrganizationOrgStrengthBucketStrong   OrganizationOrgStrengthBucket = "strong"
+	OrganizationOrgStrengthBucketWeak     OrganizationOrgStrengthBucket = "weak"
+)
+
+// Valid indicates whether the value is a known member of the OrganizationOrgStrengthBucket enum.
+func (e OrganizationOrgStrengthBucket) Valid() bool {
+	switch e {
+	case OrganizationOrgStrengthBucketModerate:
+		return true
+	case OrganizationOrgStrengthBucketStrong:
+		return true
+	case OrganizationOrgStrengthBucketWeak:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for OrganizationSizeBand.
 const (
 	OrganizationSizeBandLessThannil OrganizationSizeBand = "<nil>"
@@ -1802,19 +1823,19 @@ func (e PersonSignalItemLabel) Valid() bool {
 
 // Defines values for PersonStrengthBreakdownBucket.
 const (
-	PersonStrengthBreakdownBucketModerate PersonStrengthBreakdownBucket = "moderate"
-	PersonStrengthBreakdownBucketStrong   PersonStrengthBreakdownBucket = "strong"
-	PersonStrengthBreakdownBucketWeak     PersonStrengthBreakdownBucket = "weak"
+	Moderate PersonStrengthBreakdownBucket = "moderate"
+	Strong   PersonStrengthBreakdownBucket = "strong"
+	Weak     PersonStrengthBreakdownBucket = "weak"
 )
 
 // Valid indicates whether the value is a known member of the PersonStrengthBreakdownBucket enum.
 func (e PersonStrengthBreakdownBucket) Valid() bool {
 	switch e {
-	case PersonStrengthBreakdownBucketModerate:
+	case Moderate:
 		return true
-	case PersonStrengthBreakdownBucketStrong:
+	case Strong:
 		return true
-	case PersonStrengthBreakdownBucketWeak:
+	case Weak:
 		return true
 	default:
 		return false
@@ -3947,7 +3968,11 @@ type Organization struct {
 
 	// Classification An org IS a partner iff classification='partner' AND it has a `partner` row (A41/ADR-0032).
 	Classification *OrganizationClassification `json:"classification,omitempty"`
-	CreatedAt      time.Time                   `json:"created_at"`
+
+	// ContactCount Count of people with a live `employment` relationship to this
+	// organization (server-computed, AC-companies-3).
+	ContactCount *int      `json:"contact_count,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
 
 	// Deals PO-EXT-3 — deals attributed to this organization. Populated on `getOrganization` only.
 	Deals        *[]Deal               `json:"deals,omitempty"`
@@ -3957,7 +3982,23 @@ type Organization struct {
 	Industry     *string               `json:"industry,omitempty"`
 	LegalName    *string               `json:"legal_name,omitempty"`
 	MergedIntoId *openapi_types.UUID   `json:"merged_into_id,omitempty"`
-	OwnerId      *openapi_types.UUID   `json:"owner_id,omitempty"`
+
+	// OpenDealCount Count of this organization's live deals with status=open
+	// (server-computed, AC-companies-3).
+	OpenDealCount *int `json:"open_deal_count,omitempty"`
+
+	// OrgStrength PO-N-ORGSTRENGTH roll-up: the plain max over this org's contacts'
+	// relationship-strength scores (org_strength.go's OrgStrength(), wired
+	// unmodified) — never an average, never capped/normalized. Null when no
+	// contact at this org has a computed strength yet (honest no-signal,
+	// AC-companies-4/5).
+	OrgStrength *struct {
+		Bucket        OrganizationOrgStrengthBucket `json:"bucket"`
+		Score         int                           `json:"score"`
+		TopPersonId   openapi_types.UUID            `json:"top_person_id"`
+		TopPersonName string                        `json:"top_person_name"`
+	} `json:"org_strength,omitempty"`
+	OwnerId *openapi_types.UUID `json:"owner_id,omitempty"`
 
 	// ParentOrgId Single-level hierarchy FK; no cycles.
 	ParentOrgId *openapi_types.UUID `json:"parent_org_id,omitempty"`
@@ -3987,6 +4028,9 @@ type Organization struct {
 
 // OrganizationClassification An org IS a partner iff classification='partner' AND it has a `partner` row (A41/ADR-0032).
 type OrganizationClassification string
+
+// OrganizationOrgStrengthBucket defines model for Organization.OrgStrength.Bucket.
+type OrganizationOrgStrengthBucket string
 
 // OrganizationSizeBand defines model for Organization.SizeBand.
 type OrganizationSizeBand string
@@ -4118,7 +4162,13 @@ type Person struct {
 	// FullName Always present (display name).
 	FullName string             `json:"full_name"`
 	Id       openapi_types.UUID `json:"id"`
-	LastName *string            `json:"last_name,omitempty"`
+
+	// LastActivityAt Most recent live activity/interaction timestamp for this person (any
+	// activity kind, not just email/call/meeting), server-computed on every
+	// read. Null when the person has no recorded activity — an honest
+	// omission, never a fabricated value.
+	LastActivityAt *time.Time `json:"last_activity_at,omitempty"`
+	LastName       *string    `json:"last_name,omitempty"`
 
 	// MergedIntoId Set when this row was merged away.
 	MergedIntoId *openapi_types.UUID     `json:"merged_into_id,omitempty"`
@@ -7838,6 +7888,14 @@ func (a *Organization) UnmarshalJSON(b []byte) error {
 		delete(object, "classification")
 	}
 
+	if raw, found := object["contact_count"]; found {
+		err = json.Unmarshal(raw, &a.ContactCount)
+		if err != nil {
+			return fmt.Errorf("error reading 'contact_count': %w", err)
+		}
+		delete(object, "contact_count")
+	}
+
 	if raw, found := object["created_at"]; found {
 		err = json.Unmarshal(raw, &a.CreatedAt)
 		if err != nil {
@@ -7900,6 +7958,22 @@ func (a *Organization) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("error reading 'merged_into_id': %w", err)
 		}
 		delete(object, "merged_into_id")
+	}
+
+	if raw, found := object["open_deal_count"]; found {
+		err = json.Unmarshal(raw, &a.OpenDealCount)
+		if err != nil {
+			return fmt.Errorf("error reading 'open_deal_count': %w", err)
+		}
+		delete(object, "open_deal_count")
+	}
+
+	if raw, found := object["org_strength"]; found {
+		err = json.Unmarshal(raw, &a.OrgStrength)
+		if err != nil {
+			return fmt.Errorf("error reading 'org_strength': %w", err)
+		}
+		delete(object, "org_strength")
 	}
 
 	if raw, found := object["owner_id"]; found {
@@ -8034,6 +8108,13 @@ func (a Organization) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if a.ContactCount != nil {
+		object["contact_count"], err = json.Marshal(a.ContactCount)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'contact_count': %w", err)
+		}
+	}
+
 	object["created_at"], err = json.Marshal(a.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'created_at': %w", err)
@@ -8081,6 +8162,20 @@ func (a Organization) MarshalJSON() ([]byte, error) {
 		object["merged_into_id"], err = json.Marshal(a.MergedIntoId)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'merged_into_id': %w", err)
+		}
+	}
+
+	if a.OpenDealCount != nil {
+		object["open_deal_count"], err = json.Marshal(a.OpenDealCount)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'open_deal_count': %w", err)
+		}
+	}
+
+	if a.OrgStrength != nil {
+		object["org_strength"], err = json.Marshal(a.OrgStrength)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'org_strength': %w", err)
 		}
 	}
 
@@ -8276,6 +8371,14 @@ func (a *Person) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("error reading 'id': %w", err)
 		}
 		delete(object, "id")
+	}
+
+	if raw, found := object["last_activity_at"]; found {
+		err = json.Unmarshal(raw, &a.LastActivityAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'last_activity_at': %w", err)
+		}
+		delete(object, "last_activity_at")
 	}
 
 	if raw, found := object["last_name"]; found {
@@ -8475,6 +8578,13 @@ func (a Person) MarshalJSON() ([]byte, error) {
 	object["id"], err = json.Marshal(a.Id)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'id': %w", err)
+	}
+
+	if a.LastActivityAt != nil {
+		object["last_activity_at"], err = json.Marshal(a.LastActivityAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'last_activity_at': %w", err)
+		}
 	}
 
 	if a.LastName != nil {
