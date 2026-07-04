@@ -38,13 +38,16 @@ type Person struct {
 	Source              string          `json:"source"`
 	CapturedBy          string          `json:"captured_by"`
 	// Provenance is kept for internal use (audit etc.); not serialised directly.
-	Provenance    prov.Provenance `json:"-"`
-	CreatedAt     time.Time       `json:"created_at"`
-	UpdatedAt     time.Time       `json:"updated_at"`
-	ArchivedAt    *time.Time      `json:"archived_at"`
-	Relationships []Relationship  `json:"relationships,omitempty"`
-	Deals         []Deal          `json:"deals,omitempty"`
-	Activities    []ActivityRef   `json:"activities,omitempty"`
+	Provenance prov.Provenance `json:"-"`
+	CreatedAt  time.Time       `json:"created_at"`
+	UpdatedAt  time.Time       `json:"updated_at"`
+	ArchivedAt *time.Time      `json:"archived_at"`
+	// ReviewFlag is PO-AC-19's non-blocking fuzzy-dedupe flag, computed fresh on
+	// every Create call and never persisted (dedupe.go's DedupeReviewFlag).
+	ReviewFlag    *DedupeReviewFlag `json:"dedupe_review,omitempty"`
+	Relationships []Relationship    `json:"relationships,omitempty"`
+	Deals         []Deal            `json:"deals,omitempty"`
+	Activities    []ActivityRef     `json:"activities,omitempty"`
 }
 
 // Organization is a company record (data-model §4.1).

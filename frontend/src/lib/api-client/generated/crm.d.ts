@@ -2367,6 +2367,17 @@ export interface components {
             /** Format: date-time */
             archived_at?: string | null;
             /**
+             * @description PO-AC-19 non-blocking fuzzy-dedupe review flag (PO-F-1 Tier-2). Present only on the
+             *     createPerson response when a live candidate scores >= DEDUPE_REVIEW_THRESHOLD (0.72);
+             *     null otherwise. Never persisted — review-queue storage/UI is a separate
+             *     data-hygiene-chapter ticket. Fuzzy scoring never auto-merges at any confidence.
+             */
+            readonly dedupe_review?: {
+                /** Format: uuid */
+                candidate_id: string;
+                confidence: number;
+            } | null;
+            /**
              * @description PO-EXT-1 relationship-strength block — present on both list rows and detail
              *     reads. Server-computed from interaction recency/frequency/reciprocity; null
              *     until a score has been computed for this person. `bucket` mirrors PO-PARAM-3's

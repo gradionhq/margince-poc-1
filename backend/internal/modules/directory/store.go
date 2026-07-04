@@ -188,6 +188,7 @@ func (s *PersonStore) Create(ctx context.Context, p Person, emails []PersonEmail
 	}
 	social := marshalJSON(p.Social)
 	address := marshalJSON(p.Address)
+	var reviewFlag *DedupeReviewFlag
 	err := withWorkspaceTx(ctx, s.db, p.WorkspaceID, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO person (id, workspace_id, full_name, first_name, last_name, title,
@@ -201,6 +202,14 @@ func (s *PersonStore) Create(ctx context.Context, p Person, emails []PersonEmail
 		if err := insertPersonEmails(ctx, tx, p.WorkspaceID, p.ID, p.Source, p.CapturedBy, emails); err != nil {
 			return err
 		}
+		// PO-AC-19: the fuzzy tier only runs once the exact-key email tier has
+		// already succeeded (no 409) — a non-blocking review-flag, never an
+		// error; create still succeeds either way.
+		flag, err := s.fuzzyDedupe(ctx, tx, p.WorkspaceID, p.ID, p.FullName, emails)
+		if err != nil {
+			return err
+		}
+		reviewFlag = flag
 		e := crmaudit.EntryFromPrincipal(ctx, "create", entityTypePerson, &p.ID, nil, p)
 		e.WorkspaceID = p.WorkspaceID
 		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
@@ -211,7 +220,12 @@ func (s *PersonStore) Create(ctx context.Context, p Person, emails []PersonEmail
 	if err != nil {
 		return Person{}, err
 	}
-	return s.Get(ctx, p.ID, p.WorkspaceID)
+	created, err := s.Get(ctx, p.ID, p.WorkspaceID)
+	if err != nil {
+		return Person{}, err
+	}
+	created.ReviewFlag = reviewFlag
+	return created, nil
 }
 
 // insertPersonEmails writes createPerson's emails[] rows, 409-ing on the first
