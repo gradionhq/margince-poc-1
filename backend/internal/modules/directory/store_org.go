@@ -82,27 +82,8 @@ func (s *OrgStore) Create(ctx context.Context, o Organization) (Organization, er
 			return err
 		}
 
-		for i, d := range domains {
-			var existingID string
-			scanErr := tx.QueryRowContext(ctx, `
-				SELECT organization_id FROM organization_domain
-				WHERE workspace_id=$1::uuid AND domain=$2 AND archived_at IS NULL`,
-				o.WorkspaceID, d.Domain).Scan(&existingID)
-			if scanErr == nil {
-				return &ErrDuplicateDomain{
-					ExistingID: existingID,
-					Field:      fmt.Sprintf("domains[%d].domain", i),
-				}
-			}
-			if !errors.Is(scanErr, sql.ErrNoRows) {
-				return scanErr
-			}
-			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO organization_domain (workspace_id, organization_id, domain, is_primary)
-				VALUES ($1,$2,$3,$4)`,
-				o.WorkspaceID, o.ID, d.Domain, d.IsPrimary); err != nil {
-				return fmt.Errorf("org create domain: %w", err)
-			}
+		if err := insertOrgDomains(ctx, tx, o.WorkspaceID, o.ID, domains); err != nil {
+			return err
 		}
 
 		payload, _ := json.Marshal(map[string]any{fieldOrganizationID: o.ID})
@@ -124,6 +105,35 @@ func (s *OrgStore) Create(ctx context.Context, o Organization) (Organization, er
 		return Organization{}, err
 	}
 	return s.Get(ctx, o.ID, o.WorkspaceID)
+}
+
+// insertOrgDomains checks each domain for a live collision with another
+// organization in the same workspace and, if none, inserts it. Extracted from
+// Create to keep that function within funlen limits.
+func insertOrgDomains(ctx context.Context, tx *sql.Tx, workspaceID, orgID string, domains []OrganizationDomain) error {
+	for i, d := range domains {
+		var existingID string
+		scanErr := tx.QueryRowContext(ctx, `
+			SELECT organization_id FROM organization_domain
+			WHERE workspace_id=$1::uuid AND domain=$2 AND archived_at IS NULL`,
+			workspaceID, d.Domain).Scan(&existingID)
+		if scanErr == nil {
+			return &ErrDuplicateDomain{
+				ExistingID: existingID,
+				Field:      fmt.Sprintf("domains[%d].domain", i),
+			}
+		}
+		if !errors.Is(scanErr, sql.ErrNoRows) {
+			return scanErr
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO organization_domain (workspace_id, organization_id, domain, is_primary)
+			VALUES ($1,$2,$3,$4)`,
+			workspaceID, orgID, d.Domain, d.IsPrimary); err != nil {
+			return fmt.Errorf("org create domain: %w", err)
+		}
+	}
+	return nil
 }
 
 // Get returns a live organization by id, workspace-scoped; ErrNotFound if absent.
