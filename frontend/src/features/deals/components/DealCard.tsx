@@ -28,6 +28,19 @@ export function stalledDays(stageEnteredAt: string | null | undefined): number {
   return Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
 }
 
+// Mirrors backend IsStalled's base-timestamp rule (stalled.go): base = last_activity_at
+// if set, else created_at. Used for the "Stalled Nd" flag's day-count and hover title —
+// deliberately independent of stage_entered_at, since that's what the flag is about.
+export function idleDays(
+  lastActivityAt: string | null | undefined,
+  createdAt: string | null | undefined,
+): number {
+  const base = lastActivityAt ?? createdAt;
+  if (!base) return 0;
+  const ms = Date.now() - new Date(base).getTime();
+  return Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
+}
+
 export function DealCard({
   deal,
   onClick,
@@ -42,6 +55,7 @@ export function DealCard({
   dragging?: boolean;
 }) {
   const age = stalledDays(deal.stage_entered_at);
+  const idle = idleDays(deal.last_activity_at, deal.created_at);
   return (
     // biome-ignore lint/a11y/useSemanticElements: can't be a real <button> — it nests the Advance <button> and hosts dnd-kit's drag-handle attributes; role="button" + onKeyDown keeps it operable.
     <div
@@ -66,10 +80,10 @@ export function DealCard({
       <div className="flex gap-gf-xs mt-gf-xs">
         {deal.stalled && (
           <span
-            title={`No activity for ${age} days`}
+            title={`No activity for ${idle} days`}
             className="text-gf-caption text-gf-status-warning font-medium"
           >
-            Stalled {age}d
+            Stalled {idle}d
           </span>
         )}
         {deal.stakeholder_count === 1 && (

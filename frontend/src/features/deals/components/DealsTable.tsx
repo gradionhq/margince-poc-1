@@ -1,7 +1,12 @@
 import type { Deal, Stage } from "../../../lib/api-client/generated/index.js";
 import { DataTable } from "../../../shared/ui/DataTable.js";
 import { Icon } from "../../../shared/ui/forge.js";
-import { formatMoney, stalledDays, weightedValue } from "./DealCard.js";
+import {
+  formatMoney,
+  idleDays,
+  stalledDays,
+  weightedValue,
+} from "./DealCard.js";
 
 export function DealsTable({
   deals,
@@ -62,7 +67,10 @@ export function DealsTable({
               }
             >
               {d.stalled && <Icon name="AlertCircle" size={14} />}
-              {stalledDays(d.stage_entered_at)}d
+              {d.stalled
+                ? idleDays(d.last_activity_at, d.created_at)
+                : stalledDays(d.stage_entered_at)}
+              d
             </span>
           ),
         },

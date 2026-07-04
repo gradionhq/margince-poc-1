@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { Deal } from "../../../lib/api-client/generated/index.js";
 import { DealCard, formatMoney, weightedValue } from "./DealCard.js";
 
+function daysAgoISO(days: number): string {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+}
+
 const baseDeal: Deal = {
   id: "d1",
   workspace_id: "w1",
@@ -65,6 +69,27 @@ describe("DealCard", () => {
       "title",
       expect.stringContaining("No activity for"),
     );
+  });
+
+  it("bases the Stalled flag's day-count on last_activity_at, not stage_entered_at (live-UAT regression)", () => {
+    // stage_entered_at is recent (deal just moved stage), but last_activity_at is
+    // genuinely ~90 days old — the flag must reflect idle time, not stage age.
+    const stalledDeal: Deal = {
+      ...baseDeal,
+      stalled: true,
+      stage_entered_at: daysAgoISO(0),
+      last_activity_at: daysAgoISO(90),
+    };
+    render(<DealCard deal={stalledDeal} onClick={vi.fn()} />);
+    const flag = screen.getByText(/^Stalled \d+d$/);
+    const match = flag.textContent?.match(/^Stalled (\d+)d$/);
+    const flagDays = Number(match?.[1]);
+    expect(flagDays).toBeGreaterThanOrEqual(89);
+    expect(flagDays).toBeLessThanOrEqual(91);
+    expect(flag).toHaveAttribute("title", `No activity for ${flagDays} days`);
+
+    // The plain age caption next to the amount stays tied to stage_entered_at (0d).
+    expect(screen.getByText(/^€.*· 0d$/)).toBeInTheDocument();
   });
 
   it("does not show the Stalled flag when not stalled", () => {

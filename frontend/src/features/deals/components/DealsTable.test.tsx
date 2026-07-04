@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { Deal, Stage } from "../../../lib/api-client/generated/index.js";
 import { DealsTable } from "./DealsTable.js";
 
+function daysAgoISO(days: number): string {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+}
+
 const stage: Stage = {
   id: "s1",
   workspace_id: "w1",
@@ -64,5 +68,21 @@ describe("DealsTable", () => {
   it("marks a stalled deal's Age cell amber with a warning icon (AC-pipeline-8)", () => {
     render(<DealsTable deals={deals} stagesById={{ s1: stage }} />);
     expect(screen.getByTestId("age-cell-d1").className).toMatch(/warning/i);
+  });
+
+  it("shows idle days (last_activity_at), not stage age, in a stalled row's Age cell (live-UAT regression)", () => {
+    const idleDeal: Deal = {
+      ...deals[0],
+      id: "d3",
+      stalled: true,
+      stage_entered_at: daysAgoISO(0),
+      last_activity_at: daysAgoISO(90),
+    };
+    render(<DealsTable deals={[idleDeal]} stagesById={{ s1: stage }} />);
+    const cell = screen.getByTestId("age-cell-d3");
+    const match = cell.textContent?.match(/(\d+)d$/);
+    const days = Number(match?.[1]);
+    expect(days).toBeGreaterThanOrEqual(89);
+    expect(days).toBeLessThanOrEqual(91);
   });
 });
