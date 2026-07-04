@@ -34,4 +34,14 @@ describe("PipelinePage", () => {
     expect(screen.getByRole("heading", { name: /deals/i })).toBeInTheDocument();
     expect(screen.getByTestId("stage-column-s0")).toBeInTheDocument();
   });
+
+  it("toggles to Table view without losing the pipeline/stage filter, and back", async () => {
+    const userEventModule = await import("@testing-library/user-event");
+    const user = userEventModule.default.setup();
+    renderPage();
+    await user.click(screen.getByRole("radio", { name: /table/i }));
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /board/i }));
+    expect(screen.getByTestId("stage-column-s0")).toBeInTheDocument();
+  });
 });
