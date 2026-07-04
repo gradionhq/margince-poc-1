@@ -147,7 +147,7 @@ func (s *OrgStore) listByOrgID(ctx context.Context, workspaceID, cursor string, 
 }
 
 func (s *OrgStore) listByOrgStrength(ctx context.Context, workspaceID, cursor string, limit int, descending bool) ([]Organization, string, error) {
-	offset, _ := decodeOffsetCursor(cursor)
+	offset := decodeOffsetCursor(cursor)
 	all := []Organization{}
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `

@@ -20,24 +20,24 @@ func encodeOffsetCursor(n int) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(strconv.Itoa(n)))
 }
 
-func decodeOffsetCursor(cursor string) (int, bool) {
+func decodeOffsetCursor(cursor string) int {
 	if cursor == "" {
-		return 0, false
+		return 0
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(cursor)
 	if err != nil {
-		return 0, false
+		return 0
 	}
 	n, err := strconv.Atoi(string(raw))
 	if err != nil || n < 0 {
-		return 0, false
+		return 0
 	}
-	return n, true
+	return n
 }
 
 //nolint:cyclop // per-person strength dispatch: one branch per sort direction plus the sort/nil comparisons; the switch is the routing surface
 func (s *PersonStore) listByStrength(ctx context.Context, workspaceID, cursor string, limit int, ascending bool) ([]Person, string, error) {
-	offset, _ := decodeOffsetCursor(cursor)
+	offset := decodeOffsetCursor(cursor)
 	// Non-nil so an empty result marshals to a JSON array ([]), never null.
 	all := []Person{}
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
