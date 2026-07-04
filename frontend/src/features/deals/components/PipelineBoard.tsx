@@ -1,0 +1,270 @@
+import {
+  DndContext,
+  type DragEndEvent,
+  type DragStartEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { useState } from "react";
+import type {
+  Deal,
+  PipelineRollup,
+  Stage,
+} from "../../../lib/api-client/generated/index.js";
+import { Skeleton } from "../../../shared/ui/forge.js";
+import { useAdvanceDeal } from "../api/deals.js";
+import { OutcomeDialog } from "./OutcomeDialog.js";
+import { StageColumn } from "./StageColumn.js";
+
+// Extracts the server-named cause from a failed advanceDeal call (a Problem-shaped body with
+// `detail`/`code`) rather than surfacing a generic "failed" — AC-pipeline-3/4 requires the
+// snap-back toast to name the specific reason.
+export function advanceErrorMessage(error: unknown): string {
+  if (error && typeof error === "object") {
+    const problem = error as { detail?: unknown; code?: unknown };
+    if (typeof problem.detail === "string" && problem.detail.length > 0) {
+      return problem.detail;
+    }
+    if (typeof problem.code === "string" && problem.code.length > 0) {
+      return `Move failed (${problem.code})`;
+    }
+  }
+  return "Move failed — please try again.";
+}
+
+// The next stage in DEAL-FORM-1 position order after `currentStageId`, searching across
+// ALL stages (open + terminal) — this is what both the Advance button (DEAL-AC-B4) and the
+// drag-drop terminal check resolve against. Returns undefined only for the last stage.
+export function nextStageId(
+  currentStageId: string,
+  allStagesByPosition: Stage[],
+): string | undefined {
+  const ordered = allStagesByPosition
+    .slice()
+    .sort((a, b) => a.position - b.position);
+  const idx = ordered.findIndex((s) => s.id === currentStageId);
+  if (idx === -1 || idx === ordered.length - 1) return undefined;
+  return ordered[idx + 1].id;
+}
+
+export function PipelineBoard({
+  pipelineId,
+  stages,
+  terminalStages = [],
+  deals,
+  rollup,
+  isLoading,
+  isError,
+  onRetry,
+  onCardClick,
+  onMoveError,
+  onMoveSuccess,
+}: {
+  pipelineId: string;
+  stages: Stage[];
+  terminalStages?: Stage[];
+  deals: Deal[];
+  // Drives each column's raw/weighted sub-line (DEAL-EXT-1: server read only, never
+  // client-summed) — undefined while the roll-up hasn't loaded/errored, rendered
+  // honestly rather than falling back to a client-side sum.
+  rollup?: PipelineRollup;
+  isLoading: boolean;
+  isError: boolean;
+  onRetry: () => void;
+  onCardClick: (dealId: string) => void;
+  onMoveError?: (message: string) => void;
+  onMoveSuccess?: (message: string) => void;
+}) {
+  const advance = useAdvanceDeal(pipelineId);
+  const [isDragging, setIsDragging] = useState(false);
+  // Both the won-stage id and the lost-stage id are resolved once a terminal transition is
+  // pending — the OutcomeDialog's OK/Cancel choice (AC-deal-6) decides which one to write,
+  // independent of which drop zone (if any) triggered the pending state.
+  const [pendingOutcome, setPendingOutcome] = useState<{
+    dealId: string;
+    dealName: string;
+    wonStageId?: string;
+    lostStageId?: string;
+  } | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
+  const wonStage = terminalStages.find((s) => s.semantic === "won");
+  const lostStage = terminalStages.find((s) => s.semantic === "lost");
+  const allStages = [...stages, ...terminalStages];
+
+  // Shared by drag-drop and the Advance button: an open→open move applies directly; a move
+  // where either endpoint is terminal opens the outcome dialog (either-endpoint rule,
+  // DEAL-AC-N-1/DEAL-WIRE-4).
+  function attemptAdvance(dealId: string, toStageId: string) {
+    const deal = deals.find((d) => d.id === dealId);
+    if (!deal || deal.stage_id === toStageId) return;
+    const targetIsTerminal = terminalStages.some((s) => s.id === toStageId);
+    const fromIsTerminal =
+      stages.find((s) => s.id === deal.stage_id) === undefined;
+    if (targetIsTerminal || fromIsTerminal) {
+      setPendingOutcome({
+        dealId,
+        dealName: deal.name,
+        wonStageId: wonStage?.id,
+        lostStageId: lostStage?.id,
+      });
+      return;
+    }
+    const fromStage = allStages.find((s) => s.id === deal.stage_id);
+    const toStage = allStages.find((s) => s.id === toStageId);
+    advance.mutate(
+      { dealId, toStageId },
+      {
+        onSuccess: () =>
+          onMoveSuccess?.(
+            `${deal.name} moved ${fromStage?.name ?? "?"} → ${toStage?.name ?? "?"} · stage history recorded`,
+          ),
+        onError: (err) => onMoveError?.(advanceErrorMessage(err)),
+      },
+    );
+  }
+
+  function handleDragStart(_event: DragStartEvent) {
+    setIsDragging(true);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setIsDragging(false);
+    const dealId = String(event.active.id);
+    const toStageId = event.over?.id ? String(event.over.id) : undefined;
+    if (!toStageId) return;
+    attemptAdvance(dealId, toStageId);
+  }
+
+  function handleAdvanceClick(dealId: string) {
+    const deal = deals.find((d) => d.id === dealId);
+    if (!deal) return;
+    const target = nextStageId(deal.stage_id, allStages);
+    if (!target) return; // already at the last stage — nothing to advance to
+    attemptAdvance(dealId, target);
+  }
+
+  if (isLoading) {
+    return (
+      <div data-testid="board-skeleton" className="flex gap-gf-md p-gf-md">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <Skeleton key={i} height="300px" />
+        ))}
+      </div>
+    );
+  }
+  if (isError) {
+    return (
+      <div className="p-gf-md rounded-md border border-gf-status-danger-subtle bg-gf-status-danger-subtle">
+        <p className="text-gf-body text-gf-status-danger mb-gf-sm">
+          Failed to load the pipeline board.
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="text-gf-caption text-gf-accent underline"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+  if (stages.length === 0) {
+    return (
+      <p className="p-gf-md text-gf-body text-gf-secondary">
+        No pipeline configured yet.
+      </p>
+    );
+  }
+  return (
+    <div className="p-gf-md">
+      {deals.length === 0 && (
+        // A top-level honest empty state (STATE-1) distinct from a column's own "Drop a card
+        // here" hint — empty stage columns still render below (they stay valid drop targets,
+        // never collapsed).
+        <p
+          data-testid="board-empty-state"
+          className="mb-gf-md text-gf-body text-gf-secondary"
+        >
+          No deals yet — drag a card here once you create one, or use "New deal"
+          above.
+        </p>
+      )}
+      <DndContext
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="flex gap-gf-md overflow-x-auto">
+          {stages.map((stage) => (
+            <StageColumn
+              key={stage.id}
+              stage={stage}
+              deals={deals.filter((d) => d.stage_id === stage.id)}
+              rollupStage={rollup?.by_stage.find(
+                (s) => s.stage_id === stage.id,
+              )}
+              baseCurrency={rollup?.base_currency}
+              onCardClick={onCardClick}
+              onAdvanceClick={handleAdvanceClick}
+            />
+          ))}
+          {isDragging &&
+            terminalStages.map((stage) => (
+              <StageColumn
+                key={stage.id}
+                stage={stage}
+                deals={[]}
+                isTransient
+                onCardClick={onCardClick}
+                onAdvanceClick={handleAdvanceClick}
+              />
+            ))}
+        </div>
+      </DndContext>
+      <OutcomeDialog
+        open={pendingOutcome !== null}
+        dealName={pendingOutcome?.dealName ?? ""}
+        isLoading={advance.isPending}
+        onWon={() => {
+          if (!pendingOutcome?.wonStageId) return;
+          const dealName = pendingOutcome.dealName;
+          advance.mutate(
+            {
+              dealId: pendingOutcome.dealId,
+              toStageId: pendingOutcome.wonStageId,
+              status: "won",
+            },
+            {
+              onSuccess: () =>
+                onMoveSuccess?.(`${dealName} moved to Closed Won`),
+              onError: (err) => onMoveError?.(advanceErrorMessage(err)),
+            },
+          );
+          setPendingOutcome(null);
+        }}
+        onLost={(reason) => {
+          if (!pendingOutcome?.lostStageId) return;
+          const dealName = pendingOutcome.dealName;
+          advance.mutate(
+            {
+              dealId: pendingOutcome.dealId,
+              toStageId: pendingOutcome.lostStageId,
+              status: "lost",
+              lostReason: reason,
+            },
+            {
+              onSuccess: () =>
+                onMoveSuccess?.(`${dealName} moved to Closed Lost`),
+              onError: (err) => onMoveError?.(advanceErrorMessage(err)),
+            },
+          );
+          setPendingOutcome(null);
+        }}
+        onCancel={() => setPendingOutcome(null)}
+      />
+    </div>
+  );
+}
