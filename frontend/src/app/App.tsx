@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { LoginPage } from "../features/identity/routes/LoginPage.js";
 import { CompaniesPage } from "../features/organizations/routes/CompaniesPage.js";
+import { CompanyDetailPage } from "../features/organizations/routes/CompanyDetailPage.js";
 import { PeoplePage } from "../features/people/routes/PeoplePage.js";
 import { ProtectedRoute } from "./ProtectedRoute.js";
 import { ShellPlaceholderPage } from "./ShellPlaceholderPage.js";
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/home" element={<ShellPlaceholderPage title="Home" />} />
         <Route path="/people" element={<PeoplePage />} />
         <Route path="/companies" element={<CompaniesPage />} />
+        <Route path="/companies/:id" element={<CompanyDetailPage />} />
         <Route path="/leads" element={<ShellPlaceholderPage title="Leads" />} />
         <Route path="/deals" element={<ShellPlaceholderPage title="Deals" />} />
         <Route path="/tasks" element={<ShellPlaceholderPage title="Tasks" />} />
