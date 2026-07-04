@@ -116,7 +116,7 @@ func TestOrgStore_List_AttachesAggregates(t *testing.T) {
 		t.Fatalf("seed won deal: %v", err)
 	}
 
-	orgs, _, err := orgStore.List(ctx, orgAggTestWS, "", 20, "")
+	orgs, _, err := orgStore.List(ctx, orgAggTestWS, "", 20, "", OrgListFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}

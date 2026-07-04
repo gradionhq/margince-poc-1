@@ -90,7 +90,7 @@ func (f *fakeOrgStore) Update(ctx context.Context, id, workspaceID string, updat
 	return crmcore.Organization{}, errs.ErrNotFound
 }
 
-func (f *fakeOrgStore) List(ctx context.Context, workspaceID, cursor string, limit int, sort string) ([]crmcore.Organization, string, error) {
+func (f *fakeOrgStore) List(ctx context.Context, workspaceID, cursor string, limit int, sort string, filter crmcore.OrgListFilter) ([]crmcore.Organization, string, error) {
 	return nil, "", nil
 }
 

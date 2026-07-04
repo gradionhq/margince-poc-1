@@ -385,3 +385,270 @@ func TestOrganizationHandler_Update_StaleIfMatchAndMalformed(t *testing.T) {
 		t.Fatalf("want 1 organization.updated outbox row, got %d", eventCount)
 	}
 }
+
+func TestOrganizationHandler_List_ClassificationAndRelevanceFilter(t *testing.T) {
+	db := openDealTestDB(t)
+	seedOrgHandlerWorkspace(t, db)
+
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: orgHandlerTestWS, UserID: "human:test"})
+	orgStore := crmcore.NewOrgStore(db)
+
+	classification := "partner"
+	matchingName := "PartnerHigh-" + ids.New()
+	if _, err := orgStore.Create(ctx, crmcore.Organization{
+		WorkspaceID: orgHandlerTestWS, DisplayName: matchingName,
+		Classification: &classification, Relevance: 75,
+		Source: "test", CapturedBy: "human:test",
+	}); err != nil {
+		t.Fatalf("create matching org: %v", err)
+	}
+	if _, err := orgStore.Create(ctx, crmcore.Organization{
+		WorkspaceID: orgHandlerTestWS, DisplayName: "PartnerLow-" + ids.New(),
+		Classification: &classification, Relevance: 10,
+		Source: "test", CapturedBy: "human:test",
+	}); err != nil {
+		t.Fatalf("create low-relevance org: %v", err)
+	}
+	otherClass := "vendor"
+	if _, err := orgStore.Create(ctx, crmcore.Organization{
+		WorkspaceID: orgHandlerTestWS, DisplayName: "Vendor-" + ids.New(),
+		Classification: &otherClass, Relevance: 90,
+		Source: "test", CapturedBy: "human:test",
+	}); err != nil {
+		t.Fatalf("create vendor org: %v", err)
+	}
+
+	h := NewOrganizationHandler(orgStore)
+	req := httptest.NewRequest(http.MethodGet, "/organizations?classification=partner&relevance_gte=50&sort=strength", nil)
+	req = withOrgWorkspace(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d want 200, body=%s", w.Code, w.Body.String())
+	}
+	var page struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(page.Data) != 1 {
+		t.Fatalf("want 1 matching org, got %d: %v", len(page.Data), page.Data)
+	}
+	if page.Data[0]["display_name"] != matchingName || page.Data[0]["classification"] != "partner" {
+		t.Fatalf("unexpected filtered row: %v", page.Data[0])
+	}
+}
+
+func TestOrganizationHandler_List_DomainAndOwnerFilter(t *testing.T) {
+	db := openDealTestDB(t)
+	seedOrgHandlerWorkspace(t, db)
+
+	ownerID := ids.New()
+	if _, err := db.Exec(
+		`INSERT INTO app_user (id, workspace_id, email, display_name)
+		 VALUES ($1::uuid, $2::uuid, $3, 'Owner')
+		 ON CONFLICT (id) DO NOTHING`,
+		ownerID, orgHandlerTestWS, ownerID+"@test.example",
+	); err != nil {
+		t.Fatalf("seed app_user: %v", err)
+	}
+
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: orgHandlerTestWS, UserID: "human:test"})
+	orgStore := crmcore.NewOrgStore(db)
+	owned, err := orgStore.Create(ctx, crmcore.Organization{
+		WorkspaceID: orgHandlerTestWS, DisplayName: "Owned-" + ids.New(),
+		OwnerID: &ownerID,
+		Domains: []crmcore.OrganizationDomain{{Domain: "Owned.Example"}},
+		Source:  "test", CapturedBy: "human:test",
+	})
+	if err != nil {
+		t.Fatalf("create owned org: %v", err)
+	}
+	if _, err := orgStore.Create(ctx, crmcore.Organization{
+		WorkspaceID: orgHandlerTestWS, DisplayName: "Unowned-" + ids.New(),
+		Source: "test", CapturedBy: "human:test",
+	}); err != nil {
+		t.Fatalf("create unowned org: %v", err)
+	}
+
+	h := NewOrganizationHandler(orgStore)
+
+	reqDomain := httptest.NewRequest(http.MethodGet, "/organizations?domain=owned.example", nil)
+	reqDomain = withOrgWorkspace(reqDomain)
+	wDomain := httptest.NewRecorder()
+	h.ServeHTTP(wDomain, reqDomain)
+	if wDomain.Code != http.StatusOK {
+		t.Fatalf("domain filter status=%d want 200, body=%s", wDomain.Code, wDomain.Body.String())
+	}
+	var pageDomain struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(wDomain.Body.Bytes(), &pageDomain); err != nil {
+		t.Fatalf("decode domain resp: %v", err)
+	}
+	if len(pageDomain.Data) != 1 || pageDomain.Data[0]["id"] != owned.ID {
+		t.Fatalf("domain filter: want exactly org %s, got %v", owned.ID, pageDomain.Data)
+	}
+
+	reqOwner := httptest.NewRequest(http.MethodGet, "/organizations?owner_id="+ownerID, nil)
+	reqOwner = withOrgWorkspace(reqOwner)
+	wOwner := httptest.NewRecorder()
+	h.ServeHTTP(wOwner, reqOwner)
+	if wOwner.Code != http.StatusOK {
+		t.Fatalf("owner filter status=%d want 200, body=%s", wOwner.Code, wOwner.Body.String())
+	}
+	var pageOwner struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(wOwner.Body.Bytes(), &pageOwner); err != nil {
+		t.Fatalf("decode owner resp: %v", err)
+	}
+	if len(pageOwner.Data) != 1 || pageOwner.Data[0]["id"] != owned.ID {
+		t.Fatalf("owner_id filter: want exactly org %s, got %v", owned.ID, pageOwner.Data)
+	}
+}
+
+func TestOrganizationHandler_FullLifecycle_ListFiltersAcrossEndpoints(t *testing.T) {
+	db := openDealTestDB(t)
+	seedOrgHandlerWorkspace(t, db)
+
+	ownerID := ids.New()
+	if _, err := db.Exec(
+		`INSERT INTO app_user (id, workspace_id, email, display_name)
+		 VALUES ($1::uuid, $2::uuid, $3, 'Lifecycle Owner')
+		 ON CONFLICT (id) DO NOTHING`,
+		ownerID, orgHandlerTestWS, ownerID+"@test.example",
+	); err != nil {
+		t.Fatalf("seed app_user: %v", err)
+	}
+
+	h := NewOrganizationHandler(crmcore.NewOrgStore(db))
+	postOrg := func(body string) map[string]any {
+		req := httptest.NewRequest(http.MethodPost, "/organizations", strings.NewReader(body))
+		req = withOrgWorkspace(req)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("create status=%d want 201, body=%s", w.Code, w.Body.String())
+		}
+		var created map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+			t.Fatalf("decode created: %v", err)
+		}
+		return created
+	}
+
+	targetClassification := "partner-" + ids.New()
+	targetDomain := "Acme-" + ids.New() + ".COM"
+	targetDomainLower := strings.ToLower(targetDomain)
+	target := postOrg(`{
+		"display_name": "Acme Inc",
+		"classification": "` + targetClassification + `",
+		"relevance": 75,
+		"owner_id": "` + ownerID + `",
+		"domains": [{"domain": "` + targetDomain + `", "is_primary": true}],
+		"source": "test",
+		"captured_by": "human:test"
+	}`)
+	postOrg(`{
+		"display_name": "Control Co",
+		"classification": "vendor",
+		"relevance": 10,
+		"source": "test",
+		"captured_by": "human:test"
+	}`)
+
+	if domains, ok := target["domains"].([]any); !ok || len(domains) != 1 {
+		t.Fatalf("create did not normalize domains: %v", target["domains"])
+	} else if dom, ok := domains[0].(map[string]any); !ok || dom["domain"] != targetDomainLower {
+		t.Fatalf("create did not normalize domains: %v", target["domains"])
+	}
+	targetID, _ := target["id"].(string)
+
+	listOne := func(rawURL string) []map[string]any {
+		req := httptest.NewRequest(http.MethodGet, rawURL, nil)
+		req = withOrgWorkspace(req)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("list %s status=%d want 200, body=%s", rawURL, w.Code, w.Body.String())
+		}
+		var page struct {
+			Data []map[string]any `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
+			t.Fatalf("decode list %s: %v", rawURL, err)
+		}
+		return page.Data
+	}
+
+	if rows := listOne("/organizations?classification=" + targetClassification + "&relevance_gte=50"); len(rows) != 1 || rows[0]["id"] != targetID {
+		t.Fatalf("classification/relevance filter mismatch: %v", rows)
+	}
+	if rows := listOne("/organizations?domain=" + targetDomainLower); len(rows) != 1 || rows[0]["id"] != targetID {
+		t.Fatalf("domain filter mismatch: %v", rows)
+	}
+	if rows := listOne("/organizations?owner_id=" + ownerID); len(rows) != 1 || rows[0]["id"] != targetID {
+		t.Fatalf("owner_id filter mismatch: %v", rows)
+	}
+
+	reqGet := httptest.NewRequest(http.MethodGet, "/organizations/"+targetID, nil)
+	reqGet = withOrgWorkspace(reqGet)
+	wGet := httptest.NewRecorder()
+	h.ServeHTTP(wGet, reqGet)
+	if wGet.Code != http.StatusOK {
+		t.Fatalf("get status=%d want 200, body=%s", wGet.Code, wGet.Body.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(wGet.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode get: %v", err)
+	}
+	if got["id"] != targetID {
+		t.Fatalf("get returned wrong org: %v", got["id"])
+	}
+
+	reqPatch := httptest.NewRequest(http.MethodPatch, "/organizations/"+targetID, strings.NewReader(`{"display_name":"Acme Prime"}`))
+	reqPatch.Header.Set("If-Match", "1")
+	reqPatch = withOrgWorkspace(reqPatch)
+	wPatch := httptest.NewRecorder()
+	h.ServeHTTP(wPatch, reqPatch)
+	if wPatch.Code != http.StatusOK {
+		t.Fatalf("patch status=%d want 200, body=%s", wPatch.Code, wPatch.Body.String())
+	}
+	var patched map[string]any
+	if err := json.Unmarshal(wPatch.Body.Bytes(), &patched); err != nil {
+		t.Fatalf("decode patch: %v", err)
+	}
+	if patched["display_name"] != "Acme Prime" {
+		t.Fatalf("patch did not update display_name: %v", patched["display_name"])
+	}
+
+	reqDelete := httptest.NewRequest(http.MethodDelete, "/organizations/"+targetID, nil)
+	reqDelete = withOrgWorkspace(reqDelete)
+	wDelete := httptest.NewRecorder()
+	h.ServeHTTP(wDelete, reqDelete)
+	if wDelete.Code != http.StatusOK {
+		t.Fatalf("delete status=%d want 200, body=%s", wDelete.Code, wDelete.Body.String())
+	}
+
+	reqArchived := httptest.NewRequest(http.MethodGet, "/organizations/"+targetID, nil)
+	reqArchived = withOrgWorkspace(reqArchived)
+	wArchived := httptest.NewRecorder()
+	h.ServeHTTP(wArchived, reqArchived)
+	if wArchived.Code != http.StatusOK {
+		t.Fatalf("archived get status=%d want 200, body=%s", wArchived.Code, wArchived.Body.String())
+	}
+	var archived map[string]any
+	if err := json.Unmarshal(wArchived.Body.Bytes(), &archived); err != nil {
+		t.Fatalf("decode archived: %v", err)
+	}
+	if archived["archived_at"] == nil {
+		t.Fatalf("expected archived_at on archived org, got %v", archived)
+	}
+
+	if rows := listOne("/organizations?domain=" + targetDomainLower); len(rows) != 0 {
+		t.Fatalf("archived org leaked through domain filter: %v", rows)
+	}
+}

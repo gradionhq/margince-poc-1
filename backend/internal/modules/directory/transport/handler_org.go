@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
@@ -174,9 +175,20 @@ func (h *OrganizationHandler) list(w http.ResponseWriter, r *http.Request) {
 		jsonProblem(w, http.StatusUnprocessableEntity, "sort_field_not_allowed")
 		return
 	}
+	q := r.URL.Query()
+	filter := directory.OrgListFilter{
+		Classification: q.Get("classification"),
+		Domain:         q.Get("domain"),
+		OwnerID:        q.Get("owner_id"),
+	}
+	if s := q.Get("relevance_gte"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil {
+			filter.RelevanceGTE = &n
+		}
+	}
 	cursor := r.URL.Query().Get("cursor")
 	limit := queryLimit(r, 20)
-	items, next, err := h.store.List(r.Context(), wsID, cursor, limit, sortVal)
+	items, next, err := h.store.List(r.Context(), wsID, cursor, limit, sortVal, filter)
 	if err != nil {
 		jsonErr(w, err)
 		return
