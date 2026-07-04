@@ -51,4 +51,40 @@ describe("DealCard", () => {
     screen.getByTestId("deal-card-d1").click();
     expect(onClick).toHaveBeenCalled();
   });
+
+  it("shows the Stalled flag with a days-idle hover title when stalled (AC-pipeline-5)", () => {
+    const stalledDeal: Deal = {
+      ...baseDeal,
+      stalled: true,
+      stage_entered_at: "2020-01-01T00:00:00Z",
+    };
+    render(<DealCard deal={stalledDeal} onClick={vi.fn()} />);
+    const flag = screen.getByText(/^Stalled \d+d$/);
+    expect(flag).toBeInTheDocument();
+    expect(flag).toHaveAttribute(
+      "title",
+      expect.stringContaining("No activity for"),
+    );
+  });
+
+  it("does not show the Stalled flag when not stalled", () => {
+    render(<DealCard deal={baseDeal} onClick={vi.fn()} />);
+    expect(screen.queryByText(/^Stalled \d+d$/)).not.toBeInTheDocument();
+  });
+
+  it("shows the Single-threaded flag when stakeholder_count is 1 (AC-pipeline-5)", () => {
+    const soloDeal: Deal = { ...baseDeal, stakeholder_count: 1 };
+    render(<DealCard deal={soloDeal} onClick={vi.fn()} />);
+    const flag = screen.getByText("Single-threaded");
+    expect(flag).toBeInTheDocument();
+    expect(flag).toHaveAttribute(
+      "title",
+      "Only one stakeholder captured on this deal",
+    );
+  });
+
+  it("does not show the Single-threaded flag when stakeholder_count is more than 1", () => {
+    render(<DealCard deal={baseDeal} onClick={vi.fn()} />);
+    expect(screen.queryByText("Single-threaded")).not.toBeInTheDocument();
+  });
 });
