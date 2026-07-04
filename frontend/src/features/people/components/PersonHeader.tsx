@@ -22,6 +22,11 @@ export function PersonHeader({ person }: { person: Person }) {
   );
   const { mutate: save, isPending } = useUpdatePerson(person.id);
 
+  // Known gap (see PersonDetailPage.tsx's header comment): `GET /people/{id}` currently never
+  // populates `emails`/`phones` on the composite read (the backend doesn't join
+  // person_email/person_phone outside Create's request echo) — these branches are correct
+  // against the declared contract shape and will render real rows the moment that backend gap
+  // closes; they are not dead code by design, just unexercised by the current backend.
   const primaryEmail =
     person.emails?.find((e) => e.is_primary) ?? person.emails?.[0];
   const primaryPhone =

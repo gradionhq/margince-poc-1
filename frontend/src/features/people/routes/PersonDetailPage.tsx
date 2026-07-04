@@ -15,6 +15,14 @@ import { StrengthCard } from "../components/StrengthCard.js";
 //  - NotesTab has no confirmed create-note endpoint in the contract — Save is local-state only.
 //  - ActivityRef (Person.activities) carries no source/captured_by — the Activity tab cannot
 //    render a real per-row provenance chip from this field; omitted rather than fabricated.
+//  - `GET /people/{id}` never populates `emails`/`phones` on the composite read — the backend's
+//    assembleComposite (backend/internal/modules/people/transport/handler_person.go) and
+//    PersonStore.Get/GetAny (backend/internal/modules/directory/store.go) never join
+//    person_email/person_phone; those fields only ever appear transiently on Create's request
+//    echo, never on a subsequent GET (confirmed live via curl against a real DB with seeded
+//    rows). `PersonHeader`'s primaryEmail/primaryPhone branches are correct against the
+//    contract's declared shape and will render real data the moment the backend joins it — a
+//    pre-existing backend gap (predates T19), not something to fix from this frontend ticket.
 export function PersonDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [mergeOpen, setMergeOpen] = useState(false);
