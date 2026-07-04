@@ -196,6 +196,69 @@ func TestPersonHandler_Get_Composite360_P95Under100ms(t *testing.T) {
 	}
 }
 
+func TestPersonHandler_Get_NonexistentID_Returns404(t *testing.T) {
+	db := openTestDB(t)
+	seedWorkspace(t, db, personCompositeWS)
+	setRLS(t, db, personCompositeWS)
+
+	h := personHandlerForTest(db, directory.NewPersonStore(db))
+
+	req := httptest.NewRequest(http.MethodGet, "/people/00000000-0000-0000-0000-0000000000ff", nil)
+	req = req.WithContext(crmctx.With(req.Context(), crmctx.Principal{TenantID: personCompositeWS, UserID: "human:test"}))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("GET /people/{nonexistent-id}: want 404, got %d: %s", w.Code, w.Body.String())
+	}
+	var problem map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&problem); err != nil {
+		t.Fatal(err)
+	}
+	if problem["code"] != "not_found" {
+		t.Fatalf("code = %v, want not_found", problem["code"])
+	}
+}
+
+const personCompositeOtherWS = "00000000-0000-0000-0000-000000000047"
+
+func TestPersonHandler_Get_ForeignWorkspaceID_Returns404(t *testing.T) {
+	db := openTestDB(t)
+	seedWorkspace(t, db, personCompositeWS)
+	seedWorkspace(t, db, personCompositeOtherWS)
+	setRLS(t, db, personCompositeWS)
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: personCompositeWS, UserID: "human:test"})
+	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
+
+	personStore := directory.NewPersonStore(db)
+	h := personHandlerForTest(db, personStore)
+
+	subject, err := personStore.Create(ctx, directory.Person{WorkspaceID: personCompositeWS, FullName: "Tenant A Subject", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	if err != nil {
+		t.Fatalf("seed subject: %v", err)
+	}
+
+	// Switch RLS to the other workspace and request the same id with a
+	// principal scoped to that other workspace — the row belongs to
+	// personCompositeWS, so it must 404, never leak.
+	setRLS(t, db, personCompositeOtherWS)
+	req := httptest.NewRequest(http.MethodGet, "/people/"+subject.ID, nil)
+	req = req.WithContext(crmctx.With(req.Context(), crmctx.Principal{TenantID: personCompositeOtherWS, UserID: "human:test"}))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("GET /people/{id} from foreign workspace: want 404, got %d: %s", w.Code, w.Body.String())
+	}
+	var problem map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&problem); err != nil {
+		t.Fatal(err)
+	}
+	if problem["code"] != "not_found" {
+		t.Fatalf("code = %v, want not_found", problem["code"])
+	}
+}
+
 // percentileDuration duplicates modules/directory's store_deal_filter_test.go
 // percentile() helper — this package can't import a _test.go symbol across
 // packages, same duplication class as this file's other shared helpers.

@@ -138,6 +138,75 @@ func TestOrganizationHandler_Get_ArchivedStillFetchableWithComposite(t *testing.
 	}
 }
 
+func TestOrganizationHandler_Get_NonexistentID_Returns404(t *testing.T) {
+	db := openDealTestDB(t)
+	orgHandlerSetRLS(t, db, orgCompositeWS)
+	if _, err := db.Exec(`INSERT INTO workspace (id, name, slug, base_currency) VALUES ($1,$2,$3,'EUR') ON CONFLICT (id) DO NOTHING`, orgCompositeWS, "org-360-ws", "org-360-404-"+time.Now().Format("20060102150405")); err != nil {
+		t.Fatalf("seed workspace: %v", err)
+	}
+
+	h := orgHandlerForTest(db, crmcore.NewOrgStore(db))
+
+	req := httptest.NewRequest(http.MethodGet, "/organizations/00000000-0000-0000-0000-0000000000ff", nil)
+	req = withOrgWorkspaceID(req, orgCompositeWS)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("GET /organizations/{nonexistent-id}: want 404, got %d: %s", w.Code, w.Body.String())
+	}
+	var problem map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&problem); err != nil {
+		t.Fatal(err)
+	}
+	if problem["code"] != "not_found" {
+		t.Fatalf("code = %v, want not_found", problem["code"])
+	}
+}
+
+const orgCompositeOtherWS = "00000000-0000-0000-0000-000000000048"
+
+func TestOrganizationHandler_Get_ForeignWorkspaceID_Returns404(t *testing.T) {
+	db := openDealTestDB(t)
+	orgHandlerSetRLS(t, db, orgCompositeWS)
+	if _, err := db.Exec(`INSERT INTO workspace (id, name, slug, base_currency) VALUES ($1,$2,$3,'EUR') ON CONFLICT (id) DO NOTHING`, orgCompositeWS, "org-360-ws", "org-360-fw-"+time.Now().Format("20060102150405")); err != nil {
+		t.Fatalf("seed workspace: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO workspace (id, name, slug, base_currency) VALUES ($1,$2,$3,'EUR') ON CONFLICT (id) DO NOTHING`, orgCompositeOtherWS, "org-360-other-ws", "org-360-other-"+time.Now().Format("20060102150405")); err != nil {
+		t.Fatalf("seed other workspace: %v", err)
+	}
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: orgCompositeWS, UserID: "human:test"})
+	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
+
+	orgStore := crmcore.NewOrgStore(db)
+	h := orgHandlerForTest(db, orgStore)
+
+	org, err := orgStore.Create(ctx, crmcore.Organization{WorkspaceID: orgCompositeWS, DisplayName: "Tenant A Org", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	if err != nil {
+		t.Fatalf("seed org: %v", err)
+	}
+
+	// Switch RLS to the other workspace and request the same id with a
+	// principal scoped to that other workspace — the row belongs to
+	// orgCompositeWS, so it must 404, never leak.
+	orgHandlerSetRLS(t, db, orgCompositeOtherWS)
+	req := httptest.NewRequest(http.MethodGet, "/organizations/"+org.ID, nil)
+	req = withOrgWorkspaceID(req, orgCompositeOtherWS)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("GET /organizations/{id} from foreign workspace: want 404, got %d: %s", w.Code, w.Body.String())
+	}
+	var problem map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&problem); err != nil {
+		t.Fatal(err)
+	}
+	if problem["code"] != "not_found" {
+		t.Fatalf("code = %v, want not_found", problem["code"])
+	}
+}
+
 func TestOrganizationHandler_Get_Composite360_PerfBudgetAndPaginationCap(t *testing.T) {
 	db := openDealTestDB(t)
 	const ws = "00000000-0000-0000-0000-000000000044"

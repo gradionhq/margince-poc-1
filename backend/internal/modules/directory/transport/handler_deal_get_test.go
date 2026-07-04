@@ -149,6 +149,93 @@ func TestDealHandler_Get_ArchivedStillFetchable(t *testing.T) {
 	}
 }
 
+func TestDealHandler_Get_NonexistentID_Returns404(t *testing.T) {
+	db := openDealTestDB(t)
+	orgHandlerSetRLS(t, db, dealGetTestWS)
+	if _, err := db.Exec(`INSERT INTO workspace (id, name, slug, base_currency) VALUES ($1,$2,$3,'EUR') ON CONFLICT (id) DO NOTHING`, dealGetTestWS, "deal-360-ws", "deal-360-404-"+time.Now().Format("20060102150405")); err != nil {
+		t.Fatalf("seed workspace: %v", err)
+	}
+
+	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
+
+	req := httptest.NewRequest(http.MethodGet, "/deals/00000000-0000-0000-0000-0000000000ff", nil)
+	req = withDealGetWorkspace(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("GET /deals/{nonexistent-id}: want 404, got %d: %s", w.Code, w.Body.String())
+	}
+	var problem map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&problem); err != nil {
+		t.Fatal(err)
+	}
+	if problem["code"] != "not_found" {
+		t.Fatalf("code = %v, want not_found", problem["code"])
+	}
+}
+
+const dealGetTestOtherWS = "00000000-0000-0000-0000-000000000049"
+
+func withDealGetOtherWorkspace(r *http.Request) *http.Request {
+	ctx := crmctx.With(r.Context(), crmctx.Principal{TenantID: dealGetTestOtherWS, UserID: "human:test"})
+	return r.WithContext(ctx)
+}
+
+func TestDealHandler_Get_ForeignWorkspaceID_Returns404(t *testing.T) {
+	db := openDealTestDB(t)
+	orgHandlerSetRLS(t, db, dealGetTestWS)
+	if _, err := db.Exec(`INSERT INTO workspace (id, name, slug, base_currency) VALUES ($1,$2,$3,'EUR') ON CONFLICT (id) DO NOTHING`, dealGetTestWS, "deal-360-ws", "deal-360-fw-"+time.Now().Format("20060102150405")); err != nil {
+		t.Fatalf("seed workspace: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO workspace (id, name, slug, base_currency) VALUES ($1,$2,$3,'EUR') ON CONFLICT (id) DO NOTHING`, dealGetTestOtherWS, "deal-360-other-ws", "deal-360-other-"+time.Now().Format("20060102150405")); err != nil {
+		t.Fatalf("seed other workspace: %v", err)
+	}
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: dealGetTestWS, UserID: "human:test"})
+	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
+
+	pstore := deals.NewPipelineStore(db)
+	pl, err := pstore.Create(ctx, deals.Pipeline{WorkspaceID: dealGetTestWS, Name: "ForeignWS Pipeline"})
+	if err != nil {
+		t.Fatalf("seed pipeline: %v", err)
+	}
+	sstore := deals.NewStageStore(db)
+	st, err := sstore.Create(ctx, deals.Stage{WorkspaceID: dealGetTestWS, PipelineID: pl.ID, Name: "Open", Position: 1, Semantic: "open", WinProbability: 50})
+	if err != nil {
+		t.Fatalf("seed stage: %v", err)
+	}
+
+	dealStore := crmcore.NewDealStore(db)
+	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
+
+	d := crmcore.NewDeal("Tenant A Deal", pl.ID, st.ID, p0)
+	d.WorkspaceID = dealGetTestWS
+	created, err := dealStore.Create(ctx, d, "")
+	if err != nil {
+		t.Fatalf("seed deal: %v", err)
+	}
+
+	// Switch RLS to the other workspace and request the same id with a
+	// principal scoped to that other workspace — the row belongs to
+	// dealGetTestWS, so it must 404, never leak.
+	orgHandlerSetRLS(t, db, dealGetTestOtherWS)
+	req := httptest.NewRequest(http.MethodGet, "/deals/"+created.ID, nil)
+	req = withDealGetOtherWorkspace(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("GET /deals/{id} from foreign workspace: want 404, got %d: %s", w.Code, w.Body.String())
+	}
+	var problem map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&problem); err != nil {
+		t.Fatal(err)
+	}
+	if problem["code"] != "not_found" {
+		t.Fatalf("code = %v, want not_found", problem["code"])
+	}
+}
+
 func TestDealHandler_Get_Composite360_P95Under100ms(t *testing.T) {
 	db := openDealTestDB(t)
 	const ws = "00000000-0000-0000-0000-000000000046"
