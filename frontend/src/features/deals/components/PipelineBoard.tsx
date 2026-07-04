@@ -54,6 +54,7 @@ export function PipelineBoard({
   onRetry,
   onCardClick,
   onMoveError,
+  onMoveSuccess,
 }: {
   pipelineId: string;
   stages: Stage[];
@@ -64,6 +65,7 @@ export function PipelineBoard({
   onRetry: () => void;
   onCardClick: (dealId: string) => void;
   onMoveError?: (message: string) => void;
+  onMoveSuccess?: (message: string) => void;
 }) {
   const advance = useAdvanceDeal(pipelineId);
   const [isDragging, setIsDragging] = useState(false);
@@ -101,9 +103,17 @@ export function PipelineBoard({
       });
       return;
     }
+    const fromStage = allStages.find((s) => s.id === deal.stage_id);
+    const toStage = allStages.find((s) => s.id === toStageId);
     advance.mutate(
       { dealId, toStageId },
-      { onError: (err) => onMoveError?.(advanceErrorMessage(err)) },
+      {
+        onSuccess: () =>
+          onMoveSuccess?.(
+            `${deal.name} moved ${fromStage?.name ?? "?"} → ${toStage?.name ?? "?"} · stage history recorded`,
+          ),
+        onError: (err) => onMoveError?.(advanceErrorMessage(err)),
+      },
     );
   }
 
@@ -207,18 +217,24 @@ export function PipelineBoard({
         isLoading={advance.isPending}
         onWon={() => {
           if (!pendingOutcome?.wonStageId) return;
+          const dealName = pendingOutcome.dealName;
           advance.mutate(
             {
               dealId: pendingOutcome.dealId,
               toStageId: pendingOutcome.wonStageId,
               status: "won",
             },
-            { onError: (err) => onMoveError?.(advanceErrorMessage(err)) },
+            {
+              onSuccess: () =>
+                onMoveSuccess?.(`${dealName} moved to Closed Won`),
+              onError: (err) => onMoveError?.(advanceErrorMessage(err)),
+            },
           );
           setPendingOutcome(null);
         }}
         onLost={(reason) => {
           if (!pendingOutcome?.lostStageId) return;
+          const dealName = pendingOutcome.dealName;
           advance.mutate(
             {
               dealId: pendingOutcome.dealId,
@@ -226,7 +242,11 @@ export function PipelineBoard({
               status: "lost",
               lostReason: reason,
             },
-            { onError: (err) => onMoveError?.(advanceErrorMessage(err)) },
+            {
+              onSuccess: () =>
+                onMoveSuccess?.(`${dealName} moved to Closed Lost`),
+              onError: (err) => onMoveError?.(advanceErrorMessage(err)),
+            },
           );
           setPendingOutcome(null);
         }}

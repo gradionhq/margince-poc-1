@@ -83,6 +83,12 @@ export function PipelinePage() {
                 { id: crypto.randomUUID(), variant: "error", message },
               ])
             }
+            onMoveSuccess={(message) =>
+              setToasts((t) => [
+                ...t,
+                { id: crypto.randomUUID(), variant: "success", message },
+              ])
+            }
           />
         ) : (
           <DealsTable deals={dealPage?.data ?? []} stagesById={stagesById} />

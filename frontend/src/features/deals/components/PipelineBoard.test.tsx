@@ -271,6 +271,31 @@ describe("advanceErrorMessage", () => {
   });
 });
 
+describe("PipelineBoard onMoveSuccess", () => {
+  it("fires a success message naming the from/to stages on a completed open→open move (live-UAT t21 step 3)", () => {
+    mockAdvanceMutate.mockClear();
+    const onMoveSuccess = vi.fn();
+    render(
+      <PipelineBoard
+        pipelineId="p1"
+        stages={stages} // s0 "New" (pos 0), s1 "Qualified" (pos 1) — both open
+        deals={deals} // d1 sits in s0
+        isLoading={false}
+        isError={false}
+        onRetry={vi.fn()}
+        onCardClick={vi.fn()}
+        onMoveSuccess={onMoveSuccess}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^advance$/i }));
+    const [, options] = mockAdvanceMutate.mock.calls[0];
+    options.onSuccess();
+    expect(onMoveSuccess).toHaveBeenCalledWith(
+      "Acme moved New → Qualified · stage history recorded",
+    );
+  });
+});
+
 describe("PipelineBoard onMoveError", () => {
   it("names the specific cause from the failed move's error body (AC-pipeline-3/4)", () => {
     mockAdvanceMutate.mockClear();
