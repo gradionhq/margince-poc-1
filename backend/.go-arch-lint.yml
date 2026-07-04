@@ -32,6 +32,7 @@ vendors:
   uuid:    { in: "github.com/google/uuid" }
   yaml:    { in: "gopkg.in/yaml.v3" }
   crypto:  { in: "golang.org/x/crypto**" }
+  text:    { in: "golang.org/x/text**" }
 components:
   # Tier-0 shared kernel (dependency-free leaf layer)
   obs:          { in: internal/shared/kernel/obs }
@@ -104,7 +105,7 @@ deps:
   # DatasourceProvider to become exported, which this task does not authorize).
   directory:
     mayDependOn: [crmctx, datasource, ids, errs, prov, audit]
-    canUse: [pq]
+    canUse: [pq, text] # text: golang.org/x/text/unicode/norm for NFKD unaccent in dedupe.go (T07)
   deals:
     mayDependOn: [crmctx, errs, ids]
     canUse: [pq]
