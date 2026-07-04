@@ -31,11 +31,13 @@ export function stalledDays(stageEnteredAt: string | null | undefined): number {
 export function DealCard({
   deal,
   onClick,
+  onAdvanceClick,
   dragHandleProps,
   dragging = false,
 }: {
   deal: Deal;
   onClick: () => void;
+  onAdvanceClick?: (dealId: string) => void;
   dragHandleProps?: Record<string, unknown>;
   dragging?: boolean;
 }) {
@@ -73,6 +75,18 @@ export function DealCard({
           </span>
         )}
       </div>
+      {onAdvanceClick && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation(); // don't also fire the card's own onClick/navigate
+            onAdvanceClick(deal.id);
+          }}
+          className="mt-gf-xs text-gf-caption text-gf-accent underline"
+        >
+          Advance
+        </button>
+      )}
     </div>
   );
 }
@@ -80,9 +94,11 @@ export function DealCard({
 export function DraggableDealCard({
   deal,
   onClick,
+  onAdvanceClick,
 }: {
   deal: Deal;
   onClick: () => void;
+  onAdvanceClick?: (dealId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: deal.id,
@@ -92,7 +108,7 @@ export function DraggableDealCard({
     : undefined;
   return (
     <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
-      <DealCard deal={deal} onClick={onClick} dragging={isDragging} />
+      <DealCard deal={deal} onClick={onClick} onAdvanceClick={onAdvanceClick} dragging={isDragging} />
     </div>
   );
 }

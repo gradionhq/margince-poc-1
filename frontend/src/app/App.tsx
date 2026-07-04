@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { LoginPage } from "../features/identity/routes/LoginPage.js";
+import { DealDetailPage } from "../features/deals/routes/DealDetailPage.js";
 import { PipelinePage } from "../features/deals/routes/PipelinePage.js";
 import { CompaniesPage } from "../features/organizations/routes/CompaniesPage.js";
 import { PeoplePage } from "../features/people/routes/PeoplePage.js";
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/companies" element={<CompaniesPage />} />
         <Route path="/leads" element={<ShellPlaceholderPage title="Leads" />} />
         <Route path="/deals" element={<PipelinePage />} />
+        <Route path="/deals/:id" element={<DealDetailPage />} />
         <Route path="/tasks" element={<ShellPlaceholderPage title="Tasks" />} />
         <Route path="/inbox" element={<ShellPlaceholderPage title="Inbox" />} />
         <Route

@@ -7,11 +7,13 @@ export function StageColumn({
   deals,
   isTransient = false,
   onCardClick,
+  onAdvanceClick,
 }: {
   stage: Stage;
   deals: Deal[];
   isTransient?: boolean;
   onCardClick: (dealId: string) => void;
+  onAdvanceClick?: (dealId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   const raw = deals.reduce((sum, d) => sum + (d.amount_minor ?? 0), 0);
@@ -47,7 +49,12 @@ export function StageColumn({
           <p className="text-gf-caption text-gf-muted p-gf-sm">Drop a card here</p>
         )}
         {sorted.map((deal) => (
-          <DraggableDealCard key={deal.id} deal={deal} onClick={() => onCardClick(deal.id)} />
+          <DraggableDealCard
+            key={deal.id}
+            deal={deal}
+            onClick={() => onCardClick(deal.id)}
+            onAdvanceClick={onAdvanceClick}
+          />
         ))}
       </div>
     </div>

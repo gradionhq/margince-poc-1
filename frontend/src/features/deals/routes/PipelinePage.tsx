@@ -31,6 +31,7 @@ export function PipelinePage() {
         <PipelineBoard
           pipelineId={pipelineId ?? ""}
           stages={openStages}
+          terminalStages={(allStages ?? []).filter((s) => s.semantic !== "open")}
           deals={dealPage?.data ?? []}
           isLoading={dealsLoading}
           isError={dealsError}
