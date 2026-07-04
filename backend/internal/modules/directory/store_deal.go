@@ -318,8 +318,13 @@ func (s *DealStore) checkStageInPipeline(ctx context.Context, tx *sql.Tx, id, wo
 
 // freezeDealFX returns the latest FX rate (and its date) for the deal's current
 // currency when the status is moving to won/lost — the rate to freeze onto the deal.
-// Both are nil when the deal is not closing, has no currency, or has no FX rate on file;
-// the caller COALESCEs them so a nil leaves the stored value untouched.
+// When the deal's currency matches the workspace's base_currency, the rate is a
+// genuine 1:1 identity and is returned directly without consulting fx_rate: a
+// workspace closing a deal denominated in its own base currency should never
+// need an explicit identity conversion rate pre-seeded on file.
+// Both are nil when the deal is not closing, has no currency, or (for a foreign
+// currency) has no FX rate on file; the caller COALESCEs them so a nil leaves
+// the stored value untouched.
 func (s *DealStore) freezeDealFX(ctx context.Context, tx *sql.Tx, workspaceID, id, newStatus string) (*float64, *time.Time) {
 	if newStatus != statusWon && newStatus != statusLost {
 		return nil, nil
@@ -329,6 +334,15 @@ func (s *DealStore) freezeDealFX(ctx context.Context, tx *sql.Tx, workspaceID, i
 	if !currency.Valid || currency.String == "" {
 		return nil, nil
 	}
+
+	var baseCurrency sql.NullString
+	_ = tx.QueryRowContext(ctx, `SELECT base_currency FROM workspace WHERE id=$1::uuid`, workspaceID).Scan(&baseCurrency)
+	if baseCurrency.Valid && baseCurrency.String == currency.String {
+		rate := 1.0
+		now := time.Now().UTC()
+		return &rate, &now
+	}
+
 	var rate float64
 	var rateDate time.Time
 	if err := tx.QueryRowContext(ctx, `

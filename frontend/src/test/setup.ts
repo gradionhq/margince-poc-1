@@ -1,10 +1,8 @@
 import "@testing-library/jest-dom/vitest";
 
-// jsdom does not implement <dialog> autofocus/showModal/close (the Forge Modal
-// atom relies on the native top-layer <dialog> API — see @shared/ui's
-// Modal.tsx). Polyfill the bits used so unit tests can render an open Modal
-// without a real browser; Storybook (Chromium) already exercises the real
-// native behavior.
+// jsdom doesn't implement the <dialog> element's showModal()/close() (used by
+// @shared/ui's Modal for its native focus-trap/top-layer behavior) — polyfill just
+// enough for it to open/close under Testing Library.
 if (typeof HTMLDialogElement !== "undefined") {
   if (!HTMLDialogElement.prototype.showModal) {
     HTMLDialogElement.prototype.showModal = function showModal(
