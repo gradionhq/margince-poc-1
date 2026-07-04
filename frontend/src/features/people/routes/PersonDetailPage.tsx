@@ -1,12 +1,15 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { Skeleton } from "../../../shared/ui/forge.js";
+import { Button, Skeleton } from "../../../shared/ui/forge.js";
 import { usePerson } from "../api/person.js";
+import { MergePersonDialog } from "../components/MergePersonDialog.js";
 import { PersonHeader } from "../components/PersonHeader.js";
 import { PersonTabs } from "../components/PersonTabs.js";
 import { StrengthCard } from "../components/StrengthCard.js";
 
 export function PersonDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [mergeOpen, setMergeOpen] = useState(false);
   const { data: person, isLoading, isError, error, refetch } = usePerson(id ?? "");
 
   if (isLoading) {
@@ -47,10 +50,17 @@ export function PersonDetailPage() {
 
   return (
     <div data-testid="person-detail-loaded" className="p-gf-lg max-w-4xl mx-auto flex flex-col gap-gf-lg">
-      <PersonHeader person={person} />
+      <div className="flex items-start justify-between gap-gf-md">
+        <div className="flex-1">
+          <PersonHeader person={person} />
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => setMergeOpen(true)}>
+          Merge…
+        </Button>
+      </div>
       <StrengthCard personId={person.id} strength={person.strength} />
       <PersonTabs personId={person.id} activities={person.activities ?? []} />
-      {/* Merge is wired in Task 6. */}
+      <MergePersonDialog personId={person.id} open={mergeOpen} onClose={() => setMergeOpen(false)} />
     </div>
   );
 }

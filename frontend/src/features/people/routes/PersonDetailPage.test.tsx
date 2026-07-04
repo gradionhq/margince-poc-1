@@ -9,6 +9,12 @@ vi.mock("../api/person.js", () => ({
   useUpdatePerson: vi.fn(() => ({ mutate: vi.fn(), isPending: false, error: null })),
   usePersonStrengthBreakdown: vi.fn(() => ({ data: undefined, isLoading: false })),
   usePersonDeals: vi.fn(() => ({ data: [], isLoading: false, isError: false })),
+  useMergePerson: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+    reset: vi.fn(),
+  })),
 }));
 
 import * as personApi from "../api/person.js";
@@ -77,5 +83,6 @@ describe("PersonDetailPage", () => {
     } as unknown as ReturnType<typeof personApi.usePerson>);
     renderAt("p1");
     expect(screen.getByTestId("person-detail-loaded")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /merge/i })).toBeInTheDocument();
   });
 });
