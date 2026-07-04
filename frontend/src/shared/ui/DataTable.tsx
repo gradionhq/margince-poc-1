@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 
 type Column<T> = {
   key: string;
@@ -10,10 +10,12 @@ export function DataTable<T>({
   columns,
   rows,
   getRowKey,
+  onRowClick,
 }: {
   columns: ReadonlyArray<Column<T>>;
   rows: ReadonlyArray<T>;
   getRowKey: (row: T) => string;
+  onRowClick?: (row: T) => void;
 }) {
   return (
     <div className="overflow-auto">
@@ -34,7 +36,19 @@ export function DataTable<T>({
           {rows.map((row) => (
             <tr
               key={getRowKey(row)}
-              className="border-t border-gf-subtle hover:bg-gf-hover"
+              className={`border-t border-gf-subtle hover:bg-gf-hover ${onRowClick ? "cursor-pointer" : ""}`}
+              {...(onRowClick
+                ? {
+                    tabIndex: 0,
+                    onClick: () => onRowClick(row),
+                    onKeyDown: (e: KeyboardEvent) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onRowClick(row);
+                      }
+                    },
+                  }
+                : {})}
             >
               {columns.map((col) => (
                 <td key={col.key} className="p-gf-sm">
