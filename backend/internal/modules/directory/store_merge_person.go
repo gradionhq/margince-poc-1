@@ -61,6 +61,8 @@ type mergeLoserState struct {
 // validateMergePair reads both loser and target rows inside tx, returning the
 // loser's version + before-snapshot or a typed 422/404 error if the pair is
 // not eligible for merge (already-merged loser, invalid target).
+//
+//nolint:dupl // parallel per-entity merge validation: mirrored by validateOrgMergePair (store_merge_org.go) for organization; the SQL table names and error wiring differ by entity, a generic version would read worse than the explicit form
 func validateMergePair(ctx context.Context, tx *sql.Tx, loserID, targetID, workspaceID string) (mergeLoserState, error) {
 	var state mergeLoserState
 	var loserMergedInto sql.NullString
@@ -139,7 +141,7 @@ func (s *PersonStore) Merge(ctx context.Context, loserID, targetID, workspaceID 
 		if n, _ := res.RowsAffected(); n == 0 {
 			return errs.ErrVersionSkew
 		}
-		e := crmaudit.EntryFromPrincipal(ctx, "merge", entityTypePerson, &loserID, json.RawMessage(state.beforeRaw), map[string]any{"merged_into_id": targetID})
+		e := crmaudit.EntryFromPrincipal(ctx, "merge", entityTypePerson, &loserID, json.RawMessage(state.beforeRaw), map[string]any{fieldMergedIntoID: targetID})
 		e.WorkspaceID = workspaceID
 		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
 			return fmt.Errorf("person merge audit: %w", err)
