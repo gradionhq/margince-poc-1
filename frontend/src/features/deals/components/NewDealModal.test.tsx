@@ -165,6 +165,55 @@ describe("NewDealModal — organizationId prop already provided (pre-linked cont
     );
   });
 
+  it("shows an honest error and keeps the modal open when the deal create fails (dropped-error-path regression)", async () => {
+    const onCreated = vi.fn();
+    mutateAsync.mockRejectedValueOnce({
+      code: "validation_error",
+      detail: "name is required",
+    });
+    render(
+      <NewDealModal
+        open={true}
+        onClose={vi.fn()}
+        organizationId="o1"
+        defaultPipelineId="p1"
+        defaultStageId="s0"
+        onCreated={onCreated}
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /confirm & create/i }),
+    );
+    expect(screen.getByText(/name is required/i)).toBeInTheDocument();
+    expect(onCreated).not.toHaveBeenCalled();
+    // The modal stays open (Confirm & create is still present) so the rep can retry
+    // without losing their input.
+    expect(
+      screen.getByRole("button", { name: /confirm & create/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows an honest error when the deal creates but a stakeholder pre-attach fails, without calling onCreated", async () => {
+    const onCreated = vi.fn();
+    mutateAsync.mockResolvedValueOnce({ id: "d9" });
+    relationshipPost.mockRejectedValueOnce(new Error("network down"));
+    render(
+      <NewDealModal
+        open={true}
+        onClose={vi.fn()}
+        organizationId="o1"
+        defaultPipelineId="p1"
+        defaultStageId="s0"
+        onCreated={onCreated}
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /confirm & create/i }),
+    );
+    expect(screen.getByText(/deal was created, but/i)).toBeInTheDocument();
+    expect(onCreated).not.toHaveBeenCalled();
+  });
+
   it("Cancel makes no server call and changes nothing", async () => {
     const onClose = vi.fn();
     render(

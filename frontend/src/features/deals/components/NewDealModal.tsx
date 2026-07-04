@@ -40,6 +40,23 @@ export function NewDealModal({
   const stakeholderPersonIds = (employmentRelationships?.data ?? [])
     .map((r) => r.person_id)
     .filter((id): id is string => !!id);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  // Extracts an honest, specific cause from a failed create/pre-attach call — mirrors
+  // PipelineBoard's advanceErrorMessage rather than surfacing a generic failure or
+  // (worse) silently swallowing it.
+  function errorMessage(error: unknown): string {
+    if (error && typeof error === "object") {
+      const problem = error as { detail?: unknown; code?: unknown };
+      if (typeof problem.detail === "string" && problem.detail.length > 0) {
+        return problem.detail;
+      }
+      if (typeof problem.code === "string" && problem.code.length > 0) {
+        return `Create failed (${problem.code})`;
+      }
+    }
+    return "Create failed — please try again.";
+  }
 
   // Once an org is picked/preset for the first time, seed the suggested deal name — but never
   // clobber a name the rep has already started editing.
@@ -68,32 +85,49 @@ export function NewDealModal({
               variant="primary"
               loading={createDeal.isPending}
               onClick={async () => {
+                setCreateError(null);
                 const capturedBy = `human:${user?.id ?? "unknown"}`;
-                const deal = await createDeal.mutateAsync({
-                  name,
-                  organization_id: organizationId,
-                  pipeline_id: defaultPipelineId,
-                  stage_id: defaultStageId,
-                  source: "manual",
-                  captured_by: capturedBy,
-                });
+                let deal: { id: string };
+                try {
+                  deal = await createDeal.mutateAsync({
+                    name,
+                    organization_id: organizationId,
+                    pipeline_id: defaultPipelineId,
+                    stage_id: defaultStageId,
+                    source: "manual",
+                    captured_by: capturedBy,
+                  });
+                } catch (err) {
+                  setCreateError(errorMessage(err));
+                  return;
+                }
                 // AC-pipeline-9/10: pre-attach the org's current employment relationships as
                 // deal_stakeholder edges once the deal exists — one createRelationship POST per
-                // person, batched, fired only after the deal create succeeds.
-                await Promise.all(
-                  stakeholderPersonIds.map((personId) =>
-                    apiClient.POST("/relationships", {
-                      body: {
-                        kind: "deal_stakeholder",
-                        deal_id: deal.id,
-                        person_id: personId,
-                        source: "manual",
-                        captured_by: capturedBy,
-                        is_current_primary: false,
-                      },
-                    }),
-                  ),
-                );
+                // person, batched, fired only after the deal create succeeds. The deal already
+                // exists at this point, so a pre-attach failure is surfaced distinctly (not as a
+                // generic create failure) and does NOT call onCreated — the modal stays open so
+                // the rep sees the honest state rather than a silent no-op.
+                try {
+                  await Promise.all(
+                    stakeholderPersonIds.map((personId) =>
+                      apiClient.POST("/relationships", {
+                        body: {
+                          kind: "deal_stakeholder",
+                          deal_id: deal.id,
+                          person_id: personId,
+                          source: "manual",
+                          captured_by: capturedBy,
+                          is_current_primary: false,
+                        },
+                      }),
+                    ),
+                  );
+                } catch {
+                  setCreateError(
+                    "Deal was created, but pre-attaching stakeholders failed — check the deal record.",
+                  );
+                  return;
+                }
                 onCreated();
               }}
             >
@@ -125,6 +159,11 @@ export function NewDealModal({
         )}
         {organizationId && (
           <>
+            {createError && (
+              <p className="text-gf-caption text-gf-status-danger">
+                {createError}
+              </p>
+            )}
             {hasDuplicate && (
               <p className="text-gf-caption text-gf-status-warning">
                 {organization?.display_name ?? "This company"} already has an
