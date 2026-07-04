@@ -50,7 +50,7 @@ func TestOrganizationHandler_List_EmptyWorkspace(t *testing.T) {
 	db := openDealTestDB(t)
 	seedOrgHandlerWorkspace(t, db)
 
-	h := NewOrganizationHandler(crmcore.NewOrgStore(db))
+	h := NewOrganizationHandler(crmcore.NewOrgStore(db), db)
 	req := httptest.NewRequest(http.MethodGet, "/organizations", nil)
 	req = withOrgWorkspace(req)
 	w := httptest.NewRecorder()
@@ -92,7 +92,7 @@ func TestOrganizationHandler_List_WithAggregates(t *testing.T) {
 	personStore := crmcore.NewPersonStore(db)
 	personSeed := crmcore.NewPerson("Agent-"+ids.New(), p0)
 	personSeed.WorkspaceID = orgHandlerTestWS
-	person, err := personStore.Create(ctx, personSeed)
+	person, err := personStore.Create(ctx, personSeed, nil)
 	if err != nil {
 		t.Fatalf("create person: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestOrganizationHandler_List_WithAggregates(t *testing.T) {
 		t.Fatalf("seed employment: %v", err)
 	}
 
-	h := NewOrganizationHandler(orgStore)
+	h := NewOrganizationHandler(orgStore, db)
 	req := httptest.NewRequest(http.MethodGet, "/organizations", nil)
 	req = withOrgWorkspace(req)
 	w := httptest.NewRecorder()
@@ -138,7 +138,7 @@ func TestOrganizationHandler_List_InvalidSort(t *testing.T) {
 	db := openDealTestDB(t)
 	seedOrgHandlerWorkspace(t, db)
 
-	h := NewOrganizationHandler(crmcore.NewOrgStore(db))
+	h := NewOrganizationHandler(crmcore.NewOrgStore(db), db)
 	req := httptest.NewRequest(http.MethodGet, "/organizations?sort=bogus", nil)
 	req = withOrgWorkspace(req)
 	w := httptest.NewRecorder()
@@ -153,7 +153,7 @@ func TestOrganizationHandler_Create_NormalizesDomainAndWritesAuditEvent(t *testi
 	db := openDealTestDB(t)
 	seedOrgHandlerWorkspace(t, db)
 
-	h := NewOrganizationHandler(crmcore.NewOrgStore(db))
+	h := NewOrganizationHandler(crmcore.NewOrgStore(db), db)
 	body := `{
 		"display_name": "Acme Inc",
 		"domains": [{"domain": "Acme.COM", "is_primary": true}],
@@ -210,7 +210,7 @@ func TestOrganizationHandler_Create_DuplicateDomainReturns409(t *testing.T) {
 	db := openDealTestDB(t)
 	seedOrgHandlerWorkspace(t, db)
 
-	h := NewOrganizationHandler(crmcore.NewOrgStore(db))
+	h := NewOrganizationHandler(crmcore.NewOrgStore(db), db)
 	first := `{
 		"display_name": "First Co",
 		"domains": [{"domain": "dupe.com", "is_primary": true}],
@@ -292,7 +292,7 @@ func TestOrganizationHandler_Get_ArchivedStillFetchable(t *testing.T) {
 		t.Fatalf("archive org: %v", err)
 	}
 
-	h := NewOrganizationHandler(orgStore)
+	h := NewOrganizationHandler(orgStore, db)
 	req := httptest.NewRequest(http.MethodGet, "/organizations/"+org.ID, nil)
 	req = withOrgWorkspace(req)
 	w := httptest.NewRecorder()
@@ -338,7 +338,7 @@ func TestOrganizationHandler_Update_StaleIfMatchAndMalformed(t *testing.T) {
 		t.Fatalf("create org: %v", err)
 	}
 
-	h := NewOrganizationHandler(orgStore)
+	h := NewOrganizationHandler(orgStore, db)
 
 	reqMalformed := httptest.NewRequest(http.MethodPatch, "/organizations/"+org.ID, strings.NewReader(`{"display_name":"X"}`))
 	reqMalformed.Header.Set("If-Match", "not-a-number")
@@ -418,7 +418,7 @@ func TestOrganizationHandler_List_ClassificationAndRelevanceFilter(t *testing.T)
 		t.Fatalf("create vendor org: %v", err)
 	}
 
-	h := NewOrganizationHandler(orgStore)
+	h := NewOrganizationHandler(orgStore, db)
 	req := httptest.NewRequest(http.MethodGet, "/organizations?classification=partner&relevance_gte=50&sort=strength", nil)
 	req = withOrgWorkspace(req)
 	w := httptest.NewRecorder()
@@ -473,7 +473,7 @@ func TestOrganizationHandler_List_DomainAndOwnerFilter(t *testing.T) {
 		t.Fatalf("create unowned org: %v", err)
 	}
 
-	h := NewOrganizationHandler(orgStore)
+	h := NewOrganizationHandler(orgStore, db)
 
 	reqDomain := httptest.NewRequest(http.MethodGet, "/organizations?domain=owned.example", nil)
 	reqDomain = withOrgWorkspace(reqDomain)
@@ -524,7 +524,7 @@ func TestOrganizationHandler_FullLifecycle_ListFiltersAcrossEndpoints(t *testing
 		t.Fatalf("seed app_user: %v", err)
 	}
 
-	h := NewOrganizationHandler(crmcore.NewOrgStore(db))
+	h := NewOrganizationHandler(crmcore.NewOrgStore(db), db)
 	postOrg := func(body string) map[string]any {
 		req := httptest.NewRequest(http.MethodPost, "/organizations", strings.NewReader(body))
 		req = withOrgWorkspace(req)

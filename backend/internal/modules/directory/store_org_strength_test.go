@@ -44,14 +44,14 @@ func TestOrgStore_List_AttachesAggregates(t *testing.T) {
 
 	strongSeed := NewPerson("Strong-"+uniq(), p0)
 	strongSeed.WorkspaceID = orgAggTestWS
-	strongPerson, err := personStore.Create(ctx, strongSeed)
+	strongPerson, err := personStore.Create(ctx, strongSeed, nil)
 	if err != nil {
 		t.Fatalf("create strongPerson: %v", err)
 	}
 
 	weakSeed := NewPerson("Weak-"+uniq(), p0)
 	weakSeed.WorkspaceID = orgAggTestWS
-	_, err = personStore.Create(ctx, weakSeed)
+	_, err = personStore.Create(ctx, weakSeed, nil)
 	if err != nil {
 		t.Fatalf("create weakPerson: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestOrgStore_List_AttachesAggregates(t *testing.T) {
 		s := NewPerson("Weak2-"+uniq(), p0)
 		s.WorkspaceID = orgAggTestWS
 		return s
-	}())
+	}(), nil)
 	if err != nil {
 		t.Fatalf("create weakPerson2: %v", err)
 	}

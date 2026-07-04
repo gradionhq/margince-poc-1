@@ -59,7 +59,7 @@ func TestAuditEventCoverage(t *testing.T) {
 			Source:     "api",
 			CapturedBy: "human:test",
 		},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("PersonStore.Create: %v", err)
 	}

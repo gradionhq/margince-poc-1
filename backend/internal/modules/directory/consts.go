@@ -34,6 +34,7 @@ const (
 	fieldOrganizationID = "organization_id"
 	fieldNote           = "note"
 	fieldSourceID       = "source_id"
+	fieldMergedIntoID   = "merged_into_id"
 )
 
 // Actor-type and audit-action values written to audit_log.
