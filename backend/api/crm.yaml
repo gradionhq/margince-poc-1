@@ -398,6 +398,13 @@ paths:
           in: query
           schema: { type: string }
           description: Lookup by normalized domain (the employer-inference index).
+        - name: classification
+          in: query
+          schema: { type: string, enum: [customer, prospect, partner, vendor, other, agency, reseller, tech_vendor, platform, competitor] }
+        - name: relevance_gte
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 100 }
+          description: Lower bound (inclusive) on `relevance`.
         - name: q
           in: query
           schema: { type: string }
@@ -4026,7 +4033,28 @@ components:
         domains:
           type: array
           items: { $ref: '#/components/schemas/OrganizationDomain' }
-        classification: { type: [string, 'null'], enum: [null, customer, prospect, partner, vendor, other], description: "An org IS a partner iff classification='partner' AND it has a `partner` row (A41/ADR-0032)." }
+        classification:
+          type: [string, 'null']
+          enum: [null, customer, prospect, partner, vendor, other, agency, reseller, tech_vendor, platform, competitor]
+          x-extensible-enum: true
+          description: >-
+            PO-DDL-4 target values (agency, reseller, tech_vendor, platform, competitor, plus
+            prospect/customer/partner/other) unioned with legacy live values (vendor) per the
+            additive-first gate decision (gate issue #58, Option 1) — legacy values are
+            DEPRECATED, not removed; a fast-follow ticket drops them + adds NOT NULL DEFAULT
+            'prospect' after a deprecation window. An org IS a partner iff
+            classification='partner' AND it has a `partner` row (A41/ADR-0032).
+        relevance:
+          type: [integer, 'null']
+          minimum: 0
+          maximum: 100
+          description: Evidence-backed relevance score (PO-DDL-4); null when not yet computed.
+        logo_object_key:
+          type: [string, 'null']
+          description: Object-store base key for the resolved logo (sm/md/lg variants derived); null → render a deterministic monogram (A55).
+        logo_origin:
+          type: [string, 'null']
+          description: Resolved source URL the logo was pulled from (logo-specific provenance, beyond row source/captured_by).
         source: { type: string }
         captured_by: { type: string }
         raw: { type: [object, 'null'], additionalProperties: true }
