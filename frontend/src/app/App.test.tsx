@@ -43,7 +43,9 @@ function renderApp(initialEntry: string) {
 describe("App routes", () => {
   it("mounts PeoplePage at /people", () => {
     renderApp("/people");
-    expect(screen.getByRole("heading", { name: /contacts we actually know/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /contacts we actually know/i }),
+    ).toBeInTheDocument();
   });
 
   it("mounts ShellPlaceholderPage for rail routes without a real feature", () => {
@@ -53,6 +55,8 @@ describe("App routes", () => {
 
   it("mounts CompaniesPage at /companies", () => {
     renderApp("/companies");
-    expect(screen.getByRole("heading", { name: /companies/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /companies/i }),
+    ).toBeInTheDocument();
   });
 });
