@@ -186,7 +186,10 @@ VALUES
   ('00000000-0000-0000-0042-000000000004', '00000000-0000-0000-0000-000000000001',
    'Umbrella Proposal', '00000000-0000-0000-0040-000000000001',
    '00000000-0000-0000-0041-000000000004', '00000000-0000-0000-0010-000000000002',
-   NULL, 900000, 'EUR', 'seed', 'human:dev'),
+   -- T22 live-UAT: needs organization_id set so guide step 1's "View company"
+   -- link has something to point at on the same fixture that also carries the
+   -- multi-stakeholder framing (champion + economic_buyer, below).
+   '00000000-0000-0000-0044-000000000001', 900000, 'EUR', 'seed', 'human:dev'),
   ('00000000-0000-0000-0042-000000000005', '00000000-0000-0000-0000-000000000001',
    'Stark Negotiation', '00000000-0000-0000-0040-000000000001',
    '00000000-0000-0000-0041-000000000005', '00000000-0000-0000-0010-000000000002',
@@ -252,5 +255,108 @@ VALUES
     NULL,
     '{"full_name":"Alice Müller"}'::jsonb
   );
+
+-- ─── T22 live-UAT fixtures (Deal 360) ───────────────────────
+-- Guide workspace/manual-test/t22.md needs: an open mid-pipeline deal with
+-- 2+ stakeholders (one economic_buyer), a closed (won/lost) deal, a deal
+-- with zero stakeholders (already satisfied by Initech/Wonka/Wayne having
+-- no relationship rows below), and a deal with logged email/call/meeting
+-- activities plus an open task assigned to a seeded app_user. Mirrors
+-- T21's precedent of extending dev.sql for its own guide's prereqs.
+
+-- Two more open deals at Negotiation (position 5, next stage terminal) so
+-- steps 4/5/6 (Won / Lost-blank / Lost-with-reason) each get an
+-- independent fixture instead of reusing "Stark Negotiation" three times.
+INSERT INTO deal (id, workspace_id, name, pipeline_id, stage_id, owner_id, organization_id, amount_minor, currency, source, captured_by)
+VALUES
+  ('00000000-0000-0000-0042-000000000007', '00000000-0000-0000-0000-000000000001',
+   'Wayne Enterprises Renewal', '00000000-0000-0000-0040-000000000001',
+   '00000000-0000-0000-0041-000000000005', '00000000-0000-0000-0010-000000000002',
+   '00000000-0000-0000-0044-000000000001', 400000, 'EUR', 'seed', 'human:dev'),
+  ('00000000-0000-0000-0042-000000000008', '00000000-0000-0000-0000-000000000001',
+   'Wonka Industries Deal', '00000000-0000-0000-0040-000000000001',
+   '00000000-0000-0000-0041-000000000005', '00000000-0000-0000-0010-000000000002',
+   NULL, 600000, 'EUR', 'seed', 'human:dev')
+ON CONFLICT (id) DO NOTHING;
+
+-- A closed (lost) deal fixture for the Reopen guide step. amount_minor is
+-- NULL so deal_closed_fx (status<>open needs fx_rate_to_base when amount
+-- is set) is trivially satisfied without a real FX freeze.
+INSERT INTO deal (id, workspace_id, name, pipeline_id, stage_id, owner_id, organization_id,
+                   amount_minor, currency, source, captured_by, status, lost_reason, closed_at)
+VALUES
+  ('00000000-0000-0000-0042-000000000006', '00000000-0000-0000-0000-000000000001',
+   'LexCorp Renewal', '00000000-0000-0000-0040-000000000001',
+   '00000000-0000-0000-0041-000000000007', '00000000-0000-0000-0010-000000000002',
+   '00000000-0000-0000-0044-000000000001', NULL, 'EUR', 'seed', 'human:dev',
+   'lost', 'Budget cut', now() - interval '5 days')
+ON CONFLICT (id) DO NOTHING;
+
+-- Second + third stakeholder on "Umbrella Proposal" (already exists, Proposal
+-- stage, zero stakeholders pre-T22) so it becomes the multi-threaded,
+-- economic-buyer-present fixture for step 8. Champion=Carol, Economic
+-- buyer=Bob.
+INSERT INTO relationship (id, workspace_id, kind, person_id, deal_id, role, source, captured_by)
+VALUES
+  ('00000000-0000-0000-0043-000000000002', '00000000-0000-0000-0000-000000000001',
+   'deal_stakeholder', '00000000-0000-0000-0001-000000000003',
+   '00000000-0000-0000-0042-000000000004', 'champion', 'seed', 'human:dev'),
+  ('00000000-0000-0000-0043-000000000003', '00000000-0000-0000-0000-000000000001',
+   'deal_stakeholder', '00000000-0000-0000-0001-000000000002',
+   '00000000-0000-0000-0042-000000000004', 'economic_buyer', 'seed', 'human:dev')
+ON CONFLICT (id) DO NOTHING;
+
+-- Logged email/call/meeting activities + one open task (assignee = rep
+-- app_user) on "Umbrella Proposal" for steps 10/12/13.
+INSERT INTO activity (id, workspace_id, kind, subject, occurred_at, source_system, duration_seconds,
+                       meeting_status, due_at, assignee_id, is_done, source, captured_by)
+VALUES
+  ('00000000-0000-0000-0045-000000000001', '00000000-0000-0000-0000-000000000001',
+   'email', 'Proposal follow-up', now() - interval '3 days', 'gmail', NULL,
+   NULL, NULL, NULL, false, 'seed', 'human:dev'),
+  ('00000000-0000-0000-0045-000000000002', '00000000-0000-0000-0000-000000000001',
+   'call', 'Pricing discussion', now() - interval '2 days', 'aircall', 900,
+   NULL, NULL, NULL, false, 'seed', 'human:dev'),
+  ('00000000-0000-0000-0045-000000000003', '00000000-0000-0000-0000-000000000001',
+   'meeting', 'Proposal walkthrough', now() - interval '1 days', 'google_calendar', NULL,
+   'held', NULL, NULL, false, 'seed', 'human:dev'),
+  ('00000000-0000-0000-0045-000000000004', '00000000-0000-0000-0000-000000000001',
+   'task', 'Send updated pricing sheet', now() - interval '1 days', NULL, NULL,
+   NULL, now() + interval '3 days', '00000000-0000-0000-0010-000000000002', false, 'seed', 'human:dev')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO activity_link (id, workspace_id, activity_id, entity_type, deal_id)
+VALUES
+  ('00000000-0000-0000-0046-000000000001', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0045-000000000001', 'deal', '00000000-0000-0000-0042-000000000004'),
+  ('00000000-0000-0000-0046-000000000002', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0045-000000000002', 'deal', '00000000-0000-0000-0042-000000000004'),
+  ('00000000-0000-0000-0046-000000000003', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0045-000000000003', 'deal', '00000000-0000-0000-0042-000000000004'),
+  ('00000000-0000-0000-0046-000000000004', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0045-000000000004', 'deal', '00000000-0000-0000-0042-000000000004')
+ON CONFLICT (id) DO NOTHING;
+
+-- Stage-history fixture: "Umbrella Proposal" already sits at Proposal
+-- (position 4) so it's genuinely mid-pipeline (New->Qualified->Discovery
+-- already behind it) for step 1's stepper + step 11's history card.
+INSERT INTO audit_log (workspace_id, actor_type, actor_id, action, entity_type, entity_id, before, after, occurred_at)
+VALUES
+  ('00000000-0000-0000-0000-000000000001'::uuid, 'human', '00000000-0000-0000-0010-000000000002',
+   'create', 'deal', '00000000-0000-0000-0042-000000000004'::uuid,
+   NULL, '{"name":"Umbrella Proposal","status":"open"}'::jsonb, now() - interval '10 days'),
+  ('00000000-0000-0000-0000-000000000001'::uuid, 'human', '00000000-0000-0000-0010-000000000002',
+   'advance_stage', 'deal', '00000000-0000-0000-0042-000000000004'::uuid,
+   '{"stage_id":"00000000-0000-0000-0041-000000000001","status":"open"}'::jsonb,
+   '{"stage_id":"00000000-0000-0000-0041-000000000002","status":"open"}'::jsonb, now() - interval '8 days'),
+  ('00000000-0000-0000-0000-000000000001'::uuid, 'human', '00000000-0000-0000-0010-000000000002',
+   'advance_stage', 'deal', '00000000-0000-0000-0042-000000000004'::uuid,
+   '{"stage_id":"00000000-0000-0000-0041-000000000002","status":"open"}'::jsonb,
+   '{"stage_id":"00000000-0000-0000-0041-000000000003","status":"open"}'::jsonb, now() - interval '6 days'),
+  ('00000000-0000-0000-0000-000000000001'::uuid, 'human', '00000000-0000-0000-0010-000000000002',
+   'advance_stage', 'deal', '00000000-0000-0000-0042-000000000004'::uuid,
+   '{"stage_id":"00000000-0000-0000-0041-000000000003","status":"open"}'::jsonb,
+   '{"stage_id":"00000000-0000-0000-0041-000000000004","status":"open"}'::jsonb, now() - interval '4 days');
+
 
 COMMIT;

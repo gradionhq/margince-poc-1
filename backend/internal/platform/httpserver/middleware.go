@@ -151,6 +151,10 @@ const ObjPartner = "partner"
 // deal-scoped read.
 const ObjRelationship = "relationship"
 
+// ObjActivity is the canonical RBAC object name for activities, shared by
+// the /activities route wiring and the seeded role_permission rows.
+const ObjActivity = "activity"
+
 // MethodToAction maps an HTTP method to the canonical RBAC action name.
 func MethodToAction(method string) string {
 	switch strings.ToUpper(method) {

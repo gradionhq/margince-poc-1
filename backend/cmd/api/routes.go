@@ -127,4 +127,24 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 	mux.Handle("GET /organizations/{id}/partner", instrument("/organizations/partner", k.domainWrap(httpserver.ObjPartner, partnerHandler)))
 	mux.Handle("GET /partners", instrument("/partners", k.domainWrap(httpserver.ObjPartner, partnerHandler)))
 	crud("/relationships", httpserver.ObjRelationship, dealtransport.NewRelationshipHandler(directory.NewRelationshipStore(k.db)))
+	crud("/activities", httpserver.ObjActivity, dealtransport.NewActivityHandler(directory.NewActivityStore(k.db)))
+
+	// GET /records/{entity_type}/{id}/history: object varies per-request
+	// (the entity_type path param), so it cannot use domainWrap's
+	// single-object RBAC gate the way crud() does. HistoryHandler carries its
+	// own Authorizer, invoked per-request with the path's entity_type; this
+	// closure adapts RbacMiddleware's LoadRolePermissions/AuthorizePerms
+	// machinery into that Authorizer signature. Auth/workspace context is
+	// still required via workspaceWrap + RequireAuth.
+	historyAuthz := func(ctx context.Context, object, action string) error {
+		p, _ := crmctx.From(ctx)
+		perms, err := httpserver.LoadRolePermissions(ctx, k.db, p.TenantID, p.UserID)
+		if err != nil {
+			return err
+		}
+		return crmauth.AuthorizePerms(perms, object, action)
+	}
+	historyHandler := directory.NewHistoryHandler(directory.NewAuditHistoryReader(k.db), historyAuthz)
+	mux.Handle("GET /records/{entity_type}/{id}/history",
+		instrument("/records/history", k.workspaceWrap(httpserver.RequireAuth(historyHandler))))
 }

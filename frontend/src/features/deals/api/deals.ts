@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../../lib/api-client/client.js";
 import type {
+  Activity,
+  AuditHistoryEntry,
   CreateDealRequest,
   Deal,
   DealDetail,
@@ -9,6 +11,7 @@ import type {
   PipelineRollup,
   RelationshipListResponse,
   Stage,
+  UpdateActivityRequest,
 } from "../../../lib/api-client/generated/index.js";
 
 export const dealsKeys = {
@@ -17,6 +20,8 @@ export const dealsKeys = {
     ["deals", "list", pipelineId, stageId, status] as const,
   rollup: (pipelineId?: string) => ["deals", "rollup", pipelineId] as const,
   detail: (id?: string) => ["deals", "detail", id] as const,
+  activities: (dealId?: string) => ["deals", "activities", dealId] as const,
+  history: (dealId?: string) => ["deals", "history", dealId] as const,
   pipelines: ["pipelines"] as const,
   stages: (pipelineId?: string) => ["stages", pipelineId] as const,
 };
@@ -107,6 +112,59 @@ export function useDeal(id: string | undefined) {
       if (error) throw error;
       if (!data) throw new Error("empty response");
       return data;
+    },
+  });
+}
+
+export function useDealActivities(dealId: string | undefined) {
+  return useQuery<Activity[]>({
+    queryKey: dealsKeys.activities(dealId),
+    enabled: !!dealId,
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET("/activities", {
+        params: {
+          query: { entity_type: "deal", entity_id: dealId, limit: 50 },
+        },
+      });
+      if (error) throw error;
+      return data?.data ?? [];
+    },
+  });
+}
+
+export function useDealHistory(dealId: string | undefined) {
+  return useQuery<AuditHistoryEntry[]>({
+    queryKey: dealsKeys.history(dealId),
+    enabled: !!dealId,
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET(
+        `/records/deal/${dealId}/history` as "/records/{entity_type}/{id}/history",
+        { params: { path: { entity_type: "deal", id: dealId as string } } },
+      );
+      if (error) throw error;
+      return data?.data ?? [];
+    },
+  });
+}
+
+export function useUpdateActivity() {
+  const qc = useQueryClient();
+  return useMutation<
+    Activity,
+    unknown,
+    { activityId: string; dealId: string; patch: UpdateActivityRequest }
+  >({
+    mutationFn: async ({ activityId, patch }) => {
+      const { data, error } = await apiClient.PATCH("/activities/{id}", {
+        params: { path: { id: activityId } },
+        body: patch,
+      });
+      if (error) throw error;
+      if (!data) throw new Error("empty response");
+      return data;
+    },
+    onSettled: (_data, _err, vars) => {
+      qc.invalidateQueries({ queryKey: dealsKeys.activities(vars.dealId) });
     },
   });
 }

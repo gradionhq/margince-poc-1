@@ -7,6 +7,7 @@ vi.mock("../../../lib/api-client/client.js", () => ({
   apiClient: {
     GET: vi.fn(),
     POST: vi.fn(),
+    PATCH: vi.fn(),
   },
 }));
 
@@ -16,12 +17,15 @@ import {
   useAdvanceDeal,
   useCreateDeal,
   useDeal,
+  useDealActivities,
+  useDealHistory,
   useDeals,
   useDefaultPipeline,
   useOpenDealsForOrg,
   usePipelineRollup,
   useRecentActivityCount,
   useStages,
+  useUpdateActivity,
 } from "./deals.js";
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -273,5 +277,96 @@ describe("useRecentActivityCount", () => {
       }),
     );
     expect(result.current.data).toBe(2);
+  });
+});
+
+describe("deal-360 read layer", () => {
+  it("useDealActivities fetches activities filtered to this deal, entity_type=deal", async () => {
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: {
+        data: [
+          { id: "a1", kind: "email", occurred_at: "2026-01-01T00:00:00Z" },
+          { id: "a2", kind: "task", occurred_at: "2026-01-02T00:00:00Z" },
+        ],
+        page: { has_more: false },
+      },
+    });
+    const { result } = renderHook(() => useDealActivities("d1"), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiClient.GET).toHaveBeenCalledWith(
+      "/activities",
+      expect.objectContaining({
+        params: expect.objectContaining({
+          query: expect.objectContaining({
+            entity_type: "deal",
+            entity_id: "d1",
+          }),
+        }),
+      }),
+    );
+    expect(result.current.data).toHaveLength(2);
+  });
+
+  it("useDealHistory fetches the deal's audit-history entries", async () => {
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: {
+        data: [
+          {
+            id: "h1",
+            action: "create",
+            occurred_at: "2026-01-01T00:00:00Z",
+            summary: "Devin created the deal",
+          },
+          {
+            id: "h2",
+            action: "advance_stage",
+            occurred_at: "2026-01-03T00:00:00Z",
+            summary: "Devin changed Stage from Discovery to Proposal",
+          },
+        ],
+      },
+    });
+    const { result } = renderHook(() => useDealHistory("d1"), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiClient.GET).toHaveBeenCalledWith(
+      "/records/deal/d1/history",
+      expect.objectContaining({
+        params: { path: { entity_type: "deal", id: "d1" } },
+      }),
+    );
+    expect(result.current.data).toHaveLength(2);
+  });
+
+  it("useUpdateActivity PATCHes the activity and invalidates the deal's activities query", async () => {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    (apiClient.PATCH as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: { id: "a2", kind: "task", is_done: true },
+    });
+    function localWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+    }
+    const { result } = renderHook(() => useUpdateActivity(), {
+      wrapper: localWrapper,
+    });
+    await act(async () => {
+      await result.current.mutateAsync({
+        activityId: "a2",
+        dealId: "d1",
+        patch: { is_done: true },
+      });
+    });
+    expect(apiClient.PATCH).toHaveBeenCalledWith(
+      "/activities/{id}",
+      expect.objectContaining({
+        params: { path: { id: "a2" } },
+        body: { is_done: true },
+      }),
+    );
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: dealsKeys.activities("d1"),
+    });
   });
 });

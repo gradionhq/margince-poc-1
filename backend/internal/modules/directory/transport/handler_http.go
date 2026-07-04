@@ -6,6 +6,7 @@ package transport
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -154,4 +155,29 @@ func pageResponse(data any, nextCursor string) map[string]any {
 
 func provenanceOf(source, capturedBy string) prov.Provenance {
 	return prov.Provenance{Source: source, CapturedBy: capturedBy}
+}
+
+// writeUpdateResult maps a store Update/Patch error to its problem+json
+// response (conflict / version_skew / not_found / the generic jsonErr
+// fallback), or writes v as a 200 on success. Shared by every handler whose
+// update method follows this exact shape (RelationshipHandler, ActivityHandler)
+// so the mapping isn't duplicated per handler (dupl lint).
+func writeUpdateResult[T any](w http.ResponseWriter, v T, err error) {
+	if errors.Is(err, errs.ErrConflict) {
+		jsonProblem(w, http.StatusConflict, "conflict")
+		return
+	}
+	if errors.Is(err, errs.ErrVersionSkew) {
+		jsonProblem(w, http.StatusConflict, "version_skew")
+		return
+	}
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, v)
 }
