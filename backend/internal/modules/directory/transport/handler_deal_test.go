@@ -382,6 +382,18 @@ func TestDealHandler_List_FilterAndSort(t *testing.T) {
 	}
 }
 
+// NOTE: T21's own GET /deals/{id} coverage (stakeholders present, timeline
+// contract, 404) used to live here as
+// TestDealHandler_Get_HappyPathIncludesStakeholdersAndEmptyTimeline /
+// TestDealHandler_Get_NotFound. Both are now superseded by main's fuller
+// deal-360 composite read (GetAny + activityStore-backed timeline) merged
+// from a sibling ticket — see TestDealHandler_Get_Composite360,
+// TestDealHandler_Get_NonexistentID_Returns404, and
+// TestDealHandler_Get_ForeignWorkspaceID_Returns404 in
+// handler_deal_get_test.go, which cover the same ground against the current
+// (non-empty) timeline contract. Removed here rather than left stale/
+// duplicated against an obsolete "timeline is always empty" assumption.
+
 func TestDealHandler_FullLifecycle_CreateUpdateList(t *testing.T) {
 	db := openDealTestDB(t)
 	pipelineID, stageID, otherStageID := seedDealFixtures(t, db, "lifecycle")
