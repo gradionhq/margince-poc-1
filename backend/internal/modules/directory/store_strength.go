@@ -20,23 +20,24 @@ func encodeOffsetCursor(n int) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(strconv.Itoa(n)))
 }
 
-func decodeOffsetCursor(cursor string) (int, bool) {
+func decodeOffsetCursor(cursor string) int {
 	if cursor == "" {
-		return 0, false
+		return 0
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(cursor)
 	if err != nil {
-		return 0, false
+		return 0
 	}
 	n, err := strconv.Atoi(string(raw))
 	if err != nil || n < 0 {
-		return 0, false
+		return 0
 	}
-	return n, true
+	return n
 }
 
+//nolint:cyclop // per-person strength dispatch: one branch per sort direction plus the sort/nil comparisons; the switch is the routing surface
 func (s *PersonStore) listByStrength(ctx context.Context, workspaceID, cursor string, limit int, ascending bool) ([]Person, string, error) {
-	offset, _ := decodeOffsetCursor(cursor)
+	offset := decodeOffsetCursor(cursor)
 	// Non-nil so an empty result marshals to a JSON array ([]), never null.
 	all := []Person{}
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
@@ -70,7 +71,10 @@ func (s *PersonStore) listByStrength(ctx context.Context, workspaceID, cursor st
 		for i := range all {
 			ptrs[i] = &all[i]
 		}
-		return s.attachStrength(ctx, tx, workspaceID, ptrs)
+		if err := s.attachStrength(ctx, tx, workspaceID, ptrs); err != nil {
+			return err
+		}
+		return s.attachLastActivity(ctx, tx, workspaceID, ptrs)
 	})
 	if err != nil {
 		return nil, "", err
@@ -137,6 +141,55 @@ func (s *PersonStore) strengthActivitiesFor(ctx context.Context, tx *sql.Tx, wor
 		out[personID] = append(out[personID], a)
 	}
 	return out, rows.Err()
+}
+
+// lastActivityFor batch-fetches the most recent live activity timestamp per
+// person, across every activity kind. Honest omission when no activity recorded.
+func (s *PersonStore) lastActivityFor(ctx context.Context, tx *sql.Tx, workspaceID string, personIDs []string) (map[string]time.Time, error) {
+	out := map[string]time.Time{}
+	if len(personIDs) == 0 {
+		return out, nil
+	}
+	rows, err := tx.QueryContext(ctx, `
+		SELECT al.person_id, MAX(a.occurred_at)
+		FROM activity a
+		JOIN activity_link al ON al.activity_id = a.id
+		WHERE a.workspace_id=$1::uuid AND a.archived_at IS NULL
+		  AND al.person_id = ANY($2::uuid[])
+		GROUP BY al.person_id`,
+		workspaceID, pq.Array(personIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var personID string
+		var lastAt time.Time
+		if err := rows.Scan(&personID, &lastAt); err != nil {
+			return nil, err
+		}
+		out[personID] = lastAt
+	}
+	return out, rows.Err()
+}
+
+// attachLastActivity mutates people in place, setting LastActivityAt.
+func (s *PersonStore) attachLastActivity(ctx context.Context, tx *sql.Tx, workspaceID string, people []*Person) error {
+	ids := make([]string, len(people))
+	for i, p := range people {
+		ids[i] = p.ID
+	}
+	byPerson, err := s.lastActivityFor(ctx, tx, workspaceID, ids)
+	if err != nil {
+		return err
+	}
+	for _, p := range people {
+		if t, ok := byPerson[p.ID]; ok {
+			t := t
+			p.LastActivityAt = &t
+		}
+	}
+	return nil
 }
 
 // attachStrength computes PO-F-3 for each person and mutates the pointed-to

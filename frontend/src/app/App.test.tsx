@@ -18,6 +18,14 @@ vi.mock("../features/people/api/people.js", () => ({
     isError: false,
   }),
 }));
+vi.mock("../features/organizations/api/organizations.js", () => ({
+  useOrganizations: () => ({
+    data: { data: [] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
 
 import App from "./App.js";
 
@@ -35,11 +43,20 @@ function renderApp(initialEntry: string) {
 describe("App routes", () => {
   it("mounts PeoplePage at /people", () => {
     renderApp("/people");
-    expect(screen.getAllByText("People").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("heading", { name: /contacts we actually know/i }),
+    ).toBeInTheDocument();
   });
 
   it("mounts ShellPlaceholderPage for rail routes without a real feature", () => {
     renderApp("/reports");
     expect(screen.getByText(/reports — coming soon/i)).toBeInTheDocument();
+  });
+
+  it("mounts CompaniesPage at /companies", () => {
+    renderApp("/companies");
+    expect(
+      screen.getByRole("heading", { name: /companies/i }),
+    ).toBeInTheDocument();
   });
 });

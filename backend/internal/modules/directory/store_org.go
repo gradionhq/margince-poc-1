@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sort"
 
 	"github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
@@ -14,10 +15,15 @@ import (
 // ---------------------------------------------------------------------------
 
 // OrgStore executes parameterized SQL against the organization table.
-type OrgStore struct{ db *sql.DB }
+type OrgStore struct {
+	db          *sql.DB
+	personStore *PersonStore
+}
 
 // NewOrgStore returns an OrgStore.
-func NewOrgStore(db *sql.DB) *OrgStore { return &OrgStore{db: db} }
+func NewOrgStore(db *sql.DB) *OrgStore {
+	return &OrgStore{db: db, personStore: NewPersonStore(db)}
+}
 
 // Create inserts an organization in one workspace-scoped tx.
 func (s *OrgStore) Create(ctx context.Context, o Organization) (Organization, error) {
@@ -77,12 +83,24 @@ func (s *OrgStore) Get(ctx context.Context, id, workspaceID string) (Organizatio
 	return o, nil
 }
 
-// List returns a keyset page of organizations for the workspace and the next cursor.
-func (s *OrgStore) List(ctx context.Context, workspaceID, cursor string, limit int) ([]Organization, string, error) {
+// List returns a page of live organizations. sort="" or "id" uses ID keyset cursor;
+// "strength"/"-strength" fetches all, attaches aggregates, sorts by score, offset-paginates.
+func (s *OrgStore) List(ctx context.Context, workspaceID, cursor string, limit int, sortVal string) ([]Organization, string, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	var out []Organization
+	switch sortVal {
+	case "strength":
+		return s.listByOrgStrength(ctx, workspaceID, cursor, limit, false)
+	case "-strength":
+		return s.listByOrgStrength(ctx, workspaceID, cursor, limit, true)
+	default:
+		return s.listByOrgID(ctx, workspaceID, cursor, limit)
+	}
+}
+
+func (s *OrgStore) listByOrgID(ctx context.Context, workspaceID, cursor string, limit int) ([]Organization, string, error) {
+	out := []Organization{}
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `
 			SELECT id, workspace_id, name, website, classification, relevance,
@@ -108,7 +126,14 @@ func (s *OrgStore) List(ctx context.Context, workspaceID, cursor string, limit i
 			unmarshalJSON(socialRaw, &o.Social)
 			out = append(out, o)
 		}
-		return rows.Err()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		ptrs := make([]*Organization, len(out))
+		for i := range out {
+			ptrs[i] = &out[i]
+		}
+		return attachOrgAggregates(ctx, tx, s.personStore.strengthActivitiesFor, workspaceID, ptrs)
 	})
 	if err != nil {
 		return nil, "", err
@@ -119,6 +144,77 @@ func (s *OrgStore) List(ctx context.Context, workspaceID, cursor string, limit i
 		out = out[:limit]
 	}
 	return out, next, nil
+}
+
+func (s *OrgStore) listByOrgStrength(ctx context.Context, workspaceID, cursor string, limit int, descending bool) ([]Organization, string, error) {
+	offset := decodeOffsetCursor(cursor)
+	all := []Organization{}
+	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `
+			SELECT id, workspace_id, name, website, classification, relevance,
+			       owner_id, social, version, source, captured_by, created_at, updated_at
+			FROM organization
+			WHERE workspace_id=$1::uuid AND archived_at IS NULL
+			ORDER BY id`,
+			workspaceID)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var o Organization
+			var socialRaw []byte
+			if err := rows.Scan(&o.ID, &o.WorkspaceID, &o.DisplayName, &o.Website, &o.Classification, &o.Relevance,
+				&o.OwnerID, &socialRaw, &o.Version, &o.Source, &o.CapturedBy,
+				&o.CreatedAt, &o.UpdatedAt); err != nil {
+				return err
+			}
+			o.Social = map[string]any{}
+			unmarshalJSON(socialRaw, &o.Social)
+			all = append(all, o)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		ptrs := make([]*Organization, len(all))
+		for i := range all {
+			ptrs[i] = &all[i]
+		}
+		return attachOrgAggregates(ctx, tx, s.personStore.strengthActivitiesFor, workspaceID, ptrs)
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	sort.SliceStable(all, func(i, j int) bool {
+		si, sj := all[i].Strength, all[j].Strength
+		if si == nil && sj == nil {
+			return all[i].ID < all[j].ID
+		}
+		if si == nil {
+			return false
+		}
+		if sj == nil {
+			return true
+		}
+		if si.Score != sj.Score {
+			if descending {
+				return si.Score > sj.Score
+			}
+			return si.Score < sj.Score
+		}
+		return all[i].ID < all[j].ID
+	})
+	if offset > len(all) {
+		offset = len(all)
+	}
+	end := offset + limit
+	var next string
+	if end < len(all) {
+		next = encodeOffsetCursor(end)
+	} else {
+		end = len(all)
+	}
+	return all[offset:end], next, nil
 }
 
 // Update applies partial updates to an organization.

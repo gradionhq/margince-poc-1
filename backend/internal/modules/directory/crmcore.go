@@ -25,6 +25,7 @@ type Person struct {
 	ConvertedFromLeadID *string         `json:"converted_from_lead_id"`
 	Version             int64           `json:"version"`
 	Strength            *PersonStrength `json:"strength"`
+	LastActivityAt      *time.Time      `json:"last_activity_at"`
 	Source              string          `json:"source"`
 	CapturedBy          string          `json:"captured_by"`
 	// Provenance is kept for internal use (audit etc.); not serialised directly.
@@ -36,20 +37,23 @@ type Person struct {
 
 // Organization is a company record (data-model §4.1).
 type Organization struct {
-	ID             string         `json:"id"`
-	WorkspaceID    string         `json:"workspace_id"`
-	DisplayName    string         `json:"display_name"`
-	Website        *string        `json:"website"`
-	Classification *string        `json:"classification"`
-	Relevance      int            `json:"relevance"`
-	OwnerID        *string        `json:"owner_id"`
-	ParentOrgID    *string        `json:"parent_org_id"`
-	MergedIntoID   *string        `json:"merged_into_id"`
-	Social         map[string]any `json:"social"`
-	Address        map[string]any `json:"address"`
-	Version        int64          `json:"version"`
-	Source         string         `json:"source"`
-	CapturedBy     string         `json:"captured_by"`
+	ID             string            `json:"id"`
+	WorkspaceID    string            `json:"workspace_id"`
+	DisplayName    string            `json:"display_name"`
+	Website        *string           `json:"website"`
+	Classification *string           `json:"classification"`
+	Relevance      int               `json:"relevance"`
+	OwnerID        *string           `json:"owner_id"`
+	ParentOrgID    *string           `json:"parent_org_id"`
+	MergedIntoID   *string           `json:"merged_into_id"`
+	Social         map[string]any    `json:"social"`
+	Address        map[string]any    `json:"address"`
+	ContactCount   int               `json:"contact_count"`
+	OpenDealCount  int               `json:"open_deal_count"`
+	Strength       *OrgStrengthBlock `json:"org_strength"`
+	Version        int64             `json:"version"`
+	Source         string            `json:"source"`
+	CapturedBy     string            `json:"captured_by"`
 	// Provenance is kept for internal use; not serialised directly.
 	Provenance prov.Provenance `json:"-"`
 	CreatedAt  time.Time       `json:"created_at"`
@@ -154,6 +158,14 @@ func NewPerson(fullName string, p prov.Provenance) Person {
 		ID: ids.New(), FullName: fullName, Social: map[string]any{},
 		Provenance: p, Source: p.Source, CapturedBy: p.CapturedBy, Version: 1,
 	}
+}
+
+// OrgStrengthBlock is the wire shape of PO-N-ORGSTRENGTH's org roll-up.
+type OrgStrengthBlock struct {
+	Score         int    `json:"score"`
+	Bucket        string `json:"bucket"`
+	TopPersonID   string `json:"top_person_id"`
+	TopPersonName string `json:"top_person_name"`
 }
 
 // PersonStrength is the wire shape of PO-EXT-1's relationship-strength block.

@@ -3980,6 +3980,15 @@ components:
             frequency: { type: number }
             reciprocity: { type: number }
           required: [score, bucket, recency, frequency, reciprocity]
+        last_activity_at:
+          type: [string, 'null']
+          format: date-time
+          readOnly: true
+          description: |
+            Most recent live activity/interaction timestamp for this person (any
+            activity kind, not just email/call/meeting), server-computed on every
+            read. Null when the person has no recorded activity — an honest
+            omission, never a fabricated value.
         relationships:
           type: array
           readOnly: true
@@ -4150,6 +4159,33 @@ components:
           readOnly: true
           description: PO-EXT-3 — timeline activity refs linked to this organization, most recent first. Populated on `getOrganization` only.
           items: { $ref: '#/components/schemas/ActivityRef' }
+        contact_count:
+          type: integer
+          readOnly: true
+          description: |
+            Count of people with a live `employment` relationship to this
+            organization (server-computed, AC-companies-3).
+        open_deal_count:
+          type: integer
+          readOnly: true
+          description: |
+            Count of this organization's live deals with status=open
+            (server-computed, AC-companies-3).
+        org_strength:
+          type: [object, 'null']
+          readOnly: true
+          description: |
+            PO-N-ORGSTRENGTH roll-up: the plain max over this org's contacts'
+            relationship-strength scores (org_strength.go's OrgStrength(), wired
+            unmodified) — never an average, never capped/normalized. Null when no
+            contact at this org has a computed strength yet (honest no-signal,
+            AC-companies-4/5).
+          properties:
+            score: { type: integer, minimum: 0, maximum: 100 }
+            bucket: { type: string, enum: [weak, moderate, strong] }
+            top_person_id: { type: string, format: uuid }
+            top_person_name: { type: string }
+          required: [score, bucket, top_person_id, top_person_name]
       additionalProperties: true
       x-extension: true
 
