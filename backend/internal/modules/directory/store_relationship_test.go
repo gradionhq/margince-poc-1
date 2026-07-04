@@ -360,3 +360,134 @@ func TestRelationshipStore_Create_AuditAndEventOnOwningStream(t *testing.T) {
 		t.Fatalf("event rows on person stream = %d, want 1", eventCount)
 	}
 }
+
+func TestRelationshipStore_List_FiltersByKindAndOrg(t *testing.T) {
+	db := sqlDB(t)
+	seedRelWorkspace(t, db, wsRelStore)
+	setRelRLS(t, db, wsRelStore)
+	personID, orgID := seedRelPersonOrg(t, db, wsRelStore)
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsRelStore, UserID: "human:test"})
+	s := crmcore.NewRelationshipStore(db)
+
+	created, err := s.Create(ctx, crmcore.Relationship{
+		WorkspaceID:    wsRelStore,
+		Kind:           "employment",
+		PersonID:       &personID,
+		OrganizationID: &orgID,
+		Source:         "test",
+		CapturedBy:     "human:test",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	items, _, err := s.List(ctx, wsRelStore, "", 20, crmcore.RelationshipListFilter{
+		Kind:           "employment",
+		OrganizationID: orgID,
+	})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	found := false
+	for _, r := range items {
+		if r.ID == created.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected created relationship %s in filtered list, got %d rows", created.ID, len(items))
+	}
+}
+
+// TestRelationshipStore_Update_StaleIfMatchVersionSkews covers the standard
+// If-Match/version convention (409 version_skew on a stale token).
+func TestRelationshipStore_Update_StaleIfMatchVersionSkews(t *testing.T) {
+	db := sqlDB(t)
+	seedRelWorkspace(t, db, wsRelStore)
+	setRelRLS(t, db, wsRelStore)
+	personID, orgID := seedRelPersonOrg(t, db, wsRelStore)
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsRelStore, UserID: "human:test"})
+	s := crmcore.NewRelationshipStore(db)
+
+	created, err := s.Create(ctx, crmcore.Relationship{
+		WorkspaceID:    wsRelStore,
+		Kind:           "employment",
+		PersonID:       &personID,
+		OrganizationID: &orgID,
+		Role:           strPtr("cto"),
+		Source:         "test",
+		CapturedBy:     "human:test",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	updated, err := s.Update(ctx, created.ID, wsRelStore, map[string]any{"role": "vp_eng"}, created.Version)
+	if err != nil {
+		t.Fatalf("first update: %v", err)
+	}
+	if updated.Role == nil || *updated.Role != "vp_eng" {
+		t.Fatalf("updated role = %+v, want vp_eng", updated.Role)
+	}
+
+	_, err = s.Update(ctx, created.ID, wsRelStore, map[string]any{"role": "ceo"}, created.Version)
+	if !errors.Is(err, errs.ErrVersionSkew) {
+		t.Fatalf("err = %v, want ErrVersionSkew on stale If-Match", err)
+	}
+}
+
+func TestRelationshipStore_Archive_ExcludedFromDefaultList_VisibleWithIncludeArchived(t *testing.T) {
+	db := sqlDB(t)
+	seedRelWorkspace(t, db, wsRelStore)
+	setRelRLS(t, db, wsRelStore)
+	personID, orgID := seedRelPersonOrg(t, db, wsRelStore)
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsRelStore, UserID: "human:test"})
+	s := crmcore.NewRelationshipStore(db)
+
+	created, err := s.Create(ctx, crmcore.Relationship{
+		WorkspaceID:    wsRelStore,
+		Kind:           "employment",
+		PersonID:       &personID,
+		OrganizationID: &orgID,
+		Source:         "test",
+		CapturedBy:     "human:test",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	archived, err := s.Archive(ctx, created.ID, wsRelStore)
+	if err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	if archived.ArchivedAt == nil {
+		t.Fatal("expected archived_at set")
+	}
+
+	live, _, err := s.List(ctx, wsRelStore, "", 20, crmcore.RelationshipListFilter{PersonID: personID})
+	if err != nil {
+		t.Fatalf("list live: %v", err)
+	}
+	for _, r := range live {
+		if r.ID == created.ID {
+			t.Fatal("archived relationship must be excluded from the default list")
+		}
+	}
+
+	withArchived, _, err := s.List(ctx, wsRelStore, "", 20, crmcore.RelationshipListFilter{
+		PersonID:        personID,
+		IncludeArchived: true,
+	})
+	if err != nil {
+		t.Fatalf("list include_archived: %v", err)
+	}
+	found := false
+	for _, r := range withArchived {
+		if r.ID == created.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected archived relationship in include_archived=true list")
+	}
+}
