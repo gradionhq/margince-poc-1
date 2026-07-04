@@ -18,6 +18,15 @@ vi.mock("../features/people/api/people.js", () => ({
     isError: false,
   }),
 }));
+vi.mock("../features/people/api/person.js", () => ({
+  usePerson: () => ({
+    data: undefined,
+    isLoading: true,
+    isError: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("../features/organizations/api/organizations.js", () => ({
   useOrganizations: () => ({
     data: { data: [] },
@@ -46,6 +55,11 @@ describe("App routes", () => {
     expect(
       screen.getByRole("heading", { name: /contacts we actually know/i }),
     ).toBeInTheDocument();
+  });
+
+  it("mounts PersonDetailPage at /people/:id", () => {
+    renderApp("/people/abc");
+    expect(screen.getByTestId("person-detail-loading")).toBeInTheDocument();
   });
 
   it("mounts ShellPlaceholderPage for rail routes without a real feature", () => {
