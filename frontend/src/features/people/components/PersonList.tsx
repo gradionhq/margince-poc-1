@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import type { Person } from "../../../lib/api-client/generated/index.js";
 import { DataTable } from "../../../shared/ui/DataTable.js";
 import { Avatar, Skeleton } from "../../../shared/ui/forge.js";
@@ -29,6 +30,8 @@ export function PersonList({
   isError,
   onRetry,
 }: PersonListProps) {
+  const navigate = useNavigate();
+
   if (isLoading) {
     return (
       <div
@@ -122,5 +125,12 @@ export function PersonList({
     },
   ] as const;
 
-  return <DataTable columns={columns} rows={people} getRowKey={(p) => p.id} />;
+  return (
+    <DataTable
+      columns={columns}
+      rows={people}
+      getRowKey={(p) => p.id}
+      onRowClick={(p) => navigate(`/people/${p.id}`)}
+    />
+  );
 }

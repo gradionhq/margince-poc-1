@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useStrengthSort } from "../../../shared/hooks/useStrengthSort.js";
 import { FilterDropdown, TextInput } from "../../../shared/ui/forge.js";
 import { RoleBadge } from "../../../shared/ui/RoleBadge.js";
@@ -7,6 +8,7 @@ import { useOrganizations } from "../api/organizations.js";
 import { CompanyList } from "../components/CompanyList.js";
 
 export function CompaniesPage() {
+  const navigate = useNavigate();
   const { sort, toggle } = useStrengthSort();
   const [q, setQ] = useState("");
   const { data, isLoading, isError, refetch } = useOrganizations({
@@ -76,6 +78,7 @@ export function CompaniesPage() {
           isLoading={isLoading}
           isError={isError}
           onRetry={refetch}
+          onRowClick={(id) => navigate(`/companies/${id}`)}
         />
       </main>
     </div>
