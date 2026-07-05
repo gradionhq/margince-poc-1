@@ -1,7 +1,8 @@
 import { useNavigate } from "react-router-dom";
 import type { Person } from "../../../lib/api-client/generated/index.js";
+import { ContextMenu } from "../../../shared/ui/ContextMenu.js";
 import { DataTable } from "../../../shared/ui/DataTable.js";
-import { Avatar, Skeleton } from "../../../shared/ui/forge.js";
+import { Avatar, IconButton, Skeleton } from "../../../shared/ui/forge.js";
 import { SourceChip } from "./SourceChip.js";
 import { StrengthCell } from "./StrengthCell.js";
 
@@ -10,6 +11,7 @@ interface PersonListProps {
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
+  onArchive: (id: string) => void;
 }
 
 function formatLastActivity(iso: string | null | undefined): string {
@@ -29,8 +31,20 @@ export function PersonList({
   isLoading,
   isError,
   onRetry,
+  onArchive,
 }: PersonListProps) {
   const navigate = useNavigate();
+  function stopTriggerClick(...args: [unknown?]) {
+    const event = args[0];
+    if (
+      event &&
+      typeof event === "object" &&
+      "stopPropagation" in event &&
+      typeof event.stopPropagation === "function"
+    ) {
+      event.stopPropagation();
+    }
+  }
 
   if (isLoading) {
     return (
@@ -121,6 +135,28 @@ export function PersonList({
       header: "Source",
       render: (p: Person) => (
         <SourceChip source={p.source} capturedBy={p.captured_by} />
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      render: (p: Person) => (
+        <ContextMenu
+          trigger={
+            <IconButton
+              icon="MoreVertical"
+              label="Row actions"
+              onClick={stopTriggerClick}
+            />
+          }
+          items={[
+            {
+              id: "archive",
+              label: "Archive",
+              onSelect: () => onArchive(p.id),
+            },
+          ]}
+        />
       ),
     },
   ] as const;

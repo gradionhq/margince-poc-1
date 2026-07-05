@@ -8,16 +8,19 @@ vi.mock("../../../lib/api-client/client.js", () => ({
     GET: vi.fn(),
     POST: vi.fn(),
     PATCH: vi.fn(),
+    DELETE: vi.fn(),
   },
 }));
 
 import { apiClient } from "../../../lib/api-client/client.js";
 import {
+  useArchivePerson,
   useMergePerson,
   useOrganizationName,
   usePerson,
   usePersonDeals,
   usePersonStrengthBreakdown,
+  useRestorePerson,
   useUpdatePerson,
 } from "./person.js";
 
@@ -143,6 +146,56 @@ describe("person API", () => {
         params: { path: { id: "p1" }, header: { "If-Match": "3" } },
         body: { full_name: "New Name" },
       }),
+    );
+  });
+
+  it("useArchivePerson DELETEs the person and updates the cache to archived", async () => {
+    (apiClient.DELETE as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: {
+        id: "p1",
+        full_name: "Alice",
+        archived_at: "2026-07-05T00:00:00Z",
+      },
+      error: undefined,
+    });
+    const { result } = renderHook(() => useArchivePerson("p1"), { wrapper });
+    result.current.mutate();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiClient.DELETE).toHaveBeenCalledWith(
+      "/people/{id}",
+      expect.objectContaining({ params: { path: { id: "p1" } } }),
+    );
+  });
+
+  it("useRestorePerson POSTs restore and updates the cache to live", async () => {
+    (apiClient.POST as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: { id: "p1", full_name: "Alice", archived_at: null },
+      error: undefined,
+    });
+    const { result } = renderHook(() => useRestorePerson("p1"), { wrapper });
+    result.current.mutate();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiClient.POST).toHaveBeenCalledWith(
+      "/people/{id}/restore",
+      expect.objectContaining({ params: { path: { id: "p1" } } }),
+    );
+    expect(result.current.data?.archived_at).toBeNull();
+  });
+
+  it("useRestorePerson throws the raw error on a 409 dedupe refusal for the caller to inspect", async () => {
+    (apiClient.POST as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: undefined,
+      error: {
+        status: 409,
+        code: "duplicate_email",
+        details: { existing_id: "p-2" },
+      },
+    });
+    const { result } = renderHook(() => useRestorePerson("p1"), { wrapper });
+    result.current.mutate();
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect((result.current.error as { code?: string })?.code).toBe(
+      "duplicate_email",
     );
   });
 });

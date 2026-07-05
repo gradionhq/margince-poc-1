@@ -123,3 +123,39 @@ export function useUpdatePerson(id: string) {
     },
   });
 }
+
+export function useArchivePerson(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation<Person, unknown, void>({
+    mutationFn: async () => {
+      const { data, error } = await apiClient.DELETE("/people/{id}", {
+        params: { path: { id } },
+      });
+      if (error) throw error;
+      if (!data) throw new Error("empty response");
+      return data;
+    },
+    onSuccess: (archived) => {
+      queryClient.setQueryData(["person", id], archived);
+      void queryClient.invalidateQueries({ queryKey: ["people"] });
+    },
+  });
+}
+
+export function useRestorePerson(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation<Person, unknown, void>({
+    mutationFn: async () => {
+      const { data, error } = await apiClient.POST("/people/{id}/restore", {
+        params: { path: { id } },
+      });
+      if (error) throw error;
+      if (!data) throw new Error("empty response");
+      return data;
+    },
+    onSuccess: (restored) => {
+      queryClient.setQueryData(["person", id], restored);
+      void queryClient.invalidateQueries({ queryKey: ["people"] });
+    },
+  });
+}

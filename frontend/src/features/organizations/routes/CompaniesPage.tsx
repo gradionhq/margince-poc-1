@@ -1,23 +1,40 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useStrengthSort } from "../../../shared/hooks/useStrengthSort.js";
+import { ArchiveConfirmDialog } from "../../../shared/ui/ArchiveConfirmDialog.js";
 import { FilterDropdown, TextInput } from "../../../shared/ui/forge.js";
 import { RoleBadge } from "../../../shared/ui/RoleBadge.js";
+import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
 import { useAuthStore } from "../../identity/store/authStore.js";
-import { useOrganizations } from "../api/organizations.js";
+import {
+  useArchiveOrganization,
+  useOrganizations,
+} from "../api/organizations.js";
 import { CompanyList } from "../components/CompanyList.js";
 
 export function CompaniesPage() {
   const navigate = useNavigate();
   const { sort, toggle } = useStrengthSort();
   const [q, setQ] = useState("");
+  const [archiveTarget, setArchiveTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [toasts, setToasts] = useState<
+    Array<{ id: string; variant: "success" | "error"; message: string }>
+  >([]);
   const { data, isLoading, isError, refetch } = useOrganizations({
     sort,
     q: q || undefined,
   });
   const { user, role } = useAuthStore();
+  const archive = useArchiveOrganization(archiveTarget?.id ?? "");
 
   const companies = data?.data ?? [];
+
+  function pushToast(variant: "success" | "error", message: string) {
+    setToasts((t) => [...t, { id: crypto.randomUUID(), variant, message }]);
+  }
 
   return (
     <div className="min-h-screen bg-gf-page">
@@ -79,8 +96,36 @@ export function CompaniesPage() {
           isError={isError}
           onRetry={refetch}
           onRowClick={(id) => navigate(`/companies/${id}`)}
+          onArchive={(id) => {
+            const target = companies.find((org) => org.id === id);
+            if (target) setArchiveTarget({ id, name: target.display_name });
+          }}
         />
       </main>
+      <ArchiveConfirmDialog
+        open={!!archiveTarget}
+        entityLabel={archiveTarget?.name ?? ""}
+        isLoading={archive.isPending}
+        onConfirm={() => {
+          if (!archiveTarget) return;
+          archive.mutate(undefined, {
+            onSuccess: () => {
+              pushToast("success", `${archiveTarget.name} archived`);
+              setArchiveTarget(null);
+              void refetch();
+            },
+            onError: () => {
+              pushToast("error", "Failed to archive — please try again.");
+              setArchiveTarget(null);
+            },
+          });
+        }}
+        onCancel={() => setArchiveTarget(null)}
+      />
+      <ToastContainer
+        toasts={toasts}
+        onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))}
+      />
     </div>
   );
 }

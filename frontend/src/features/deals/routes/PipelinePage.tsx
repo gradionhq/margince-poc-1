@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ArchiveConfirmDialog } from "../../../shared/ui/ArchiveConfirmDialog.js";
 import { Button, RadioGroup } from "../../../shared/ui/forge.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
 import {
+  useArchiveDeal,
   useDeals,
   useDefaultPipeline,
   usePipelineRollup,
@@ -17,6 +19,10 @@ export function PipelinePage() {
   const navigate = useNavigate();
   const [view, setView] = useState<"board" | "table">("board");
   const [newDealOpen, setNewDealOpen] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [toasts, setToasts] = useState<
     Array<{ id: string; variant: "success" | "error"; message: string }>
   >([]);
@@ -38,6 +44,18 @@ export function PipelinePage() {
     isLoading: rollupLoading,
     isError: rollupError,
   } = usePipelineRollup(pipelineId);
+  const archive = useArchiveDeal(archiveTarget?.id ?? "");
+
+  function pushToast(variant: "success" | "error", message: string) {
+    setToasts((t) => [...t, { id: crypto.randomUUID(), variant, message }]);
+  }
+
+  function handleArchive(dealId: string) {
+    const target = dealPage?.data.find((deal) => deal.id === dealId);
+    if (target) {
+      setArchiveTarget({ id: target.id, name: target.name });
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gf-page">
@@ -78,21 +96,16 @@ export function PipelinePage() {
             isError={dealsError}
             onRetry={refetchDeals}
             onCardClick={(dealId) => navigate(`/deals/${dealId}`)}
-            onMoveError={(message) =>
-              setToasts((t) => [
-                ...t,
-                { id: crypto.randomUUID(), variant: "error", message },
-              ])
-            }
-            onMoveSuccess={(message) =>
-              setToasts((t) => [
-                ...t,
-                { id: crypto.randomUUID(), variant: "success", message },
-              ])
-            }
+            onArchive={handleArchive}
+            onMoveError={(message) => pushToast("error", message)}
+            onMoveSuccess={(message) => pushToast("success", message)}
           />
         ) : (
-          <DealsTable deals={dealPage?.data ?? []} stagesById={stagesById} />
+          <DealsTable
+            deals={dealPage?.data ?? []}
+            stagesById={stagesById}
+            onArchive={handleArchive}
+          />
         )}
       </main>
       {newDealOpen && pipeline?.id && openStages[0] && (
@@ -106,18 +119,32 @@ export function PipelinePage() {
           defaultStageId={openStages[0].id}
           onCreated={() => {
             setNewDealOpen(false);
-            setToasts((t) => [
-              ...t,
-              {
-                id: crypto.randomUUID(),
-                variant: "success",
-                message:
-                  "Deal created from context · org + people + recent activity pre-attached",
-              },
-            ]);
+            pushToast(
+              "success",
+              "Deal created from context · org + people + recent activity pre-attached",
+            );
           }}
         />
       )}
+      <ArchiveConfirmDialog
+        open={archiveTarget !== null}
+        entityLabel={archiveTarget?.name ?? ""}
+        isLoading={archive.isPending}
+        onConfirm={() =>
+          archive.mutate(undefined, {
+            onSuccess: () => {
+              pushToast("success", `${archiveTarget?.name} archived`);
+              setArchiveTarget(null);
+              void refetchDeals();
+            },
+            onError: () => {
+              pushToast("error", "Failed to archive — please try again.");
+              setArchiveTarget(null);
+            },
+          })
+        }
+        onCancel={() => setArchiveTarget(null)}
+      />
       <ToastContainer
         toasts={toasts}
         onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))}

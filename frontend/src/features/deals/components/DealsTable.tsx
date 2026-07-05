@@ -1,6 +1,7 @@
 import type { Deal, Stage } from "../../../lib/api-client/generated/index.js";
+import { ContextMenu } from "../../../shared/ui/ContextMenu.js";
 import { DataTable } from "../../../shared/ui/DataTable.js";
-import { Icon } from "../../../shared/ui/forge.js";
+import { Icon, IconButton } from "../../../shared/ui/forge.js";
 import {
   formatMoney,
   idleDays,
@@ -11,10 +12,23 @@ import {
 export function DealsTable({
   deals,
   stagesById,
+  onArchive,
 }: {
   deals: Deal[];
   stagesById: Record<string, Stage>;
+  onArchive?: (dealId: string) => void;
 }) {
+  function stopTriggerClick(...args: [unknown?]) {
+    const event = args[0];
+    if (
+      event &&
+      typeof event === "object" &&
+      "stopPropagation" in event &&
+      typeof event.stopPropagation === "function"
+    ) {
+      event.stopPropagation();
+    }
+  }
   const sorted = deals
     .slice()
     .sort((a, b) => (b.amount_minor ?? 0) - (a.amount_minor ?? 0));
@@ -72,6 +86,28 @@ export function DealsTable({
                 : stalledDays(d.stage_entered_at)}
               d
             </span>
+          ),
+        },
+        {
+          key: "actions",
+          header: "",
+          render: (d) => (
+            <ContextMenu
+              trigger={
+                <IconButton
+                  icon="MoreVertical"
+                  label="Row actions"
+                  onClick={stopTriggerClick}
+                />
+              }
+              items={[
+                {
+                  id: "archive",
+                  label: "Archive",
+                  onSelect: () => onArchive?.(d.id),
+                },
+              ]}
+            />
           ),
         },
       ]}

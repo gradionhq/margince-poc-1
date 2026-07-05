@@ -1,7 +1,17 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
+import { ArchiveConfirmDialog } from "../../../shared/ui/ArchiveConfirmDialog.js";
+import {
+  ArchivedBanner,
+  restoreErrorMessage,
+} from "../../../shared/ui/ArchivedBanner.js";
 import { Button, Skeleton } from "../../../shared/ui/forge.js";
-import { usePerson } from "../api/person.js";
+import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
+import {
+  useArchivePerson,
+  usePerson,
+  useRestorePerson,
+} from "../api/person.js";
 import { MergePersonDialog } from "../components/MergePersonDialog.js";
 import { PersonHeader } from "../components/PersonHeader.js";
 import { PersonTabs } from "../components/PersonTabs.js";
@@ -26,6 +36,14 @@ import { StrengthCard } from "../components/StrengthCard.js";
 export function PersonDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [toasts, setToasts] = useState<
+    Array<{ id: string; variant: "success" | "error"; message: string }>
+  >([]);
+  const [restoreConflict, setRestoreConflict] = useState<{
+    message: string;
+    existingId?: string;
+  } | null>(null);
   const {
     data: person,
     isLoading,
@@ -33,6 +51,12 @@ export function PersonDetailPage() {
     error,
     refetch,
   } = usePerson(id ?? "");
+  const archive = useArchivePerson(id ?? "");
+  const restore = useRestorePerson(id ?? "");
+
+  function pushToast(variant: "success" | "error", message: string) {
+    setToasts((t) => [...t, { id: crypto.randomUUID(), variant, message }]);
+  }
 
   if (isLoading) {
     return (
@@ -81,13 +105,49 @@ export function PersonDetailPage() {
       data-testid="person-detail-loaded"
       className="p-gf-lg max-w-4xl mx-auto flex flex-col gap-gf-lg"
     >
+      {person.archived_at && (
+        <ArchivedBanner
+          entityLabel="contact"
+          isRestoring={restore.isPending}
+          existingRecordId={restoreConflict?.existingId}
+          existingRecordHref={
+            restoreConflict?.existingId
+              ? `/people/${restoreConflict.existingId}`
+              : undefined
+          }
+          onRestore={() =>
+            restore.mutate(undefined, {
+              onSuccess: () => {
+                pushToast("success", "Contact restored");
+                setRestoreConflict(null);
+              },
+              onError: (err) => {
+                const parsed = restoreErrorMessage(err);
+                if (parsed.existingId) setRestoreConflict(parsed);
+                else pushToast("error", parsed.message);
+              },
+            })
+          }
+        />
+      )}
       <div className="flex items-start justify-between gap-gf-md">
         <div className="flex-1">
           <PersonHeader person={person} />
         </div>
-        <Button variant="ghost" size="sm" onClick={() => setMergeOpen(true)}>
-          Merge…
-        </Button>
+        <div className="flex items-center gap-gf-sm">
+          {!person.archived_at && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setArchiveOpen(true)}
+            >
+              Archive…
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => setMergeOpen(true)}>
+            Merge…
+          </Button>
+        </div>
       </div>
       <StrengthCard personId={person.id} strength={person.strength} />
       <PersonTabs personId={person.id} activities={person.activities ?? []} />
@@ -95,6 +155,28 @@ export function PersonDetailPage() {
         personId={person.id}
         open={mergeOpen}
         onClose={() => setMergeOpen(false)}
+      />
+      <ArchiveConfirmDialog
+        open={archiveOpen}
+        entityLabel={person.full_name}
+        isLoading={archive.isPending}
+        onConfirm={() =>
+          archive.mutate(undefined, {
+            onSuccess: () => {
+              pushToast("success", "Contact archived");
+              setArchiveOpen(false);
+            },
+            onError: () => {
+              pushToast("error", "Failed to archive — please try again.");
+              setArchiveOpen(false);
+            },
+          })
+        }
+        onCancel={() => setArchiveOpen(false)}
+      />
+      <ToastContainer
+        toasts={toasts}
+        onDismiss={(tid) => setToasts((t) => t.filter((x) => x.id !== tid))}
       />
     </div>
   );

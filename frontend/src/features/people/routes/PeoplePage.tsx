@@ -1,15 +1,25 @@
 import { useState } from "react";
 import { useStrengthSort } from "../../../shared/hooks/useStrengthSort.js";
+import { ArchiveConfirmDialog } from "../../../shared/ui/ArchiveConfirmDialog.js";
 import { FieldGuard } from "../../../shared/ui/FieldGuard.js";
 import { Button, FilterDropdown, TextInput } from "../../../shared/ui/forge.js";
 import { RoleBadge } from "../../../shared/ui/RoleBadge.js";
+import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
 import { useAuthStore } from "../../identity/store/authStore.js";
 import { usePeople } from "../api/people.js";
+import { useArchivePerson } from "../api/person.js";
 import { PersonList } from "../components/PersonList.js";
 import { classifySource } from "../components/SourceChip.js";
 
 export function PeoplePage() {
   const [q, setQ] = useState("");
+  const [archiveTarget, setArchiveTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [toasts, setToasts] = useState<
+    Array<{ id: string; variant: "success" | "error"; message: string }>
+  >([]);
   const { sort, toggle } = useStrengthSort();
   const { data, isLoading, isError, refetch } = usePeople({
     sort,
@@ -17,6 +27,7 @@ export function PeoplePage() {
   });
   const { user, role } = useAuthStore();
   const capturedByMode = role === "admin" ? "visible" : "masked";
+  const archive = useArchivePerson(archiveTarget?.id ?? "");
 
   const people = data?.data ?? [];
   const connectorCount = people.filter(
@@ -25,6 +36,10 @@ export function PeoplePage() {
   const typedCount = people.filter(
     (p) => classifySource(p.source, p.captured_by) === "typed-by-you",
   ).length;
+
+  function pushToast(variant: "success" | "error", message: string) {
+    setToasts((t) => [...t, { id: crypto.randomUUID(), variant, message }]);
+  }
 
   return (
     <div className="min-h-screen bg-gf-page">
@@ -85,8 +100,36 @@ export function PeoplePage() {
           isLoading={isLoading}
           isError={isError}
           onRetry={() => void refetch()}
+          onArchive={(id) => {
+            const target = people.find((p) => p.id === id);
+            if (target) setArchiveTarget({ id, name: target.full_name });
+          }}
         />
       </main>
+      <ArchiveConfirmDialog
+        open={!!archiveTarget}
+        entityLabel={archiveTarget?.name ?? ""}
+        isLoading={archive.isPending}
+        onConfirm={() => {
+          if (!archiveTarget) return;
+          archive.mutate(undefined, {
+            onSuccess: () => {
+              pushToast("success", `${archiveTarget.name} archived`);
+              setArchiveTarget(null);
+              void refetch();
+            },
+            onError: () => {
+              pushToast("error", "Failed to archive — please try again.");
+              setArchiveTarget(null);
+            },
+          });
+        }}
+        onCancel={() => setArchiveTarget(null)}
+      />
+      <ToastContainer
+        toasts={toasts}
+        onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))}
+      />
     </div>
   );
 }

@@ -45,6 +45,22 @@ func (s *PersonStore) Restore(ctx context.Context, id, workspaceID string) (Pers
 			id, workspaceID); err != nil {
 			return err
 		}
+		// Inverse of Archive's cascade (store.go): restoring a person makes
+		// its per-person child rows live again, so they are properly
+		// dedupe-checked against other live people going forward (T23 UAT
+		// follow-up).
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE person_email SET archived_at=NULL
+			 WHERE person_id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NOT NULL`,
+			id, workspaceID); err != nil {
+			return fmt.Errorf("person restore cascade person_email: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE person_phone SET archived_at=NULL
+			 WHERE person_id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NOT NULL`,
+			id, workspaceID); err != nil {
+			return fmt.Errorf("person restore cascade person_phone: %w", err)
+		}
 		payload, _ := json.Marshal(map[string]any{fieldPersonID: id})
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload)
@@ -65,9 +81,14 @@ func (s *PersonStore) Restore(ctx context.Context, id, workspaceID string) (Pers
 	return s.GetAny(ctx, id, workspaceID)
 }
 
-// findDuplicateEmail returns ErrDuplicateEmail when id's live email(s) collide
-// with another live person's email in the same workspace (used by Restore to
-// re-check the invariant Create enforces at insert time).
+// findDuplicateEmail returns ErrDuplicateEmail when the person being restored
+// (id, currently still archived — and, per Archive's cascade, so are its own
+// person_email rows at this point in the tx, before the inverse cascade below
+// runs) has an email that collides with another live person's email in the
+// same workspace (used by Restore to re-check the invariant Create enforces
+// at insert time). pe1 (the restoring person's own rows) is intentionally not
+// filtered on archived_at — it is expected to still be archived here; only
+// pe2 (the other candidate person) must be live for a collision to count.
 func (s *PersonStore) findDuplicateEmail(ctx context.Context, tx *sql.Tx, workspaceID, personID string) error {
 	var existingID string
 	if err := tx.QueryRowContext(ctx, `
@@ -77,7 +98,7 @@ func (s *PersonStore) findDuplicateEmail(ctx context.Context, tx *sql.Tx, worksp
 		  AND pe2.workspace_id = pe1.workspace_id
 		  AND pe2.person_id <> pe1.person_id
 		  AND pe2.archived_at IS NULL
-		WHERE pe1.person_id=$1::uuid AND pe1.workspace_id=$2::uuid AND pe1.archived_at IS NULL
+		WHERE pe1.person_id=$1::uuid AND pe1.workspace_id=$2::uuid
 		LIMIT 1`,
 		personID, workspaceID).Scan(&existingID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

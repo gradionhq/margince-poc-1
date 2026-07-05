@@ -22,12 +22,22 @@ vi.mock("../api/person.js", () => ({
     error: null,
     reset: vi.fn(),
   })),
+  useArchivePerson: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
+  useRestorePerson: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+  })),
 }));
 
 import * as personApi from "../api/person.js";
 import { PersonDetailPage } from "./PersonDetailPage.js";
 
 const mockUsePerson = vi.mocked(personApi.usePerson);
+const mockUseRestorePerson = vi.mocked(personApi.useRestorePerson);
 
 function renderAt(id: string) {
   const qc = new QueryClient();
@@ -82,6 +92,7 @@ describe("PersonDetailPage", () => {
         emails: [],
         phones: [],
         relationships: [],
+        archived_at: null,
       },
       isLoading: false,
       isError: false,
@@ -105,6 +116,7 @@ describe("PersonDetailPage", () => {
         relationships: [],
         emails: [],
         phones: [],
+        archived_at: null,
       },
       isLoading: false,
       isError: false,
@@ -116,5 +128,135 @@ describe("PersonDetailPage", () => {
     expect(screen.getByText(/no signal yet/i)).toBeInTheDocument();
     expect(screen.getByRole("tablist")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /merge/i })).toBeInTheDocument();
+  });
+
+  it("renders an archived banner and no notfound state for archived contacts", () => {
+    mockUsePerson.mockReturnValue({
+      data: {
+        id: "p1",
+        full_name: "Alice",
+        source: "manual",
+        captured_by: "human:u1",
+        strength: null,
+        activities: [],
+        relationships: [],
+        emails: [],
+        phones: [],
+        archived_at: "2026-07-05T00:00:00Z",
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof personApi.usePerson>);
+    renderAt("p1");
+    expect(screen.getByTestId("archived-banner")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("person-detail-notfound"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("restores an archived contact from the banner", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const user = userEvent.setup();
+    const mutate = vi.fn((_vars, options?: { onSuccess?: () => void }) => {
+      options?.onSuccess?.();
+    });
+    mockUseRestorePerson.mockReturnValue({
+      mutate,
+      isPending: false,
+      error: null,
+    } as unknown as ReturnType<typeof personApi.useRestorePerson>);
+    mockUsePerson.mockReturnValue({
+      data: {
+        id: "p1",
+        full_name: "Alice",
+        source: "manual",
+        captured_by: "human:u1",
+        strength: null,
+        activities: [],
+        relationships: [],
+        emails: [],
+        phones: [],
+        archived_at: "2026-07-05T00:00:00Z",
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof personApi.usePerson>);
+    renderAt("p1");
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    expect(mutate).toHaveBeenCalledOnce();
+  });
+
+  it("shows the existing-record pointer on a 409 restore refusal", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const user = userEvent.setup();
+    const mutate = vi.fn(
+      (_vars, options?: { onError?: (error: unknown) => void }) => {
+        options?.onError?.({
+          status: 409,
+          code: "duplicate_email",
+          detail: "A live person already has this email.",
+          details: { existing_id: "p-existing-1" },
+        });
+      },
+    );
+    mockUseRestorePerson.mockReturnValue({
+      mutate,
+      isPending: false,
+      error: null,
+    } as unknown as ReturnType<typeof personApi.useRestorePerson>);
+    mockUsePerson.mockReturnValue({
+      data: {
+        id: "p1",
+        full_name: "Alice",
+        source: "manual",
+        captured_by: "human:u1",
+        strength: null,
+        activities: [],
+        relationships: [],
+        emails: [],
+        phones: [],
+        archived_at: "2026-07-05T00:00:00Z",
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof personApi.usePerson>);
+    renderAt("p1");
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    expect(
+      screen.getByRole("link", { name: /already live as a different record/i }),
+    ).toHaveAttribute("href", "/people/p-existing-1");
+    expect(screen.queryByText(/failed to restore/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the Archive button for live contacts and not the archived banner", () => {
+    mockUsePerson.mockReturnValue({
+      data: {
+        id: "p1",
+        full_name: "Alice",
+        source: "manual",
+        captured_by: "human:u1",
+        strength: null,
+        activities: [],
+        relationships: [],
+        emails: [],
+        phones: [],
+        archived_at: null,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof personApi.usePerson>);
+    renderAt("p1");
+    expect(
+      screen.getByRole("button", { name: /archive/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("archived-banner")).not.toBeInTheDocument();
   });
 });

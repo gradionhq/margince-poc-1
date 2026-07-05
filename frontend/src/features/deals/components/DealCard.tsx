@@ -1,5 +1,7 @@
 import { useDraggable } from "@dnd-kit/core";
 import type { Deal } from "../../../lib/api-client/generated/index.js";
+import { ContextMenu } from "../../../shared/ui/ContextMenu.js";
+import { IconButton } from "../../../shared/ui/forge.js";
 
 export function formatMoney(
   amountMinor: number | null | undefined,
@@ -45,17 +47,30 @@ export function DealCard({
   deal,
   onClick,
   onAdvanceClick,
+  onArchive,
   dragHandleProps,
   dragging = false,
 }: {
   deal: Deal;
   onClick: () => void;
   onAdvanceClick?: (dealId: string) => void;
+  onArchive?: (dealId: string) => void;
   dragHandleProps?: Record<string, unknown>;
   dragging?: boolean;
 }) {
   const age = stalledDays(deal.stage_entered_at);
   const idle = idleDays(deal.last_activity_at, deal.created_at);
+  function stopTriggerClick(...args: [unknown?]) {
+    const event = args[0];
+    if (
+      event &&
+      typeof event === "object" &&
+      "stopPropagation" in event &&
+      typeof event.stopPropagation === "function"
+    ) {
+      event.stopPropagation();
+    }
+  }
   return (
     // biome-ignore lint/a11y/useSemanticElements: can't be a real <button> — it nests the Advance <button> and hosts dnd-kit's drag-handle attributes; role="button" + onKeyDown keeps it operable.
     <div
@@ -64,15 +79,36 @@ export function DealCard({
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
         if (e.key === "Enter" || e.key === " ") onClick();
       }}
-      className={`rounded-lg border bg-gf-card p-gf-md cursor-pointer transition-shadow ${
+      className={`relative rounded-lg border bg-gf-card p-gf-md cursor-pointer transition-shadow ${
         deal.stalled
           ? "border-l-4 border-l-gf-status-warning border-gf-subtle"
           : "border-gf-subtle"
       } ${dragging ? "opacity-60 shadow-lg" : "hover:shadow-sm"}`}
       {...dragHandleProps}
     >
+      {onArchive && (
+        <div className="absolute right-gf-xs top-gf-xs">
+          <ContextMenu
+            trigger={
+              <IconButton
+                icon="MoreVertical"
+                label="Row actions"
+                onClick={stopTriggerClick}
+              />
+            }
+            items={[
+              {
+                id: "archive",
+                label: "Archive",
+                onSelect: () => onArchive(deal.id),
+              },
+            ]}
+          />
+        </div>
+      )}
       <p className="text-gf-body font-medium text-gf-primary">{deal.name}</p>
       <p className="text-gf-caption text-gf-secondary">
         {formatMoney(deal.amount_minor, deal.currency)} · {age}d
@@ -115,10 +151,12 @@ export function DraggableDealCard({
   deal,
   onClick,
   onAdvanceClick,
+  onArchive,
 }: {
   deal: Deal;
   onClick: () => void;
   onAdvanceClick?: (dealId: string) => void;
+  onArchive?: (dealId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
@@ -133,6 +171,7 @@ export function DraggableDealCard({
         deal={deal}
         onClick={onClick}
         onAdvanceClick={onAdvanceClick}
+        onArchive={onArchive}
         dragging={isDragging}
       />
     </div>

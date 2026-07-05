@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { PersonList } from "./PersonList.js";
@@ -60,6 +60,7 @@ describe("PersonList", () => {
       isLoading: true,
       isError: false,
       onRetry: vi.fn(),
+      onArchive: vi.fn(),
     });
     expect(screen.getByTestId("person-list-skeleton")).toBeInTheDocument();
   });
@@ -68,7 +69,13 @@ describe("PersonList", () => {
     const { default: userEvent } = await import("@testing-library/user-event");
     const onRetry = vi.fn();
     const user = userEvent.setup();
-    renderList({ people: [], isLoading: false, isError: true, onRetry });
+    renderList({
+      people: [],
+      isLoading: false,
+      isError: true,
+      onRetry,
+      onArchive: vi.fn(),
+    });
     await user.click(screen.getByRole("button", { name: /retry/i }));
     expect(onRetry).toHaveBeenCalledOnce();
   });
@@ -79,6 +86,7 @@ describe("PersonList", () => {
       isLoading: false,
       isError: false,
       onRetry: vi.fn(),
+      onArchive: vi.fn(),
     });
     expect(screen.getByText(/no contacts/i)).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
@@ -90,6 +98,7 @@ describe("PersonList", () => {
       isLoading: false,
       isError: false,
       onRetry: vi.fn(),
+      onArchive: vi.fn(),
     });
     expect(screen.getByRole("table")).toBeInTheDocument();
     const rows = screen.getAllByRole("row");
@@ -105,6 +114,7 @@ describe("PersonList", () => {
       isLoading: false,
       isError: false,
       onRetry: vi.fn(),
+      onArchive: vi.fn(),
     });
     expect(screen.getByText(/no activity/)).toBeInTheDocument();
   });
@@ -115,6 +125,7 @@ describe("PersonList", () => {
       isLoading: false,
       isError: false,
       onRetry: vi.fn(),
+      onArchive: vi.fn(),
     });
     const row = screen.getByText("Alice").closest("tr") as HTMLElement;
     fireEvent.click(row);
@@ -123,5 +134,25 @@ describe("PersonList", () => {
     // PersonDetailPage.test.tsx via a routed MemoryRouter with the target path in initialEntries.
     expect(row).toHaveAttribute("tabIndex", "0");
     void container;
+  });
+
+  it("renders the row menu Archive action and calls onArchive with the row id", () => {
+    const onArchive = vi.fn();
+    renderList({
+      people: somePeople,
+      isLoading: false,
+      isError: false,
+      onRetry: vi.fn(),
+      onArchive,
+    });
+
+    const aliceRow = screen.getByText("Alice").closest("tr") as HTMLElement;
+    fireEvent.click(
+      within(aliceRow).getByRole("button", { name: /row actions/i }),
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Archive" }));
+
+    expect(onArchive).toHaveBeenCalledOnce();
+    expect(onArchive).toHaveBeenCalledWith("1");
   });
 });

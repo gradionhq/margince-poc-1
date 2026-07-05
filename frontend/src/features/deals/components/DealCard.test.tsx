@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Deal } from "../../../lib/api-client/generated/index.js";
 import { DealCard, formatMoney, weightedValue } from "./DealCard.js";
@@ -56,6 +56,15 @@ describe("DealCard", () => {
     expect(onClick).toHaveBeenCalled();
   });
 
+  it("ignores bubbled keyboard events from the row-actions button", () => {
+    const onClick = vi.fn();
+    render(<DealCard deal={baseDeal} onClick={onClick} onArchive={vi.fn()} />);
+    fireEvent.keyDown(screen.getByRole("button", { name: /row actions/i }), {
+      key: "Enter",
+    });
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
   it("shows the Stalled flag with a days-idle hover title when stalled (AC-pipeline-5)", () => {
     const stalledDeal: Deal = {
       ...baseDeal,
@@ -111,5 +120,19 @@ describe("DealCard", () => {
   it("does not show the Single-threaded flag when stakeholder_count is more than 1", () => {
     render(<DealCard deal={baseDeal} onClick={vi.fn()} />);
     expect(screen.queryByText("Single-threaded")).not.toBeInTheDocument();
+  });
+
+  it("exposes Archive from the card actions menu and calls onArchive with the deal id", async () => {
+    const onArchive = vi.fn();
+    const userEventModule = await import("@testing-library/user-event");
+    const user = userEventModule.default.setup();
+    render(
+      <DealCard deal={baseDeal} onClick={vi.fn()} onArchive={onArchive} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /row actions/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Archive" }));
+
+    expect(onArchive).toHaveBeenCalledWith("d1");
   });
 });

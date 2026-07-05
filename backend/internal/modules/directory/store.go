@@ -467,27 +467,3 @@ func (s *PersonStore) Update(ctx context.Context, id, workspaceID string, update
 	}
 	return s.Get(ctx, id, workspaceID)
 }
-
-// Archive soft-deletes a person and returns the archived entity.
-func (s *PersonStore) Archive(ctx context.Context, id, workspaceID string) (Person, error) {
-	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx,
-			`UPDATE person SET archived_at=now() WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
-			id, workspaceID)
-		if err != nil {
-			return err
-		}
-		if n, _ := res.RowsAffected(); n > 0 {
-			ea := crmaudit.EntryFromPrincipal(ctx, "archive", entityTypePerson, &id, nil, nil)
-			ea.WorkspaceID = workspaceID
-			if _, err := crmaudit.WriteTx(ctx, tx, ea); err != nil {
-				return fmt.Errorf("person archive audit: %w", err)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return Person{}, err
-	}
-	return s.GetAny(ctx, id, workspaceID)
-}

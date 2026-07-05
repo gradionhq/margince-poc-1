@@ -3,11 +3,18 @@ import {
   cloneElement,
   isValidElement,
   type KeyboardEvent,
+  type KeyboardEventHandler,
+  type MouseEventHandler,
   type ReactElement,
   type ReactNode,
   useRef,
   useState,
 } from "react";
+
+type TriggerProps = {
+  onClick?: MouseEventHandler;
+  onKeyDown?: KeyboardEventHandler;
+};
 
 type MenuItem = { id: string; label: string; onSelect: () => void };
 
@@ -27,9 +34,15 @@ export function ContextMenu({
     setActiveIndex(-1);
   }
 
-  const triggerWithOpen = isValidElement(trigger)
-    ? cloneElement(trigger as ReactElement<{ onClick?: () => void }>, {
-        onClick: toggle,
+  const triggerElement = isValidElement(trigger)
+    ? (trigger as ReactElement<TriggerProps>)
+    : null;
+  const triggerWithOpen = triggerElement
+    ? cloneElement(triggerElement, {
+        onClick: (event) => {
+          triggerElement.props.onClick?.(event);
+          toggle();
+        },
       })
     : trigger;
 

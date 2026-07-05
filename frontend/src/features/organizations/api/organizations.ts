@@ -145,3 +145,42 @@ export function useUpdateOrganization(id: string) {
     },
   });
 }
+
+export function useArchiveOrganization(id: string) {
+  const qc = useQueryClient();
+  return useMutation<Organization, unknown, void>({
+    mutationFn: async () => {
+      const { data, error } = await apiClient.DELETE("/organizations/{id}", {
+        params: { path: { id } },
+      });
+      if (error) throw error;
+      if (!data) throw new Error("empty response");
+      return data;
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(["organizations", "detail", id], data);
+      void qc.invalidateQueries({ queryKey: ["organizations"] });
+    },
+  });
+}
+
+export function useRestoreOrganization(id: string) {
+  const qc = useQueryClient();
+  return useMutation<Organization, unknown, void>({
+    mutationFn: async () => {
+      const { data, error } = await apiClient.POST(
+        "/organizations/{id}/restore",
+        {
+          params: { path: { id } },
+        },
+      );
+      if (error) throw error;
+      if (!data) throw new Error("empty response");
+      return data;
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(["organizations", "detail", id], data);
+      void qc.invalidateQueries({ queryKey: ["organizations"] });
+    },
+  });
+}
