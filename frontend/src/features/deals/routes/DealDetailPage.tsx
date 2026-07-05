@@ -110,8 +110,10 @@ export function DealDetailPage() {
       setOutcomeOpen(true);
       return;
     }
+    const currentDeal = deal;
+    if (!currentDeal) return;
     advance.mutate(
-      { dealId: deal.id, toStageId: target },
+      { dealId: currentDeal.id, toStageId: target },
       {
         onSuccess: () => {
           pushToast("success", "Deal advanced");
