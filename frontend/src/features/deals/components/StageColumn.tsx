@@ -14,6 +14,7 @@ export function StageColumn({
   isTransient = false,
   onCardClick,
   onAdvanceClick,
+  onArchive,
 }: {
   stage: Stage;
   deals: Deal[];
@@ -30,6 +31,7 @@ export function StageColumn({
   isTransient?: boolean;
   onCardClick: (dealId: string) => void;
   onAdvanceClick?: (dealId: string) => void;
+  onArchive?: (dealId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   const sorted = deals
@@ -75,6 +77,7 @@ export function StageColumn({
             deal={deal}
             onClick={() => onCardClick(deal.id)}
             onAdvanceClick={onAdvanceClick}
+            onArchive={onArchive}
           />
         ))}
       </div>

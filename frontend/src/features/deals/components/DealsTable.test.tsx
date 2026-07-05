@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Deal, Stage } from "../../../lib/api-client/generated/index.js";
 import { DealsTable } from "./DealsTable.js";
 
@@ -84,5 +84,22 @@ describe("DealsTable", () => {
     const days = Number(match?.[1]);
     expect(days).toBeGreaterThanOrEqual(89);
     expect(days).toBeLessThanOrEqual(91);
+  });
+
+  it("exposes Archive from the row actions menu and calls onArchive with the deal id", async () => {
+    const onArchive = vi.fn();
+    const userEventModule = await import("@testing-library/user-event");
+    const user = userEventModule.default.setup();
+
+    render(
+      <DealsTable deals={deals} stagesById={{ s1: stage }} onArchive={onArchive} />,
+    );
+
+    await user.click(
+      screen.getAllByRole("button", { name: /row actions/i })[0],
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Archive" }));
+
+    expect(onArchive).toHaveBeenCalledWith("d1");
   });
 });

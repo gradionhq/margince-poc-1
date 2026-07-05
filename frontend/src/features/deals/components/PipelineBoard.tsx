@@ -60,6 +60,7 @@ export function PipelineBoard({
   onCardClick,
   onMoveError,
   onMoveSuccess,
+  onArchive,
 }: {
   pipelineId: string;
   stages: Stage[];
@@ -73,6 +74,7 @@ export function PipelineBoard({
   isError: boolean;
   onRetry: () => void;
   onCardClick: (dealId: string) => void;
+  onArchive?: (dealId: string) => void;
   onMoveError?: (message: string) => void;
   onMoveSuccess?: (message: string) => void;
 }) {
@@ -209,6 +211,7 @@ export function PipelineBoard({
               baseCurrency={rollup?.base_currency}
               onCardClick={onCardClick}
               onAdvanceClick={handleAdvanceClick}
+              onArchive={onArchive}
             />
           ))}
           {isDragging &&
@@ -220,6 +223,7 @@ export function PipelineBoard({
                 isTransient
                 onCardClick={onCardClick}
                 onAdvanceClick={handleAdvanceClick}
+                onArchive={onArchive}
               />
             ))}
         </div>

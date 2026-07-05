@@ -7,6 +7,7 @@ vi.mock("../../../lib/api-client/client.js", () => ({
   apiClient: {
     GET: vi.fn(),
     POST: vi.fn(),
+    DELETE: vi.fn(),
     PATCH: vi.fn(),
   },
 }));
@@ -15,6 +16,7 @@ import { apiClient } from "../../../lib/api-client/client.js";
 import {
   dealsKeys,
   useAdvanceDeal,
+  useArchiveDeal,
   useCreateDeal,
   useDeal,
   useDealActivities,
@@ -23,6 +25,7 @@ import {
   useDefaultPipeline,
   useOpenDealsForOrg,
   usePipelineRollup,
+  useRestoreDeal,
   useRecentActivityCount,
   useStages,
   useUpdateActivity,
@@ -226,6 +229,102 @@ describe("useCreateDeal", () => {
       expect.objectContaining({
         body: expect.objectContaining({ organization_id: "o1" }),
       }),
+    );
+  });
+});
+
+describe("useArchiveDeal", () => {
+  it("DELETEs the deal and updates the cache to archived", async () => {
+    (apiClient.DELETE as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: {
+        id: "d1",
+        name: "Acme deal",
+        archived_at: "2026-07-05T00:00:00Z",
+      },
+      error: undefined,
+    });
+    const qc = new QueryClient();
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useArchiveDeal("d1"), {
+      wrapper: localWrapper,
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(apiClient.DELETE).toHaveBeenCalledWith(
+      "/deals/{id}",
+      expect.objectContaining({ params: { path: { id: "d1" } } }),
+    );
+    expect(result.current.data?.archived_at).toBe("2026-07-05T00:00:00Z");
+  });
+});
+
+describe("useRestoreDeal", () => {
+  it("POSTs restore and updates the cache to live", async () => {
+    (apiClient.POST as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: {
+        id: "d1",
+        name: "Acme deal",
+        archived_at: null,
+      },
+      error: undefined,
+    });
+    const qc = new QueryClient();
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useRestoreDeal("d1"), {
+      wrapper: localWrapper,
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(apiClient.POST).toHaveBeenCalledWith(
+      "/deals/{id}/restore",
+      expect.objectContaining({ params: { path: { id: "d1" } } }),
+    );
+    expect(result.current.data?.archived_at).toBeNull();
+  });
+
+  it("surfaces the raw 409 error for the caller to inspect", async () => {
+    (apiClient.POST as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: undefined,
+      error: {
+        status: 409,
+        code: "duplicate_name",
+        details: { existing_id: "d-existing-1" },
+      },
+    });
+    const qc = new QueryClient();
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useRestoreDeal("d1"), {
+      wrapper: localWrapper,
+    });
+
+    await act(async () => {
+      try {
+        await result.current.mutateAsync();
+      } catch {
+        // expected
+      }
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect((result.current.error as { code?: string })?.code).toBe(
+      "duplicate_name",
     );
   });
 });

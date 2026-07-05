@@ -254,6 +254,42 @@ export function useCreateDeal() {
   });
 }
 
+export function useArchiveDeal(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation<Deal, unknown, void>({
+    mutationFn: async () => {
+      const { data, error } = await apiClient.DELETE("/deals/{id}", {
+        params: { path: { id } },
+      });
+      if (error) throw error;
+      if (!data) throw new Error("empty response");
+      return data;
+    },
+    onSuccess: (archived) => {
+      queryClient.setQueryData(dealsKeys.detail(id), archived);
+      void queryClient.invalidateQueries({ queryKey: dealsKeys.list() });
+    },
+  });
+}
+
+export function useRestoreDeal(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation<Deal, unknown, void>({
+    mutationFn: async () => {
+      const { data, error } = await apiClient.POST("/deals/{id}/restore", {
+        params: { path: { id } },
+      });
+      if (error) throw error;
+      if (!data) throw new Error("empty response");
+      return data;
+    },
+    onSuccess: (restored) => {
+      queryClient.setQueryData(dealsKeys.detail(id), restored);
+      void queryClient.invalidateQueries({ queryKey: dealsKeys.list() });
+    },
+  });
+}
+
 export function useOpenDealsForOrg(organizationId: string | undefined) {
   return useQuery<DealListResponse>({
     queryKey: ["deals", "org-open", organizationId],
