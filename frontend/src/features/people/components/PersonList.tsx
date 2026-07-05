@@ -34,6 +34,17 @@ export function PersonList({
   onArchive,
 }: PersonListProps) {
   const navigate = useNavigate();
+  function stopTriggerClick(...args: [unknown?]) {
+    const event = args[0];
+    if (
+      event &&
+      typeof event === "object" &&
+      "stopPropagation" in event &&
+      typeof event.stopPropagation === "function"
+    ) {
+      event.stopPropagation();
+    }
+  }
 
   if (isLoading) {
     return (
@@ -135,8 +146,7 @@ export function PersonList({
             <IconButton
               icon="MoreVertical"
               label="Row actions"
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
+              onClick={stopTriggerClick}
             />
           }
           items={[

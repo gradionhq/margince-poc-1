@@ -60,6 +60,17 @@ export function DealCard({
 }) {
   const age = stalledDays(deal.stage_entered_at);
   const idle = idleDays(deal.last_activity_at, deal.created_at);
+  function stopTriggerClick(...args: [unknown?]) {
+    const event = args[0];
+    if (
+      event &&
+      typeof event === "object" &&
+      "stopPropagation" in event &&
+      typeof event.stopPropagation === "function"
+    ) {
+      event.stopPropagation();
+    }
+  }
   return (
     // biome-ignore lint/a11y/useSemanticElements: can't be a real <button> — it nests the Advance <button> and hosts dnd-kit's drag-handle attributes; role="button" + onKeyDown keeps it operable.
     <div
@@ -68,6 +79,7 @@ export function DealCard({
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
         if (e.key === "Enter" || e.key === " ") onClick();
       }}
       className={`relative rounded-lg border bg-gf-card p-gf-md cursor-pointer transition-shadow ${
@@ -84,8 +96,7 @@ export function DealCard({
               <IconButton
                 icon="MoreVertical"
                 label="Row actions"
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => e.stopPropagation()}
+                onClick={stopTriggerClick}
               />
             }
             items={[

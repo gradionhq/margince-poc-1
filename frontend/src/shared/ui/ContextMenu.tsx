@@ -34,10 +34,13 @@ export function ContextMenu({
     setActiveIndex(-1);
   }
 
-  const triggerWithOpen = isValidElement(trigger)
-    ? cloneElement(trigger as ReactElement<TriggerProps>, {
+  const triggerElement = isValidElement(trigger)
+    ? (trigger as ReactElement<TriggerProps>)
+    : null;
+  const triggerWithOpen = triggerElement
+    ? cloneElement(triggerElement, {
         onClick: (event) => {
-          trigger.props.onClick?.(event);
+          triggerElement.props.onClick?.(event);
           toggle();
         },
       })

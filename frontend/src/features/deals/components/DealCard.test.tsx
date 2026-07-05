@@ -56,6 +56,15 @@ describe("DealCard", () => {
     expect(onClick).toHaveBeenCalled();
   });
 
+  it("ignores bubbled keyboard events from the row-actions button", () => {
+    const onClick = vi.fn();
+    render(<DealCard deal={baseDeal} onClick={onClick} onArchive={vi.fn()} />);
+    fireEvent.keyDown(screen.getByRole("button", { name: /row actions/i }), {
+      key: "Enter",
+    });
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
   it("shows the Stalled flag with a days-idle hover title when stalled (AC-pipeline-5)", () => {
     const stalledDeal: Deal = {
       ...baseDeal,

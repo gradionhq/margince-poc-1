@@ -18,6 +18,17 @@ export function DealsTable({
   stagesById: Record<string, Stage>;
   onArchive?: (dealId: string) => void;
 }) {
+  function stopTriggerClick(...args: [unknown?]) {
+    const event = args[0];
+    if (
+      event &&
+      typeof event === "object" &&
+      "stopPropagation" in event &&
+      typeof event.stopPropagation === "function"
+    ) {
+      event.stopPropagation();
+    }
+  }
   const sorted = deals
     .slice()
     .sort((a, b) => (b.amount_minor ?? 0) - (a.amount_minor ?? 0));
@@ -86,8 +97,7 @@ export function DealsTable({
                 <IconButton
                   icon="MoreVertical"
                   label="Row actions"
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => e.stopPropagation()}
+                  onClick={stopTriggerClick}
                 />
               }
               items={[

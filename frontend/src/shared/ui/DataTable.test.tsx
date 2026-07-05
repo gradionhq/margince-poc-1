@@ -38,4 +38,25 @@ describe("DataTable", () => {
     fireEvent.keyDown(row, { key: "Enter" });
     expect(onRowClick).toHaveBeenCalledTimes(2);
   });
+
+  it("ignores bubbled keyboard events from interactive descendants", () => {
+    const onRowClick = vi.fn();
+    render(
+      <DataTable<Row>
+        columns={[
+          {
+            key: "name",
+            header: "Name",
+            render: (r) => <button type="button">{r.name}</button>,
+          },
+        ]}
+        rows={[{ id: "1", name: "Alice" }]}
+        getRowKey={(r) => r.id}
+        onRowClick={onRowClick}
+      />,
+    );
+    const button = screen.getByRole("button", { name: "Alice" });
+    fireEvent.keyDown(button, { key: "Enter" });
+    expect(onRowClick).not.toHaveBeenCalled();
+  });
 });

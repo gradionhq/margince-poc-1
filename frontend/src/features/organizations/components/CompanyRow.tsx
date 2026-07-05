@@ -13,6 +13,17 @@ export function CompanyRow({
   onClick?: () => void;
   onArchive?: (id: string) => void;
 }) {
+  function stopTriggerClick(...args: [unknown?]) {
+    const event = args[0];
+    if (
+      event &&
+      typeof event === "object" &&
+      "stopPropagation" in event &&
+      typeof event.stopPropagation === "function"
+    ) {
+      event.stopPropagation();
+    }
+  }
   const strength = org.org_strength
     ? {
         score: org.org_strength.score,
@@ -60,8 +71,7 @@ export function CompanyRow({
             <IconButton
               icon="MoreVertical"
               label="Row actions"
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
+              onClick={stopTriggerClick}
             />
           }
           items={[
