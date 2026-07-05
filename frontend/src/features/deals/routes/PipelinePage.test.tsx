@@ -3,6 +3,8 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
+const archiveMutate = vi.fn();
+
 vi.mock("../api/deals.js", () => ({
   useDefaultPipeline: () => ({ data: { id: "p1" } }),
   useStages: () => ({
@@ -17,7 +19,26 @@ vi.mock("../api/deals.js", () => ({
     ],
   }),
   useDeals: () => ({
-    data: { data: [] },
+    data: {
+      data: [
+        {
+          id: "d1",
+          name: "Acme deal",
+          amount_minor: 100000,
+          currency: "USD",
+          pipeline_id: "p1",
+          stage_id: "s0",
+          status: "open",
+          source: "manual",
+          captured_by: "human:u1",
+          created_at: "2026-07-01T00:00:00Z",
+          updated_at: "2026-07-01T00:00:00Z",
+          stalled: false,
+          stakeholder_count: 2,
+          stage_entered_at: "2026-07-01T00:00:00Z",
+        },
+      ],
+    },
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -28,6 +49,10 @@ vi.mock("../api/deals.js", () => ({
     isError: false,
   }),
   useAdvanceDeal: () => ({ mutate: vi.fn(), isPending: false }),
+  useArchiveDeal: () => ({
+    mutate: archiveMutate,
+    isPending: false,
+  }),
 }));
 
 import { PipelinePage } from "./PipelinePage.js";
@@ -44,6 +69,30 @@ function renderPage() {
 }
 
 describe("PipelinePage", () => {
+  it("opens the archive dialog from the board and shows a success toast after confirm", async () => {
+    archiveMutate.mockImplementation((_vars, opts) => opts?.onSuccess?.());
+    const userEventModule = await import("@testing-library/user-event");
+    const user = userEventModule.default.setup();
+
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: /row actions/i }));
+    await user.click(screen.getByRole("menuitem", { name: "Archive" }));
+
+    expect(screen.getByText(/acme deal will be removed/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Archive" }));
+
+    expect(archiveMutate).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
+    expect(screen.getByText("Acme deal archived")).toBeInTheDocument();
+  });
+
   it("renders the Deals heading and the New stage column", () => {
     renderPage();
     expect(screen.getByRole("heading", { name: /deals/i })).toBeInTheDocument();

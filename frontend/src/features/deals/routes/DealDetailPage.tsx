@@ -2,14 +2,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { Stage } from "../../../lib/api-client/generated/index.js";
+import { ArchiveConfirmDialog } from "../../../shared/ui/ArchiveConfirmDialog.js";
+import { ArchivedBanner, restoreErrorMessage } from "../../../shared/ui/ArchivedBanner.js";
 import { Button, Skeleton } from "../../../shared/ui/forge.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
 import {
   dealsKeys,
+  useArchiveDeal,
   useAdvanceDeal,
   useDeal,
   useDealActivities,
   useDealHistory,
+  useRestoreDeal,
   useStages,
 } from "../api/deals.js";
 import { ActivityTimelineCard } from "../components/ActivityTimelineCard.js";
@@ -50,8 +54,11 @@ export function DealDetailPage() {
     isError: historyError,
   } = useDealHistory(id);
   const advance = useAdvanceDeal(deal?.pipeline_id);
+  const archive = useArchiveDeal(id ?? "");
+  const restore = useRestoreDeal(id ?? "");
   const [outcomeOpen, setOutcomeOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   function pushToast(variant: Toast["variant"], message: string) {
@@ -131,6 +138,23 @@ export function DealDetailPage() {
     <div className="p-gf-lg grid grid-cols-1 lg:grid-cols-3 gap-gf-lg">
       <div className="lg:col-span-2 flex flex-col gap-gf-lg">
         <header className="rounded-lg border border-gf-subtle bg-gf-card p-gf-lg">
+          {deal.archived_at && (
+            <ArchivedBanner
+              entityLabel="deal"
+              isRestoring={restore.isPending}
+              onRestore={() =>
+                restore.mutate(undefined, {
+                  onSuccess: () => {
+                    pushToast("success", "Deal restored");
+                  },
+                  onError: (err) => {
+                    const parsed = restoreErrorMessage(err);
+                    pushToast("error", parsed.message);
+                  },
+                })
+              }
+            />
+          )}
           <h1 className="text-gf-title font-semibold text-gf-primary">
             {deal.name}
           </h1>
@@ -162,6 +186,15 @@ export function DealDetailPage() {
             />
           </div>
           <div className="mt-gf-md flex gap-gf-sm">
+            {!deal.archived_at && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setArchiveOpen(true)}
+              >
+                Archive…
+              </Button>
+            )}
             {deal.status === "open" && target && (
               <Button variant="primary" onClick={handleAdvanceClick}>
                 Advance
@@ -260,6 +293,25 @@ export function DealDetailPage() {
           setReopenOpen(false);
         }}
         onCancel={() => setReopenOpen(false)}
+      />
+
+      <ArchiveConfirmDialog
+        open={archiveOpen}
+        entityLabel={deal.name}
+        isLoading={archive.isPending}
+        onConfirm={() =>
+          archive.mutate(undefined, {
+            onSuccess: () => {
+              pushToast("success", `${deal.name} archived`);
+              setArchiveOpen(false);
+            },
+            onError: () => {
+              pushToast("error", "Failed to archive — please try again.");
+              setArchiveOpen(false);
+            },
+          })
+        }
+        onCancel={() => setArchiveOpen(false)}
       />
 
       <ToastContainer

@@ -5,6 +5,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const advanceMutate = vi.fn();
+const archiveMutate = vi.fn();
+const restoreMutate = vi.fn();
 const refetchDeal = vi.fn();
 const dealData = {
   id: "d1",
@@ -12,6 +14,7 @@ const dealData = {
   amount_minor: 1000000,
   currency: "USD",
   status: "open",
+  archived_at: null,
   pipeline_id: "pipe1",
   stage_id: "s2",
   organization_id: "org1",
@@ -72,6 +75,8 @@ vi.mock("../api/deals.js", () => ({
     isLoading: false,
   }),
   useAdvanceDeal: () => ({ mutate: advanceMutate, isPending: false }),
+  useArchiveDeal: () => ({ mutate: archiveMutate, isPending: false }),
+  useRestoreDeal: () => ({ mutate: restoreMutate, isPending: false }),
   useDealActivities: () => ({ data: [], isLoading: false, isError: false }),
   useDealHistory: () => ({ data: [], isLoading: false, isError: false }),
 }));
@@ -106,12 +111,15 @@ const originalStatus = dealData.status;
 describe("DealDetailPage", () => {
   beforeEach(() => {
     advanceMutate.mockReset();
+    archiveMutate.mockReset();
+    restoreMutate.mockReset();
     refetchDeal.mockReset();
   });
 
   afterEach(() => {
     dealData.stage_id = originalStageId;
     dealData.status = originalStatus;
+    dealData.archived_at = null;
   });
 
   it("renders header, stepper, weighted-value, stakeholders rail, tasks/timeline/history cards", () => {
@@ -229,5 +237,60 @@ describe("DealDetailPage", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["deals", "history", "d1"],
     });
+  });
+
+  it("shows the archived banner and a restore action for an archived deal", async () => {
+    dealData.archived_at = "2026-07-05T00:00:00Z";
+    renderPage();
+
+    expect(screen.getByTestId("archived-banner")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^restore$/i }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /^restore$/i }));
+
+    expect(restoreMutate).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
+  });
+
+  it("renders a generic restore toast on a 409 and no existing-record link", async () => {
+    dealData.archived_at = "2026-07-05T00:00:00Z";
+    restoreMutate.mockImplementation((_vars, opts) =>
+      opts?.onError?.({
+        status: 409,
+        code: "duplicate_name",
+        detail: "A live deal already has this name.",
+      }),
+    );
+
+    renderPage();
+    await userEvent.click(screen.getByRole("button", { name: /^restore$/i }));
+
+    expect(
+      screen.getByText(/a live deal already has this name/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /already live as a different record/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows Archive when the deal is live and not the archived banner", async () => {
+    renderPage();
+
+    expect(screen.queryByTestId("archived-banner")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^archive…$/i }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /^archive…$/i }));
+    expect(
+      screen.getByText(/acme deal will be removed from the default list/i),
+    ).toBeInTheDocument();
   });
 });
