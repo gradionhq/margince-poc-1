@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../../lib/api-client/client.js", () => ({
-  apiClient: { GET: vi.fn(), PATCH: vi.fn() },
+  apiClient: { GET: vi.fn(), PATCH: vi.fn(), DELETE: vi.fn(), POST: vi.fn() },
 }));
 
 // vitest's `clearMocks` defaults to false, and the shared `apiClient.GET`/`PATCH` mock is a single
@@ -16,10 +16,12 @@ beforeEach(() => {
 
 import { apiClient } from "../../../lib/api-client/client.js";
 import {
+  useArchiveOrganization,
   useOrganization,
   useOrgContacts,
   useOrgPartner,
   useSourcedDeals,
+  useRestoreOrganization,
   useUpdateOrganization,
 } from "./organizations.js";
 
@@ -167,5 +169,73 @@ describe("useUpdateOrganization (AC-company-12 Edit → PATCH updateOrganization
     expect(qc.getQueryData(["organizations", "detail", "org1"])).toMatchObject({
       industry: "Fintech",
     });
+  });
+});
+
+describe("useArchiveOrganization", () => {
+  it("DELETEs the organization and updates the cache to archived", async () => {
+    (apiClient.DELETE as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: {
+        id: "org1",
+        display_name: "Acme",
+        archived_at: "2026-07-05T00:00:00Z",
+      },
+      error: undefined,
+      response: { status: 200 },
+    });
+    const { result } = renderHook(() => useArchiveOrganization("org1"), {
+      wrapper,
+    });
+    result.current.mutate();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiClient.DELETE).toHaveBeenCalledWith(
+      "/organizations/{id}",
+      expect.objectContaining({ params: { path: { id: "org1" } } }),
+    );
+    expect(result.current.data?.archived_at).toBe("2026-07-05T00:00:00Z");
+  });
+});
+
+describe("useRestoreOrganization", () => {
+  it("POSTs restore and updates the cache to live", async () => {
+    (apiClient.POST as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: {
+        id: "org1",
+        display_name: "Acme",
+        archived_at: null,
+      },
+      error: undefined,
+      response: { status: 200 },
+    });
+    const { result } = renderHook(() => useRestoreOrganization("org1"), {
+      wrapper,
+    });
+    result.current.mutate();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiClient.POST).toHaveBeenCalledWith(
+      "/organizations/{id}/restore",
+      expect.objectContaining({ params: { path: { id: "org1" } } }),
+    );
+    expect(result.current.data?.archived_at).toBeNull();
+  });
+
+  it("throws the raw error on a 409 dedupe refusal for the caller to inspect", async () => {
+    (apiClient.POST as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: undefined,
+      error: {
+        status: 409,
+        code: "duplicate_domain",
+        details: { existing_id: "org-2" },
+      },
+      response: { status: 409 },
+    });
+    const { result } = renderHook(() => useRestoreOrganization("org1"), {
+      wrapper,
+    });
+    result.current.mutate();
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect((result.current.error as { code?: string })?.code).toBe(
+      "duplicate_domain",
+    );
   });
 });

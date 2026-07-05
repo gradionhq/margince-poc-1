@@ -1,12 +1,20 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import type { Person } from "../../../lib/api-client/generated/index.js";
-import { Button, Skeleton, StatusDot } from "../../../shared/ui/forge.js";
+import { ArchiveConfirmDialog } from "../../../shared/ui/ArchiveConfirmDialog.js";
 import {
+  ArchivedBanner,
+  restoreErrorMessage,
+} from "../../../shared/ui/ArchivedBanner.js";
+import { Button, Skeleton, StatusDot } from "../../../shared/ui/forge.js";
+import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
+import {
+  useArchiveOrganization,
   useOrganization,
   useOrgContacts,
   useOrgPartner,
   useSourcedDeals,
+  useRestoreOrganization,
 } from "../api/organizations.js";
 import {
   formatLocation,
@@ -43,10 +51,24 @@ export function CompanyDetailPage() {
 
   const [newDealOpen, setNewDealOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [toasts, setToasts] = useState<
+    Array<{ id: string; variant: "success" | "error"; message: string }>
+  >([]);
+  const [restoreConflict, setRestoreConflict] = useState<{
+    message: string;
+    existingId?: string;
+  } | null>(null);
   const [editedFields, setEditedFields] = useState<Set<string>>(new Set());
+  const archive = useArchiveOrganization(id ?? "");
+  const restore = useRestoreOrganization(id ?? "");
   const contactPeople = contacts
     .map((c) => c.data)
     .filter((p): p is Person => !!p);
+
+  function pushToast(variant: "success" | "error", message: string) {
+    setToasts((t) => [...t, { id: crypto.randomUUID(), variant, message }]);
+  }
 
   if (isLoading) {
     return (
@@ -148,6 +170,11 @@ export function CompanyDetailPage() {
           </div>
         </div>
         <div className="ml-auto flex gap-gf-sm">
+          {!org.archived_at && (
+            <Button variant="ghost" size="sm" onClick={() => setArchiveOpen(true)}>
+              Archive…
+            </Button>
+          )}
           <Button
             variant="secondary"
             size="sm"
@@ -176,6 +203,31 @@ export function CompanyDetailPage() {
         </div>
       </header>
       <main className="p-gf-lg max-w-5xl mx-auto flex flex-col gap-gf-lg">
+        {org.archived_at && (
+          <ArchivedBanner
+            entityLabel="company"
+            isRestoring={restore.isPending}
+            existingRecordId={restoreConflict?.existingId}
+            existingRecordHref={
+              restoreConflict?.existingId
+                ? `/companies/${restoreConflict.existingId}`
+                : undefined
+            }
+            onRestore={() =>
+              restore.mutate(undefined, {
+                onSuccess: () => {
+                  pushToast("success", "Company restored");
+                  setRestoreConflict(null);
+                },
+                onError: (err) => {
+                  const parsed = restoreErrorMessage(err);
+                  if (parsed.existingId) setRestoreConflict(parsed);
+                  else pushToast("error", parsed.message);
+                },
+              })
+            }
+          />
+        )}
         <OrgStrengthCard orgStrength={org.org_strength} contacts={contacts} />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-gf-lg">
           <PeopleRail org={org} contacts={contacts} />
@@ -205,6 +257,28 @@ export function CompanyDetailPage() {
         onSaved={(changed) =>
           setEditedFields((prev) => new Set([...prev, ...changed]))
         }
+      />
+      <ArchiveConfirmDialog
+        open={archiveOpen}
+        entityLabel={org.display_name}
+        isLoading={archive.isPending}
+        onConfirm={() =>
+          archive.mutate(undefined, {
+            onSuccess: () => {
+              pushToast("success", "Company archived");
+              setArchiveOpen(false);
+            },
+            onError: () => {
+              pushToast("error", "Failed to archive — please try again.");
+              setArchiveOpen(false);
+            },
+          })
+        }
+        onCancel={() => setArchiveOpen(false)}
+      />
+      <ToastContainer
+        toasts={toasts}
+        onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))}
       />
     </div>
   );

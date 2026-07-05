@@ -2,7 +2,7 @@ import type { Organization } from "../../../lib/api-client/generated/index.js";
 import { Skeleton } from "../../../shared/ui/forge.js";
 import { CompanyRow } from "./CompanyRow.js";
 
-const COLUMNS = ["Company", "Contacts", "Open deals", "Org strength"];
+const COLUMNS = ["Company", "Contacts", "Open deals", "Org strength", ""];
 
 interface CompanyListProps {
   companies: Organization[];
@@ -10,6 +10,7 @@ interface CompanyListProps {
   isError: boolean;
   onRetry: () => void;
   onRowClick: (id: string) => void;
+  onArchive?: (id: string) => void;
 }
 
 export function CompanyList({
@@ -18,6 +19,7 @@ export function CompanyList({
   isError,
   onRetry,
   onRowClick,
+  onArchive,
 }: CompanyListProps) {
   if (isLoading) {
     return (
@@ -78,6 +80,7 @@ export function CompanyList({
               key={org.id}
               org={org}
               onClick={() => onRowClick(org.id)}
+              onArchive={onArchive}
             />
           ))}
         </tbody>

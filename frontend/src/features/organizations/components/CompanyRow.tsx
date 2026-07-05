@@ -1,13 +1,17 @@
 import type { Organization } from "../../../lib/api-client/generated/index.js";
+import { ContextMenu } from "../../../shared/ui/ContextMenu.js";
+import { IconButton } from "../../../shared/ui/forge.js";
 import { OrgLogo } from "./OrgLogo.js";
 import { OrgStrengthCell } from "./OrgStrengthCell.js";
 
 export function CompanyRow({
   org,
   onClick,
+  onArchive,
 }: {
   org: Organization;
   onClick?: () => void;
+  onArchive?: (id: string) => void;
 }) {
   const strength = org.org_strength
     ? {
@@ -49,6 +53,23 @@ export function CompanyRow({
           strength={strength}
           contactCount={org.contact_count ?? 0}
         />
+      </td>
+      <td className="p-gf-sm">
+        <div
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <ContextMenu
+            trigger={<IconButton icon="MoreVertical" label="Row actions" />}
+            items={[
+              {
+                id: "archive",
+                label: "Archive",
+                onSelect: () => onArchive?.(org.id),
+              },
+            ]}
+          />
+        </div>
       </td>
     </tr>
   );

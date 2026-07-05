@@ -1,7 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+let mockArchiveMutate = vi.fn(
+  (_vars: void, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.(),
+);
 
 vi.mock("../api/organizations.js", () => ({
   useOrganizations: () => ({
@@ -20,6 +24,10 @@ vi.mock("../api/organizations.js", () => ({
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
+  }),
+  useArchiveOrganization: () => ({
+    mutate: mockArchiveMutate,
+    isPending: false,
   }),
 }));
 vi.mock("../../identity/store/authStore.js", () => ({
@@ -43,6 +51,12 @@ function renderPage() {
 }
 
 describe("CompaniesPage", () => {
+  beforeEach(() => {
+    mockArchiveMutate = vi.fn(
+      (_vars: void, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.(),
+    );
+  });
+
   it("renders the Companies section label", () => {
     renderPage();
     expect(
@@ -89,5 +103,21 @@ describe("CompaniesPage", () => {
     );
     fireEvent.click(screen.getByText("Acme Inc"));
     expect(screen.getByText("Company detail o1")).toBeInTheDocument();
+  });
+  it("opens archive confirm from the row menu and shows a success toast on confirm", async () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /row actions/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /archive/i }));
+
+    expect(
+      screen.getByText(/acme inc will be removed from the default list/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /archive/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/acme inc archived/i)).toBeInTheDocument(),
+    );
   });
 });

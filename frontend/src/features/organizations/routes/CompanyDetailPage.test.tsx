@@ -24,13 +24,21 @@ const baseOrgData = {
 };
 
 let mockPartner: unknown = null;
-let mockMutate = vi.fn((_patch: unknown, opts?: { onSuccess?: () => void }) =>
-  opts?.onSuccess?.(),
+let mockOrg = { ...baseOrgData };
+let mockUpdateMutate = vi.fn(
+  (_patch: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.(),
+);
+let mockArchiveMutate = vi.fn(
+  (_vars: void, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.(),
+);
+let mockRestoreMutate = vi.fn(
+  (_vars: void, opts?: { onSuccess?: () => void; onError?: (err: unknown) => void }) =>
+    opts?.onSuccess?.(),
 );
 
 vi.mock("../api/organizations.js", () => ({
   useOrganization: () => ({
-    data: baseOrgData,
+    data: mockOrg,
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -42,7 +50,15 @@ vi.mock("../api/organizations.js", () => ({
   }),
   useOrgContacts: () => ({ contacts: [], isLoading: false }),
   useSourcedDeals: () => ({ data: [], isLoading: false, isError: false }),
-  useUpdateOrganization: () => ({ mutate: mockMutate, isPending: false }),
+  useUpdateOrganization: () => ({ mutate: mockUpdateMutate, isPending: false }),
+  useArchiveOrganization: () => ({
+    mutate: mockArchiveMutate,
+    isPending: false,
+  }),
+  useRestoreOrganization: () => ({
+    mutate: mockRestoreMutate,
+    isPending: false,
+  }),
 }));
 
 import { CompanyDetailPage } from "./CompanyDetailPage.js";
@@ -63,8 +79,19 @@ function renderPage() {
 describe("CompanyDetailPage", () => {
   beforeEach(() => {
     mockPartner = null;
-    mockMutate = vi.fn((_patch: unknown, opts?: { onSuccess?: () => void }) =>
-      opts?.onSuccess?.(),
+    mockOrg = { ...baseOrgData };
+    mockUpdateMutate = vi.fn(
+      (_patch: unknown, opts?: { onSuccess?: () => void }) =>
+        opts?.onSuccess?.(),
+    );
+    mockArchiveMutate = vi.fn(
+      (_vars: void, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.(),
+    );
+    mockRestoreMutate = vi.fn(
+      (
+        _vars: void,
+        opts?: { onSuccess?: () => void; onError?: (err: unknown) => void },
+      ) => opts?.onSuccess?.(),
     );
   });
 
@@ -139,5 +166,52 @@ describe("CompanyDetailPage", () => {
     fireEvent.change(industryInput, { target: { value: "Fintech" } });
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
     expect(screen.getByTitle("Typed by you this session")).toBeInTheDocument();
+  });
+
+  it("renders the archived banner and no blank/404-shaped content for an archived company", () => {
+    mockOrg = { ...baseOrgData, archived_at: "2026-07-05T00:00:00Z" };
+    renderPage();
+    expect(screen.getByText(/this company is archived/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/failed to load this company/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("clicking Restore calls the restore mutation for an archived company", () => {
+    mockOrg = { ...baseOrgData, archived_at: "2026-07-05T00:00:00Z" };
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /restore/i }));
+    expect(mockRestoreMutate).toHaveBeenCalledOnce();
+  });
+
+  it("shows the existing-record pointer link on a 409 restore refusal", () => {
+    mockOrg = { ...baseOrgData, archived_at: "2026-07-05T00:00:00Z" };
+    mockRestoreMutate = vi.fn(
+      (
+        _vars: void,
+        opts?: { onSuccess?: () => void; onError?: (err: unknown) => void },
+      ) =>
+        opts?.onError?.({
+          status: 409,
+          code: "duplicate_domain",
+          details: { existing_id: "org2" },
+          detail: "A live company already has this domain.",
+        }),
+    );
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /restore/i }));
+    expect(
+      screen.getByRole("link", { name: /already live as a different record/i }),
+    ).toHaveAttribute("href", "/companies/org2");
+    expect(
+      screen.queryByText(/failed to load this company/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows Archive… for a live company and no archived banner", () => {
+    mockOrg = { ...baseOrgData, archived_at: null };
+    renderPage();
+    expect(screen.getByRole("button", { name: /archive…/i })).toBeInTheDocument();
+    expect(screen.queryByText(/this company is archived/i)).not.toBeInTheDocument();
   });
 });
