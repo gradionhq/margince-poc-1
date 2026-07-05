@@ -16,7 +16,8 @@ export function restoreErrorMessage(error: unknown): {
   if (error && typeof error === "object") {
     const problem = error as RestoreProblem;
     const code = typeof problem.code === "string" ? problem.code : undefined;
-    const detail = typeof problem.detail === "string" ? problem.detail : undefined;
+    const detail =
+      typeof problem.detail === "string" ? problem.detail : undefined;
     const existingId =
       typeof problem.details?.existing_id === "string"
         ? problem.details.existing_id
@@ -61,7 +62,12 @@ export function ArchivedBanner({
           Already live as a different record →
         </Link>
       ) : (
-        <Button variant="secondary" size="sm" loading={isRestoring} onClick={onRestore}>
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={isRestoring}
+          onClick={onRestore}
+        >
           Restore
         </Button>
       )}

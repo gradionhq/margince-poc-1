@@ -55,21 +55,23 @@ export function CompanyRow({
         />
       </td>
       <td className="p-gf-sm">
-        <div
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        >
-          <ContextMenu
-            trigger={<IconButton icon="MoreVertical" label="Row actions" />}
-            items={[
-              {
-                id: "archive",
-                label: "Archive",
-                onSelect: () => onArchive?.(org.id),
-              },
-            ]}
-          />
-        </div>
+        <ContextMenu
+          trigger={
+            <IconButton
+              icon="MoreVertical"
+              label="Row actions"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            />
+          }
+          items={[
+            {
+              id: "archive",
+              label: "Archive",
+              onSelect: () => onArchive?.(org.id),
+            },
+          ]}
+        />
       </td>
     </tr>
   );

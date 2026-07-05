@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext } from "@playwright/test";
+import { type APIRequestContext, expect } from "@playwright/test";
 
 const API_URL = process.env.E2E_API_URL ?? "http://localhost:8080";
 
@@ -26,9 +26,14 @@ function uniqueSuffix(prefix: string): string {
     .slice(2, 8)}`;
 }
 
-async function readJson<T>(response: { ok(): boolean; status(): number; text(): Promise<string> }, label: string): Promise<T> {
+async function readJson<T>(
+  response: { ok(): boolean; status(): number; text(): Promise<string> },
+  label: string,
+): Promise<T> {
   const body = await response.text();
-  expect(response.ok(), `${label} failed: ${response.status()} ${body}`).toBe(true);
+  expect(response.ok(), `${label} failed: ${response.status()} ${body}`).toBe(
+    true,
+  );
   return JSON.parse(body) as T;
 }
 
@@ -55,7 +60,10 @@ async function createPerson(
   return readJson<Person>(response, `create person ${fullName}`);
 }
 
-async function archivePerson(request: APIRequestContext, id: string): Promise<Person> {
+async function archivePerson(
+  request: APIRequestContext,
+  id: string,
+): Promise<Person> {
   const response = await request.delete(`${API_URL}/people/${id}`);
   return readJson<Person>(response, `archive person ${id}`);
 }
@@ -92,7 +100,8 @@ async function getDefaultPipelineAndStage(request: APIRequestContext): Promise<{
   const pipelines = await readJson<{
     data: Array<{ id: string; is_default: boolean }>;
   }>(pipelinesResponse, "list pipelines");
-  const pipeline = pipelines.data.find((p) => p.is_default) ?? pipelines.data[0];
+  const pipeline =
+    pipelines.data.find((p) => p.is_default) ?? pipelines.data[0];
   expect(pipeline, "expected a seeded pipeline").toBeTruthy();
 
   const stagesResponse = await request.get(
@@ -129,7 +138,10 @@ async function createDeal(
   return readJson<Deal>(response, `create deal ${name}`);
 }
 
-async function archiveDeal(request: APIRequestContext, id: string): Promise<Deal> {
+async function archiveDeal(
+  request: APIRequestContext,
+  id: string,
+): Promise<Deal> {
   const response = await request.delete(`${API_URL}/deals/${id}`);
   return readJson<Deal>(response, `archive deal ${id}`);
 }
@@ -138,11 +150,7 @@ export async function seedLivePerson(
   request: APIRequestContext,
 ): Promise<Person> {
   const suffix = uniqueSuffix("person");
-  return createPerson(
-    request,
-    `T23 E2E ${suffix}`,
-    `${suffix}@example.test`,
-  );
+  return createPerson(request, `T23 E2E ${suffix}`, `${suffix}@example.test`);
 }
 
 export async function seedArchivedPerson(

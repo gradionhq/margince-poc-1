@@ -7,7 +7,11 @@ import {
 } from "../../../shared/ui/ArchivedBanner.js";
 import { Button, Skeleton } from "../../../shared/ui/forge.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
-import { useArchivePerson, usePerson, useRestorePerson } from "../api/person.js";
+import {
+  useArchivePerson,
+  usePerson,
+  useRestorePerson,
+} from "../api/person.js";
 import { MergePersonDialog } from "../components/MergePersonDialog.js";
 import { PersonHeader } from "../components/PersonHeader.js";
 import { PersonTabs } from "../components/PersonTabs.js";
@@ -132,7 +136,11 @@ export function PersonDetailPage() {
         </div>
         <div className="flex items-center gap-gf-sm">
           {!person.archived_at && (
-            <Button variant="ghost" size="sm" onClick={() => setArchiveOpen(true)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setArchiveOpen(true)}
+            >
               Archive…
             </Button>
           )}

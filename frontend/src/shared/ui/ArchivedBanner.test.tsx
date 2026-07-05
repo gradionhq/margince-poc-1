@@ -69,6 +69,8 @@ describe("ArchivedBanner", () => {
     expect(
       screen.getByRole("link", { name: /already live as a different record/i }),
     ).toHaveAttribute("href", "/people/p-existing-1");
-    expect(screen.queryByRole("button", { name: "Restore" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Restore" }),
+    ).not.toBeInTheDocument();
   });
 });

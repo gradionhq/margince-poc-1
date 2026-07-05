@@ -151,7 +151,9 @@ describe("PersonDetailPage", () => {
     } as unknown as ReturnType<typeof personApi.usePerson>);
     renderAt("p1");
     expect(screen.getByTestId("archived-banner")).toBeInTheDocument();
-    expect(screen.queryByTestId("person-detail-notfound")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("person-detail-notfound"),
+    ).not.toBeInTheDocument();
   });
 
   it("restores an archived contact from the banner", async () => {
@@ -191,14 +193,16 @@ describe("PersonDetailPage", () => {
   it("shows the existing-record pointer on a 409 restore refusal", async () => {
     const { default: userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();
-    const mutate = vi.fn((_vars, options?: { onError?: (error: unknown) => void }) => {
-      options?.onError?.({
-        status: 409,
-        code: "duplicate_email",
-        detail: "A live person already has this email.",
-        details: { existing_id: "p-existing-1" },
-      });
-    });
+    const mutate = vi.fn(
+      (_vars, options?: { onError?: (error: unknown) => void }) => {
+        options?.onError?.({
+          status: 409,
+          code: "duplicate_email",
+          detail: "A live person already has this email.",
+          details: { existing_id: "p-existing-1" },
+        });
+      },
+    );
     mockUseRestorePerson.mockReturnValue({
       mutate,
       isPending: false,
@@ -227,9 +231,7 @@ describe("PersonDetailPage", () => {
     expect(
       screen.getByRole("link", { name: /already live as a different record/i }),
     ).toHaveAttribute("href", "/people/p-existing-1");
-    expect(
-      screen.queryByText(/failed to restore/i),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/failed to restore/i)).not.toBeInTheDocument();
   });
 
   it("shows the Archive button for live contacts and not the archived banner", () => {

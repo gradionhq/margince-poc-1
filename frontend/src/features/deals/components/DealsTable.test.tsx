@@ -92,7 +92,11 @@ describe("DealsTable", () => {
     const user = userEventModule.default.setup();
 
     render(
-      <DealsTable deals={deals} stagesById={{ s1: stage }} onArchive={onArchive} />,
+      <DealsTable
+        deals={deals}
+        stagesById={{ s1: stage }}
+        onArchive={onArchive}
+      />,
     );
 
     await user.click(

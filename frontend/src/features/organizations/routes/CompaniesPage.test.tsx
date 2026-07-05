@@ -4,7 +4,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let mockArchiveMutate = vi.fn(
-  (_vars: void, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.(),
+  (_vars: undefined, opts?: { onSuccess?: () => undefined }) =>
+    opts?.onSuccess?.(),
 );
 
 vi.mock("../api/organizations.js", () => ({
@@ -53,7 +54,8 @@ function renderPage() {
 describe("CompaniesPage", () => {
   beforeEach(() => {
     mockArchiveMutate = vi.fn(
-      (_vars: void, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.(),
+      (_vars: undefined, opts?: { onSuccess?: () => undefined }) =>
+        opts?.onSuccess?.(),
     );
   });
 

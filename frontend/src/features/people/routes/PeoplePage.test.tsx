@@ -181,9 +181,11 @@ describe("PeoplePage toolbar and section label", () => {
     const { default: userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();
     const refetch = vi.fn();
-    const archiveMutate = vi.fn((_vars, options?: { onSuccess?: () => void }) => {
-      options?.onSuccess?.();
-    });
+    const archiveMutate = vi.fn(
+      (_vars, options?: { onSuccess?: () => void }) => {
+        options?.onSuccess?.();
+      },
+    );
 
     mockUsePeople.mockReturnValue({
       data: { data: people, page: { has_more: false } },
@@ -201,7 +203,9 @@ describe("PeoplePage toolbar and section label", () => {
     await user.click(screen.getByRole("button", { name: /row actions/i }));
     await user.click(await screen.findByRole("menuitem", { name: "Archive" }));
 
-    expect(screen.getByText(/alice smith will be removed from the default list/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/alice smith will be removed from the default list/i),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Archive" }));
 

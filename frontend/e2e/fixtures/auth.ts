@@ -1,4 +1,4 @@
-import { type Page, test as base } from "@playwright/test";
+import { test as base, type Page } from "@playwright/test";
 
 const DEFAULT_EMAIL = process.env.E2E_USER_EMAIL ?? "admin@example.com";
 const DEFAULT_PASSWORD = process.env.E2E_USER_PASSWORD ?? "changeme";

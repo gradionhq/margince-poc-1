@@ -13,8 +13,8 @@ import {
   useOrganization,
   useOrgContacts,
   useOrgPartner,
-  useSourcedDeals,
   useRestoreOrganization,
+  useSourcedDeals,
 } from "../api/organizations.js";
 import {
   formatLocation,
@@ -171,7 +171,11 @@ export function CompanyDetailPage() {
         </div>
         <div className="ml-auto flex gap-gf-sm">
           {!org.archived_at && (
-            <Button variant="ghost" size="sm" onClick={() => setArchiveOpen(true)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setArchiveOpen(true)}
+            >
               Archive…
             </Button>
           )}

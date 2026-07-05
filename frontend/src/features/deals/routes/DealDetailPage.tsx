@@ -3,13 +3,16 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { Stage } from "../../../lib/api-client/generated/index.js";
 import { ArchiveConfirmDialog } from "../../../shared/ui/ArchiveConfirmDialog.js";
-import { ArchivedBanner, restoreErrorMessage } from "../../../shared/ui/ArchivedBanner.js";
+import {
+  ArchivedBanner,
+  restoreErrorMessage,
+} from "../../../shared/ui/ArchivedBanner.js";
 import { Button, Skeleton } from "../../../shared/ui/forge.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
 import {
   dealsKeys,
-  useArchiveDeal,
   useAdvanceDeal,
+  useArchiveDeal,
   useDeal,
   useDealActivities,
   useDealHistory,

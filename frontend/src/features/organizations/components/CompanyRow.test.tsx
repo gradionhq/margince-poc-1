@@ -9,14 +9,16 @@ describe("CompanyRow", () => {
       <table>
         <tbody>
           <CompanyRow
-            org={{
-              id: "org1",
-              display_name: "Acme Inc",
-              industry: "Software",
-              contact_count: 4,
-              open_deal_count: 2,
-              org_strength: null,
-            } as never}
+            org={
+              {
+                id: "org1",
+                display_name: "Acme Inc",
+                industry: "Software",
+                contact_count: 4,
+                open_deal_count: 2,
+                org_strength: null,
+              } as never
+            }
             onClick={vi.fn()}
             onArchive={onArchive}
           />

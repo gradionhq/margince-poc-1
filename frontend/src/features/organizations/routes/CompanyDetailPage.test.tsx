@@ -30,11 +30,14 @@ let mockUpdateMutate = vi.fn(
   (_patch: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.(),
 );
 let mockArchiveMutate = vi.fn(
-  (_vars: void, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.(),
+  (_vars: undefined, opts?: { onSuccess?: () => undefined }) =>
+    opts?.onSuccess?.(),
 );
 let mockRestoreMutate = vi.fn(
-  (_vars: void, opts?: { onSuccess?: () => void; onError?: (err: unknown) => void }) =>
-    opts?.onSuccess?.(),
+  (
+    _vars: undefined,
+    opts?: { onSuccess?: () => undefined; onError?: (err: unknown) => void },
+  ) => opts?.onSuccess?.(),
 );
 
 vi.mock("../api/organizations.js", () => ({
@@ -86,12 +89,16 @@ describe("CompanyDetailPage", () => {
         opts?.onSuccess?.(),
     );
     mockArchiveMutate = vi.fn(
-      (_vars: void, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.(),
+      (_vars: undefined, opts?: { onSuccess?: () => undefined }) =>
+        opts?.onSuccess?.(),
     );
     mockRestoreMutate = vi.fn(
       (
-        _vars: void,
-        opts?: { onSuccess?: () => void; onError?: (err: unknown) => void },
+        _vars: undefined,
+        opts?: {
+          onSuccess?: () => undefined;
+          onError?: (err: unknown) => void;
+        },
       ) => opts?.onSuccess?.(),
     );
   });
@@ -189,8 +196,11 @@ describe("CompanyDetailPage", () => {
     mockOrg = { ...baseOrgData, archived_at: "2026-07-05T00:00:00Z" };
     mockRestoreMutate = vi.fn(
       (
-        _vars: void,
-        opts?: { onSuccess?: () => void; onError?: (err: unknown) => void },
+        _vars: undefined,
+        opts?: {
+          onSuccess?: () => undefined;
+          onError?: (err: unknown) => void;
+        },
       ) =>
         opts?.onError?.({
           status: 409,
@@ -212,7 +222,11 @@ describe("CompanyDetailPage", () => {
   it("shows Archive… for a live company and no archived banner", () => {
     mockOrg = { ...baseOrgData, archived_at: null };
     renderPage();
-    expect(screen.getByRole("button", { name: /archive…/i })).toBeInTheDocument();
-    expect(screen.queryByText(/this company is archived/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /archive…/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/this company is archived/i),
+    ).not.toBeInTheDocument();
   });
 });

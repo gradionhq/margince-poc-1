@@ -142,9 +142,11 @@ test.describe("DealDetailPage", () => {
     });
 
     await authedPage.goto("/deals/error-deal");
-    await expect(authedPage.getByText("Failed to load this deal.")).toBeVisible({
-      timeout: 15000,
-    });
+    await expect(authedPage.getByText("Failed to load this deal.")).toBeVisible(
+      {
+        timeout: 15000,
+      },
+    );
   });
 
   test("STATE-4: no live RBAC fixture is available yet, so the page keeps its current chrome", async ({
@@ -152,7 +154,9 @@ test.describe("DealDetailPage", () => {
   }) => {
     const deal = await seedLiveDeal(authedPage.request);
     await authedPage.goto(`/deals/${deal.id}`);
-    await expect(authedPage.getByRole("button", { name: "Archive…" })).toBeVisible();
+    await expect(
+      authedPage.getByRole("button", { name: "Archive…" }),
+    ).toBeVisible();
   });
 
   test("STATE-5: omits PILOT-EXCLUDED panels from the DOM", async ({

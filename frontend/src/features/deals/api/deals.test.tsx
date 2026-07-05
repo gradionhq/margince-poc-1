@@ -25,8 +25,8 @@ import {
   useDefaultPipeline,
   useOpenDealsForOrg,
   usePipelineRollup,
-  useRestoreDeal,
   useRecentActivityCount,
+  useRestoreDeal,
   useStages,
   useUpdateActivity,
 } from "./deals.js";

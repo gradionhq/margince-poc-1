@@ -1,6 +1,5 @@
 import { expect, test } from "./fixtures/auth.js";
 import {
-  seedArchivedDeal,
   seedArchivedOrganization,
   seedArchivedPerson,
   seedLiveDeal,
@@ -30,7 +29,9 @@ test.describe("archive / restore", () => {
 
     await authedPage.goto(`/people/${person.id}`);
     await expect(authedPage.getByTestId("archived-banner")).toBeVisible();
-    await expect(authedPage.getByRole("button", { name: "Restore" })).toBeVisible();
+    await expect(
+      authedPage.getByRole("button", { name: "Restore" }),
+    ).toBeVisible();
 
     await Promise.all([
       authedPage.waitForResponse(
@@ -128,23 +129,26 @@ test.describe("archive / restore", () => {
     const archived = await seedArchivedPerson(authedPage.request);
     const live = await seedLivePerson(authedPage.request);
 
-    await authedPage.route(`**/people/${archived.id}/restore`, async (route) => {
-      await route.fulfill({
-        status: 409,
-        contentType: "application/problem+json",
-        body: JSON.stringify({
-          type: "about:blank",
-          title: "Conflict",
+    await authedPage.route(
+      `**/people/${archived.id}/restore`,
+      async (route) => {
+        await route.fulfill({
           status: 409,
-          code: "duplicate_email",
-          detail: "An active person already owns this email.",
-          details: {
-            existing_id: live.id,
-            field: "emails[0].email",
-          },
-        }),
-      });
-    });
+          contentType: "application/problem+json",
+          body: JSON.stringify({
+            type: "about:blank",
+            title: "Conflict",
+            status: 409,
+            code: "duplicate_email",
+            detail: "An active person already owns this email.",
+            details: {
+              existing_id: live.id,
+              field: "emails[0].email",
+            },
+          }),
+        });
+      },
+    );
 
     await authedPage.goto(`/people/${archived.id}`);
     await authedPage.getByRole("button", { name: "Restore" }).click();

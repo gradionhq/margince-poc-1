@@ -81,21 +81,23 @@ export function DealsTable({
           key: "actions",
           header: "",
           render: (d) => (
-            <div
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
-            >
-              <ContextMenu
-                trigger={<IconButton icon="MoreVertical" label="Row actions" />}
-                items={[
-                  {
-                    id: "archive",
-                    label: "Archive",
-                    onSelect: () => onArchive?.(d.id),
-                  },
-                ]}
-              />
-            </div>
+            <ContextMenu
+              trigger={
+                <IconButton
+                  icon="MoreVertical"
+                  label="Row actions"
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                />
+              }
+              items={[
+                {
+                  id: "archive",
+                  label: "Archive",
+                  onSelect: () => onArchive?.(d.id),
+                },
+              ]}
+            />
           ),
         },
       ]}

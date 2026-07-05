@@ -78,13 +78,16 @@ export function DealCard({
       {...dragHandleProps}
     >
       {onArchive && (
-        <div
-          className="absolute right-gf-xs top-gf-xs"
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        >
+        <div className="absolute right-gf-xs top-gf-xs">
           <ContextMenu
-            trigger={<IconButton icon="MoreVertical" label="Row actions" />}
+            trigger={
+              <IconButton
+                icon="MoreVertical"
+                label="Row actions"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              />
+            }
             items={[
               {
                 id: "archive",

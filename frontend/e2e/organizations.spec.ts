@@ -40,7 +40,9 @@ test.describe("CompaniesPage", () => {
       await route.continue();
     });
 
-    const nav = authedPage.goto("/companies", { waitUntil: "domcontentloaded" });
+    const nav = authedPage.goto("/companies", {
+      waitUntil: "domcontentloaded",
+    });
     await expect(authedPage.getByTestId("company-list-skeleton")).toBeVisible();
     release();
     await nav;
@@ -58,12 +60,16 @@ test.describe("CompaniesPage", () => {
     });
 
     await authedPage.goto("/companies");
-    await expect(authedPage.getByText("Failed to load companies.")).toBeVisible({
-      timeout: 15000,
-    });
-    await expect(authedPage.getByRole("button", { name: "Retry" })).toBeVisible({
-      timeout: 15000,
-    });
+    await expect(authedPage.getByText("Failed to load companies.")).toBeVisible(
+      {
+        timeout: 15000,
+      },
+    );
+    await expect(authedPage.getByRole("button", { name: "Retry" })).toBeVisible(
+      {
+        timeout: 15000,
+      },
+    );
   });
 
   test("STATE-4: read-only users still render the page chrome", async ({
@@ -76,7 +82,9 @@ test.describe("CompaniesPage", () => {
     await page.waitForURL("**/people");
 
     await page.goto("/companies");
-    await expect(page.getByRole("heading", { name: /companies/i })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /companies/i }),
+    ).toBeVisible();
   });
 
   test("STATE-5: omits PILOT-EXCLUDED panels from the DOM", async ({
@@ -102,7 +110,11 @@ test.describe("CompanyDetailPage", () => {
     authedPage,
   }) => {
     await authedPage.route("**/api/organizations/**", async (route) => {
-      if (new URL(route.request().url()).pathname.startsWith("/api/organizations/")) {
+      if (
+        new URL(route.request().url()).pathname.startsWith(
+          "/api/organizations/",
+        )
+      ) {
         await new Promise((resolve) => setTimeout(resolve, 750));
         await route.continue();
         return;
@@ -113,14 +125,20 @@ test.describe("CompanyDetailPage", () => {
     await authedPage.goto("/companies/loading-company", {
       waitUntil: "domcontentloaded",
     });
-    await expect(authedPage.getByTestId("company-detail-skeleton")).toBeVisible();
+    await expect(
+      authedPage.getByTestId("company-detail-skeleton"),
+    ).toBeVisible();
   });
 
   test("STATE-3: renders the error card on backend failure", async ({
     authedPage,
   }) => {
     await authedPage.route("**/api/organizations/**", async (route) => {
-      if (new URL(route.request().url()).pathname.startsWith("/api/organizations/")) {
+      if (
+        new URL(route.request().url()).pathname.startsWith(
+          "/api/organizations/",
+        )
+      ) {
         await route.abort();
         return;
       }
@@ -138,7 +156,9 @@ test.describe("CompanyDetailPage", () => {
   }) => {
     const archived = await seedArchivedOrganization(authedPage.request);
     await authedPage.goto(`/companies/${archived.id}`);
-    await expect(authedPage.getByRole("button", { name: "Edit" })).toBeVisible();
+    await expect(
+      authedPage.getByRole("button", { name: "Edit" }),
+    ).toBeVisible();
   });
 
   test("STATE-5: omits PILOT-EXCLUDED panels from the DOM", async ({

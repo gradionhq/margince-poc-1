@@ -130,21 +130,23 @@ export function PersonList({
       key: "actions",
       header: "",
       render: (p: Person) => (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        >
-          <ContextMenu
-            trigger={<IconButton icon="MoreVertical" label="Row actions" />}
-            items={[
-              {
-                id: "archive",
-                label: "Archive",
-                onSelect: () => onArchive(p.id),
-              },
-            ]}
-          />
-        </div>
+        <ContextMenu
+          trigger={
+            <IconButton
+              icon="MoreVertical"
+              label="Row actions"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            />
+          }
+          items={[
+            {
+              id: "archive",
+              label: "Archive",
+              onSelect: () => onArchive(p.id),
+            },
+          ]}
+        />
       ),
     },
   ] as const;

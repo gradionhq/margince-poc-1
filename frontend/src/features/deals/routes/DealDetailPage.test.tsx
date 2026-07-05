@@ -276,7 +276,9 @@ describe("DealDetailPage", () => {
       screen.getByText(/a live deal already has this name/i),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: /already live as a different record/i }),
+      screen.queryByRole("link", {
+        name: /already live as a different record/i,
+      }),
     ).not.toBeInTheDocument();
   });
 

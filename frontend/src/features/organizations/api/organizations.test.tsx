@@ -20,8 +20,8 @@ import {
   useOrganization,
   useOrgContacts,
   useOrgPartner,
-  useSourcedDeals,
   useRestoreOrganization,
+  useSourcedDeals,
   useUpdateOrganization,
 } from "./organizations.js";
 

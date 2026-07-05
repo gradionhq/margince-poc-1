@@ -61,9 +61,11 @@ test.describe("PeoplePage", () => {
     await expect(authedPage.getByTestId("person-list-error")).toBeVisible({
       timeout: 15000,
     });
-    await expect(authedPage.getByRole("button", { name: "Retry" })).toBeVisible({
-      timeout: 15000,
-    });
+    await expect(authedPage.getByRole("button", { name: "Retry" })).toBeVisible(
+      {
+        timeout: 15000,
+      },
+    );
   });
 
   test("STATE-4: read-only users still render the page chrome and the existing field gate", async ({
@@ -96,7 +98,9 @@ test.describe("PersonDetailPage", () => {
     const archived = await seedArchivedPerson(authedPage.request);
     await authedPage.goto(`/people/${archived.id}`);
     await expect(authedPage.getByTestId("archived-banner")).toBeVisible();
-    await expect(authedPage.getByRole("button", { name: "Restore" })).toBeVisible();
+    await expect(
+      authedPage.getByRole("button", { name: "Restore" }),
+    ).toBeVisible();
   });
 
   test("STATE-2: shows the loading shell before the person resolves", async ({

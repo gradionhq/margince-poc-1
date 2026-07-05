@@ -168,9 +168,12 @@ export function useRestoreOrganization(id: string) {
   const qc = useQueryClient();
   return useMutation<Organization, unknown, void>({
     mutationFn: async () => {
-      const { data, error } = await apiClient.POST("/organizations/{id}/restore", {
-        params: { path: { id } },
-      });
+      const { data, error } = await apiClient.POST(
+        "/organizations/{id}/restore",
+        {
+          params: { path: { id } },
+        },
+      );
       if (error) throw error;
       if (!data) throw new Error("empty response");
       return data;
