@@ -6,7 +6,8 @@ import { Button, FilterDropdown, TextInput } from "../../../shared/ui/forge.js";
 import { RoleBadge } from "../../../shared/ui/RoleBadge.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
 import { useAuthStore } from "../../identity/store/authStore.js";
-import { useArchivePerson, usePeople } from "../api/people.js";
+import { usePeople } from "../api/people.js";
+import { useArchivePerson } from "../api/person.js";
 import { PersonList } from "../components/PersonList.js";
 import { classifySource } from "../components/SourceChip.js";
 

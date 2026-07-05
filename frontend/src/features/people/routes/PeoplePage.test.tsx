@@ -8,16 +8,19 @@ vi.mock("../../identity/store/authStore.js", () => ({
 }));
 vi.mock("../api/people.js", () => ({
   usePeople: vi.fn(),
+}));
+vi.mock("../api/person.js", () => ({
   useArchivePerson: vi.fn(),
 }));
 
 import * as authStore from "../../identity/store/authStore.js";
 import * as peopleApi from "../api/people.js";
+import * as personApi from "../api/person.js";
 import { PeoplePage } from "./PeoplePage.js";
 
 const mockUseAuthStore = vi.mocked(authStore.useAuthStore);
 const mockUsePeople = vi.mocked(peopleApi.usePeople);
-const mockUseArchivePerson = vi.mocked(peopleApi.useArchivePerson);
+const mockUseArchivePerson = vi.mocked(personApi.useArchivePerson);
 
 const fakeUser = {
   id: "u1",
@@ -67,7 +70,7 @@ describe("PeoplePage RBAC", () => {
     mockUseArchivePerson.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
-    } as unknown as ReturnType<typeof peopleApi.useArchivePerson>);
+    } as unknown as ReturnType<typeof personApi.useArchivePerson>);
   });
 
   it("shows captured_by label when role=admin", () => {
@@ -136,7 +139,7 @@ describe("PeoplePage toolbar and section label", () => {
     mockUseArchivePerson.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
-    } as unknown as ReturnType<typeof peopleApi.useArchivePerson>);
+    } as unknown as ReturnType<typeof personApi.useArchivePerson>);
   });
 
   it("renders the section label 'Contacts we actually know'", () => {
@@ -191,7 +194,7 @@ describe("PeoplePage toolbar and section label", () => {
     mockUseArchivePerson.mockReturnValue({
       mutate: archiveMutate,
       isPending: false,
-    } as unknown as ReturnType<typeof peopleApi.useArchivePerson>);
+    } as unknown as ReturnType<typeof personApi.useArchivePerson>);
 
     renderPeoplePage();
 

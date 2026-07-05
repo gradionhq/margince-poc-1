@@ -21,6 +21,7 @@ const baseOrgData = {
   updated_at: "2026-01-01T00:00:00Z",
   source: "manual",
   captured_by: "human:u1",
+  archived_at: null as string | null,
 };
 
 let mockPartner: unknown = null;

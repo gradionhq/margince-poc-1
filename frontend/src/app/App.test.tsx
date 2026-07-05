@@ -26,6 +26,8 @@ vi.mock("../features/people/api/person.js", () => ({
     error: null,
     refetch: vi.fn(),
   }),
+  useArchivePerson: () => ({ mutate: vi.fn(), isPending: false }),
+  useRestorePerson: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock("../features/organizations/api/organizations.js", () => ({
   useOrganizations: () => ({
@@ -34,6 +36,8 @@ vi.mock("../features/organizations/api/organizations.js", () => ({
     isError: false,
     refetch: vi.fn(),
   }),
+  useArchiveOrganization: () => ({ mutate: vi.fn(), isPending: false }),
+  useRestoreOrganization: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 import App from "./App.js";

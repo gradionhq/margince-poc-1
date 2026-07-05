@@ -14,7 +14,7 @@ const dealData = {
   amount_minor: 1000000,
   currency: "USD",
   status: "open",
-  archived_at: null,
+  archived_at: null as string | null,
   pipeline_id: "pipe1",
   stage_id: "s2",
   organization_id: "org1",
