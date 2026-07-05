@@ -114,6 +114,74 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: scripts/check-dco.sh "origin/$BASE_REF" HEAD
 
+  liveuat:
+    name: liveuat
+    needs: [deterministic-gates]
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5  # v5.5.0
+        with:
+          go-version: "1.26"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Enable corepack
+        run: corepack enable
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        run: pnpm --dir frontend exec playwright install --with-deps chromium
+      - name: Start dev infra
+        run: docker compose -f infra/docker-compose.dev.yml up -d
+      - name: Start backend and frontend
+        env:
+          E2E_USER_EMAIL: admin@example.com
+          E2E_USER_PASSWORD: changeme
+        run: |
+          make migrate-up seed-reset run > "$RUNNER_TEMP/backend.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/backend.pid"
+          pnpm --dir frontend dev > "$RUNNER_TEMP/frontend.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/frontend.pid"
+      - name: Wait for backend
+        run: |
+          for _ in $(seq 1 90); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/people || true)
+            if [[ "$code" =~ ^[0-9]{3}$ ]] && [[ "$code" != "000" ]]; then
+              echo "backend ready: $code"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "backend did not become ready" >&2
+          exit 1
+      - name: Wait for frontend
+        run: |
+          for _ in $(seq 1 90); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5173/ || true)
+            if [[ "$code" =~ ^[0-9]{3}$ ]] && [[ "$code" != "000" ]]; then
+              echo "frontend ready: $code"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "frontend did not become ready" >&2
+          exit 1
+      - name: live UAT e2e
+        env:
+          E2E_USER_EMAIL: admin@example.com
+          E2E_USER_PASSWORD: changeme
+        run: pnpm --dir frontend e2e
+      - name: Dump backend log on failure
+        if: failure()
+        run: sed -n '1,240p' "$RUNNER_TEMP/backend.log"
+      - name: Dump frontend log on failure
+        if: failure()
+        run: sed -n '1,240p' "$RUNNER_TEMP/frontend.log"
+
   # The residue gate is deterministic (no model) — it belongs with the structural
   # gates and is merge-blocking, not advisory: a CRAFT-FIX/CRAFT-DISPUTE marker
   # left in the tree fails the merge. This is what makes the markers leak-proof.
