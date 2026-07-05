@@ -1,7 +1,8 @@
 import { useNavigate } from "react-router-dom";
 import type { Person } from "../../../lib/api-client/generated/index.js";
+import { ContextMenu } from "../../../shared/ui/ContextMenu.js";
 import { DataTable } from "../../../shared/ui/DataTable.js";
-import { Avatar, Skeleton } from "../../../shared/ui/forge.js";
+import { Avatar, IconButton, Skeleton } from "../../../shared/ui/forge.js";
 import { SourceChip } from "./SourceChip.js";
 import { StrengthCell } from "./StrengthCell.js";
 
@@ -10,6 +11,7 @@ interface PersonListProps {
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
+  onArchive: (id: string) => void;
 }
 
 function formatLastActivity(iso: string | null | undefined): string {
@@ -29,6 +31,7 @@ export function PersonList({
   isLoading,
   isError,
   onRetry,
+  onArchive,
 }: PersonListProps) {
   const navigate = useNavigate();
 
@@ -121,6 +124,27 @@ export function PersonList({
       header: "Source",
       render: (p: Person) => (
         <SourceChip source={p.source} capturedBy={p.captured_by} />
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      render: (p: Person) => (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <ContextMenu
+            trigger={<IconButton icon="MoreVertical" label="Row actions" />}
+            items={[
+              {
+                id: "archive",
+                label: "Archive",
+                onSelect: () => onArchive(p.id),
+              },
+            ]}
+          />
+        </div>
       ),
     },
   ] as const;
