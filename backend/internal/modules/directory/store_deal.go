@@ -375,10 +375,27 @@ func (s *DealStore) StageSemantic(ctx context.Context, stageID, workspaceID stri
 // Archive soft-deletes a deal (sets archived_at).
 func (s *DealStore) Archive(ctx context.Context, id, workspaceID string) (Deal, error) {
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx,
+		res, err := tx.ExecContext(ctx,
 			`UPDATE deal SET archived_at=now() WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
 			id, workspaceID)
-		return err
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			payload, _ := json.Marshal(map[string]any{colDealID: id})
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload)
+				 VALUES ($1,$2,$3::uuid,$4)`,
+				workspaceID, "deal.archived", id, payload); err != nil {
+				return fmt.Errorf("deal archive event: %w", err)
+			}
+			e := crmaudit.EntryFromPrincipal(ctx, "archive", entityTypeDeal, &id, nil, nil)
+			e.WorkspaceID = workspaceID
+			if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+				return fmt.Errorf("deal archive audit: %w", err)
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return Deal{}, err

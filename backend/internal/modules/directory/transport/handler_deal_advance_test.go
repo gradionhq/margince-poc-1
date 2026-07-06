@@ -15,6 +15,7 @@ type fakeStageSemanticReader struct {
 	deal          directory.Deal
 	semanticByID  map[string]string
 	advanceCalled bool
+	archiveCalled bool
 }
 
 func (f *fakeStageSemanticReader) Get(_ context.Context, _, _ string) (directory.Deal, error) {
@@ -52,6 +53,11 @@ func (f *fakeStageSemanticReader) ListFiltered(_ context.Context, _, _ string, _
 
 func (f *fakeStageSemanticReader) Restore(_ context.Context, _, _ string) (directory.Deal, error) {
 	return directory.Deal{}, nil
+}
+
+func (f *fakeStageSemanticReader) Archive(_ context.Context, _, _ string) (directory.Deal, error) {
+	f.archiveCalled = true
+	return f.deal, nil
 }
 
 func TestDealHandler_Advance_AgentWithoutTokenOnYellowTransition_403(t *testing.T) {

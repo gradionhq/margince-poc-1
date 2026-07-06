@@ -42,6 +42,7 @@ type stageSemanticReader interface {
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (directory.Deal, error)
 	ListFiltered(ctx context.Context, workspaceID, cursor string, limit int, filter directory.DealListFilter) ([]directory.Deal, string, error)
 	Restore(ctx context.Context, id, workspaceID string) (directory.Deal, error)
+	Archive(ctx context.Context, id, workspaceID string) (directory.Deal, error)
 }
 
 type dealStakeholderReader interface {
@@ -80,6 +81,8 @@ func (h *DealHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.create(w, r)
 	case r.Method == http.MethodPatch && id != "":
 		h.update(w, r, id)
+	case r.Method == http.MethodDelete && id != "":
+		h.archive(w, r, id)
 	default:
 		http.NotFound(w, r)
 	}
@@ -219,6 +222,20 @@ func (h *DealHandler) restore(w http.ResponseWriter, r *http.Request, id string)
 		return
 	}
 	jsonOK(w, restored)
+}
+
+func (h *DealHandler) archive(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := workspaceID(r)
+	archived, err := h.store.Archive(r.Context(), id, wsID)
+	if errors.Is(err, errs.ErrNotFound) {
+		jsonProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	jsonOK(w, archived)
 }
 
 //nolint:cyclop // HTTP boundary: each advance error maps to a distinct status code; 16 is 1 over the lint max
