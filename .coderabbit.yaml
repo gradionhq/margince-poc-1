@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit configuration
+# Docs: https://docs.coderabbit.ai/guides/configure-coderabbit
+language: en-US
+
+reviews:
+  # Skip noisy/low-value paths. Leading "!" excludes a glob from review.
+  path_filters:
+    - "!**/*.md"          # all Markdown (README, docs, manual-test notes, etc.)
+    - "!**/*.mdx"
+    - "!docs/**"          # documentation tree
+    - "!workspace/manual-test/**"  # manual test notes
+    - "!**/*.lock"
+    - "!pnpm-lock.yaml"
+  auto_review:
+    enabled: true
+    # Don't auto-review PRs that only touch the excluded paths above.
+    drafts: false
+
+chat:
+  auto_reply: true
