@@ -31,6 +31,49 @@ make fe-dev
 The Vite dev server proxies `/api` to the backend. Open the URL it prints (typically
 `http://localhost:5173`).
 
+## Isolated UAT env (per worktree)
+
+To run a full UAT stack that won't collide with another worktree's — one shared infra,
+a private database per slug, derived host ports:
+
+```
+make uat_env UAT_SLUG=<slug>          # spin: own db crm_uat_<slug> + backend/FE on derived ports
+make uat_env_stop UAT_SLUG=<slug>     # stop (add DROP=1 to also drop the db)
+```
+
+`uat_env` keeps the ONE shared Postgres/Redis/MinIO on their default ports, but gives the
+slug its own database `crm_uat_<slug>` (created, migrated, seeded like the dev workspace)
+and derives the backend + Vite ports deterministically from the slug — so two worktrees
+can run live UAT at once without clashing on data or ports. The FE's `/api` proxy follows
+its backend via `BACKEND_PORT`. All logs stream to one file and the ready banner prints the
+paths:
+
+```
+UAT env 'smoke' ready
+  backend  http://localhost:8722
+  frontend http://localhost:5815
+  logs     .tmp/uat/smoke/uat.log
+  stop     make uat_env_stop UAT_SLUG=smoke
+```
+
+The swarm's UAT runner passes only `UAT_SLUG` (derived from the worktree). This replaces the
+factory's old `swarm uat env` / `COMPOSE_PROJECT_NAME` approach.
+
+## Fast fe-only UAT: component capture
+
+For a frontend-only change, `make fe-uat` renders just the *changed* component's Storybook
+stories in a headless Chromium and screenshots them — no live stack, no DB:
+
+```
+make fe-uat                 # scoped to the branch diff; artifact: .tmp/fe-uat/manifest.json
+make fe-uat ARGS="--build"  # force a fresh static Storybook build first
+```
+
+It **fails** if a story does not render clean (thrown error, console error, or empty root),
+and if a changed component has no story at all (the swarm then has `react-dev` author one).
+It is not wired into `make check` — it is the fe-only UAT lane the coordinator runs instead
+of booting the full stack.
+
 ## Log in
 
 The dev seed (`backend/seed/dev.sql`) creates four users in the same dev workspace, all
@@ -93,6 +136,11 @@ audit-coherence, RLS store-path) → doc-style/craft-doc/image-pins → Go test 
 frontend static checks → Go tests → frontend tests. It must be green before anything
 merges. `make help` lists every target; `make tools` bootstraps the lint/codegen
 binaries a fresh machine needs.
+
+`make check` splits into `make check-backend` (format → lint → invariants → Go tests) and
+`make check-fe` (frontend static + tests) — CI runs these as two parallel jobs
+(`backend-gates`, `fe-gates`), so the full local gate suite is now enforced in CI with no
+gap for a local-only gate to slip through.
 
 ## Docs
 
