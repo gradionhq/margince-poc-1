@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	_ "github.com/lib/pq"
 	"gopkg.in/yaml.v3"
 )
 
@@ -98,14 +97,14 @@ func concretePath(p string) string {
 	return strings.Join(parts, "/")
 }
 
-// buildTestMux builds the real route mux with an unconnected DB handle.
+// buildTestMux builds the real route mux with a nil DB handle. This is safe:
+// route *registration* only stores the *sql.DB on the stores/middleware; the
+// handle is dereferenced solely inside request handlers (e.g. RbacMiddleware's
+// LoadRolePermissions), which mux.Handler resolves without executing. Using nil
+// (rather than sql.Open) also keeps this in the unit lane — no real-infra open.
 func buildTestMux(t *testing.T) *http.ServeMux {
 	t.Helper()
-	db, err := sql.Open("postgres", "") // lib/pq: lazy — never connects until a query runs
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	var db *sql.DB
 	return buildMux(context.Background(), db, Config{}, nil)
 }
 
