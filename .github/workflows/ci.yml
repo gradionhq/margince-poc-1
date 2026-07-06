@@ -18,11 +18,31 @@ on:
 # are green, via `needs`. Gate ordering is the deterministic gates -> craftsmanship
 # -> human acceptance (foundation architecture/16). See docs/quality/craftsmanship.md.
 #
-# Path filtering: the `changes` job classifies the diff so expensive jobs only run
-# when files they actually validate change — on push to main AND on PRs alike. A
-# docs-only change runs only dco + craft-residue; a CLI/Go-only change skips the
-# live UAT e2e; backend/frontend/infra changes run the full suite. craft-residue
-# always runs so a leaked CRAFT marker in any file (incl. docs) fails the merge.
+# Path filtering: the `changes` job classifies the diff (via dorny/paths-filter)
+# into two outputs, and every job below gates on them — on push to main AND on PRs
+# alike. This is what stops, e.g., a docs- or yaml-only change from running the
+# 60-minute live UAT e2e.
+#
+#   code = any changed file that is NOT purely docs
+#          (everything except **/*.md, docs/**, LICENSE)
+#   e2e  = a change that can affect the end-to-end run
+#          (backend/**, frontend/**, infra/**, and the JS/pnpm/biome manifests)
+#
+# Trigger rules per job (all also require: push to main, OR a non-draft PR):
+#
+#   Job                  Runs when            Skipped for
+#   ------------------   ------------------   ---------------------------------
+#   changes              always               draft PRs
+#   deterministic-gates  code == true         docs-only changes
+#   craftsmanship        code == true         docs-only changes
+#   liveuat (e2e)        e2e  == true         docs-only, CLI/Go-only, yaml-only
+#   craft-residue        always (any change)  — (stays leak-proof; catches a
+#                                               CRAFT marker left in ANY file)
+#   dco                  PRs only             pushes to main (empty commit range)
+#
+# Note: liveuat does NOT run on a change to this workflow file — .github/** is not
+# in the `e2e` set. If you edit the liveuat job's steps, trigger a run manually
+# (workflow_dispatch) or push alongside a backend/frontend/infra change to verify.
 jobs:
   changes:
     name: changes
