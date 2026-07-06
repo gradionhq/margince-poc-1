@@ -3,8 +3,10 @@
 # database crm_uat_<slug> plus deterministic app/FE ports derived from the slug,
 # so two worktrees can run a live UAT stack concurrently without colliding on
 # the database or the host ports. All logs go to a single file; a state file
-# records the PIDs + ports so `stop` can tear it down (killing by port too,
-# since `go run` spawns a grandchild that outlives its parent).
+# records the PIDs + ports so `stop` can tear it down. The backend runs as a
+# direct ./bin/server (killable by PID); the FE runs via pnpm (whose vite child
+# outlives a bare `kill $pnpm_pid`), so `stop` also frees the recorded ports by
+# listener as a backstop.
 #
 #   scripts/uat-env.sh up   <slug>            # spin infra + db + backend + FE
 #   scripts/uat-env.sh stop <slug> [--drop]   # stop servers; --drop also drops the db
@@ -18,6 +20,12 @@ for a in "$@"; do [ "$a" = "--drop" ] && drop=1; done
 
 if [ -z "$slug" ]; then
   echo "FAIL: uat_env requires UAT_SLUG=<slug>" >&2
+  exit 1
+fi
+# The slug flows into a filesystem path and a CREATE DATABASE identifier — keep it
+# to a safe charset so it can neither traverse paths nor break/inject SQL.
+if ! [[ "$slug" =~ ^[a-z0-9_-]+$ ]]; then
+  echo "FAIL: UAT_SLUG must match ^[a-z0-9_-]+$ (got '$slug')" >&2
   exit 1
 fi
 
@@ -48,6 +56,13 @@ wait_ready() { # url timeout_s — any HTTP response (even 401) means the port i
 
 case "$cmd" in
 up)
+  # Refuse if the derived port is already bound — otherwise a second `up` for a
+  # still-running slug would fail to bind silently and wait_ready would get a
+  # false "ready" from the OLD server. Stop it first.
+  if lsof -ti "tcp:${port}" >/dev/null 2>&1; then
+    echo "FAIL: backend port :${port} already in use — is env '$slug' already running? (make uat_env_stop UAT_SLUG=$slug)" >&2
+    exit 1
+  fi
   mkdir -p "$rundir"
   : > "$log"
   echo "uat_env '$slug' → db=$db backend=:$port fe=:$fe_port (logs: $log)"
@@ -61,7 +76,7 @@ up)
     PGPASSWORD=margince psql -h localhost -U margince -d "$db" \
       -v ON_ERROR_STOP=1 -f backend/seed/reset.sql
     PGPASSWORD=margince psql -h localhost -U margince -d "$db" \
-      -f backend/seed/dev.sql
+      -v ON_ERROR_STOP=1 -f backend/seed/dev.sql
     echo "=== build server (once, before the readiness poll) ==="
     make build
     echo "=== servers ==="
@@ -99,16 +114,19 @@ stop)
     # shellcheck disable=SC1090
     . "$state"
     kill "${BACKEND_PID:-}" "${FE_PID:-}" 2>/dev/null || true
-    # go run spawns a compiled grandchild; free the ports by listener too.
+    # Backstop: free the recorded ports by listener (reaps vite, pnpm's child).
     for p in "${PORT:-}" "${FE_PORT:-}"; do
-      [ -n "$p" ] && lsof -ti "tcp:${p}" 2>/dev/null | xargs -r kill 2>/dev/null || true
+      [ -n "$p" ] || continue
+      pids=$(lsof -ti "tcp:${p}" 2>/dev/null || true)
+      [ -n "$pids" ] && kill $pids 2>/dev/null || true
     done
     rm -rf "$rundir"
     echo "stopped uat_env '$slug' (freed :${PORT:-?} :${FE_PORT:-?})"
   else
     # No state file — best-effort free the derived ports anyway.
     for p in "$port" "$fe_port"; do
-      lsof -ti "tcp:${p}" 2>/dev/null | xargs -r kill 2>/dev/null || true
+      pids=$(lsof -ti "tcp:${p}" 2>/dev/null || true)
+      [ -n "$pids" ] && kill $pids 2>/dev/null || true
     done
     echo "no recorded env for '$slug' (freed derived ports :$port :$fe_port if bound)"
   fi
