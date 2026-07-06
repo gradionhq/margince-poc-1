@@ -14,7 +14,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
-func createArchivableTestDeal(t *testing.T, ctx context.Context, dealStore *crmcore.DealStore, pipelineID, stageID, name string) crmcore.Deal {
+func createArchivableTestDeal(ctx context.Context, t *testing.T, dealStore *crmcore.DealStore, pipelineID, stageID, name string) crmcore.Deal {
 	t.Helper()
 	d := crmcore.NewDeal(name, pipelineID, stageID, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	d.WorkspaceID = dealTestWorkspaceID
@@ -31,7 +31,7 @@ func TestDealHandler_Archive_HappyPath200(t *testing.T) {
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: dealTestWorkspaceID, UserID: "human:test"})
 	dealStore := crmcore.NewDealStore(db)
 
-	d := createArchivableTestDeal(t, ctx, dealStore, pipelineID, stageID, "Handler Archivable Deal")
+	d := createArchivableTestDeal(ctx, t, dealStore, pipelineID, stageID, "Handler Archivable Deal")
 
 	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
 	req := httptest.NewRequest(http.MethodDelete, "/deals/"+d.ID, nil)
@@ -79,7 +79,7 @@ func TestDealHandler_Archive_WrongWorkspaceReturns404(t *testing.T) {
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: dealTestWorkspaceID, UserID: "human:test"})
 	dealStore := crmcore.NewDealStore(db)
 
-	d := createArchivableTestDeal(t, ctx, dealStore, pipelineID, stageID, "Wrong Workspace Deal")
+	d := createArchivableTestDeal(ctx, t, dealStore, pipelineID, stageID, "Wrong Workspace Deal")
 
 	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
 	// Send request with a different workspace ID
@@ -99,7 +99,7 @@ func TestDealHandler_Archive_ArchivedDealExcludedFromList(t *testing.T) {
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: dealTestWorkspaceID, UserID: "human:test"})
 	dealStore := crmcore.NewDealStore(db)
 
-	d := createArchivableTestDeal(t, ctx, dealStore, pipelineID, stageID, "Archivable for List")
+	d := createArchivableTestDeal(ctx, t, dealStore, pipelineID, stageID, "Archivable for List")
 
 	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
 

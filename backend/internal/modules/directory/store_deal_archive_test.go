@@ -62,7 +62,7 @@ func seedDealArchiveFixtures(t *testing.T, db *sql.DB) (pipelineID, stageID stri
 	return pipelineID, stageID
 }
 
-func createArchivableDeal(t *testing.T, ctx context.Context, store *crmcore.DealStore, pipelineID, stageID, name string) crmcore.Deal {
+func createArchivableDeal(ctx context.Context, t *testing.T, store *crmcore.DealStore, pipelineID, stageID, name string) crmcore.Deal {
 	t.Helper()
 	d := crmcore.NewDeal(name, pipelineID, stageID, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	d.WorkspaceID = dealArchiveWS
@@ -79,7 +79,7 @@ func TestDealStore_Archive_WritesEventAndAudit(t *testing.T) {
 	ctx := context.Background()
 	store := crmcore.NewDealStore(db)
 
-	d := createArchivableDeal(t, ctx, store, pipelineID, stageID, "Archivable Deal")
+	d := createArchivableDeal(ctx, t, store, pipelineID, stageID, "Archivable Deal")
 
 	archived, err := store.Archive(ctx, d.ID, dealArchiveWS)
 	if err != nil {
@@ -129,7 +129,7 @@ func TestDealStore_Archive_AlreadyArchivedIsIdempotent(t *testing.T) {
 	ctx := context.Background()
 	store := crmcore.NewDealStore(db)
 
-	d := createArchivableDeal(t, ctx, store, pipelineID, stageID, "Idempotent Deal")
+	d := createArchivableDeal(ctx, t, store, pipelineID, stageID, "Idempotent Deal")
 
 	// Archive once
 	_, err := store.Archive(ctx, d.ID, dealArchiveWS)
