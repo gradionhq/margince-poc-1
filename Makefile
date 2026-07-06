@@ -9,7 +9,8 @@ PSQL     := $(if $(shell command -v psql),PGPASSWORD=margince psql -h localhost 
 PSQL_ADMIN := $(if $(shell command -v psql),PGPASSWORD=margince psql -h localhost -U margince -d postgres,docker exec -i -e PGPASSWORD=margince infra-postgres-1 psql -U margince -d postgres)
 GOFILES := $(shell find backend crm-de cli -name "*.go" 2>/dev/null)
 GO_COVER_MIN := 0
-COMPOSE := docker compose -f infra/docker-compose.dev.yml
+DOCKER_COMPOSE := $(if $(shell docker compose version >/dev/null 2>&1 && echo yes),docker compose,docker-compose)
+COMPOSE := $(DOCKER_COMPOSE) -f infra/docker-compose.dev.yml
 DATABASE_URL ?= postgres://margince:margince@localhost:5432/margince?sslmode=disable
 TEST_DATABASE_URL ?= postgres://margince:margince@localhost:5432/margince_test?sslmode=disable
 REDIS_URL ?= redis://localhost:6379
