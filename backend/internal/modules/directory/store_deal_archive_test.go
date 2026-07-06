@@ -73,6 +73,30 @@ func createArchivableDeal(ctx context.Context, t *testing.T, store *crmcore.Deal
 	return d
 }
 
+func assertDealArchiveEventAndAudit(t *testing.T, db *sql.DB, dealID string, wantCount int) {
+	t.Helper()
+	var eventCount int
+	if err := db.QueryRow(
+		`SELECT count(*) FROM event_outbox WHERE topic='deal.archived' AND entity_id=$1::uuid`,
+		dealID,
+	).Scan(&eventCount); err != nil {
+		t.Fatalf("count event_outbox: %v", err)
+	}
+	if eventCount != wantCount {
+		t.Fatalf("want %d deal.archived outbox row(s), got %d", wantCount, eventCount)
+	}
+	var auditCount int
+	if err := db.QueryRow(
+		`SELECT count(*) FROM audit_log WHERE entity_type='deal' AND entity_id=$1::uuid AND action='archive'`,
+		dealID,
+	).Scan(&auditCount); err != nil {
+		t.Fatalf("count audit_log: %v", err)
+	}
+	if auditCount != wantCount {
+		t.Fatalf("want %d audit_log archive row(s), got %d", wantCount, auditCount)
+	}
+}
+
 func TestDealStore_Archive_WritesEventAndAudit(t *testing.T) {
 	db := openDealArchiveTestDB(t)
 	pipelineID, stageID := seedDealArchiveFixtures(t, db)
@@ -89,26 +113,7 @@ func TestDealStore_Archive_WritesEventAndAudit(t *testing.T) {
 		t.Fatalf("want archived_at set after archive, got nil")
 	}
 
-	var eventCount int
-	if err := db.QueryRow(
-		`SELECT count(*) FROM event_outbox WHERE topic='deal.archived' AND entity_id=$1::uuid`,
-		d.ID,
-	).Scan(&eventCount); err != nil {
-		t.Fatalf("count event_outbox: %v", err)
-	}
-	if eventCount != 1 {
-		t.Fatalf("want 1 deal.archived outbox row, got %d", eventCount)
-	}
-	var auditCount int
-	if err := db.QueryRow(
-		`SELECT count(*) FROM audit_log WHERE entity_type='deal' AND entity_id=$1::uuid AND action='archive'`,
-		d.ID,
-	).Scan(&auditCount); err != nil {
-		t.Fatalf("count audit_log: %v", err)
-	}
-	if auditCount != 1 {
-		t.Fatalf("want 1 audit_log archive row, got %d", auditCount)
-	}
+	assertDealArchiveEventAndAudit(t, db, d.ID, 1)
 }
 
 func TestDealStore_Archive_NonExistentReturnsNotFound(t *testing.T) {
@@ -144,24 +149,5 @@ func TestDealStore_Archive_AlreadyArchivedIsIdempotent(t *testing.T) {
 	}
 
 	// Verify only one event and one audit row were written (not two)
-	var eventCount int
-	if err := db.QueryRow(
-		`SELECT count(*) FROM event_outbox WHERE topic='deal.archived' AND entity_id=$1::uuid`,
-		d.ID,
-	).Scan(&eventCount); err != nil {
-		t.Fatalf("count event_outbox: %v", err)
-	}
-	if eventCount != 1 {
-		t.Fatalf("want 1 deal.archived outbox row after idempotent archive, got %d", eventCount)
-	}
-	var auditCount int
-	if err := db.QueryRow(
-		`SELECT count(*) FROM audit_log WHERE entity_type='deal' AND entity_id=$1::uuid AND action='archive'`,
-		d.ID,
-	).Scan(&auditCount); err != nil {
-		t.Fatalf("count audit_log: %v", err)
-	}
-	if auditCount != 1 {
-		t.Fatalf("want 1 audit_log archive row after idempotent archive, got %d", auditCount)
-	}
+	assertDealArchiveEventAndAudit(t, db, d.ID, 1)
 }
