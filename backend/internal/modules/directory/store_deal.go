@@ -381,8 +381,12 @@ func (s *DealStore) Archive(ctx context.Context, id, workspaceID string) (Deal, 
 		if err != nil {
 			return err
 		}
-		if n, _ := res.RowsAffected(); n > 0 {
-			payload, _ := json.Marshal(map[string]any{colDealID: id})
+		n, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("deal archive rows affected: %w", err)
+		}
+		if n > 0 {
+			payload, _ := json.Marshal(map[string]string{colDealID: id})
 			if _, err := tx.ExecContext(ctx,
 				`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload)
 				 VALUES ($1,$2,$3::uuid,$4)`,
