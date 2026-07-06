@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	// Registers the postgres driver so sql.Open("postgres", ...) in openDealArchiveTestDB resolves; only the driver's side-effecting init() is used.
 	_ "github.com/lib/pq"
 
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
