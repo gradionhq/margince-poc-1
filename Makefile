@@ -225,6 +225,8 @@ storybook: ## Start Storybook dev server
 	@pnpm --filter @gradion/crm-web exec storybook dev --port 6006
 ui-shots: ## Capture each story to frontend/.shots/*.png for visual review (opt-in, not a gate). Optional: ID=<substr>
 	@if [ -d node_modules ]; then node frontend/scripts/capture-stories.mjs $(ID) ; else echo "skip ui-shots: run make fe-install first"; fi
+fe-uat: ## Change-scoped Storybook render+capture UAT lane for fe-only diffs (no live stack). Artifact: .tmp/fe-uat/manifest.json. Optional: ARGS="--build --allow-missing"
+	@if [ -d node_modules ]; then node frontend/scripts/fe-uat.mjs $(ARGS) ; else echo "FAIL: run make fe-install first"; exit 1; fi
 fe-test: ## Run frontend unit + storybook component tests
 	@if [ -d node_modules ]; then \
 	  pnpm --filter @gradion/crm-web exec vitest run --project unit && \
