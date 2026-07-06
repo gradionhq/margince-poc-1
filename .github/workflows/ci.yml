@@ -92,7 +92,7 @@ jobs:
   craftsmanship:
     name: craftsmanship
     # Gate ordering: craftsmanship runs only after the deterministic gates are green.
-    needs: [changes, deterministic-gates]
+    needs: [deterministic-gates, changes]
     if: github.event_name == 'push' || (github.event.pull_request.draft == false && needs.changes.outputs.code == 'true')
     runs-on: ubuntu-latest
     # Advisory until the golden set calibrates BLOCK precision (B-EP11.6); flipped
@@ -155,7 +155,7 @@ jobs:
 
   liveuat:
     name: liveuat
-    needs: [changes, deterministic-gates]
+    needs: [deterministic-gates, changes]
     # Expensive end-to-end run: only fire when files that can affect it change
     # (backend/frontend/infra/this workflow). Docs-only and CLI/Go-only PRs skip it.
     if: github.event_name == 'push' || (github.event.pull_request.draft == false && needs.changes.outputs.e2e == 'true')
