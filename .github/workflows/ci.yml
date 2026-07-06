@@ -1,11 +1,11 @@
 name: CI
 
-# CI runs the gate suite on every push to main and on pull requests. Draft PRs are
-# skipped per-job: the dark-factory swarm pushes many WIP commits to a draft PR during
-# implementation, and running the suite on each is waste. Marking a PR ready
-# (`ready_for_review`) fires the full suite once on the final state, and every fix
-# pushed while ready re-runs it until green. Push events to main carry no PR context
-# (`draft` is null), so the per-job guard falls through to true and main is always checked.
+# CI runs the gate suite on pushes to main and on pull requests, filtered by which
+# files changed (see the path-filtering note below). Draft PRs are skipped per-job:
+# the dark-factory swarm pushes many WIP commits to a draft PR during implementation,
+# and running the suite on each is waste. Marking a PR ready (`ready_for_review`)
+# fires the applicable jobs once on the final state, and every fix pushed while ready
+# re-runs them until green.
 on:
   push:
     branches: [main]
@@ -19,11 +19,10 @@ on:
 # -> human acceptance (foundation architecture/16). See docs/quality/craftsmanship.md.
 #
 # Path filtering: the `changes` job classifies the diff so expensive jobs only run
-# when files they actually validate change. On push to main every job runs (the
-# `push` branch of each job's `if` short-circuits before the path outputs are read),
-# so main is always fully checked. On PRs the per-category outputs gate each job:
-# a docs-only PR runs only dco + craft-residue; a CLI/Go-only change skips the live
-# UAT e2e; backend/frontend/infra changes run the full suite.
+# when files they actually validate change — on push to main AND on PRs alike. A
+# docs-only change runs only dco + craft-residue; a CLI/Go-only change skips the
+# live UAT e2e; backend/frontend/infra changes run the full suite. craft-residue
+# always runs so a leaked CRAFT marker in any file (incl. docs) fails the merge.
 jobs:
   changes:
     name: changes
@@ -53,14 +52,13 @@ jobs:
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
               - 'biome.json'
-              - '.github/workflows/ci.yml'
 
   deterministic-gates:
     name: deterministic-gates
     needs: [changes]
-    # Skip draft PRs; skip docs-only PRs (no code changed). Push to main and
-    # ready-for-review PRs that touch code run the full suite.
-    if: github.event_name == 'push' || (github.event.pull_request.draft == false && needs.changes.outputs.code == 'true')
+    # Run only when non-docs files change — on push to main and on ready PRs.
+    # Docs-only changes skip the Go gates; draft PRs are skipped entirely.
+    if: needs.changes.outputs.code == 'true' && (github.event_name == 'push' || github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
@@ -93,7 +91,7 @@ jobs:
     name: craftsmanship
     # Gate ordering: craftsmanship runs only after the deterministic gates are green.
     needs: [deterministic-gates, changes]
-    if: github.event_name == 'push' || (github.event.pull_request.draft == false && needs.changes.outputs.code == 'true')
+    if: needs.changes.outputs.code == 'true' && (github.event_name == 'push' || github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
     # Advisory until the golden set calibrates BLOCK precision (B-EP11.6); flipped
     # to a required, no-override check in Phase 4. `continue-on-error` keeps it
@@ -157,8 +155,9 @@ jobs:
     name: liveuat
     needs: [deterministic-gates, changes]
     # Expensive end-to-end run: only fire when files that can affect it change
-    # (backend/frontend/infra/this workflow). Docs-only and CLI/Go-only PRs skip it.
-    if: github.event_name == 'push' || (github.event.pull_request.draft == false && needs.changes.outputs.e2e == 'true')
+    # (backend/frontend/infra) — on push to main and on PRs alike. Docs-only,
+    # CLI/Go-only, and workflow-only changes skip it.
+    if: needs.changes.outputs.e2e == 'true' && (github.event_name == 'push' || github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
