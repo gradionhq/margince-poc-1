@@ -41,7 +41,7 @@ are re-exercised through the UI in the Pipelines & Deals section below).
    **Expected:** each logs in and lands on Home; the nav rail renders People, Companies, Leads,
    Deals, Tasks, Inbox, Reports, Ask AI, Settings, and (admin only) Members.
 4. The dev seed loads three people (Alice Müller, Bob Schmidt, Carol Wagner) and a pipeline with
-   8 deals against one organization (Acme Corp) — the Deals section below has real data
+   8 deals (several linked to a seeded organization, Acme Corp) — the Deals section below has real data
    out of the box. **The base seed does NOT include organizations, employment relationships, or
    activities for the three people** — without those, every person/org strength card reads "no
    signal yet" and Company 360's people/org-strength cards have nothing to show. Load the People &
@@ -198,7 +198,7 @@ are re-exercised through the UI in the Pipelines & Deals section below).
 
 ### Company 360 (T20)
 
-11. The base seed already has a different "Acme Corp" row with no linked contacts (5 deals,
+11. The base seed already has a different "Acme Corp" row with no linked contacts (4 deals,
     `org_strength: null`) — Setup step 4 mints a **second** "Acme Corp" row for Alice/Bob. On the
     Companies list, open the "Acme Corp" row whose person shows "Engineer @ Acme Corp" (Alice's
     seeded title) — that's the one with fixtures. Check its **org-strength card**. **Expected:**
