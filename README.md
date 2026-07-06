@@ -49,11 +49,24 @@ the People screen has real data to render.
 ## What to expect once you're in
 
 Log in, then click through the rail: every route renders (Home, People, Companies,
-Leads, Deals, Tasks, Inbox, Reports, Ask AI, Settings, and Members for admins) — the
-ones without a real feature yet show a placeholder page, not a dead link or a 404.
-`/people` is the one real vertical slice: it loads, lists, and lets you inspect Alice,
-Bob, and Carol end to end (API → contract types → hook → list → card), with real
-loading/empty/error states.
+Leads, Deals, Tasks, Inbox, Reports, Ask AI, Settings, and Members for admins). Epic 01
+(T01–T23) shipped real, working screens for the CRM core:
+
+- **People** and **Companies** — sortable, paginated lists with relationship-strength
+  cells, dedupe/merge on create, and a strength-scoring engine (no user-editable
+  "strength" field — it's always computed and traceable).
+- **Person 360** and **Company 360** — full record views: strength card + evidence
+  drawer, linked deals, stakeholders, and (on companies) a partner panel.
+- **Deals** — a pipeline board and table (drag-to-advance with 🟡 approval gating on
+  sensitive transitions), a weighted pipeline roll-up, a stalled-deal flag, partner
+  registration, and a deal 360 with stepper/stakeholders/history.
+- **Archive/restore** on all six screens above, plus the STATE-1..5 honest-states floor
+  (empty/loading/error/no-permission/nothing-grounded) audited across every one of them.
+
+The remaining rail items (Leads, Tasks, Inbox, Reports, Ask AI) are still placeholders —
+they render, but carry no feature yet, same as day zero. See
+[`docs/manual-guide/epic01/README.md`](docs/manual-guide/epic01/README.md) for a full
+manual-test walkthrough of everything above.
 
 ## Verify it boots without clicking anything
 
@@ -83,9 +96,11 @@ binaries a fresh machine needs.
 
 ## Docs
 
-There is no `docs/` content in this skeleton yet — `skeleton/docs/` exists only as an
-empty scaffold (`subsystems/.gitkeep`). The full spec (product, architecture,
-subsystems, quality, recipes, decisions, glossary — see the design doc §3.2) is
-**Phase 2** work, authored once the skeleton itself is settled. `AGENTS.md` carries the
-one section (`## Craftsmanship`) that a deterministic gate already depends on; nothing
-else has landed.
+`docs/` is populated: [`docs/README.md`](docs/README.md) is the entry point into the
+full spec — product, architecture, subsystems, quality, recipes, and decision records.
+Start there for how the spec is organized and how to read it; `AGENTS.md` still carries
+the one `## Craftsmanship` section a deterministic gate depends on directly.
+
+For hands-on verification of what's shipped so far, see
+[`docs/manual-guide/epic01/README.md`](docs/manual-guide/epic01/README.md) — an ordered,
+click-through manual-test guide covering Epic 01 (T01–T23).
