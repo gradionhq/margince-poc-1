@@ -49,7 +49,7 @@ func TestDealHandler_Archive_HappyPath200(t *testing.T) {
 
 func TestDealHandler_Archive_NonExistentReturns404(t *testing.T) {
 	db := openDealTestDB(t)
-	_ = seedDealFixtures(t, db, "archive-404")
+	_, _, _ = seedDealFixtures(t, db, "archive-404")
 	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
 
 	req := httptest.NewRequest(http.MethodDelete, "/deals/00000000-0000-0000-0000-000000000099", nil)

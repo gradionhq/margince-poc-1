@@ -108,7 +108,7 @@ func TestDealStore_Archive_WritesEventAndAudit(t *testing.T) {
 
 func TestDealStore_Archive_NonExistentReturnsNotFound(t *testing.T) {
 	db := openDealArchiveTestDB(t)
-	_ = seedDealArchiveFixtures(t, db)
+	_, _ = seedDealArchiveFixtures(t, db)
 	ctx := context.Background()
 	store := crmcore.NewDealStore(db)
 
