@@ -9,6 +9,7 @@ import (
 
 	crmauth "github.com/gradionhq/margince/backend/internal/modules/identity"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
+	platformauth "github.com/gradionhq/margince/backend/internal/platform/auth"
 	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	"github.com/gradionhq/margince/backend/internal/platform/httpserver"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
@@ -56,9 +57,9 @@ type assignRoleBody struct {
 // 403 without the permission. Composes in cmd/api/routes.go as
 // workspaceWrap(RequireManageMembers(db, handler)).
 func RequireManageMembers(db *sql.DB, next http.Handler) http.Handler {
-	return httpserver.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		p, _ := crmctx.From(r.Context()) // guaranteed by httpserver.RequireAuth above
-		perms, err := httpserver.LoadRolePermissions(r.Context(), db, p.TenantID, p.UserID)
+	return platformauth.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p, _ := crmctx.From(r.Context()) // guaranteed by platformauth.RequireAuth above
+		perms, err := platformauth.LoadRolePermissions(r.Context(), db, p.TenantID, p.UserID)
 		if err != nil {
 			httpserver.WriteInternal(w)
 			return

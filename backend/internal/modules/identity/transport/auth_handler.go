@@ -18,6 +18,7 @@ import (
 	_ "github.com/lib/pq" // postgres driver registration, carried over unchanged from this file's original cmd/api/auth_handler.go (poc)
 
 	crmauth "github.com/gradionhq/margince/backend/internal/modules/identity"
+	platformauth "github.com/gradionhq/margince/backend/internal/platform/auth"
 	"github.com/gradionhq/margince/backend/internal/platform/httpserver"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
@@ -77,19 +78,19 @@ var adminPermissionsJSON = func() string {
 		}
 		return m
 	}
-	crua := []string{httpserver.ActionRead, httpserver.ActionCreate, httpserver.ActionUpdate, httpserver.ActionArchive}
+	crua := []string{platformauth.ActionRead, platformauth.ActionCreate, platformauth.ActionUpdate, platformauth.ActionArchive}
 	perms := map[string]any{
-		httpserver.ObjPerson: all(crua...),
-		"organization":       all(crua...),
-		"deal":               all(crua...),
-		"pipeline":           all(crua...),
-		"activity":           all(crua...),
-		"lead":               all(crua...),
-		"report":             all(httpserver.ActionRead),
-		"passport":           all(httpserver.ActionRead, httpserver.ActionCreate, httpserver.ActionArchive),
-		"approval":           all(httpserver.ActionRead, "decide"),
-		"workspace":          map[string]any{"manage_members": map[string]any{"row_scope": "all"}},
-		"record_grant":       all(httpserver.ActionRead, httpserver.ActionCreate, httpserver.ActionArchive),
+		platformauth.ObjPerson: all(crua...),
+		"organization":         all(crua...),
+		"deal":                 all(crua...),
+		"pipeline":             all(crua...),
+		"activity":             all(crua...),
+		"lead":                 all(crua...),
+		"report":               all(platformauth.ActionRead),
+		"passport":             all(platformauth.ActionRead, platformauth.ActionCreate, platformauth.ActionArchive),
+		"approval":             all(platformauth.ActionRead, "decide"),
+		"workspace":            map[string]any{"manage_members": map[string]any{"row_scope": "all"}},
+		"record_grant":         all(platformauth.ActionRead, platformauth.ActionCreate, platformauth.ActionArchive),
 	}
 	b, err := json.Marshal(perms)
 	if err != nil {

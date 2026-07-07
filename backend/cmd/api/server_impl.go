@@ -18,7 +18,7 @@ import (
 	peopletransport "github.com/gradionhq/margince/backend/internal/modules/people/transport"
 	relationships "github.com/gradionhq/margince/backend/internal/modules/relationships"
 	relstransport "github.com/gradionhq/margince/backend/internal/modules/relationships/transport"
-	"github.com/gradionhq/margince/backend/internal/platform/httpserver"
+	platformauth "github.com/gradionhq/margince/backend/internal/platform/auth"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/authz"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
@@ -31,7 +31,7 @@ import (
 func buildAllOperations(k *routeKit) *server.AllOperations {
 	historyAuthz := authz.Authorizer(func(ctx context.Context, object, action string) error {
 		p, _ := crmctx.From(ctx)
-		perms, err := httpserver.LoadRolePermissions(ctx, k.db, p.TenantID, p.UserID)
+		perms, err := platformauth.LoadRolePermissions(ctx, k.db, p.TenantID, p.UserID)
 		if err != nil {
 			return err
 		}

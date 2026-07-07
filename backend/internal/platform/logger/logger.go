@@ -1,8 +1,8 @@
-// Package obs is the Tier-0 observability seam: structured slog JSON logging
-// with base correlation fields (trace_id/span_id/correlation_id/actor/module)
-// plus W3C traceparent carriage. Dependency-free (stdlib only) so every module
-// may use it without violating the module DAG.
-package obs
+// Package logger is the Tier-1 platform observability seam: structured slog JSON
+// logging with base correlation fields (trace_id/span_id/correlation_id/actor/module)
+// plus W3C traceparent carriage. Reclassified from Tier-0 kernel/obs to Tier-1
+// platform by WS-E-d (Task 8) per AC-E4.
+package logger
 
 import (
 	"context"
