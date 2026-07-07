@@ -177,6 +177,14 @@ func AuthorizePerms(perms RolePermissions, object, action string) error {
 	return adapters.AuthorizePerms(perms, object, action)
 }
 
+// ---------------------------------------------------------------------------
+// Session port adapter
+// ---------------------------------------------------------------------------
+
+// SessionVerifier implements ports/session.Verifier using the concrete
+// SessionStore and PassportStore. Wired at the composition root (cmd/api).
+type SessionVerifier = adapters.SessionVerifier
+
 // LoadUserScopesFromPerms derives scope strings from a user's RolePermissions.
 func LoadUserScopesFromPerms(perms RolePermissions) []string {
 	return adapters.LoadUserScopesFromPerms(perms)
