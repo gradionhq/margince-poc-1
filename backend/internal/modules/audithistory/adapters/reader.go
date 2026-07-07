@@ -22,6 +22,12 @@ func NewAuditHistoryReader(db *sql.DB) *AuditHistoryReader {
 	return &AuditHistoryReader{db: db, fieldMasks: domain.DefaultFieldMasks}
 }
 
+// WithFieldMasks returns a copy of the reader with the given field masks injected.
+// Intended for integration tests that need to assert masking behaviour.
+func (r *AuditHistoryReader) WithFieldMasks(masks map[string]domain.EntityFieldMask) *AuditHistoryReader {
+	return &AuditHistoryReader{db: r.db, fieldMasks: masks}
+}
+
 // ReadHistory returns all audit_log rows for the given entity, ordered chronologically,
 // with before/after masked to the viewer's readable fields.
 // The caller MUST have already set the RLS GUC (app.workspace_id) on the connection
