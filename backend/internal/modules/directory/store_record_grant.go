@@ -181,10 +181,9 @@ func (s *RecordGrantStore) List(ctx context.Context, workspaceID string, filter 
 		n++
 		args = append(args, limit+1)
 		//nolint:gosec // G202: `where` injects only bound-param indices ($N), never user input; all filter values are passed via args
-		rows, err := tx.QueryContext(ctx,
-			`SELECT id, workspace_id, record_type, record_id, subject_type, subject_id, access, granted_by, reason, expires_at, created_at, version
-			FROM record_grant WHERE `+where+` ORDER BY id LIMIT $`+strconv.Itoa(n),
-			args...)
+		query := `SELECT id, workspace_id, record_type, record_id, subject_type, subject_id, access, granted_by, reason, expires_at, created_at, version
+			FROM record_grant WHERE ` + where + ` ORDER BY id LIMIT $` + strconv.Itoa(n) // NOSONAR S2077 -- `where`/`n` are built exclusively from fixed column-name literals and $N placeholder indices (never user input or table/column names); every actual filter VALUE is passed positionally via `args`, the same reviewed-safe shape as store_deal_list.go/store_org_list.go's identical pattern elsewhere in this package (pre-existing, outside this PR's New-Code analysis window).
+		rows, err := tx.QueryContext(ctx, query, args...)
 		if err != nil {
 			return err
 		}
