@@ -7,7 +7,6 @@ import (
 	"errors"
 	"testing"
 
-	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
 	apperrors "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
@@ -122,10 +121,9 @@ func TestStageStore_Update_PositionCollision_Returns409(t *testing.T) {
 // TestStageStore_Update_WinProbabilitySuccess_ReflectsLiveOnDeal covers UAT-5:
 // PATCH /stages/{id} retuning a non-terminal stage's win_probability, then
 // re-reading a deal in that stage, must reflect the new probability
-// immediately (not cached). The `deals` module doesn't own the deal store
-// (it stayed in `modules/directory` per T11), so this test wires the two
-// stores against the same underlying connection to exercise the real
-// deal->stage read path end to end.
+// immediately (not cached). This test wires the deal store and stage store
+// against the same underlying connection to exercise the real deal->stage
+// read path end to end.
 func TestStageStore_Update_WinProbabilitySuccess_ReflectsLiveOnDeal(t *testing.T) {
 	wsID := ids.New()
 	db := openTestDB(t)
@@ -147,8 +145,8 @@ func TestStageStore_Update_WinProbabilitySuccess_ReflectsLiveOnDeal(t *testing.T
 		t.Fatal("create qualified stage:", err)
 	}
 
-	dealStore := directory.NewDealStore(db)
-	deal := directory.NewDeal("Retune Deal "+uniq(), pl.ID, qualified.ID,
+	dealStore := NewDealStore(db)
+	deal := NewDeal("Retune Deal "+uniq(), pl.ID, qualified.ID,
 		prov.Provenance{Source: "unit-test", CapturedBy: "unit-test"})
 	deal.WorkspaceID = wsID
 	created, err := dealStore.Create(ctx, deal, "")
@@ -174,7 +172,7 @@ func TestStageStore_Update_WinProbabilitySuccess_ReflectsLiveOnDeal(t *testing.T
 		t.Fatalf("expected re-read stage WinProbability=30, got %v", reread.WinProbability)
 	}
 
-	// directory.Deal carries no win_probability-shaped field at all (see
+	// deals.Deal carries no win_probability-shaped field at all (see
 	// crmcore.go) -- a deal's win probability is always read live off its
 	// stage via the deal's stage_id FK, never denormalized/cached onto the
 	// deal row. Re-reading the deal after the stage retune confirms the deal
