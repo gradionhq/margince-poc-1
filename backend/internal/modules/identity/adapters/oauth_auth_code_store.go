@@ -1,4 +1,4 @@
-package crmauth
+package adapters
 
 import (
 	"context"
@@ -13,10 +13,7 @@ import (
 )
 
 // ErrInvalidGrant is returned by AuthCodeStore.Consume on any failure that
-// must fail closed: not found, expired, already used, or PKCE mismatch. The
-// caller (the /token handler) maps this to RFC 6749's invalid_grant error —
-// it deliberately does not distinguish the reason, so a client can't probe
-// which check failed.
+// must fail closed.
 var ErrInvalidGrant = errors.New("invalid grant")
 
 // AuthCodeRecord is the resolved grant behind a consumed authorization code.
@@ -34,16 +31,13 @@ type AuthCodeStore struct{ db *sql.DB }
 // NewAuthCodeStore returns an AuthCodeStore.
 func NewAuthCodeStore(db *sql.DB) *AuthCodeStore { return &AuthCodeStore{db: db} }
 
-// PKCEChallengeS256 derives the RFC 7636 S256 code_challenge from a
-// code_verifier: base64url(SHA256(verifier)), no padding.
+// PKCEChallengeS256 derives the RFC 7636 S256 code_challenge from a code_verifier.
 func PKCEChallengeS256(verifier string) string {
 	sum := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-// Issue mints a one-time authorization code, stores its hash + PKCE
-// challenge, and returns the raw code (redirected to the client's
-// redirect_uri as the `code` query param).
+// Issue mints a one-time authorization code.
 func (s *AuthCodeStore) Issue(ctx context.Context, clientID, workspaceID, codeChallenge, redirectURI string, scopes []string, grantedBy string, ttl time.Duration) (rawCode string, err error) {
 	raw := make([]byte, 32)
 	if _, err = rand.Read(raw); err != nil {
@@ -64,11 +58,7 @@ func (s *AuthCodeStore) Issue(ctx context.Context, clientID, workspaceID, codeCh
 	return rawCode, nil
 }
 
-// Consume atomically validates and marks a code used in one transaction:
-// unexpired + unused + SHA256(codeVerifier) base64url == stored
-// code_challenge, then UPDATE used_at. Any failure returns ErrInvalidGrant
-// (fail closed) — a reused or expired code, or a verifier mismatch, never
-// yields a grant.
+// Consume atomically validates and marks a code used in one transaction.
 func (s *AuthCodeStore) Consume(ctx context.Context, rawCode, codeVerifier string) (AuthCodeRecord, error) {
 	hash := sha256sum(rawCode)
 	tx, err := s.db.BeginTx(ctx, nil)

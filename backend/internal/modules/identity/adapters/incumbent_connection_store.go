@@ -1,4 +1,4 @@
-package crmauth
+package adapters
 
 import (
 	"context"
@@ -19,28 +19,16 @@ type IncumbentConnectionRecord struct {
 	RevokedAt   *time.Time
 }
 
-// DBExec is satisfied by both *sql.Tx and *sql.DB — the same shape as
-// crmaudit.DBExec, duplicated here so crm-auth's stores don't import crmaudit
-// just for this interface (crm-auth mayDependOn does not include audit).
+// DBExec is satisfied by both *sql.Tx and *sql.DB.
 type DBExec interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// IncumbentConnectionStore manages incumbent_connection rows (one per
-// workspace+connector — a workspace has at most one live HubSpot connection).
-//
-// Backed by DBExec (satisfied by both *sql.DB and *sql.Tx, mirroring
-// crmaudit.DBExec) rather than a concrete *sql.DB, so a caller that needs a
-// connection mutation to commit atomically with an audit row (P12 — see
-// cmd/server/hubspot_handler.go's callback/rotate/revoke handlers) can pass a
-// *sql.Tx to the same constructor instead of a separate Tx-suffixed type.
+// IncumbentConnectionStore manages incumbent_connection rows.
 type IncumbentConnectionStore struct{ db DBExec }
 
-// NewIncumbentConnectionStore returns an IncumbentConnectionStore backed by
-// db, which may be a *sql.DB (plain reads/writes) or a *sql.Tx (when the
-// caller needs this store's mutation to share a transaction with e.g. an
-// audit-log write).
+// NewIncumbentConnectionStore returns an IncumbentConnectionStore.
 func NewIncumbentConnectionStore(db DBExec) *IncumbentConnectionStore {
 	return &IncumbentConnectionStore{db: db}
 }
@@ -84,9 +72,6 @@ func (s *IncumbentConnectionStore) Get(ctx context.Context, workspaceID, connect
 }
 
 // Revoke sets status='revoked', revoked_at=now() for an active connection.
-// Fail-closed: a second Revoke on an already-revoked (or absent) connection
-// returns ErrNotFound rather than silently no-oping, mirroring
-// PassportStore.Revoke's revoked_at IS NULL fail-closed idiom.
 func (s *IncumbentConnectionStore) Revoke(ctx context.Context, id, workspaceID string) error {
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE incumbent_connection SET status='revoked', revoked_at=now()

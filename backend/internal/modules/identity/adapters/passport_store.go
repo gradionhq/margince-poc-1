@@ -1,4 +1,4 @@
-package crmauth
+package adapters
 
 import (
 	"context"
@@ -28,8 +28,6 @@ type PassportStore struct{ db *sql.DB }
 func NewPassportStore(db *sql.DB) *PassportStore { return &PassportStore{db: db} }
 
 // Create mints a passport token, stores its hash, returns raw token + record.
-// onBehalfOf/label restore the pinned passport columns (DM-DDL-7); callers
-// without a distinct on-behalf-of principal pass grantedBy again.
 func (s *PassportStore) Create(ctx context.Context, workspaceID, grantedBy, onBehalfOf, label string, scopes []string, expiresIn time.Duration) (rawToken string, rec PassportRecord, err error) {
 	raw := make([]byte, 32)
 	if _, err = rand.Read(raw); err != nil {
@@ -55,7 +53,7 @@ func (s *PassportStore) Create(ctx context.Context, workspaceID, grantedBy, onBe
 	return rawToken, rec, nil
 }
 
-// Lookup returns a valid (not revoked, not expired) passport by raw token.
+// Lookup returns a valid passport by raw token.
 func (s *PassportStore) Lookup(ctx context.Context, rawToken string) (PassportRecord, error) {
 	hash := sha256sum(rawToken)
 	var rec PassportRecord
@@ -71,7 +69,6 @@ func (s *PassportStore) Lookup(ctx context.Context, rawToken string) (PassportRe
 	if err != nil {
 		return rec, err
 	}
-	// scopesRaw is postgres array literal: {scope1,scope2}
 	rec.Scopes = parsePostgresTextArray(string(scopesRaw))
 	return rec, nil
 }

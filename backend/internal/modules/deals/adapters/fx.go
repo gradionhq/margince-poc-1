@@ -1,7 +1,5 @@
-// Package deals: FX as-of lookup for the open-deal roll-up (DEAL-FORM-2, DM-FX-5). This is
-// a separate need from directory/store_deal.go's freezeDealFX, which finds the latest ever
-// rate to freeze onto a deal at close time.
-package deals
+// Package adapters: FX as-of lookup for the open-deal roll-up (DEAL-FORM-2, DM-FX-5).
+package adapters
 
 import (
 	"context"
@@ -14,8 +12,7 @@ import (
 )
 
 // FXRateUnavailableError signals that no stored fx_rate row satisfies the as-of lookup for
-// the requested currency pair. The roll-up must fail the whole read instead of silently
-// substituting a rate of 1.
+// the requested currency pair.
 type FXRateUnavailableError struct {
 	Currency string
 	AsOf     time.Time

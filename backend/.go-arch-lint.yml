@@ -73,10 +73,18 @@ components:
   dealtransport:     { in: internal/modules/directory/transport }
   deals:             { in: internal/modules/deals }
   dealstransport:    { in: internal/modules/deals/transport }
-  people:            { in: internal/modules/people/transport }
+  dealsdomain:       { in: internal/modules/deals/domain }
+  dealsports:        { in: internal/modules/deals/ports }
+  dealsadapters:     { in: internal/modules/deals/adapters }
+  dealsapp:          { in: internal/modules/deals/app }
+  people:            { in: internal/modules/people }
+  peopletransport:   { in: internal/modules/people/transport }
   contracts:         { in: internal/contracts/types }
+  identityadapters:  { in: internal/modules/identity/adapters }
   gdpr:              { in: internal/modules/gdpr }
+  gdpradapters:      { in: internal/modules/gdpr/adapters }
   approvals:         { in: internal/modules/approvals }
+  approvalsadapters: { in: internal/modules/approvals/adapters }
 deps:
   # Tier-0 seams + kernel are not listed -> may depend on nothing internal.
   # Exception: datasource aliases errs.ErrVersionSkew (ADR-0036/B-E18.1a) — both are Tier-0.
@@ -90,6 +98,8 @@ deps:
   blobstore:
     canUse: [minio]
   identity:
+    mayDependOn: [identityadapters, keyvault]
+  identityadapters:
     mayDependOn: [keyvault]
     canUse: [crypto]
   # httpserver (extracted from cmd/api, 1c restructure) wraps auth/session
@@ -122,7 +132,13 @@ deps:
   # platform/toolgate itself (D9: only the composition root wires the two
   # together).
   deals:
-    mayDependOn: [crmctx, errs, ids, mcp]
+    mayDependOn: [dealsdomain, dealsadapters, mcp]
+  dealsdomain:
+    mayDependOn: [mcp]
+  dealsports:
+    mayDependOn: [dealsdomain]
+  dealsadapters:
+    mayDependOn: [dealsdomain, errs, ids]
     canUse: [pq]
   # people is the person-specific HTTP transport layer only (handler_person.go);
   # it depends on directory for the Person type/store (see directory's note
@@ -131,7 +147,7 @@ deps:
   # (WS-D-b, AC-D2, D9) rather than a duplicated inline gate. approvals is
   # still listed here (its now-unused allowance is removed by Task 7/10, not
   # jumped ahead here).
-  people:
+  peopletransport:
     mayDependOn: [directory, crmctx, errs, prov, approvals, mcp, approvalsport, toolgate]
   # dealtransport is the deal module's HTTP transport layer (handler_deal.go, T11);
   # same shape as people above — depends on directory for the Deal type/store plus

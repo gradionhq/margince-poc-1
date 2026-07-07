@@ -1,4 +1,4 @@
-package crmauth
+package adapters
 
 import (
 	"context"
@@ -17,9 +17,11 @@ const (
 	cookieName          = "crm_session"
 )
 
+// CookieName is the session cookie name.
+const CookieName = cookieName
+
 // ErrNotFound mirrors errs.ErrNotFound but is defined locally because the module
 // DAG (.go-arch-lint.yml) only permits crm-auth to depend on crmctx, not errs.
-// Callers compose it into HTTP 404 / 401 responses at the composition root.
 var ErrNotFound = errors.New("not found")
 
 // SessionRecord is a loaded session row.
@@ -39,8 +41,6 @@ type SessionStore struct{ db *sql.DB }
 func NewSessionStore(db *sql.DB) *SessionStore { return &SessionStore{db: db} }
 
 // Create mints a new raw token, stores its SHA-256 hash, returns the raw token.
-// userAgent/ip are the login request's provenance (session.user_agent/ip,
-// DM-DDL-6) — an empty string stores NULL.
 func (s *SessionStore) Create(ctx context.Context, workspaceID, userID, userAgent, ip string) (rawToken string, err error) {
 	raw := make([]byte, 32)
 	if _, err = rand.Read(raw); err != nil {
@@ -58,8 +58,7 @@ func (s *SessionStore) Create(ctx context.Context, workspaceID, userID, userAgen
 	return rawToken, err
 }
 
-// Lookup returns the session for rawToken if valid (not expired, not
-// idle-expired, not revoked — a revoked session must stop authenticating).
+// Lookup returns the session for rawToken if valid.
 func (s *SessionStore) Lookup(ctx context.Context, rawToken string) (SessionRecord, error) {
 	hash := sha256sum(rawToken)
 	var rec SessionRecord
@@ -87,9 +86,7 @@ func (s *SessionStore) Delete(ctx context.Context, sessionID string) error {
 	return err
 }
 
-// Revoke soft-revokes a session (mirrors PassportStore.Revoke exactly). A
-// revoked session's Lookup fails with ErrNotFound instead of hard-deleting the
-// row, so the restored revoked_at column (D4) has a real writer.
+// Revoke soft-revokes a session.
 func (s *SessionStore) Revoke(ctx context.Context, sessionID, workspaceID string) error {
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE session SET revoked_at=now() WHERE id=$1::uuid AND workspace_id=$2::uuid AND revoked_at IS NULL`,
@@ -116,7 +113,5 @@ func nullableStr(s string) *string {
 	return &s
 }
 
-// SHA256SumExported is exported for integration test use only: it lets tests mint
-// the same token hash the SessionStore stores, so they can insert fixture rows
-// (e.g. an already-expired session) that Lookup will resolve.
+// SHA256SumExported is exported for integration test use only.
 func SHA256SumExported(s string) string { return sha256sum(s) }

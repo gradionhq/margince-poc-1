@@ -1,4 +1,5 @@
-package deals
+// Package adapters contains the deals module's PostgreSQL storage adapters.
+package adapters
 
 import (
 	"context"
@@ -7,10 +8,7 @@ import (
 
 // withWorkspaceTx runs fn inside a single tx as the non-superuser margince_app
 // role with app.workspace_id set, so FORCE RLS is actually enforced on every
-// CRUD query (data-model §1.3). Duplicated from modules/directory/store.go
-// rather than exported solely for this package's benefit — same
-// minimal-duplication convention as modules/directory/transport's HTTP
-// helpers (see that package's doc comment).
+// CRUD query (data-model §1.3).
 func withWorkspaceTx(ctx context.Context, db *sql.DB, workspaceID string, fn func(tx *sql.Tx) error) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -51,9 +49,7 @@ func nullInt(m map[string]any, key string) *int64 {
 	return nil
 }
 
-// nullBool reads a *bool bounded-update field the same way nullStr/nullInt
-// read their types — the pipeline store's is_default is the first bool-typed
-// bounded field, so this is new (not a duplicate of anything in directory).
+// nullBool reads a *bool bounded-update field.
 func nullBool(m map[string]any, key string) *bool {
 	if v, ok := m[key]; ok {
 		if b, ok := v.(bool); ok {

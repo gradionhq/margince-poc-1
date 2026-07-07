@@ -1,5 +1,6 @@
-// Package crmauth is the Tier-1 identity/RBAC module + Agent Seat Passport.
-package crmauth
+// Package adapters contains the identity module's pure types, functions,
+// and storage adapters.
+package adapters
 
 import (
 	"errors"
@@ -11,13 +12,8 @@ import (
 // ErrForbidden is returned by AuthorizePerms on deny.
 var ErrForbidden = errors.New("forbidden")
 
-// CookieName is the session cookie name.
-const CookieName = cookieName
-
 // ErrScopeExceeded is returned by CheckScopeSubset when a requested scope is not
-// carried by the grantor. It mirrors errs.ErrScopeExceeded but is defined locally
-// because the module DAG (.go-arch-lint.yml) only permits crm-auth to depend on
-// crmctx, not errs. The crm-agents admission gate maps this to a 403.
+// carried by the grantor.
 var ErrScopeExceeded = errors.New("scope exceeded")
 
 // knownObjects is the V1 object set for permission validation.
@@ -119,9 +115,7 @@ func CheckScopeSubset(requested, grantorScopes []string) error {
 	return nil
 }
 
-// AuthorizePerms checks whether perms allows action on object. The server layer
-// loads perms from DB (role.permissions JSONB) and calls this. Returns
-// ErrForbidden when the object or action is not present.
+// AuthorizePerms checks whether perms allows action on object.
 func AuthorizePerms(perms RolePermissions, object, action string) error {
 	entry, ok := perms[object]
 	if !ok {
@@ -133,8 +127,7 @@ func AuthorizePerms(perms RolePermissions, object, action string) error {
 	return nil
 }
 
-// LoadUserScopesFromPerms derives scope strings ("read:X", "create:X", ...) from
-// a user's RolePermissions. Called by cmd/server after loading role.permissions JSONB.
+// LoadUserScopesFromPerms derives scope strings from a user's RolePermissions.
 func LoadUserScopesFromPerms(perms RolePermissions) []string {
 	var out []string
 	for obj, entry := range perms {

@@ -1,4 +1,4 @@
-package deals
+package adapters
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"time"
 
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
+
+	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
 )
 
 // RollupStore computes GET /pipelines/{id}/rollup over live open deals.
@@ -14,25 +16,6 @@ type RollupStore struct{ db *sql.DB }
 
 // NewRollupStore returns a RollupStore.
 func NewRollupStore(db *sql.DB) *RollupStore { return &RollupStore{db: db} }
-
-// PipelineRollup is the wire shape of crm.yaml's PipelineRollup schema.
-type PipelineRollup struct {
-	PipelineID      string                `json:"pipeline_id"`
-	UnweightedMinor int64                 `json:"unweighted_minor"`
-	WeightedMinor   int64                 `json:"weighted_minor"`
-	BaseCurrency    string                `json:"base_currency"`
-	AsOfDate        string                `json:"as_of_date"`
-	ByStage         []PipelineRollupStage `json:"by_stage"`
-	Breakdown       []RollupDealRow       `json:"breakdown"`
-}
-
-// PipelineRollupStage is the wire shape of crm.yaml's PipelineRollupStage schema.
-type PipelineRollupStage struct {
-	StageID         string `json:"stage_id"`
-	UnweightedMinor int64  `json:"unweighted_minor"`
-	WeightedMinor   int64  `json:"weighted_minor"`
-	DealCount       int    `json:"deal_count"`
-}
 
 type rollupDealRow struct {
 	dealID         string
@@ -43,8 +26,8 @@ type rollupDealRow struct {
 }
 
 // Get computes the roll-up for one pipeline as of asOf.
-func (s *RollupStore) Get(ctx context.Context, pipelineID, workspaceID string, asOf time.Time) (PipelineRollup, error) {
-	var out PipelineRollup
+func (s *RollupStore) Get(ctx context.Context, pipelineID, workspaceID string, asOf time.Time) (domain.PipelineRollup, error) {
+	var out domain.PipelineRollup
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		baseCurrency, err := s.loadRollupBaseCurrency(ctx, tx, workspaceID)
 		if err != nil {
@@ -65,7 +48,7 @@ func (s *RollupStore) Get(ctx context.Context, pipelineID, workspaceID string, a
 		return nil
 	})
 	if err != nil {
-		return PipelineRollup{}, err
+		return domain.PipelineRollup{}, err
 	}
 	return out, nil
 }
@@ -134,19 +117,19 @@ func (s *RollupStore) loadRollupDeals(ctx context.Context, tx *sql.Tx, workspace
 	return deals, nil
 }
 
-func (s *RollupStore) buildRollup(ctx context.Context, tx *sql.Tx, workspaceID, pipelineID, baseCurrency string, asOf time.Time, deals []rollupDealRow) (PipelineRollup, error) {
-	out := PipelineRollup{
+func (s *RollupStore) buildRollup(ctx context.Context, tx *sql.Tx, workspaceID, pipelineID, baseCurrency string, asOf time.Time, deals []rollupDealRow) (domain.PipelineRollup, error) {
+	out := domain.PipelineRollup{
 		PipelineID:   pipelineID,
 		BaseCurrency: baseCurrency,
 		AsOfDate:     asOf.UTC().Format("2006-01-02"),
-		ByStage:      []PipelineRollupStage{},
-		Breakdown:    []RollupDealRow{},
+		ByStage:      []domain.PipelineRollupStage{},
+		Breakdown:    []domain.RollupDealRow{},
 	}
 
-	byStage := map[string]*PipelineRollupStage{}
+	byStage := map[string]*domain.PipelineRollupStage{}
 	stageOrder := make([]string, 0, 8)
 	for _, row := range deals {
-		dealRow := RollupDealRow{DealID: row.dealID, WinProbability: row.winProbability}
+		dealRow := domain.RollupDealRow{DealID: row.dealID, WinProbability: row.winProbability}
 		if !row.amountMinor.Valid {
 			dealRow.NoAmount = true
 		} else {
@@ -154,18 +137,18 @@ func (s *RollupStore) buildRollup(ctx context.Context, tx *sql.Tx, workspaceID, 
 			if row.currency.Valid && row.currency.String != "" && row.currency.String != baseCurrency {
 				rate, err := AsOfFXRate(ctx, tx, workspaceID, row.currency.String, baseCurrency, asOf)
 				if err != nil {
-					return PipelineRollup{}, err
+					return domain.PipelineRollup{}, err
 				}
-				baseValue = ConvertToBase(row.amountMinor.Int64, row.currency.String, baseCurrency, rate)
+				baseValue = domain.ConvertToBase(row.amountMinor.Int64, row.currency.String, baseCurrency, rate)
 			}
 			dealRow.BaseValueMinor = baseValue
-			dealRow.WeightedValueMinor = WeightedValue(baseValue, row.winProbability)
+			dealRow.WeightedValueMinor = domain.WeightedValue(baseValue, row.winProbability)
 		}
 		out.Breakdown = append(out.Breakdown, dealRow)
 
 		stageRow := byStage[row.stageID]
 		if stageRow == nil {
-			stageRow = &PipelineRollupStage{StageID: row.stageID}
+			stageRow = &domain.PipelineRollupStage{StageID: row.stageID}
 			byStage[row.stageID] = stageRow
 			stageOrder = append(stageOrder, row.stageID)
 		}
@@ -174,10 +157,10 @@ func (s *RollupStore) buildRollup(ctx context.Context, tx *sql.Tx, workspaceID, 
 		stageRow.DealCount++
 	}
 
-	totals := SumRollup(out.Breakdown)
+	totals := domain.SumRollup(out.Breakdown)
 	out.UnweightedMinor = totals.UnweightedMinor
 	out.WeightedMinor = totals.WeightedMinor
-	out.ByStage = make([]PipelineRollupStage, 0, len(stageOrder))
+	out.ByStage = make([]domain.PipelineRollupStage, 0, len(stageOrder))
 	for _, stageID := range stageOrder {
 		out.ByStage = append(out.ByStage, *byStage[stageID])
 	}

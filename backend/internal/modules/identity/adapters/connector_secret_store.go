@@ -1,4 +1,4 @@
-package crmauth
+package adapters
 
 import (
 	"context"
@@ -10,8 +10,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/platform/keyvault"
 )
 
-// ConnectorSecretRecord is one loaded connector_secret row (ciphertext only —
-// callers get plaintext solely through Lookup, never a raw field read).
+// ConnectorSecretRecord is one loaded connector_secret row.
 type ConnectorSecretRecord struct {
 	ID           string
 	WorkspaceID  string
@@ -21,33 +20,18 @@ type ConnectorSecretRecord struct {
 	RotatedAt    time.Time
 }
 
-// ConnectorSecretStore seals/unseals connector token material through a
-// keyvault.KeyProvider and persists ciphertext-only rows.
-//
-// Rotate/Put both APPEND a new connector_secret row rather than updating one in
-// place (the "store-level concern" the spec leaves to the implementer): a
-// superseded row stays queryable for audit/incident review, and Lookup always
-// resolves the latest by rotated_at DESC. This trades a small amount of extra
-// storage for never losing the ability to inspect what a prior token rotation
-// looked like (kms_key_id, timing) after the fact.
-//
-// Backed by DBExec (see incumbent_connection_store.go) so a caller can pass a
-// live *sql.Tx when this store's write must commit atomically with an audit
-// row (P12).
+// ConnectorSecretStore seals/unseals connector token material.
 type ConnectorSecretStore struct {
 	db       DBExec
 	provider keyvault.KeyProvider
 }
 
-// NewConnectorSecretStore returns a ConnectorSecretStore backed by db (a
-// *sql.DB or a *sql.Tx) and provider.
+// NewConnectorSecretStore returns a ConnectorSecretStore.
 func NewConnectorSecretStore(db DBExec, provider keyvault.KeyProvider) *ConnectorSecretStore {
 	return &ConnectorSecretStore{db: db, provider: provider}
 }
 
-// requireActiveConnection returns an error if the connection is absent or not
-// 'active'. Shared by Rotate and Lookup so both fail closed identically on a
-// revoked connection.
+// requireActiveConnection returns an error if the connection is absent or not 'active'.
 func (s *ConnectorSecretStore) requireActiveConnection(ctx context.Context, workspaceID, connectionID string) error {
 	var status string
 	if err := s.db.QueryRowContext(ctx, `
@@ -65,11 +49,6 @@ func (s *ConnectorSecretStore) requireActiveConnection(ctx context.Context, work
 }
 
 // Put seals plaintext and inserts a new connector_secret row for connectionID.
-// Put does not itself require the connection to be active — it is also the
-// very first token write at connect time, before the connection can have any
-// other status — but every OTHER caller of this store (Rotate, Lookup) does
-// guard on active status; a revoked connection's Rotate/Lookup both fail
-// closed rather than accepting a still-plausible-looking write or read.
 func (s *ConnectorSecretStore) Put(ctx context.Context, workspaceID, connectionID string, plaintext []byte) (ConnectorSecretRecord, error) {
 	var rec ConnectorSecretRecord
 	ciphertext, kmsKeyID, err := s.provider.Seal(ctx, plaintext)
@@ -91,10 +70,7 @@ func (s *ConnectorSecretStore) Put(ctx context.Context, workspaceID, connectionI
 	return rec, nil
 }
 
-// Rotate appends a new connector_secret row for an ACTIVE connection only —
-// guarded the same way Lookup is guarded (requireActiveConnection), so a
-// rotate against a revoked connection fails closed instead of silently
-// appending a dead write nobody can ever Lookup back out.
+// Rotate appends a new connector_secret row for an ACTIVE connection only.
 func (s *ConnectorSecretStore) Rotate(ctx context.Context, workspaceID, connectionID string, newPlaintext []byte) (ConnectorSecretRecord, error) {
 	if err := s.requireActiveConnection(ctx, workspaceID, connectionID); err != nil {
 		return ConnectorSecretRecord{}, err
@@ -102,9 +78,7 @@ func (s *ConnectorSecretStore) Rotate(ctx context.Context, workspaceID, connecti
 	return s.Put(ctx, workspaceID, connectionID, newPlaintext)
 }
 
-// Lookup resolves the latest connector_secret row for connectionID and returns
-// its unsealed plaintext. Fails closed if the parent incumbent_connection is
-// not 'active' (revoked) — the caller never gets a stale token back silently.
+// Lookup resolves the latest connector_secret row for connectionID and returns its unsealed plaintext.
 func (s *ConnectorSecretStore) Lookup(ctx context.Context, workspaceID, connectionID string) ([]byte, error) {
 	if err := s.requireActiveConnection(ctx, workspaceID, connectionID); err != nil {
 		return nil, err

@@ -1,4 +1,4 @@
-package crmauth
+package adapters
 
 import (
 	"context"
@@ -14,8 +14,7 @@ type OAuthClientRecord struct {
 	RedirectURIs []string
 }
 
-// OAuthClientStore manages oauth_client rows — public clients only (PKCE
-// replaces the client secret per OAuth 2.1).
+// OAuthClientStore manages oauth_client rows.
 type OAuthClientStore struct{ db *sql.DB }
 
 // NewOAuthClientStore returns an OAuthClientStore.

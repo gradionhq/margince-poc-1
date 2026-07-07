@@ -1,8 +1,5 @@
-// Package deals is the deals/pipeline domain module: pipeline, stage (T10),
-// deal CRUD lives in modules/directory for now (T11 predates this module and
-// wasn't migrated — see PR description for the discrepancy note). Implements
-// no datasource.Provider seam yet; add one only when a future ticket needs it.
-package deals
+// Package domain contains the deals module's pure domain types.
+package domain
 
 import "time"
 

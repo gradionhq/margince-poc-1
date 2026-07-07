@@ -1,11 +1,8 @@
-// Package deals provides the either-endpoint tier resolver for deal-stage
-// transitions (DEAL-WIRE-4), migrated from the skeleton's superseded
-// directory.terminalStageTier (target-semantic-only, dead code — zero
-// callers) per the T12 spec. A transition is 🟡 when EITHER endpoint's
+// Package domain provides the either-endpoint tier resolver for deal-stage
+// transitions (DEAL-WIRE-4). A transition is 🟡 when EITHER endpoint's
 // semantic is terminal (won/lost): closing and reopening are both governed;
-// open-to-open in either direction is 🟢. Resolving from *semantics* (never
-// stage names) means renaming a stage cannot dodge the gate.
-package deals
+// open-to-open in either direction is 🟢.
+package domain
 
 import "github.com/gradionhq/margince/backend/internal/shared/ports/mcp"
 
@@ -31,9 +28,7 @@ func ResolveTier(fromSemantic, toSemantic string) Tier {
 }
 
 // ResolveDynamicTier adapts ResolveTier to the toolgate.RegisterResolver
-// arg-map shape (WS-D-b, AC-D2): the advanceDeal x-mcp-tool's registered
-// "target_stage_semantic" resolver reads from_semantic/to_semantic out of
-// the diff fields the deal-advance handler already computes.
+// arg-map shape (WS-D-b, AC-D2).
 func ResolveDynamicTier(args map[string]any) mcp.RiskTier {
 	from, _ := args["from_semantic"].(string)
 	to, _ := args["to_semantic"].(string)

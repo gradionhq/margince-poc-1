@@ -1,6 +1,6 @@
-// Package deals: DEAL-FORM-2's pure arithmetic for rounding, per-deal FX conversion,
-// weighted value calculation, and total reconciliation.
-package deals
+// Package domain: DEAL-FORM-2's pure arithmetic for rounding, per-deal FX conversion,
+// weighted value calculation, total reconciliation, and rollup wire shapes.
+package domain
 
 import "math"
 
@@ -51,4 +51,23 @@ func SumRollup(rows []RollupDealRow) RollupTotals {
 		totals.WeightedMinor += row.WeightedValueMinor
 	}
 	return totals
+}
+
+// PipelineRollup is the wire shape of crm.yaml's PipelineRollup schema.
+type PipelineRollup struct {
+	PipelineID      string                `json:"pipeline_id"`
+	UnweightedMinor int64                 `json:"unweighted_minor"`
+	WeightedMinor   int64                 `json:"weighted_minor"`
+	BaseCurrency    string                `json:"base_currency"`
+	AsOfDate        string                `json:"as_of_date"`
+	ByStage         []PipelineRollupStage `json:"by_stage"`
+	Breakdown       []RollupDealRow       `json:"breakdown"`
+}
+
+// PipelineRollupStage is the wire shape of crm.yaml's PipelineRollupStage schema.
+type PipelineRollupStage struct {
+	StageID         string `json:"stage_id"`
+	UnweightedMinor int64  `json:"unweighted_minor"`
+	WeightedMinor   int64  `json:"weighted_minor"`
+	DealCount       int    `json:"deal_count"`
 }
