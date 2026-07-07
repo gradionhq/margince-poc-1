@@ -38,6 +38,7 @@ var commands = map[string]func([]string) error{
 	"tool":      genTool,
 	"report":    genReport,
 	"manifests": genManifests,
+	"mcp-tools": genMCPTools,
 }
 
 func main() {
@@ -68,6 +69,7 @@ Usage:
   crm-gen tool      <name>
   crm-gen report    <name>
   crm-gen manifests
+  crm-gen mcp-tools
 
 Examples:
   crm-gen field person nickname "text" string
@@ -77,6 +79,7 @@ Examples:
   crm-gen tool search_contacts
   crm-gen report pipeline_velocity
   crm-gen manifests
+  crm-gen mcp-tools
 
 field:     Writes a sequenced migration pair under `+migrationsDir+`/ and prints the
            remaining recipe steps (struct field, OpenAPI fragment, make gen-types).
@@ -87,6 +90,7 @@ connector: Scaffolds a self-registering capture connector in crm/crm-capture/con
 tool:      Scaffolds a governed MCP tool (default tier: Green) in crm/crm-agents/tools/.
 report:    Scaffolds a read-only compiled report query in backend/internal/modules/directory/reports/.
 manifests: Scans connector/workflow/tool dirs and regenerates cmd/server/imports_gen.go.
+mcp-tools: Walks backend/api/crm.yaml's x-mcp-tool annotations into a generated Go tool table.
 `)
 }
 
