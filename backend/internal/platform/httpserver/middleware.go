@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	crmauth "github.com/gradionhq/margince/backend/internal/modules/identity"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	obs "github.com/gradionhq/margince/backend/internal/shared/kernel/obs"
+	"github.com/gradionhq/margince/backend/internal/shared/ports/session"
 )
 
 // keyStatus is the structured-log field name for the response status, local to
@@ -55,10 +55,10 @@ func LogRequest(next http.Handler) http.Handler {
 	})
 }
 
-// SessionMiddleware reads crm_session cookie → SHA-256 lookup → crmctx injection.
+// SessionMiddleware reads crm_session cookie → LookupSession → crmctx injection.
 // Also propagates W3C traceparent header into the ctx trace (mints a fresh trace if absent).
 // Falls through silently if no cookie (RequireAuth enforces presence).
-func SessionMiddleware(sessions *crmauth.SessionStore, passports *crmauth.PassportStore) func(http.Handler) http.Handler {
+func SessionMiddleware(v session.Verifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Derive every context below from this single inbound request context so
@@ -73,24 +73,16 @@ func SessionMiddleware(sessions *crmauth.SessionStore, passports *crmauth.Passpo
 				ctx = obs.WithTrace(ctx, obs.NewTraceID(), obs.NewSpanID())
 			}
 
-			if cookie, err := r.Cookie(crmauth.CookieName); err == nil && cookie.Value != "" {
-				if rec, err := sessions.Lookup(ctx, cookie.Value); err == nil {
-					ctx = crmctx.With(ctx, crmctx.Principal{
-						UserID:   rec.UserID,
-						TenantID: rec.WorkspaceID,
-					})
-					sessions.Touch(ctx, rec.ID)
+			if cookie, err := r.Cookie(session.CookieName); err == nil && cookie.Value != "" {
+				if p, ok := v.LookupSession(ctx, cookie.Value); ok {
+					ctx = crmctx.With(ctx, p)
 				}
 			}
 			// Also check Authorization: Bearer <passport_token> for agent calls.
-			if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") && passports != nil {
+			if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
 				rawToken := strings.TrimPrefix(auth, "Bearer ")
-				if rec, err := passports.Lookup(ctx, rawToken); err == nil {
-					ctx = crmctx.With(ctx, crmctx.Principal{
-						UserID:   rec.GrantedBy,
-						TenantID: rec.WorkspaceID,
-						IsAgent:  true,
-					})
+				if p, ok := v.LookupPassport(ctx, rawToken); ok {
+					ctx = crmctx.With(ctx, p)
 				}
 			}
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -173,7 +165,7 @@ func MethodToAction(method string) string {
 
 // LoadRolePermissions queries role r JOIN role_assignment ra for the principal's
 // workspace+user and returns the merged, validated RolePermissions.
-func LoadRolePermissions(ctx context.Context, db *sql.DB, workspaceID, userID string) (crmauth.RolePermissions, error) {
+func LoadRolePermissions(ctx context.Context, db *sql.DB, workspaceID, userID string) (session.RolePermissions, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT r.permissions
 		FROM role r
@@ -184,7 +176,7 @@ func LoadRolePermissions(ctx context.Context, db *sql.DB, workspaceID, userID st
 	}
 	defer func() { _ = rows.Close() }()
 
-	merged := crmauth.RolePermissions{}
+	merged := session.RolePermissions{}
 	for rows.Next() {
 		var raw []byte
 		if err := rows.Scan(&raw); err != nil {
@@ -194,7 +186,7 @@ func LoadRolePermissions(ctx context.Context, db *sql.DB, workspaceID, userID st
 		if err := json.Unmarshal(raw, &rawPerms); err != nil {
 			continue
 		}
-		perms, err := crmauth.ValidatePermissions(rawPerms)
+		perms, err := session.ValidatePermissions(rawPerms)
 		if err != nil {
 			continue
 		}
@@ -217,7 +209,7 @@ func LoadRolePermissions(ctx context.Context, db *sql.DB, workspaceID, userID st
 //  1. Calls RequireAuth (401 if no principal).
 //  2. Loads the principal's role permissions from the DB.
 //  3. Derives the action from the HTTP method.
-//  4. Calls crmauth.AuthorizePerms(perms, object, action); returns 403 if denied.
+//  4. Calls session.AuthorizePerms(perms, object, action); returns 403 if denied.
 func RbacMiddleware(db *sql.DB, object string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		authed := RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -228,7 +220,7 @@ func RbacMiddleware(db *sql.DB, object string) func(http.Handler) http.Handler {
 				WriteInternal(w)
 				return
 			}
-			if err := crmauth.AuthorizePerms(perms, object, action); err != nil {
+			if err := session.AuthorizePerms(perms, object, action); err != nil {
 				WriteProblem(w, http.StatusForbidden, CodeForbidden)
 				return
 			}

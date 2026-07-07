@@ -63,6 +63,7 @@ components:
   jurisdiction: { in: pkg/shared/ports/jurisdiction }
   migrate:      { in: internal/shared/ports/migrate }
   approvalsport: { in: internal/shared/ports/approvals }
+  session:       { in: internal/shared/ports/session }
   # Tier-1 platform (seams WITH impls, cross-cutting)
   blobstore:    { in: internal/platform/blobstore }
   keyvault:     { in: internal/platform/keyvault }
@@ -141,6 +142,9 @@ components:
 deps:
   # Tier-0 seams + kernel are not listed -> may depend on nothing internal.
   # Exception: datasource aliases errs.ErrVersionSkew (ADR-0036/B-E18.1a) — both are Tier-0.
+  # Exception: session port uses crmctx.Principal as its return type (AC-E3 inversion).
+  session:
+    mayDependOn: [crmctx]
   datasource:
     mayDependOn: [errs, trust]
   migrate:
@@ -159,10 +163,10 @@ deps:
   identity:
     mayDependOn: [identityadapters, keyvault]
   identityadapters:
-    mayDependOn: [keyvault]
+    mayDependOn: [keyvault, session, crmctx]
     canUse: [crypto]
   httpserver:
-    mayDependOn: [crmctx, obs, identity, contracts]
+    mayDependOn: [crmctx, obs, session, contracts]
   identitytransport:
     mayDependOn: [httpserver, identity, audit, crmctx, ids]
     canUse: [pq]

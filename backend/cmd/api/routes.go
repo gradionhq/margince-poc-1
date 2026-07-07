@@ -57,7 +57,7 @@ type routeKit struct {
 func buildMux(ctx context.Context, db *sql.DB, cfg Config, riverClient *river.Client[*sql.Tx]) *http.ServeMux {
 	sessionStore := crmauth.NewSessionStore(db)
 	passportStore := crmauth.NewPassportStore(db)
-	sessMW := httpserver.SessionMiddleware(sessionStore, passportStore)
+	sessMW := httpserver.SessionMiddleware(&crmauth.SessionVerifier{Sessions: sessionStore, Passports: passportStore})
 
 	// workspaceWrap: reads legacy X-Workspace-ID header (dev/test) OR session context.
 	workspaceWrap := func(h http.Handler) http.Handler {
@@ -120,7 +120,7 @@ func (k *routeKit) registerObservabilityAndAuth(mux *http.ServeMux) {
 	// Auth routes (no requireAuth — login/workspace setup are unauthenticated).
 	mux.Handle("POST /workspaces", identitytransport.HandleCreateWorkspace(k.db))
 	mux.Handle("POST /auth/login", identitytransport.HandleLogin(k.db, k.sessionStore))
-	mux.Handle("POST /auth/logout", httpserver.SessionMiddleware(k.sessionStore, k.passportStore)(identitytransport.HandleLogout(k.sessionStore)))
+	mux.Handle("POST /auth/logout", httpserver.SessionMiddleware(&crmauth.SessionVerifier{Sessions: k.sessionStore, Passports: k.passportStore})(identitytransport.HandleLogout(k.sessionStore)))
 	mux.Handle("GET /me", k.workspaceWrap(httpserver.RequireAuth(identitytransport.HandleMe(k.db))))
 	mux.Handle("POST /passports", k.workspaceWrap(httpserver.RequireAuth(identitytransport.HandleCreatePassport(k.db, k.passportStore))))
 	mux.Handle("DELETE /passports/", k.workspaceWrap(httpserver.RequireAuth(identitytransport.HandleRevokePassport(k.passportStore))))
