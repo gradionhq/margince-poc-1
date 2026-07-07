@@ -22,14 +22,16 @@ func TestCIWorkflow_craftsmanshipRunsAfterDeterministicGates(t *testing.T) {
 	}
 	s := string(yml)
 
-	for _, job := range []string{"deterministic-gates:", "craftsmanship:"} {
+	// The deterministic gate suite is split into backend-gates + fe-gates (B1);
+	// craftsmanship still runs only after the backend (Go) gate is green.
+	for _, job := range []string{"backend-gates:", "fe-gates:", "craftsmanship:"} {
 		if !regexp.MustCompile(`(?m)^\s+` + regexp.QuoteMeta(job)).MatchString(s) {
 			t.Errorf("ci.yml missing job %q", job)
 		}
 	}
 	// The ordering invariant: craftsmanship declares a dependency on the gate job.
-	if !regexp.MustCompile(`needs:\s*\[?\s*deterministic-gates`).MatchString(s) {
-		t.Error("craftsmanship job must `needs: [deterministic-gates]` so it runs only after the deterministic gates are green")
+	if !regexp.MustCompile(`needs:\s*\[?\s*backend-gates`).MatchString(s) {
+		t.Error("craftsmanship job must `needs: [backend-gates]` so it runs only after the deterministic gates are green")
 	}
 }
 
@@ -50,8 +52,10 @@ func TestBranchProtection_craftsmanshipRequiredWithNoOverride(t *testing.T) {
 	if !contains(cfg.RequiredStatusChecks.Contexts, "craftsmanship") {
 		t.Error("craftsmanship must be a required status check")
 	}
-	if !contains(cfg.RequiredStatusChecks.Contexts, "deterministic-gates") {
-		t.Error("deterministic-gates must be a required status check")
+	for _, gate := range []string{"backend-gates", "fe-gates"} {
+		if !contains(cfg.RequiredStatusChecks.Contexts, gate) {
+			t.Errorf("%s must be a required status check", gate)
+		}
 	}
 	// No-override: admins cannot bypass (ADR-0045).
 	if !cfg.EnforceAdmins {

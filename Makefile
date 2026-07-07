@@ -40,7 +40,7 @@ GOLANGCI_CONFIG := $(CURDIR)/.golangci.yml
 # cache inside $(CURDIR) gives every worktree — and the main checkout — its own.
 export GOLANGCI_LINT_CACHE := $(CURDIR)/.tmp/golangci-cache
 
-.PHONY: help check check-q check-go check-fe check-fe-static check-craft-doc check-doc-style craft fmt fmt-check vet lint go-file-length test test-v test-cover test-cover-check test-integration test-it test-integration-serial test-liveuat test-lanes arch-lint fitness-jurisdiction audit-coverage audit-coherence rls-store-path contract-lint gen-types gen-types-check contract-breaking-check gen-field gen-manifests gen-manifests-check tools tools-go tidy build run dev psql clean install fe-install fe-build fe-preview fe-lint fe-typecheck fe-format fe-dev storybook fe-test test-contracts infra-up infra-down infra-reset infra-logs db-wait migrate-up migrate-down migrate-status migrate-create test-db-up test-db-reset seed seed-dev seed-reset ds-purity font-lock icon-lint check-image-pins
+.PHONY: help check check-backend check-q check-go check-fe check-fe-static check-craft-doc check-doc-style craft fmt fmt-check vet lint go-file-length test test-v test-cover test-cover-check test-integration test-it test-integration-serial test-liveuat test-lanes arch-lint fitness-jurisdiction audit-coverage audit-coherence rls-store-path contract-lint gen-types gen-types-check contract-breaking-check gen-field gen-manifests gen-manifests-check tools tools-go tidy build run dev psql clean install fe-install fe-build fe-preview fe-lint fe-typecheck fe-format fe-dev storybook fe-test test-contracts infra-up infra-down infra-reset infra-logs db-wait migrate-up migrate-down migrate-status migrate-create test-db-up test-db-reset seed seed-dev seed-reset ds-purity font-lock icon-lint check-image-pins uat_env uat_env_stop fe-uat
 
 help: ## Show targets
 	@grep -hE "^[a-zA-Z_-]+:.*## " $(MAKEFILE_LIST) | awk "BEGIN{FS=\":.*## \"}{printf \"  %-20s %s\\n\",\$$1,\$$2}"
@@ -49,11 +49,15 @@ help: ## Show targets
 # ONE ordered gate. Cheapest static checks first so it fails fast; the test suites
 # run LAST. Order: format → lint → file-length → codegen-drift → DAG/invariants →
 # frontend static → Go tests → frontend tests. `make check-q` is the quiet wrapper.
-check: fmt-check vet lint go-file-length \
+check: check-backend check-fe ## The gate: backend (format→lint→invariants→Go tests) then frontend (static + tests)
+	@echo "OK: make check passed"
+# Backend half of the gate — everything except the FE static+tests. CI's
+# backend-gates job runs exactly this, keeping CI one-to-one with local `make check`.
+check-backend: fmt-check vet lint go-file-length \
        gen-types-check contract-breaking-check gen-manifests-check arch-lint fitness-jurisdiction \
        audit-coverage audit-coherence rls-store-path check-craft-doc check-doc-style check-image-pins test-lanes \
-       check-fe-static test fe-test ## The gate: format → lint → invariants → tests (Go + FE), in that order
-	@echo "OK: make check passed"
+       test ## Backend gate: format → lint → codegen-drift → DAG/invariants → Go unit tests
+	@echo "OK: make check-backend passed"
 check-image-pins: ## Fail if any .github/workflows/*.yml uses: line has a floating tag
 	@bash scripts/check-image-pins.sh
 check-craft-doc: ## Assert the ## Craftsmanship section is present in AGENTS.md
@@ -221,6 +225,8 @@ storybook: ## Start Storybook dev server
 	@pnpm --filter @gradion/crm-web exec storybook dev --port 6006
 ui-shots: ## Capture each story to frontend/.shots/*.png for visual review (opt-in, not a gate). Optional: ID=<substr>
 	@if [ -d node_modules ]; then node frontend/scripts/capture-stories.mjs $(ID) ; else echo "skip ui-shots: run make fe-install first"; fi
+fe-uat: ## Change-scoped Storybook render+capture UAT lane for fe-only diffs (no live stack). Artifact: .tmp/fe-uat/manifest.json. Optional: ARGS="--build --allow-missing"
+	@if [ -d node_modules ]; then node frontend/scripts/fe-uat.mjs $(ARGS) ; else echo "FAIL: run make fe-install first"; exit 1; fi
 fe-test: ## Run frontend unit + storybook component tests
 	@if [ -d node_modules ]; then \
 	  pnpm --filter @gradion/crm-web exec vitest run --project unit && \
@@ -244,6 +250,12 @@ infra-reset: ## Stop + wipe volumes
 	@$(COMPOSE) down -v
 infra-logs: ## Tail infra logs
 	@$(COMPOSE) logs -f
+
+# --- Per-worktree UAT env (B5): own db crm_uat_<slug> on the shared infra + derived ports ---
+uat_env: ## Spin a per-worktree UAT env (mandatory UAT_SLUG=<slug>): own db + derived ports; logs+stop under .tmp/uat/<slug>/
+	@bash scripts/uat-env.sh up "$(UAT_SLUG)"
+uat_env_stop: ## Stop a UAT env: make uat_env_stop UAT_SLUG=<slug> [DROP=1 also drops the db]
+	@bash scripts/uat-env.sh stop "$(UAT_SLUG)" $(if $(DROP),--drop,)
 db-wait: ## Block until postgres answers pg_isready (up to 30 attempts, 2s apart) — guards migrate-up/test-db-up against the infra-up cold-start race
 	@for i in $$(seq 1 30); do \
 	  if $(COMPOSE) exec -T postgres pg_isready -U margince -h 127.0.0.1 -p 5432; then \
