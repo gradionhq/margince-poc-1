@@ -1,13 +1,13 @@
 # Margince WP0 gates. See docs/plans/2026-06-24-wp0-repo-foundation-setup.md
 # GNU make 3.81 compatible (recipes use real tabs).
 
-GO_DIRS  := backend crm-de cli/crm-gen cli/craft
+GO_DIRS  := backend jurisdictions/de cli/crm-gen cli/craft
 SEED_DIR := backend/seed
 # Use host psql when available; otherwise fall back to psql inside the infra-postgres container.
 PSQL     := $(if $(shell command -v psql),PGPASSWORD=margince psql -h localhost -U margince -d margince,docker exec -i -e PGPASSWORD=margince infra-postgres-1 psql -U margince -d margince)
 # Same fallback, but against the postgres maintenance DB — needed for CREATE/DROP DATABASE.
 PSQL_ADMIN := $(if $(shell command -v psql),PGPASSWORD=margince psql -h localhost -U margince -d postgres,docker exec -i -e PGPASSWORD=margince infra-postgres-1 psql -U margince -d postgres)
-GOFILES := $(shell find backend crm-de cli -name "*.go" 2>/dev/null)
+GOFILES := $(shell find backend jurisdictions/de cli -name "*.go" 2>/dev/null)
 GO_COVER_MIN := 0
 DOCKER_COMPOSE := $(if $(shell docker compose version >/dev/null 2>&1 && echo yes),docker compose,docker-compose)
 COMPOSE := $(DOCKER_COMPOSE) -f infra/docker-compose.dev.yml

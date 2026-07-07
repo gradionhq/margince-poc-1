@@ -7,7 +7,7 @@
 set -euo pipefail
 
 CAP="${GO_FILE_LINE_CAP:-500}"
-DIRS=(backend crm-de cli)
+DIRS=(backend jurisdictions/de cli)
 
 offenders=$(
   find "${DIRS[@]}" -name "*.go" \

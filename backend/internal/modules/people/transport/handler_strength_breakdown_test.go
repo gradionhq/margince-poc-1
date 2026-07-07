@@ -10,14 +10,14 @@ import (
 	"testing"
 	"time"
 
-	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
+	people "github.com/gradionhq/margince/backend/internal/modules/people"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
 func TestPersonHandler_StrengthBreakdown(t *testing.T) {
 	db := openTestDB(t)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	h := personHandlerForTest(db, store)
 
 	const wsID = "00000000-0000-0000-0000-000000000001"
@@ -25,7 +25,7 @@ func TestPersonHandler_StrengthBreakdown(t *testing.T) {
 	setRLS(t, db, wsID)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID})
 
-	p := directory.NewPerson("Breakdown Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	p := people.NewPerson("Breakdown Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = wsID
 	created, err := store.Create(ctx, p, nil)
 	if err != nil {

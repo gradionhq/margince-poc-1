@@ -28,7 +28,7 @@ cd "$ROOT"
 # shellcheck source=scripts/lib-testdb.sh
 source "$ROOT/scripts/lib-testdb.sh"
 
-GO_DIRS=(backend crm-de cli/crm-gen cli/craft)
+GO_DIRS=(backend jurisdictions/de cli/crm-gen cli/craft)
 parse_test_dsn
 
 JOBS="${INTEGRATION_JOBS:-$(( $(sysctl -n hw.ncpu 2>/dev/null || nproc) < 8 ? $(sysctl -n hw.ncpu 2>/dev/null || nproc) : 8 ))}"

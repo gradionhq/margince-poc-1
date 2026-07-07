@@ -6,7 +6,7 @@ import (
 	"errors"
 	"net/http"
 
-	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
+	peopleadapters "github.com/gradionhq/margince/backend/internal/modules/people/adapters"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 )
 
@@ -30,7 +30,7 @@ func (h *PersonHandler) restore(w http.ResponseWriter, r *http.Request, id strin
 			map[string]any{fieldErrors: []fieldError{{Field: "merged_into_id", Code: "merged_record"}}})
 		return
 	}
-	var dup *directory.ErrDuplicateEmail
+	var dup *peopleadapters.ErrDuplicateEmail
 	if errors.As(err, &dup) {
 		jsonProblemDetails(w, http.StatusConflict, "duplicate_email",
 			"An active person already owns this email.",

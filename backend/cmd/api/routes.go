@@ -7,16 +7,25 @@ import (
 
 	"github.com/riverqueue/river"
 
+	activities "github.com/gradionhq/margince/backend/internal/modules/activities"
+	actstransport "github.com/gradionhq/margince/backend/internal/modules/activities/transport"
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
+	audithistory "github.com/gradionhq/margince/backend/internal/modules/audithistory"
 	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	dealstransport "github.com/gradionhq/margince/backend/internal/modules/deals/transport"
-	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
-	dealtransport "github.com/gradionhq/margince/backend/internal/modules/directory/transport"
 	crmauth "github.com/gradionhq/margince/backend/internal/modules/identity"
 	identitytransport "github.com/gradionhq/margince/backend/internal/modules/identity/transport"
+	organizations "github.com/gradionhq/margince/backend/internal/modules/organizations"
+	orgstransport "github.com/gradionhq/margince/backend/internal/modules/organizations/transport"
+	partners "github.com/gradionhq/margince/backend/internal/modules/partners"
+	partnerstransport "github.com/gradionhq/margince/backend/internal/modules/partners/transport"
+	people "github.com/gradionhq/margince/backend/internal/modules/people"
 	peopletransport "github.com/gradionhq/margince/backend/internal/modules/people/transport"
+	relationships "github.com/gradionhq/margince/backend/internal/modules/relationships"
+	relstransport "github.com/gradionhq/margince/backend/internal/modules/relationships/transport"
 	"github.com/gradionhq/margince/backend/internal/platform/httpserver"
 	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/authz"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
 
@@ -131,20 +140,20 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 		mux.Handle(path, wrapped)
 		mux.Handle(path+"/", wrapped)
 	}
-	crud("/people", httpserver.ObjPerson, peopletransport.NewPersonHandler(directory.NewPersonStore(k.db), directory.NewRelationshipStore(k.db), directory.NewDealStore(k.db), directory.NewActivityStore(k.db), k.verifier))
-	crud("/organizations", httpserver.ObjOrganization, dealtransport.NewOrganizationHandler(directory.NewOrgStore(k.db), directory.NewRelationshipStore(k.db), directory.NewDealStore(k.db), directory.NewActivityStore(k.db), k.verifier))
-	dealHandler := dealtransport.NewDealHandler(directory.NewDealStore(k.db), directory.NewRelationshipStore(k.db), directory.NewActivityStore(k.db), k.verifier)
+	crud("/people", httpserver.ObjPerson, peopletransport.NewPersonHandler(people.NewPersonStore(k.db), relationships.NewRelationshipStore(k.db), deals.NewDealStore(k.db), activities.NewActivityStore(k.db), k.verifier))
+	crud("/organizations", httpserver.ObjOrganization, orgstransport.NewOrganizationHandler(organizations.NewOrgStore(k.db), relationships.NewRelationshipStore(k.db), deals.NewDealStore(k.db), activities.NewActivityStore(k.db), k.verifier))
+	dealHandler := dealstransport.NewDealHandler(deals.NewDealStore(k.db), relationships.NewRelationshipStore(k.db), activities.NewActivityStore(k.db), k.verifier)
 	crud("/deals", httpserver.ObjDeal, dealHandler)
 	mux.Handle("POST /deals/{id}/advance", instrument("/deals/advance", k.domainWrap(httpserver.ObjDeal, dealHandler)))
 	mux.Handle("GET /deals/{id}/stakeholders", instrument("/deals/stakeholders", k.domainWrap(httpserver.ObjDeal, dealHandler)))
 	crud("/pipelines", httpserver.ObjPipeline, dealstransport.NewPipelineHandler(deals.NewPipelineStore(k.db), deals.NewStageStore(k.db), deals.NewRollupStore(k.db)))
 	crud("/stages", httpserver.ObjStage, dealstransport.NewStageHandler(deals.NewStageStore(k.db)))
-	partnerHandler := dealtransport.NewPartnerHandler(directory.NewPartnerStore(k.db))
+	partnerHandler := partnerstransport.NewPartnerHandler(partners.NewPartnerStore(k.db))
 	mux.Handle("PUT /organizations/{id}/partner", instrument("/organizations/partner", k.domainWrap(httpserver.ObjPartner, partnerHandler)))
 	mux.Handle("GET /organizations/{id}/partner", instrument("/organizations/partner", k.domainWrap(httpserver.ObjPartner, partnerHandler)))
 	mux.Handle("GET /partners", instrument("/partners", k.domainWrap(httpserver.ObjPartner, partnerHandler)))
-	crud("/relationships", httpserver.ObjRelationship, dealtransport.NewRelationshipHandler(directory.NewRelationshipStore(k.db)))
-	crud("/activities", httpserver.ObjActivity, dealtransport.NewActivityHandler(directory.NewActivityStore(k.db)))
+	crud("/relationships", httpserver.ObjRelationship, relstransport.NewRelationshipHandler(relationships.NewRelationshipStore(k.db)))
+	crud("/activities", httpserver.ObjActivity, actstransport.NewActivityHandler(activities.NewActivityStore(k.db)))
 
 	// GET /records/{entity_type}/{id}/history: object varies per-request
 	// (the entity_type path param), so it cannot use domainWrap's
@@ -153,15 +162,15 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 	// closure adapts RbacMiddleware's LoadRolePermissions/AuthorizePerms
 	// machinery into that Authorizer signature. Auth/workspace context is
 	// still required via workspaceWrap + RequireAuth.
-	historyAuthz := func(ctx context.Context, object, action string) error {
+	historyAuthz := authz.Authorizer(func(ctx context.Context, object, action string) error {
 		p, _ := crmctx.From(ctx)
 		perms, err := httpserver.LoadRolePermissions(ctx, k.db, p.TenantID, p.UserID)
 		if err != nil {
 			return err
 		}
 		return crmauth.AuthorizePerms(perms, object, action)
-	}
-	historyHandler := directory.NewHistoryHandler(directory.NewAuditHistoryReader(k.db), historyAuthz)
+	})
+	historyHandler := audithistory.New(k.db, historyAuthz).Handler
 	mux.Handle("GET /records/{entity_type}/{id}/history",
 		instrument("/records/history", k.workspaceWrap(httpserver.RequireAuth(historyHandler))))
 }

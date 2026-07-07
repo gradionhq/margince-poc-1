@@ -11,6 +11,7 @@ import (
 
 	"github.com/gradionhq/margince/backend/internal/modules/deals/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 	"github.com/gradionhq/margince/backend/internal/shared/ports/mcp"
 )
 
@@ -117,4 +118,56 @@ func NewRollupStore(db *sql.DB) *RollupStore {
 // AsOfFXRate returns the most recent fx_rate.rate for fromCurrency->toCurrency with rate_date <= asOf.
 func AsOfFXRate(ctx context.Context, tx *sql.Tx, workspaceID, fromCurrency, toCurrency string, asOf time.Time) (float64, error) {
 	return adapters.AsOfFXRate(ctx, tx, workspaceID, fromCurrency, toCurrency, asOf)
+}
+
+// ---------------------------------------------------------------------------
+// Deal domain type aliases
+// ---------------------------------------------------------------------------
+
+// Deal is a sales opportunity (data-model §6.3).
+type Deal = domain.Deal
+
+// AdvanceInput carries a validated advanceDeal request body.
+type AdvanceInput = domain.AdvanceInput
+
+// DealListFilter holds optional predicates for ListFiltered.
+type DealListFilter = domain.DealListFilter
+
+// ---------------------------------------------------------------------------
+// Deal stalled-flag constants (DEAL-PARAM-1/2)
+// ---------------------------------------------------------------------------
+
+const (
+	// StalledThresholdDays is the idle threshold for the stalled flag (DEAL-PARAM-1).
+	StalledThresholdDays = domain.StalledThresholdDays
+	// StalledAskedToWaitDays is the suppression window (DEAL-PARAM-2).
+	StalledAskedToWaitDays = domain.StalledAskedToWaitDays
+	// StalledReasonNoActivity60Days is the default stalled reason DEAL-FORM-3 produces.
+	StalledReasonNoActivity60Days = domain.StalledReasonNoActivity60Days
+)
+
+// ---------------------------------------------------------------------------
+// Deal domain function wrappers
+// ---------------------------------------------------------------------------
+
+// NewDeal returns a Deal with a fresh ID, open status, version 1, and copied provenance.
+func NewDeal(name, pipelineID, stageID string, p prov.Provenance) Deal {
+	return domain.NewDeal(name, pipelineID, stageID, p)
+}
+
+// IsStalled implements DEAL-FORM-3: returns whether a deal is stalled and its reason.
+func IsStalled(d Deal, now time.Time) (bool, string) {
+	return domain.IsStalled(d, now)
+}
+
+// ---------------------------------------------------------------------------
+// DealStore adapter type alias and constructor
+// ---------------------------------------------------------------------------
+
+// DealStore manages deal rows, including stage transitions and FX freeze.
+type DealStore = adapters.DealStore
+
+// NewDealStore returns a DealStore backed by db.
+func NewDealStore(db *sql.DB) *DealStore {
+	return adapters.NewDealStore(db)
 }

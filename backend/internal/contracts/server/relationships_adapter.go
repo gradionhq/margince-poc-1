@@ -4,14 +4,14 @@ import (
 	"net/http"
 
 	"github.com/gradionhq/margince/backend/internal/contracts/types"
-	dealtransport "github.com/gradionhq/margince/backend/internal/modules/directory/transport"
+	relstransport "github.com/gradionhq/margince/backend/internal/modules/relationships/transport"
 )
 
 // RelationshipsAdapter implements the Relationships tag's slice of
 // types.ServerInterface by delegating to the real RelationshipHandler
 // cmd/api/routes.go already wires for /relationships.
 type RelationshipsAdapter struct {
-	H *dealtransport.RelationshipHandler
+	H *relstransport.RelationshipHandler
 }
 
 // ListRelationships delegates to the wired handler; see the struct doc comment above.

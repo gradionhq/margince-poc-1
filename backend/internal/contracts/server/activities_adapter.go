@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gradionhq/margince/backend/internal/contracts/types"
-	dealtransport "github.com/gradionhq/margince/backend/internal/modules/directory/transport"
+	actstransport "github.com/gradionhq/margince/backend/internal/modules/activities/transport"
 )
 
 // ActivitiesAdapter implements the Activities tag's slice of
@@ -15,7 +15,7 @@ import (
 // embedded adapters in AllOperations — neither has a wired handler in this
 // pruned tree, so AIAdapter stubs them 501 like the rest of its tag.
 type ActivitiesAdapter struct {
-	H *dealtransport.ActivityHandler
+	H *actstransport.ActivityHandler
 }
 
 // ListActivities delegates to the wired handler; see the struct doc comment above.

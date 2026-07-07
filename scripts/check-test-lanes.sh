@@ -27,7 +27,7 @@ while IFS= read -r f; do
     violations=1
   fi
 # Search roots mirror the Makefile's GO_DIRS — keep in sync when a new top-level Go dir is added.
-done < <(find backend crm-de cli -name '*_test.go' 2>/dev/null | sort)
+done < <(find backend jurisdictions/de cli -name '*_test.go' 2>/dev/null | sort)
 
 if [ "$violations" -ne 0 ]; then
   echo "FAIL: test-lanes — real-infra tests must carry //go:build integration (or liveuat)."

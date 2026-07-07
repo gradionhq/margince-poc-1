@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gradionhq/margince/backend/internal/contracts/types"
-	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
+	audittransport "github.com/gradionhq/margince/backend/internal/modules/audithistory/transport"
 )
 
 // AuditAdapter implements the Audit tag's slice of types.ServerInterface by
@@ -13,7 +13,7 @@ import (
 // and id itself via r.PathValue, so the typed entityType/idParam arguments
 // oapi-codegen generates are intentionally unused (D10).
 type AuditAdapter struct {
-	H *directory.HistoryHandler
+	H *audittransport.HistoryHandler
 }
 
 // GetRecordHistory delegates to the wired handler; see the struct doc comment above.

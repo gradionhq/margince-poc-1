@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gradionhq/margince/backend/internal/contracts/types"
-	dealtransport "github.com/gradionhq/margince/backend/internal/modules/directory/transport"
+	orgstransport "github.com/gradionhq/margince/backend/internal/modules/organizations/transport"
 )
 
 // OrganizationsAdapter implements the Organizations tag's slice of
@@ -14,7 +14,7 @@ import (
 // PartnersAdapter (their primary tag), to avoid a duplicate method
 // declaration across two embedded adapters in AllOperations.
 type OrganizationsAdapter struct {
-	H *dealtransport.OrganizationHandler
+	H *orgstransport.OrganizationHandler
 }
 
 // ListOrganizations delegates to the wired handler; see the struct doc comment above.

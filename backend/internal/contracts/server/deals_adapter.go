@@ -6,7 +6,7 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/gradionhq/margince/backend/internal/contracts/types"
-	dealtransport "github.com/gradionhq/margince/backend/internal/modules/directory/transport"
+	dealstransport "github.com/gradionhq/margince/backend/internal/modules/deals/transport"
 )
 
 // DealsAdapter implements the Deals tag's slice of types.ServerInterface.
@@ -16,7 +16,7 @@ import (
 // next-step, and people-signal operations have no handler in this pruned
 // skeleton tree and return 501, same as a fully-unimplemented tag's adapter.
 type DealsAdapter struct {
-	H *dealtransport.DealHandler
+	H *dealstransport.DealHandler
 }
 
 // ListDeals delegates to the wired handler; see the struct doc comment above.

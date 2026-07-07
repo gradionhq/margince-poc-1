@@ -22,7 +22,11 @@ import (
 	"strconv"
 	"strings"
 
-	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
+	activities "github.com/gradionhq/margince/backend/internal/modules/activities"
+	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
+	peopleadapters "github.com/gradionhq/margince/backend/internal/modules/people/adapters"
+	peopledomain "github.com/gradionhq/margince/backend/internal/modules/people/domain"
+	relationships "github.com/gradionhq/margince/backend/internal/modules/relationships"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
@@ -55,15 +59,15 @@ var personSortValues = map[string]bool{
 
 // PersonHandler routes /people and /people/{id} requests to the PersonStore.
 type PersonHandler struct {
-	store         *directory.PersonStore
-	relStore      *directory.RelationshipStore
-	dealStore     *directory.DealStore
-	activityStore *directory.ActivityStore
+	store         *peopleadapters.PersonStore
+	relStore      *relationships.RelationshipStore
+	dealStore     *deals.DealStore
+	activityStore *activities.ActivityStore
 	verifier      approvalsport.Verifier // used only by the merge endpoint's toolgate.Enforce call (🟡 gate)
 }
 
 // NewPersonHandler returns a PersonHandler.
-func NewPersonHandler(store *directory.PersonStore, relStore *directory.RelationshipStore, dealStore *directory.DealStore, activityStore *directory.ActivityStore, verifier approvalsport.Verifier) *PersonHandler {
+func NewPersonHandler(store *peopleadapters.PersonStore, relStore *relationships.RelationshipStore, dealStore *deals.DealStore, activityStore *activities.ActivityStore, verifier approvalsport.Verifier) *PersonHandler {
 	return &PersonHandler{store: store, relStore: relStore, dealStore: dealStore, activityStore: activityStore, verifier: verifier}
 }
 
@@ -181,19 +185,19 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 		jsonProblem(w, http.StatusBadRequest, "missing_required_fields")
 		return
 	}
-	p := directory.NewPerson(body.FullName, prov.Provenance{Source: body.Source, CapturedBy: body.CapturedBy})
+	p := peopledomain.NewPerson(body.FullName, prov.Provenance{Source: body.Source, CapturedBy: body.CapturedBy})
 	p.WorkspaceID = wsID
 	p.FirstName = body.FirstName
 	p.LastName = body.LastName
 	p.Title = body.Title
 	p.OwnerID = body.OwnerID
-	emails := make([]directory.PersonEmailInput, len(body.Emails))
+	emails := make([]peopledomain.PersonEmailInput, len(body.Emails))
 	for i, e := range body.Emails {
-		emails[i] = directory.PersonEmailInput{Email: e.Email, EmailType: e.EmailType, IsPrimary: e.IsPrimary, Position: e.Position}
+		emails[i] = peopledomain.PersonEmailInput{Email: e.Email, EmailType: e.EmailType, IsPrimary: e.IsPrimary, Position: e.Position}
 	}
 	created, err := h.store.Create(r.Context(), p, emails)
 	if err != nil {
-		var dup *directory.ErrDuplicateEmail
+		var dup *peopleadapters.ErrDuplicateEmail
 		if errors.As(err, &dup) {
 			jsonProblemDetails(w, http.StatusConflict, "duplicate_email",
 				"An active person already owns this email.",
@@ -217,10 +221,10 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 // set is legitimately empty — not expressible via one struct/tag serving both
 // list and get semantics).
 type personDetailResponse struct {
-	directory.Person
-	Relationships []directory.Relationship `json:"relationships"`
-	Deals         []directory.Deal         `json:"deals"`
-	Activities    []directory.ActivityRef  `json:"activities"`
+	peopledomain.Person
+	Relationships []relationships.Relationship `json:"relationships"`
+	Deals         []deals.Deal                 `json:"deals"`
+	Activities    []activities.ActivityRef     `json:"activities"`
 }
 
 func (h *PersonHandler) get(w http.ResponseWriter, r *http.Request, id string) {
@@ -247,26 +251,26 @@ func (h *PersonHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 }
 
 // assembleComposite fans out to related stores for the person-360 read.
-func (h *PersonHandler) assembleComposite(ctx context.Context, wsID string, p *directory.Person) error {
-	rels, _, err := h.relStore.List(ctx, wsID, "", 50, directory.RelationshipListFilter{PersonID: p.ID})
+func (h *PersonHandler) assembleComposite(ctx context.Context, wsID string, p *peopledomain.Person) error {
+	rels, _, err := h.relStore.List(ctx, wsID, "", 50, relationships.RelationshipListFilter{PersonID: p.ID})
 	if err != nil {
 		return err
 	}
 	p.Relationships = rels
 
-	deals, _, err := h.dealStore.ListFiltered(ctx, wsID, "", 50, directory.DealListFilter{PersonID: p.ID})
+	dealList, _, err := h.dealStore.ListFiltered(ctx, wsID, "", 50, deals.DealListFilter{PersonID: p.ID})
 	if err != nil {
 		return err
 	}
-	p.Deals = deals
+	p.Deals = dealList
 
 	acts, _, err := h.activityStore.List(ctx, wsID, "person", p.ID, "", 50)
 	if err != nil {
 		return err
 	}
-	refs := make([]directory.ActivityRef, len(acts))
+	refs := make([]activities.ActivityRef, len(acts))
 	for i, a := range acts {
-		refs[i] = directory.ToActivityRef(a)
+		refs[i] = activities.ToActivityRef(a)
 	}
 	p.Activities = refs
 	return nil
