@@ -16,6 +16,7 @@ import (
 
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
 	crmauth "github.com/gradionhq/margince/backend/internal/modules/identity"
+	identitytransport "github.com/gradionhq/margince/backend/internal/modules/identity/transport"
 	peopletransport "github.com/gradionhq/margince/backend/internal/modules/people/transport"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
@@ -99,7 +100,7 @@ func TestAuthStateMatrix(t *testing.T) {
 		{
 			name: "valid session -> 200",
 			setupCookie: func() string {
-				tok, err := sessions.Create(ctx, wsID, userID)
+				tok, err := sessions.Create(ctx, wsID, userID, "test-agent", "127.0.0.1")
 				if err != nil {
 					t.Fatalf("create session: %v", err)
 				}
@@ -133,7 +134,7 @@ func TestAuthStateMatrix(t *testing.T) {
 	}{
 		name: "revoked session -> 401",
 		setupCookie: func() string {
-			tok, err := sessions.Create(ctx, wsID, userID)
+			tok, err := sessions.Create(ctx, wsID, userID, "test-agent", "127.0.0.1")
 			if err != nil {
 				t.Fatalf("create session: %v", err)
 			}
@@ -214,32 +215,16 @@ func TestLogout(t *testing.T) {
 	sessions := crmauth.NewSessionStore(db)
 
 	// Create a valid session.
-	tok, err := sessions.Create(ctx, wsID, userID)
+	tok, err := sessions.Create(ctx, wsID, userID, "test-agent", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
 
-	// Wire a minimal mux with just the logout handler (inlined so we stay in crm-core_test;
-	// cmd/server is package main and not importable).
-	logoutHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, cerr := r.Cookie(crmauth.CookieName)
-		if cerr == nil {
-			if rec, lerr := sessions.Lookup(r.Context(), cookie.Value); lerr == nil {
-				_ = sessions.Delete(r.Context(), rec.ID)
-			}
-		}
-		http.SetCookie(w, &http.Cookie{
-			Name:   crmauth.CookieName,
-			Value:  "",
-			MaxAge: -1,
-			Path:   "/",
-		})
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	})
+	// Exercise the real production handler (identity/transport is an importable
+	// package, not cmd/server's package main) so this test proves the actual
+	// soft-revoke-on-logout behavior (D4), not a hand-rolled copy of it.
 	mux := http.NewServeMux()
-	mux.Handle("POST /auth/logout", logoutHandler)
+	mux.Handle("POST /auth/logout", identitytransport.HandleLogout(sessions))
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
 	req.AddCookie(&http.Cookie{Name: crmauth.CookieName, Value: tok})

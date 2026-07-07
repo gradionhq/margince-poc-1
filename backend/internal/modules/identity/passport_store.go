@@ -15,6 +15,8 @@ type PassportRecord struct {
 	ID          string
 	WorkspaceID string
 	GrantedBy   string
+	OnBehalfOf  *string
+	Label       *string
 	Scopes      []string
 	RevokedAt   *time.Time
 }
@@ -26,7 +28,9 @@ type PassportStore struct{ db *sql.DB }
 func NewPassportStore(db *sql.DB) *PassportStore { return &PassportStore{db: db} }
 
 // Create mints a passport token, stores its hash, returns raw token + record.
-func (s *PassportStore) Create(ctx context.Context, workspaceID, grantedBy string, scopes []string, expiresIn time.Duration) (rawToken string, rec PassportRecord, err error) {
+// onBehalfOf/label restore the pinned passport columns (DM-DDL-7); callers
+// without a distinct on-behalf-of principal pass grantedBy again.
+func (s *PassportStore) Create(ctx context.Context, workspaceID, grantedBy, onBehalfOf, label string, scopes []string, expiresIn time.Duration) (rawToken string, rec PassportRecord, err error) {
 	raw := make([]byte, 32)
 	if _, err = rand.Read(raw); err != nil {
 		return "", rec, err
@@ -36,15 +40,17 @@ func (s *PassportStore) Create(ctx context.Context, workspaceID, grantedBy strin
 	expiresAt := time.Now().UTC().Add(expiresIn)
 	scopeArr := "{" + strings.Join(scopes, ",") + "}"
 	err = s.db.QueryRowContext(ctx, `
-		INSERT INTO passport (workspace_id, granted_by, scopes, token_hash, expires_at)
-		VALUES ($1::uuid, $2::uuid, $3::text[], $4, $5)
+		INSERT INTO passport (workspace_id, granted_by, on_behalf_of, label, scopes, token_hash, expires_at)
+		VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5::text[], $6, $7)
 		RETURNING id`,
-		workspaceID, grantedBy, scopeArr, hash, expiresAt).Scan(&rec.ID)
+		workspaceID, grantedBy, onBehalfOf, nullableStr(label), scopeArr, hash, expiresAt).Scan(&rec.ID)
 	if err != nil {
 		return "", rec, err
 	}
 	rec.WorkspaceID = workspaceID
 	rec.GrantedBy = grantedBy
+	rec.OnBehalfOf = nullableStr(onBehalfOf)
+	rec.Label = nullableStr(label)
 	rec.Scopes = scopes
 	return rawToken, rec, nil
 }
@@ -55,10 +61,10 @@ func (s *PassportStore) Lookup(ctx context.Context, rawToken string) (PassportRe
 	var rec PassportRecord
 	var scopesRaw []byte
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, workspace_id, granted_by, scopes, revoked_at
+		SELECT id, workspace_id, granted_by, on_behalf_of, label, scopes, revoked_at
 		FROM passport
 		WHERE token_hash=$1 AND expires_at > now() AND revoked_at IS NULL`,
-		hash).Scan(&rec.ID, &rec.WorkspaceID, &rec.GrantedBy, &scopesRaw, &rec.RevokedAt)
+		hash).Scan(&rec.ID, &rec.WorkspaceID, &rec.GrantedBy, &rec.OnBehalfOf, &rec.Label, &scopesRaw, &rec.RevokedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return rec, ErrNotFound
 	}

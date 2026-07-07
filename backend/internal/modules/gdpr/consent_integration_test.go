@@ -51,7 +51,20 @@ func checkGranted(t *testing.T, db *sql.DB, wsID, personID, purpose string) bool
 	return state == crmgdpr.Granted
 }
 
-// seedWorkspaceAndPerson creates a workspace + person and returns (wsID, personID).
+// defaultConsentPurposesForTest mirrors the 4-entry literal the identity
+// module's signup handler seeds into every new workspace (D2 step 7). Tests in
+// this file create a workspace via a raw INSERT (bypassing that handler), so
+// they must seed the workspace's consent_purpose rows themselves — consent_purpose
+// became per-workspace in migration 000070_ws_c_conformance.
+var defaultConsentPurposesForTest = []struct{ key, label string }{
+	{"marketing_email", "Email marketing communications"},
+	{"marketing_phone", "Phone marketing communications"},
+	{"profiling", "Profiling and personalisation"},
+	{"product_updates", "Product update notifications"},
+}
+
+// seedWorkspaceAndPerson creates a workspace + person (with the workspace's
+// default consent_purpose rows) and returns (wsID, personID).
 func seedWorkspaceAndPerson(t *testing.T, db *sql.DB) (string, string) {
 	t.Helper()
 	wsID := ids.New()
@@ -62,22 +75,29 @@ func seedWorkspaceAndPerson(t *testing.T, db *sql.DB) (string, string) {
 	mustExec(t, db, `INSERT INTO app_user (id,workspace_id,email,display_name) VALUES ($1::uuid,$2::uuid,$3,$4)`,
 		userID, wsID, "u"+userID+"@t.test", "Tester")
 	mustExec(t, db, `SELECT set_config('app.workspace_id',$1,false)`, wsID)
+	for _, cp := range defaultConsentPurposesForTest {
+		mustExec(t, db, `INSERT INTO consent_purpose (workspace_id,key,label) VALUES ($1::uuid,$2,$3)`,
+			wsID, cp.key, cp.label)
+	}
 	mustExec(t, db, `INSERT INTO person (id,workspace_id,full_name,source,captured_by,version)
 		VALUES ($1::uuid,$2::uuid,'Test Person','test','test',1)`, personID, wsID)
 	return wsID, personID
 }
 
-// TestConsentPurposeSeeds verifies the four seed rows are present.
+// TestConsentPurposeSeeds verifies the four default purposes exist, scoped to
+// one workspace (consent_purpose is per-workspace as of migration
+// 000070_ws_c_conformance — D2 — not a global lookup table).
 func TestConsentPurposeSeeds(t *testing.T) {
 	db := testDB(t)
+	wsID, _ := seedWorkspaceAndPerson(t, db)
 	expected := []string{"marketing_email", "marketing_phone", "profiling", "product_updates"}
-	for _, name := range expected {
+	for _, key := range expected {
 		var n int
-		if err := db.QueryRow(`SELECT count(*) FROM consent_purpose WHERE name=$1`, name).Scan(&n); err != nil {
+		if err := db.QueryRow(`SELECT count(*) FROM consent_purpose WHERE workspace_id=$1 AND key=$2`, wsID, key).Scan(&n); err != nil {
 			t.Fatalf("query consent_purpose: %v", err)
 		}
 		if n != 1 {
-			t.Errorf("consent_purpose seed %q: count=%d want 1", name, n)
+			t.Errorf("consent_purpose seed %q for workspace %s: count=%d want 1", key, wsID, n)
 		}
 	}
 }
