@@ -15,7 +15,10 @@ import (
 	_ "github.com/lib/pq"
 
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
-	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
+	activities "github.com/gradionhq/margince/backend/internal/modules/activities"
+	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
+	people "github.com/gradionhq/margince/backend/internal/modules/people"
+	relationships "github.com/gradionhq/margince/backend/internal/modules/relationships"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
@@ -78,13 +81,13 @@ func seedWorkspace(t *testing.T, db *sql.DB, wsID string) {
 	}
 }
 
-func personHandlerForTest(db *sql.DB, store *directory.PersonStore) *PersonHandler {
-	return NewPersonHandler(store, directory.NewRelationshipStore(db), directory.NewDealStore(db), directory.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
+func personHandlerForTest(db *sql.DB, store *people.PersonStore) *PersonHandler {
+	return NewPersonHandler(store, relationships.NewRelationshipStore(db), deals.NewDealStore(db), activities.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 }
 
 func TestPersonHandler_CreateAndGet(t *testing.T) {
 	db := openTestDB(t)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	h := personHandlerForTest(db, store)
 
 	const wsID = "00000000-0000-0000-0000-000000000001"
@@ -106,7 +109,7 @@ func TestPersonHandler_CreateAndGet(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("POST /people: want 201, got %d: %s", w.Code, w.Body.String())
 	}
-	var created directory.Person
+	var created people.Person
 	if err := json.NewDecoder(w.Body).Decode(&created); err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +133,7 @@ func TestPersonHandler_CreateAndGet(t *testing.T) {
 
 func TestPersonHandler_List(t *testing.T) {
 	db := openTestDB(t)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	h := personHandlerForTest(db, store)
 
 	const wsID = "00000000-0000-0000-0000-000000000001"
@@ -138,7 +141,7 @@ func TestPersonHandler_List(t *testing.T) {
 	setRLS(t, db, wsID)
 
 	// Seed one person directly via store
-	p := directory.NewPerson("Bob Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	p := people.NewPerson("Bob Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = wsID
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID})
 	if _, err := store.Create(ctx, p, nil); err != nil {
@@ -164,7 +167,7 @@ func TestPersonHandler_List(t *testing.T) {
 
 func TestPersonHandler_UpdateAndArchive(t *testing.T) {
 	db := openTestDB(t)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	h := personHandlerForTest(db, store)
 
 	const wsID = "00000000-0000-0000-0000-000000000001"
@@ -172,7 +175,7 @@ func TestPersonHandler_UpdateAndArchive(t *testing.T) {
 	setRLS(t, db, wsID)
 
 	// Create
-	p := directory.NewPerson("Charlie Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	p := people.NewPerson("Charlie Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = wsID
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID})
 	created, err := store.Create(ctx, p, nil)
@@ -209,7 +212,7 @@ func TestPersonHandler_UpdateAndArchive(t *testing.T) {
 // still 200, not 404, mirroring OrgStore.GetAny's contract.
 func TestPersonHandler_GetArchivedAfterMerge(t *testing.T) {
 	db := openTestDB(t)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	h := personHandlerForTest(db, store)
 
 	const wsID = "00000000-0000-0000-0000-000000000001"
@@ -217,13 +220,13 @@ func TestPersonHandler_GetArchivedAfterMerge(t *testing.T) {
 	setRLS(t, db, wsID)
 
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID, UserID: "human:test"})
-	loser := directory.NewPerson("Loser Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	loser := people.NewPerson("Loser Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	loser.WorkspaceID = wsID
 	createdLoser, err := store.Create(ctx, loser, nil)
 	if err != nil {
 		t.Fatal("create loser:", err)
 	}
-	target := directory.NewPerson("Target Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	target := people.NewPerson("Target Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	target.WorkspaceID = wsID
 	createdTarget, err := store.Create(ctx, target, nil)
 	if err != nil {
@@ -255,14 +258,14 @@ func TestPersonHandler_GetArchivedAfterMerge(t *testing.T) {
 
 func TestPersonHandler_VersionSkew(t *testing.T) {
 	db := openTestDB(t)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	h := personHandlerForTest(db, store)
 
 	const wsID = "00000000-0000-0000-0000-000000000001"
 	seedWorkspace(t, db, wsID)
 	setRLS(t, db, wsID)
 
-	p := directory.NewPerson("Dave Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	p := people.NewPerson("Dave Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = wsID
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID})
 	created, err := store.Create(ctx, p, nil)

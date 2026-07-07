@@ -1,7 +1,34 @@
-// Package people is the people module scaffold (WS-E-a).
-// Transport handlers live in people/transport/; this module.go provides the
-// top-level Module type as a DI handle for future application-layer wiring.
+// Package people is the people module (WS-E-a).
+// Transport handlers live in people/transport/; domain types in people/domain/;
+// SQL adapters in people/adapters/; port interfaces in people/ports/;
+// application services in people/app/.
 package people
+
+import (
+	"database/sql"
+
+	"github.com/gradionhq/margince/backend/internal/modules/people/adapters"
+	"github.com/gradionhq/margince/backend/internal/modules/people/domain"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
+)
+
+// Re-exported type aliases so callers can import from the module root without
+// reaching into sub-packages for the most commonly used types.
+
+// Person is the people module's contact-record domain type.
+type Person = domain.Person
+
+// PersonEmailInput is one entry of createPerson's emails[] request field.
+type PersonEmailInput = domain.PersonEmailInput
+
+// PersonStore is the SQL adapter for person rows.
+type PersonStore = adapters.PersonStore
+
+// NewPersonStore returns a PersonStore backed by db.
+func NewPersonStore(db *sql.DB) *PersonStore { return adapters.NewPersonStore(db) }
+
+// NewPerson returns a Person with a fresh ID, version 1, and copied provenance.
+func NewPerson(fullName string, p prov.Provenance) Person { return domain.NewPerson(fullName, p) }
 
 // Module is the people module's dependency-injection handle.
 // Future tickets will add datasource.Provider, repository seams, and

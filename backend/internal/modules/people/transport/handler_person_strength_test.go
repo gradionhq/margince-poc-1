@@ -13,7 +13,7 @@ import (
 
 	_ "github.com/lib/pq"
 
-	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
+	people "github.com/gradionhq/margince/backend/internal/modules/people"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
@@ -52,7 +52,7 @@ func seedPersonActivity(t *testing.T, db *sql.DB, wsID, personID, kind, directio
 
 func TestPersonHandler_Get_StrengthNoSignalYet(t *testing.T) {
 	db := openTestDB(t)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	h := personHandlerForTest(db, store)
 
 	const wsID = testWorkspaceID
@@ -60,7 +60,7 @@ func TestPersonHandler_Get_StrengthNoSignalYet(t *testing.T) {
 	setRLS(t, db, wsID)
 
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID})
-	p := directory.NewPerson("NoSignal Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	p := people.NewPerson("NoSignal Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = wsID
 	created, err := store.Create(ctx, p, nil)
 	if err != nil {
@@ -85,7 +85,7 @@ func TestPersonHandler_Get_StrengthNoSignalYet(t *testing.T) {
 
 func TestPersonHandler_Get_StrengthNoRecentActivity(t *testing.T) {
 	db := openTestDB(t)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	h := personHandlerForTest(db, store)
 
 	const wsID = testWorkspaceID
@@ -93,7 +93,7 @@ func TestPersonHandler_Get_StrengthNoRecentActivity(t *testing.T) {
 	setRLS(t, db, wsID)
 
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID})
-	p := directory.NewPerson("Stale Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	p := people.NewPerson("Stale Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = wsID
 	created, err := store.Create(ctx, p, nil)
 	if err != nil {
@@ -135,7 +135,7 @@ func TestPersonHandler_Get_StrengthNoRecentActivity(t *testing.T) {
 // resulting score stable at 47/moderate.
 func TestPersonHandler_Get_StrengthGoldenExample(t *testing.T) {
 	db := openTestDB(t)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	h := personHandlerForTest(db, store)
 
 	const wsID = testWorkspaceID
@@ -143,7 +143,7 @@ func TestPersonHandler_Get_StrengthGoldenExample(t *testing.T) {
 	setRLS(t, db, wsID)
 
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID})
-	p := directory.NewPerson("Golden Example Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	p := people.NewPerson("Golden Example Test", prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = wsID
 	created, err := store.Create(ctx, p, nil)
 	if err != nil {
@@ -182,7 +182,7 @@ func TestPersonHandler_Get_StrengthGoldenExample(t *testing.T) {
 
 func TestPersonHandler_List_SortStrength(t *testing.T) {
 	db := openTestDB(t)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	h := personHandlerForTest(db, store)
 
 	const wsID = testWorkspaceID
@@ -190,8 +190,8 @@ func TestPersonHandler_List_SortStrength(t *testing.T) {
 	setRLS(t, db, wsID)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID})
 
-	mkPerson := func(name string) directory.Person {
-		p := directory.NewPerson(name, prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	mkPerson := func(name string) people.Person {
+		p := people.NewPerson(name, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 		p.WorkspaceID = wsID
 		created, err := store.Create(ctx, p, nil)
 		if err != nil {
@@ -218,7 +218,7 @@ func TestPersonHandler_List_SortStrength(t *testing.T) {
 	}
 
 	var resp struct {
-		Data []directory.Person `json:"data"`
+		Data []people.Person `json:"data"`
 	}
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
@@ -239,7 +239,7 @@ func TestPersonHandler_List_SortStrength(t *testing.T) {
 	}
 
 	var resp3 struct {
-		Data []directory.Person `json:"data"`
+		Data []people.Person `json:"data"`
 	}
 	if err := json.NewDecoder(w3.Body).Decode(&resp3); err != nil {
 		t.Fatal(err)
@@ -270,7 +270,7 @@ func TestPersonHandler_List_SortStrength(t *testing.T) {
 // guaranteed regardless of test run order.
 func TestPersonHandler_List_SortStrength_EmptyWorkspace(t *testing.T) {
 	db := openTestDB(t)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	h := personHandlerForTest(db, store)
 
 	const wsID = "00000000-0000-0000-0000-000000000002"

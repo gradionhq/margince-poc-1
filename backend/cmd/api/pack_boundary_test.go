@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	coreModPkg = "github.com/gradionhq/margince/backend/internal/modules/directory"
+	coreModPkg = "github.com/gradionhq/margince/backend/internal/modules/people"
 	packMod    = "github.com/gradionhq/margince/jurisdictions/de"
 )
 

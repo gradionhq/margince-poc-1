@@ -49,6 +49,9 @@ components:
   errs:         { in: internal/shared/apperrors }
   prov:         { in: internal/shared/kernel/prov }
   trust:        { in: internal/shared/kernel/trust }
+  authzkern:    { in: internal/shared/kernel/authz }
+  strengthkern: { in: internal/shared/kernel/strength }
+  dedupekern:   { in: internal/shared/kernel/dedupe }
   # Tier-0 ports (cross-module seam interfaces)
   wellknown:    { in: internal/shared/ports/wellknown }
   datasource:   { in: internal/shared/ports/datasource }
@@ -61,16 +64,42 @@ components:
   migrate:      { in: internal/shared/ports/migrate }
   approvalsport: { in: internal/shared/ports/approvals }
   # Tier-1 platform (seams WITH impls, cross-cutting)
-  blobstore:  { in: internal/platform/blobstore }
-  keyvault:   { in: internal/platform/keyvault }
-  audit:      { in: internal/platform/audit }
-  httpserver: { in: internal/platform/httpserver }
-  toolgate:   { in: internal/platform/toolgate }
+  blobstore:    { in: internal/platform/blobstore }
+  keyvault:     { in: internal/platform/keyvault }
+  audit:        { in: internal/platform/audit }
+  httpserver:   { in: internal/platform/httpserver }
+  toolgate:     { in: internal/platform/toolgate }
+  workspacetx:  { in: internal/platform/workspacetx }
   # Tier-1 / Tier-2 domain modules
   identity:          { in: internal/modules/identity }
   identitytransport: { in: internal/modules/identity/transport }
-  directory:         { in: internal/modules/directory }
-  dealtransport:     { in: internal/modules/directory/transport }
+  # Split catalog modules (WS-E-b, Task 6)
+  organizations:           { in: internal/modules/organizations }
+  orgsdomain:              { in: internal/modules/organizations/domain }
+  orgsadapters:            { in: internal/modules/organizations/adapters }
+  orgstransport:           { in: internal/modules/organizations/transport }
+  activities:              { in: internal/modules/activities }
+  activitiesdomain:        { in: internal/modules/activities/domain }
+  activitiesadapters:      { in: internal/modules/activities/adapters }
+  activitiestransport:     { in: internal/modules/activities/transport }
+  relationships:           { in: internal/modules/relationships }
+  relsdomain:              { in: internal/modules/relationships/domain }
+  relsadapters:            { in: internal/modules/relationships/adapters }
+  relstransport:           { in: internal/modules/relationships/transport }
+  leads:                   { in: internal/modules/leads }
+  leadsdomain:             { in: internal/modules/leads/domain }
+  leadsadapters:           { in: internal/modules/leads/adapters }
+  partners:                { in: internal/modules/partners }
+  partnersdomain:          { in: internal/modules/partners/domain }
+  partnersadapters:        { in: internal/modules/partners/adapters }
+  partnerstransport:       { in: internal/modules/partners/transport }
+  audithistory:            { in: internal/modules/audithistory }
+  audithistorydomain:      { in: internal/modules/audithistory/domain }
+  audithistoryadapters:    { in: internal/modules/audithistory/adapters }
+  audithistorytransport:   { in: internal/modules/audithistory/transport }
+  datasourcebindings:      { in: internal/modules/datasourcebindings }
+  datasourcebindingsdomain: { in: internal/modules/datasourcebindings/domain }
+  datasourcebindingsadapters: { in: internal/modules/datasourcebindings/adapters }
   deals:             { in: internal/modules/deals }
   dealstransport:    { in: internal/modules/deals/transport }
   dealsdomain:       { in: internal/modules/deals/domain }
@@ -78,6 +107,8 @@ components:
   dealsadapters:     { in: internal/modules/deals/adapters }
   dealsapp:          { in: internal/modules/deals/app }
   people:            { in: internal/modules/people }
+  peopledomain:      { in: internal/modules/people/domain }
+  peopleadapters:    { in: internal/modules/people/adapters }
   peopletransport:   { in: internal/modules/people/transport }
   contracts:         { in: internal/contracts/types }
   identityadapters:  { in: internal/modules/identity/adapters }
@@ -102,40 +133,85 @@ deps:
     canUse: [uuid]
   blobstore:
     canUse: [minio]
+  # Kernel utilities (Tier-0, no internal deps beyond shared primitives)
+  dedupekern:
+    canUse: [text]
+  # Tier-1 platform
+  workspacetx:
+    mayDependOn: [crmctx]
   identity:
     mayDependOn: [identityadapters, keyvault]
   identityadapters:
     mayDependOn: [keyvault]
     canUse: [crypto]
-  # httpserver (extracted from cmd/api, 1c restructure) wraps auth/session
-  # middleware, so it depends on identity the same way cmd/api used to; its
-  # RFC 7807 problem writer emits the generated contract's Problem type.
   httpserver:
     mayDependOn: [crmctx, obs, identity, contracts]
-  # identitytransport (extracted from cmd/api, 1c restructure) is the identity
-  # module's HTTP handler layer: it depends on the shared error/middleware
-  # writer (httpserver), the identity domain, audit (role-assignment writes),
-  # and the Tier-0 kernel bits its handlers use directly. canUse: [pq] mirrors
-  # cmd/api's own blank `_ "github.com/lib/pq"` driver-registration import,
-  # carried over unchanged from auth_handler.go's original poc file.
   identitytransport:
     mayDependOn: [httpserver, identity, audit, crmctx, ids]
     canUse: [pq]
   audit:
     mayDependOn: [crmctx, ids]
-  # directory is core's successor for the un-mounted spine (org/deal/pipeline/
-  # stage/activity/lead) plus the Person entity/store (see task-3-report.md's
-  # mapping-deviations: Person could not cleanly split out into modules/people
-  # without forcing unexported same-package access in Lead.Promote and
-  # DatasourceProvider to become exported, which this task does not authorize).
-  directory:
-    mayDependOn: [crmctx, datasource, ids, errs, prov, audit]
-    canUse: [pq, text] # text: golang.org/x/text/unicode/norm for NFKD unaccent in dedupe.go (T07)
-  # deals additionally depends on mcp (Tier-0) for ResolveDynamicTier, the
-  # advanceDeal x-mcp-tool's "target_stage_semantic" dynamic-tier resolver
-  # (WS-D-b, AC-D2) — registered at cmd/api composition, never imports
-  # platform/toolgate itself (D9: only the composition root wires the two
-  # together).
+  # Split catalog modules (WS-E-b, Task 6)
+  orgsdomain:
+    mayDependOn: [prov, ids]
+  orgsadapters:
+    mayDependOn: [orgsdomain, errs, ids, prov, workspacetx]
+    canUse: [pq]
+  organizations:
+    mayDependOn: [orgsdomain, orgsadapters]
+  orgstransport:
+    mayDependOn: [orgsadapters, orgsdomain, relationships, relsadapters, deals, dealsadapters, activities, activitiesadapters, approvalsport, toolgate, mcp, crmctx, errs]
+  activitiesdomain:
+    mayDependOn: [prov, ids]
+  activitiesadapters:
+    mayDependOn: [activitiesdomain, errs, ids, workspacetx]
+    canUse: [pq]
+  activities:
+    mayDependOn: [activitiesdomain, activitiesadapters]
+  activitiestransport:
+    mayDependOn: [activities, activitiesadapters, activitiesdomain, crmctx, errs]
+  relsdomain:
+    mayDependOn: [prov, ids]
+  relsadapters:
+    mayDependOn: [relsdomain, errs, ids, workspacetx]
+    canUse: [pq]
+  relationships:
+    mayDependOn: [relsdomain, relsadapters]
+  relstransport:
+    mayDependOn: [relationships, relsadapters, relsdomain, crmctx, errs]
+  leadsdomain:
+    mayDependOn: [prov, ids]
+  leadsadapters:
+    mayDependOn: [leadsdomain, errs, ids, workspacetx]
+    canUse: [pq]
+  leads:
+    mayDependOn: [leadsdomain, leadsadapters]
+  partnersdomain:
+    mayDependOn: [prov, ids]
+  partnersadapters:
+    mayDependOn: [partnersdomain, errs, ids, workspacetx]
+    canUse: [pq]
+  partners:
+    mayDependOn: [partnersdomain, partnersadapters]
+  partnerstransport:
+    mayDependOn: [partners, partnersadapters, partnersdomain, crmctx, errs]
+  audithistorydomain:
+    mayDependOn: [ids]
+  audithistoryadapters:
+    mayDependOn: [audithistorydomain, errs, ids]
+    canUse: [pq]
+  audithistorytransport:
+    mayDependOn: [audithistoryadapters, audithistorydomain, authzkern, crmctx, errs]
+  audithistory:
+    mayDependOn: [audithistorydomain, audithistoryadapters, audithistorytransport, authzkern]
+  datasourcebindingsdomain:
+    mayDependOn: [datasource, ids]
+  datasourcebindingsadapters:
+    mayDependOn: [datasourcebindingsdomain, errs, ids]
+    canUse: [pq]
+  datasourcebindings:
+    mayDependOn: [datasourcebindingsdomain, datasourcebindingsadapters, datasource]
+  # deals additionally depends on mcp (Tier-0) for ResolveDynamicTier.
   deals:
     mayDependOn: [dealsdomain, dealsadapters, mcp]
   dealsdomain:
@@ -143,33 +219,23 @@ deps:
   dealsports:
     mayDependOn: [dealsdomain]
   dealsadapters:
-    mayDependOn: [dealsdomain, errs, ids]
+    mayDependOn: [dealsdomain, errs, ids, workspacetx]
     canUse: [pq]
-  # people is the person-specific HTTP transport layer only (handler_person.go);
-  # it depends on directory for the Person type/store (see directory's note
-  # above) plus the Tier-0 kernel bits its handler uses directly. mergePerson's
-  # 🟡 approval-gate check now goes through toolgate/mcp/approvalsport
-  # (WS-D-b, AC-D2, D9) rather than a duplicated inline gate. approvals is
-  # still listed here (its now-unused allowance is removed by Task 7/10, not
-  # jumped ahead here).
-  peopletransport:
-    mayDependOn: [directory, crmctx, errs, prov, approvals, mcp, approvalsport, toolgate]
-  # dealtransport is the deal module's HTTP transport layer (handler_deal.go, T11);
-  # same shape as people above — depends on directory for the Deal type/store plus
-  # the Tier-0 kernel bits its handler uses directly. advanceDeal's tier-gate
-  # decision now goes through toolgate/mcp/approvalsport (WS-D-b, AC-D2, D9)
-  # rather than calling deals.ResolveTier and crmapprovals.VerifyAndConsume
-  # inline. deals and approvals are still listed here (their now-unused
-  # allowances are removed by Task 7/10, not jumped ahead here).
-  dealtransport:
-    mayDependOn: [directory, crmctx, errs, prov, deals, approvals, mcp, approvalsport, toolgate]
-  # dealstransport is the pipeline/stage module's HTTP transport layer
-  # (handler_pipeline.go, handler_stage.go, T10); same shape as
-  # dealtransport/people above — depends on deals for the
-  # Pipeline/Stage type/store plus the Tier-0 kernel bits its handlers use
-  # directly.
+  # dealstransport now owns pipeline/stage AND deal-entity handlers (WS-E-b).
   dealstransport:
-    mayDependOn: [deals, crmctx, errs, prov]
+    mayDependOn: [deals, dealsadapters, dealsdomain, mcp, approvalsport, toolgate, crmctx, errs, prov]
+  # people domain uses strengthkern for PersonStrengthFrom.
+  peopledomain:
+    mayDependOn: [prov, ids, strengthkern]
+  peopleadapters:
+    mayDependOn: [peopledomain, errs, ids, prov, workspacetx, dedupekern, strengthkern]
+    canUse: [pq]
+  people:
+    mayDependOn: [peopledomain, peopleadapters, prov]
+  # peopletransport wires cross-module stores directly (structural typing via seam ifaces
+  # defined locally, but concrete types from sibling modules flow through the constructor).
+  peopletransport:
+    mayDependOn: [people, peopledomain, peopleadapters, relationships, relsadapters, deals, dealsadapters, activities, activitiesadapters, approvalsport, toolgate, mcp, crmctx, errs, prov]
   gdpr:
     mayDependOn: [gdpradapters, gdprdomain, gdprports, crmctx, audit, ids]
     canUse: [river]
@@ -178,10 +244,6 @@ deps:
   gdpradapters:
     mayDependOn: [gdprdomain, gdprports, audit, errs, ids, crmctx]
     canUse: [river]
-  # approvals additionally depends on approvalsport (Tier-0, WS-D-b/D9): its
-  # own Binding is now a type alias onto approvalsport.Binding, and DBVerifier
-  # adapts VerifyAndConsume to approvalsport.Verifier for cmd/api composition
-  # to hand to platform/toolgate.
   approvals:
     mayDependOn: [approvalsdomain, approvalsports, approvalsadapters, approvalsapp, mcp, datasource, audit, errs, ids, approvalsport]
     canUse: [river]
@@ -192,16 +254,7 @@ deps:
     canUse: [river]
   approvalsapp:
     mayDependOn: [approvalsdomain, approvalsports, datasource, audit, errs]
-  # toolgate is the Tier-1 tool-boundary gate (WS-D-b, AC-D2, D9): it depends
-  # only on the Tier-0 mcp/approvalsport/crmctx/ids seams — never on
-  # modules/approvals directly, which would recreate the exact
-  # platform-module→domain-module edge AC-E6 removes elsewhere (rejected at
-  # plan review as structurally identical to httpserver→identity).
   toolgate:
     mayDependOn: [mcp, approvalsport, crmctx, ids]
-  # contracts is generated and imports only the oapi-codegen runtime plus, now
-  # that oapi-types.cfg.yaml's chi-server generate option is on (AC-D3), the
-  # chi router package chi-server's RegisterHandlers/ServerInterfaceWrapper
-  # output references.
   contracts:
     canUse: [oapi, chi]

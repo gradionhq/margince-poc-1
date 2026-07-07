@@ -11,7 +11,7 @@ import (
 	"errors"
 	"net/http"
 
-	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
+	peopleadapters "github.com/gradionhq/margince/backend/internal/modules/people/adapters"
 	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
@@ -69,17 +69,17 @@ func (h *PersonHandler) merge(w http.ResponseWriter, r *http.Request, id string)
 		return
 	}
 	merged, err := h.store.Merge(r.Context(), id, body.TargetID, wsID)
-	if errors.Is(err, directory.ErrSelfMerge) {
+	if errors.Is(err, peopleadapters.ErrSelfMerge) {
 		jsonValidationError(w, "target_id must not equal id.", []fieldError{{Field: "target_id", Code: "self_merge"}})
 		return
 	}
-	var already *directory.ErrAlreadyMerged
+	var already *peopleadapters.ErrAlreadyMerged
 	if errors.As(err, &already) {
 		jsonProblemDetails(w, http.StatusUnprocessableEntity, "already_merged",
 			"This record was already merged.", map[string]any{fieldExistingID: already.SurvivorID})
 		return
 	}
-	var targetInvalid *directory.ErrMergeTargetInvalid
+	var targetInvalid *peopleadapters.ErrMergeTargetInvalid
 	if errors.As(err, &targetInvalid) {
 		jsonProblemDetails(w, http.StatusUnprocessableEntity, "merge_target_invalid",
 			"The merge target is archived or itself already merged.", map[string]any{fieldExistingID: targetInvalid.SurvivorID})

@@ -13,8 +13,11 @@ import (
 	"time"
 
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
+	activities "github.com/gradionhq/margince/backend/internal/modules/activities"
 	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
-	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
+	organizations "github.com/gradionhq/margince/backend/internal/modules/organizations"
+	people "github.com/gradionhq/margince/backend/internal/modules/people"
+	relationships "github.com/gradionhq/margince/backend/internal/modules/relationships"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
@@ -28,17 +31,17 @@ func TestPersonHandler_Get_Composite360(t *testing.T) {
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: personCompositeWS, UserID: "human:test"})
 	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
 
-	personStore := directory.NewPersonStore(db)
-	relStore := directory.NewRelationshipStore(db)
-	dealStore := directory.NewDealStore(db)
-	activityStore := directory.NewActivityStore(db)
+	personStore := people.NewPersonStore(db)
+	relStore := relationships.NewRelationshipStore(db)
+	dealStore := deals.NewDealStore(db)
+	activityStore := activities.NewActivityStore(db)
 	h := NewPersonHandler(personStore, relStore, dealStore, activityStore, &crmapprovals.DBVerifier{DB: db})
 
-	subject, err := personStore.Create(ctx, directory.Person{WorkspaceID: personCompositeWS, FullName: "Composite Subject", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
+	subject, err := personStore.Create(ctx, people.Person{WorkspaceID: personCompositeWS, FullName: "Composite Subject", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed subject: %v", err)
 	}
-	org, err := directory.NewOrgStore(db).Create(ctx, directory.Organization{WorkspaceID: personCompositeWS, DisplayName: "Composite Org", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	org, err := organizations.NewOrgStore(db).Create(ctx, organizations.Organization{WorkspaceID: personCompositeWS, DisplayName: "Composite Org", Source: p0.Source, CapturedBy: p0.CapturedBy})
 	if err != nil {
 		t.Fatalf("seed org: %v", err)
 	}
@@ -58,7 +61,7 @@ func TestPersonHandler_Get_Composite360(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed stage: %v", err)
 	}
-	d := directory.NewDeal("Composite Deal", pl.ID, st.ID, p0)
+	d := deals.NewDeal("Composite Deal", pl.ID, st.ID, p0)
 	d.WorkspaceID = personCompositeWS
 	created, err := dealStore.Create(ctx, d, "")
 	if err != nil {
@@ -70,7 +73,7 @@ func TestPersonHandler_Get_Composite360(t *testing.T) {
 		personCompositeWS, subject.ID, created.ID, stringPtr("champion"), p0.Source, p0.CapturedBy); err != nil {
 		t.Fatalf("seed deal stakeholder: %v", err)
 	}
-	act, err := activityStore.Create(ctx, directory.Activity{WorkspaceID: personCompositeWS, Kind: "call", OccurredAt: time.Now(), Source: p0.Source, CapturedBy: p0.CapturedBy})
+	act, err := activityStore.Create(ctx, activities.Activity{WorkspaceID: personCompositeWS, Kind: "call", OccurredAt: time.Now(), Source: p0.Source, CapturedBy: p0.CapturedBy})
 	if err != nil {
 		t.Fatalf("seed activity: %v", err)
 	}
@@ -78,7 +81,7 @@ func TestPersonHandler_Get_Composite360(t *testing.T) {
 		t.Fatalf("link activity: %v", err)
 	}
 
-	other, err := personStore.Create(ctx, directory.Person{WorkspaceID: personCompositeWS, FullName: "Unrelated Person", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
+	other, err := personStore.Create(ctx, people.Person{WorkspaceID: personCompositeWS, FullName: "Unrelated Person", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed other: %v", err)
 	}
@@ -97,7 +100,7 @@ func TestPersonHandler_Get_Composite360(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET /people/{id}: want 200, got %d: %s", w.Code, w.Body.String())
 	}
-	var got directory.Person
+	var got people.Person
 	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
 		t.Fatal(err)
 	}
@@ -142,10 +145,10 @@ func TestPersonHandler_Get_EmptyCompositeShowsEmptyArrays_NotNull(t *testing.T) 
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: personCompositeWS, UserID: "human:test"})
 	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
 
-	personStore := directory.NewPersonStore(db)
-	h := NewPersonHandler(personStore, directory.NewRelationshipStore(db), directory.NewDealStore(db), directory.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
+	personStore := people.NewPersonStore(db)
+	h := NewPersonHandler(personStore, relationships.NewRelationshipStore(db), deals.NewDealStore(db), activities.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 
-	p, err := personStore.Create(ctx, directory.Person{WorkspaceID: personCompositeWS, FullName: "Lonely Person", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
+	p, err := personStore.Create(ctx, people.Person{WorkspaceID: personCompositeWS, FullName: "Lonely Person", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -191,10 +194,10 @@ func TestPersonHandler_Get_ArchivedStillFetchableWithComposite(t *testing.T) {
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: personCompositeWS, UserID: "human:test"})
 	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
 
-	personStore := directory.NewPersonStore(db)
-	h := NewPersonHandler(personStore, directory.NewRelationshipStore(db), directory.NewDealStore(db), directory.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
+	personStore := people.NewPersonStore(db)
+	h := NewPersonHandler(personStore, relationships.NewRelationshipStore(db), deals.NewDealStore(db), activities.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 
-	p, err := personStore.Create(ctx, directory.Person{WorkspaceID: personCompositeWS, FullName: "Archive Me", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
+	p, err := personStore.Create(ctx, people.Person{WorkspaceID: personCompositeWS, FullName: "Archive Me", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -220,13 +223,13 @@ func TestPersonHandler_Get_Composite360_P95Under100ms(t *testing.T) {
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: ws, UserID: "human:test"})
 	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
 
-	personStore := directory.NewPersonStore(db)
-	relStore := directory.NewRelationshipStore(db)
-	dealStore := directory.NewDealStore(db)
-	activityStore := directory.NewActivityStore(db)
+	personStore := people.NewPersonStore(db)
+	relStore := relationships.NewRelationshipStore(db)
+	dealStore := deals.NewDealStore(db)
+	activityStore := activities.NewActivityStore(db)
 	h := NewPersonHandler(personStore, relStore, dealStore, activityStore, &crmapprovals.DBVerifier{DB: db})
 
-	p, err := personStore.Create(ctx, directory.Person{WorkspaceID: ws, FullName: "Perf Subject", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
+	p, err := personStore.Create(ctx, people.Person{WorkspaceID: ws, FullName: "Perf Subject", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -257,7 +260,7 @@ func TestPersonHandler_Get_NonexistentID_Returns404(t *testing.T) {
 	seedWorkspace(t, db, personCompositeWS)
 	setRLS(t, db, personCompositeWS)
 
-	h := personHandlerForTest(db, directory.NewPersonStore(db))
+	h := personHandlerForTest(db, people.NewPersonStore(db))
 
 	req := httptest.NewRequest(http.MethodGet, "/people/00000000-0000-0000-0000-0000000000ff", nil)
 	req = req.WithContext(crmctx.With(req.Context(), crmctx.Principal{TenantID: personCompositeWS, UserID: "human:test"}))
@@ -286,10 +289,10 @@ func TestPersonHandler_Get_ForeignWorkspaceID_Returns404(t *testing.T) {
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: personCompositeWS, UserID: "human:test"})
 	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
 
-	personStore := directory.NewPersonStore(db)
+	personStore := people.NewPersonStore(db)
 	h := personHandlerForTest(db, personStore)
 
-	subject, err := personStore.Create(ctx, directory.Person{WorkspaceID: personCompositeWS, FullName: "Tenant A Subject", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
+	subject, err := personStore.Create(ctx, people.Person{WorkspaceID: personCompositeWS, FullName: "Tenant A Subject", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed subject: %v", err)
 	}

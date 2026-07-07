@@ -12,7 +12,7 @@ import (
 	"time"
 
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
-	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
+	people "github.com/gradionhq/margince/backend/internal/modules/people"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
@@ -32,9 +32,9 @@ func seedAppUser(t *testing.T, db *sql.DB, id, wsID string) {
 	}
 }
 
-func createTestPerson(t *testing.T, store *directory.PersonStore, ws, name string) directory.Person {
+func createTestPerson(t *testing.T, store *people.PersonStore, ws, name string) people.Person {
 	t.Helper()
-	p := directory.NewPerson(name, prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	p := people.NewPerson(name, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = ws
 	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:test", TenantID: ws})
 	created, err := store.Create(ctx, p, nil)
@@ -50,7 +50,7 @@ func TestMergePersonHumanNoTokenSucceeds(t *testing.T) {
 	db := openTestDB(t)
 	ws := ids.New()
 	seedWorkspace(t, db, ws)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	handler := personHandlerForTest(db, store)
 
 	loser := createTestPerson(t, store, ws, "Loser")
@@ -73,7 +73,7 @@ func TestMergePersonAgentRequiresApprovalToken(t *testing.T) {
 	db := openTestDB(t)
 	ws := ids.New()
 	seedWorkspace(t, db, ws)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	handler := personHandlerForTest(db, store)
 	loser := createTestPerson(t, store, ws, "Loser")
 	target := createTestPerson(t, store, ws, "Target")
@@ -132,7 +132,7 @@ func TestMergePersonSelfMerge422(t *testing.T) {
 	db := openTestDB(t)
 	ws := ids.New()
 	seedWorkspace(t, db, ws)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	handler := personHandlerForTest(db, store)
 	p := createTestPerson(t, store, ws, "Solo")
 
@@ -150,7 +150,7 @@ func TestMergePersonAlreadyMerged422WithPointer(t *testing.T) {
 	db := openTestDB(t)
 	ws := ids.New()
 	seedWorkspace(t, db, ws)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	handler := personHandlerForTest(db, store)
 	a, b, c := createTestPerson(t, store, ws, "A"), createTestPerson(t, store, ws, "B"), createTestPerson(t, store, ws, "C")
 	if _, err := store.Merge(crmctx.With(context.Background(), crmctx.Principal{UserID: "human:t", TenantID: ws}), a.ID, b.ID, ws); err != nil {
@@ -177,7 +177,7 @@ func TestMergePersonConcurrent409VersionSkew(t *testing.T) {
 	db := openTestDB(t)
 	ws := ids.New()
 	seedWorkspace(t, db, ws)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	handler := personHandlerForTest(db, store)
 	loser := createTestPerson(t, store, ws, "Loser")
 	targetB := createTestPerson(t, store, ws, "TargetB")
