@@ -7,9 +7,9 @@ import (
 
 	"github.com/riverqueue/river"
 
-	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	activities "github.com/gradionhq/margince/backend/internal/modules/activities"
 	actstransport "github.com/gradionhq/margince/backend/internal/modules/activities/transport"
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	audithistory "github.com/gradionhq/margince/backend/internal/modules/audithistory"
 	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	dealstransport "github.com/gradionhq/margince/backend/internal/modules/deals/transport"

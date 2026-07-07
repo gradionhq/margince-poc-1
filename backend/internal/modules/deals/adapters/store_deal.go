@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
+	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 )

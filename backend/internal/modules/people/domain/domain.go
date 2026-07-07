@@ -75,7 +75,7 @@ type Person struct {
 	ReviewFlag    *dedupe.DedupeReviewFlag           `json:"dedupe_review,omitempty"`
 	Relationships []relationshipsdomain.Relationship `json:"relationships,omitempty"`
 	Deals         []dealsdomain.Deal                 `json:"deals,omitempty"`
-	Activities    []activitiesdomain.ActivityRef      `json:"activities,omitempty"`
+	Activities    []activitiesdomain.ActivityRef     `json:"activities,omitempty"`
 }
 
 // NewPerson returns a Person with a fresh ID, version 1, and copied provenance.

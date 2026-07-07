@@ -224,7 +224,7 @@ type personDetailResponse struct {
 	peopledomain.Person
 	Relationships []relationships.Relationship `json:"relationships"`
 	Deals         []deals.Deal                 `json:"deals"`
-	Activities    []activities.ActivityRef      `json:"activities"`
+	Activities    []activities.ActivityRef     `json:"activities"`
 }
 
 func (h *PersonHandler) get(w http.ResponseWriter, r *http.Request, id string) {

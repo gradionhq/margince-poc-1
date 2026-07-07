@@ -9,9 +9,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gradionhq/margince/backend/internal/modules/people/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
-	"github.com/gradionhq/margince/backend/internal/modules/people/domain"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 )
 

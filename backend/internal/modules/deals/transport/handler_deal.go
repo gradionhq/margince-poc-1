@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
+	actDomain "github.com/gradionhq/margince/backend/internal/modules/activities/domain"
 	"github.com/gradionhq/margince/backend/internal/modules/deals/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
-	actDomain "github.com/gradionhq/margince/backend/internal/modules/activities/domain"
 	relDomain "github.com/gradionhq/margince/backend/internal/modules/relationships/domain"
 	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"

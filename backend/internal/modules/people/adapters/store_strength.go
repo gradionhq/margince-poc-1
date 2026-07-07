@@ -10,8 +10,8 @@ import (
 
 	"github.com/lib/pq"
 
-	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
 	"github.com/gradionhq/margince/backend/internal/modules/people/domain"
+	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/strength"
 )
 

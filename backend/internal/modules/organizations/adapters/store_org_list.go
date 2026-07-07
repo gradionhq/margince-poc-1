@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
 	"github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
+	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
 )
 
 func buildOrgListWhere(f domain.OrgListFilter, args []any, n int) (string, []any) {

@@ -18,9 +18,11 @@ import (
 
 // Type aliases for external callers so they can refer to org types via the
 // module package rather than reaching into sub-packages directly.
-type Organization = domain.Organization
-type OrgStore = adapters.OrgStore
-type OrgListFilter = domain.OrgListFilter
+type (
+	Organization  = domain.Organization
+	OrgStore      = adapters.OrgStore
+	OrgListFilter = domain.OrgListFilter
+)
 
 // NewOrgStore is a convenience constructor for external wiring.
 func NewOrgStore(db *sql.DB) *OrgStore { return adapters.NewOrgStore(db) }

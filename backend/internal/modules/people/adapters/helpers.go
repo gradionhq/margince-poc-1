@@ -82,4 +82,3 @@ func boolVal(b *bool) bool {
 	}
 	return *b
 }
-

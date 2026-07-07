@@ -7,9 +7,9 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/gradionhq/margince/backend/internal/modules/people/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
-	"github.com/gradionhq/margince/backend/internal/modules/people/domain"
 )
 
 // Archive soft-deletes a person and returns the archived entity.

@@ -13,8 +13,10 @@ import (
 )
 
 // Domain type aliases
-type Activity = domain.Activity
-type ActivityRef = domain.ActivityRef
+type (
+	Activity    = domain.Activity
+	ActivityRef = domain.ActivityRef
+)
 
 // Adapter type aliases
 type ActivityStore = adapters.ActivityStore

@@ -19,8 +19,9 @@ func (f *fakeExec) ExecContext(_ context.Context, q string, _ ...any) (sql.Resul
 }
 
 type fakeResult struct{}
+
 func (fakeResult) LastInsertId() (int64, error) { return 0, nil }
-func (fakeResult) RowsAffected() (int64, error)  { return 0, nil }
+func (fakeResult) RowsAffected() (int64, error) { return 0, nil }
 
 func TestSetWorkspaceScope_CallsExpectedQueries(t *testing.T) {
 	exec := &fakeExec{}

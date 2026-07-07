@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
-	"github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/dedupe"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"

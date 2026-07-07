@@ -14,8 +14,8 @@ import (
 
 	_ "github.com/lib/pq"
 
-	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	activities "github.com/gradionhq/margince/backend/internal/modules/activities"
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	people "github.com/gradionhq/margince/backend/internal/modules/people"
 	relationships "github.com/gradionhq/margince/backend/internal/modules/relationships"

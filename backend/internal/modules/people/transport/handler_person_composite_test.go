@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	activities "github.com/gradionhq/margince/backend/internal/modules/activities"
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	organizations "github.com/gradionhq/margince/backend/internal/modules/organizations"
 	people "github.com/gradionhq/margince/backend/internal/modules/people"
