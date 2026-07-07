@@ -689,6 +689,7 @@ DDL until their owner chapter lands it.
 | DM-DEF-5 | `flow_link` | dispact-integration | **promoted to V1** as `conversation_link` (see the ownership index) — no longer deferred |
 | DM-DEF-6 | overlay cluster: `overlay_mirror`, `overlay_association`, `incumbent_connection`, workspace SoR-mode flag | overlay-augmentation | distinct schema namespace so the native core is untouched; mirror teardown on disconnect within the declared retention window |
 | DM-DEF-7 | `fx_rate` backfill / restatement tooling | reporting (tooling, not a table) | the `fx_rate` table itself ships here (DM-DDL-12); historical restatement tooling is OUT V1 |
+| DM-DEF-8 | `field_mask` | access-and-admin | declarative field-level RBAC (masked = null + marker, shape-stable); owning chapter not yet authored — GH-209 Phase 1 ships record_grant only, field_mask's actual masking implementation is out of scope until access-and-admin lands |
 
 ### Schema — sort & filter vocabulary
 Source: contract/data-model.md#135-sort--filter-vocabulary @ 5a0b29c
