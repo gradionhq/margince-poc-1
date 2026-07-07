@@ -51,7 +51,7 @@ func (h *RecordGrantHandler) list(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, err)
 		return
 	}
-	jsonOK(w, map[string]any{"data": grants, "page": map[string]any{"next_cursor": next}})
+	jsonOK(w, pageResponse(grants, next))
 }
 
 func (h *RecordGrantHandler) create(w http.ResponseWriter, r *http.Request) {

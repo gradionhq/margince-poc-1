@@ -20,18 +20,18 @@ var ErrGrantExceedsGrantorAccess = errors.New("crmcore: grant exceeds granting p
 
 // RecordGrant mirrors the contract's RecordGrant schema (crm.yaml).
 type RecordGrant struct {
-	ID          string
-	WorkspaceID string
-	RecordType  string
-	RecordID    string
-	SubjectType string
-	SubjectID   string
-	Access      string
-	GrantedBy   string
-	Reason      *string
-	ExpiresAt   *time.Time
-	CreatedAt   time.Time
-	Version     int64
+	ID          string     `json:"id"`
+	WorkspaceID string     `json:"-"`
+	RecordType  string     `json:"record_type"`
+	RecordID    string     `json:"record_id"`
+	SubjectType string     `json:"subject_type"`
+	SubjectID   string     `json:"subject_id"`
+	Access      string     `json:"access"`
+	GrantedBy   string     `json:"granted_by"`
+	Reason      *string    `json:"reason"`
+	ExpiresAt   *time.Time `json:"expires_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	Version     int64      `json:"version"`
 }
 
 // CreateRecordGrantInput is the store-level create/upsert request.
