@@ -57,7 +57,7 @@ components:
   workflow:     { in: internal/shared/ports/workflow }
   model:        { in: internal/shared/ports/model }
   retrieval:    { in: internal/shared/ports/retrieval }
-  jurisdiction: { in: pkg/jurisdiction }
+  jurisdiction: { in: pkg/shared/ports/jurisdiction }
   migrate:      { in: internal/shared/ports/migrate }
   approvalsport: { in: internal/shared/ports/approvals }
   # Tier-1 platform (seams WITH impls, cross-cutting)

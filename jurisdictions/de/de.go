@@ -16,7 +16,7 @@ package crmde
 import (
 	"io/fs"
 
-	"github.com/gradionhq/margince/backend/pkg/jurisdiction"
+	"github.com/gradionhq/margince/backend/pkg/shared/ports/jurisdiction"
 )
 
 type pack struct{}
