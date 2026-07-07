@@ -113,7 +113,7 @@ func (h *RecordGrantHandler) create(w http.ResponseWriter, r *http.Request) {
 
 func (h *RecordGrantHandler) revoke(w http.ResponseWriter, r *http.Request) {
 	wsID := workspaceID(r)
-	id := r.PathValue("id")
+	id := pathID(r.URL.Path, "/record-grants")
 
 	p, _ := crmctx.From(r.Context())
 	if p.IsAgent {

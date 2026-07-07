@@ -39,6 +39,7 @@ var servedResources = map[string]bool{
 	"people": true, "organizations": true, "deals": true,
 	"pipelines": true, "stages": true, "partners": true,
 	"relationships": true, "activities": true, "records": true,
+	"record-grants": true,
 }
 
 // TestEveryServedContractOpIsRouted asserts every crm.yaml operation under a
@@ -71,6 +72,71 @@ func TestEveryServedContractOpIsRouted(t *testing.T) {
 			t.Errorf("%s %s (%s) is NOT routed — mount it or remove it from the contract",
 				op.method, op.path, op.id)
 		}
+	}
+}
+
+// TestRecordGrantsDeleteRoutePathValueGap is a regression test for the bug
+// where handler_record_grant.go's revoke() read the grant id via
+// r.PathValue("id") even though registerCoreCRUD's crud() helper (routes.go)
+// mounts /record-grants as a plain trailing-slash subtree pattern with NO
+// {id} wildcard segment (unlike e.g. "POST /deals/{id}/advance"). Per
+// net/http.ServeMux's docs, a pattern with no named wildcard segment NEVER
+// populates r.PathValue, however the request is dispatched — so revoke()
+// always saw id == "" against the real server, and the store's
+// DELETE ... WHERE id equals the empty string cast to uuid, failing (500, row never
+// actually deleted). handler_record_grant.go now extracts the id from
+// r.URL.Path via the shared pathID() helper instead (mirrors
+// handler_deal.go/handler_org.go/handler_relationship.go's convention).
+//
+// This proves both halves against the REAL registered pattern (extracted
+// from buildTestMux, not hand-typed) without needing a DB or a real handler
+// invocation: PathValue stays empty for this route shape on a genuine
+// ServeMux dispatch (not merely unset because nothing called SetPathValue),
+// while extracting from URL.Path recovers the id. The existing
+// TestRecordGrantHandler_Revoke_* unit tests (handler_record_grant_test.go)
+// call delReq.SetPathValue("id", ...) directly and so never caught this —
+// they exercise the handler's post-extraction logic, not real-mux routing.
+func TestRecordGrantsDeleteRoutePathValueGap(t *testing.T) {
+	mux := buildTestMux(t)
+
+	grantID := "11111111-1111-1111-1111-111111111111"
+	req := httptest.NewRequest(http.MethodDelete, "/record-grants/"+grantID, nil)
+	_, pattern := mux.Handler(req)
+	if pattern == "" {
+		t.Fatal("DELETE /record-grants/{id} is not routed at all")
+	}
+	if strings.Contains(pattern, "{") {
+		t.Fatalf("registered pattern = %q now declares a wildcard segment — "+
+			"if this changed, r.PathValue(\"id\") would work again; update "+
+			"handler_record_grant.go's revoke() and this test together", pattern)
+	}
+
+	// Dispatch the same request through a fresh mux registered with the exact
+	// pattern the real production mux uses for this route, and confirm
+	// PathValue is empty on a genuine ServeMux dispatch — the exact condition
+	// that produced the 500.
+	spy := http.NewServeMux()
+	var gotID, gotPath string
+	spy.Handle(pattern, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		gotID = r.PathValue("id")
+		gotPath = r.URL.Path
+	}))
+	spy.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodDelete, "/record-grants/"+grantID, nil))
+
+	if gotID != "" {
+		t.Fatalf(`PathValue("id") = %q, want "" — if ServeMux now populates it for this pattern, revoke() could safely use r.PathValue("id") again`, gotID)
+	}
+
+	// Reproduces pathID(r.URL.Path, "/record-grants") (handler_http.go) —
+	// unexported outside package transport, so inlined here — to prove it
+	// recovers the id from the real dispatched request's URL.Path.
+	rest := strings.TrimPrefix(gotPath, "/record-grants")
+	rest = strings.TrimPrefix(rest, "/")
+	if i := strings.Index(rest, "/"); i >= 0 {
+		rest = rest[:i]
+	}
+	if rest != grantID {
+		t.Fatalf("pathID-style extraction from URL.Path = %q, want %q", rest, grantID)
 	}
 }
 

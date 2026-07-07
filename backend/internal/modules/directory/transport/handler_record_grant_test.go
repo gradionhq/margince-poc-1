@@ -429,3 +429,60 @@ func TestRecordGrantHandler_Revoke_AgentWithValidToken_Succeeds(t *testing.T) {
 		t.Fatalf("expected the record_grant row to be deleted after a valid-token revoke, got count=%d", count)
 	}
 }
+
+// TestRecordGrantHandler_Revoke_ViaRealMux_DeletesRow is the real
+// route-registration regression test for the bug where revoke() read the
+// grant id via r.PathValue("id"): cmd/api/routes.go's registerCoreCRUD
+// mounts /record-grants as a plain trailing-slash subtree
+// (mux.Handle("/record-grants", h); mux.Handle("/record-grants/", h)) with
+// NO {id} wildcard segment, so on a real net/http.ServeMux dispatch
+// r.PathValue("id") is always "" — unlike the other Revoke_* tests above,
+// which call delReq.SetPathValue("id", grantID) directly and so never
+// exercise real routing at all. This test builds a mux with that exact
+// registration shape and dispatches a genuine DELETE through it (no
+// SetPathValue), proving the id is captured from the URL and the row is
+// actually deleted end to end.
+func TestRecordGrantHandler_Revoke_ViaRealMux_DeletesRow(t *testing.T) {
+	db := openRGHandlerTestDB(t)
+	granterID, subjectID, personID := seedRGHandlerFixtures(t, db, "revoke-real-mux")
+	h := NewRecordGrantHandler(crmcore.NewRecordGrantStore(db), db)
+
+	createBody, _ := json.Marshal(map[string]any{
+		"record_type": "person", "record_id": personID,
+		"subject_type": "user", "subject_id": subjectID,
+		"access": "read",
+	})
+	createReq := withRGWorkspace(httptest.NewRequest(http.MethodPost, "/record-grants", bytes.NewReader(createBody)), granterID)
+	createW := httptest.NewRecorder()
+	h.ServeHTTP(createW, createReq)
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("seed create status = %d, body=%s", createW.Code, createW.Body.String())
+	}
+	var created map[string]any
+	if err := json.Unmarshal(createW.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode seed create response: %v", err)
+	}
+	grantID, _ := created["id"].(string)
+
+	// Mirror routes.go's crud() helper verbatim: a bare path and its
+	// trailing-slash subtree, both routed to h — no method prefix, no {id}.
+	mux := http.NewServeMux()
+	mux.Handle("/record-grants", h)
+	mux.Handle("/record-grants/", h)
+
+	delReq := withRGWorkspace(httptest.NewRequest(http.MethodDelete, "/record-grants/"+grantID, nil), granterID)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, delReq)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204, body=%s", w.Code, w.Body.String())
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT count(*) FROM record_grant WHERE id=$1::uuid`, grantID).Scan(&count); err != nil {
+		t.Fatalf("count record_grant: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected the record_grant row to be deleted via a real mux-dispatched DELETE, got count=%d", count)
+	}
+}
