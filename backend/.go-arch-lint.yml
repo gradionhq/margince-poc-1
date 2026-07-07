@@ -11,6 +11,17 @@ version: 3
 #    Production (non-test) cross-layer edges remain fully checked — that is the real signal.
 #    Integration tests living in external `_test` packages necessarily wire sibling modules
 #    to exercise the real pipeline; that is test composition, not a production dependency.
+#
+# AC-E6 confirmed (GH-81 Task 10, WS-E-f): zero `mayDependOn` exceptions remain beyond
+# Tier-0 kernel/port seams and Tier-1 platform components. The three originally-flagged
+# illegal edges are gone: httpserver→identity (resolved by Task 7: httpserver now depends
+# on the Tier-0 `session` port instead), people→directory+approvals and dealtransport→
+# directory+deals+approvals (both resolved by Task 6's catalog split: `directory` and
+# `dealtransport` no longer exist), and every domain module now reaches approval-gating
+# through the Tier-0 `approvalsport` seam instead of the `approvals` domain module
+# directly (Task 3/D9). Re-verify with `make arch-lint` — it reports "OK - No warnings
+# found" with zero notices.
+#
 excludeFiles:
   - ".*_test\\.go$"
   # cmd/api is the composition root (main package), not a DAG-governed component — same
