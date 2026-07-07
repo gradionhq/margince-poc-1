@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
@@ -179,9 +180,11 @@ func (s *RecordGrantStore) List(ctx context.Context, workspaceID string, filter 
 		args := append([]any{workspaceID, filter.Cursor}, extraArgs...)
 		n++
 		args = append(args, limit+1)
-		rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
-			SELECT id, workspace_id, record_type, record_id, subject_type, subject_id, access, granted_by, reason, expires_at, created_at, version
-			FROM record_grant WHERE %s ORDER BY id LIMIT $%d`, where, n), args...)
+		//nolint:gosec // G202: `where` injects only bound-param indices ($N), never user input; all filter values are passed via args
+		rows, err := tx.QueryContext(ctx,
+			`SELECT id, workspace_id, record_type, record_id, subject_type, subject_id, access, granted_by, reason, expires_at, created_at, version
+			FROM record_grant WHERE `+where+` ORDER BY id LIMIT $`+strconv.Itoa(n),
+			args...)
 		if err != nil {
 			return err
 		}

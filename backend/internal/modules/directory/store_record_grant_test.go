@@ -4,6 +4,7 @@ package crmcore_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
@@ -14,22 +15,19 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
-// TestRecordGrantStore_CreateIdempotentUpsert proves createRecordGrant is
-// idempotent on (record_type, record_id, subject_type, subject_id): a second
-// call with a different access/expires_at upgrades the existing row (upsert),
-// never creates a duplicate.
-func TestRecordGrantStore_CreateIdempotentUpsert(t *testing.T) {
-	db := sqlDB(t)
-	ws := newWorkspaceSQL(t, db)
-	ctx := context.Background()
+// seedRecordGrantDealFixtures seeds an owner app_user, a subject app_user,
+// and a pipeline+stage+deal (named dealName) owned by nobody in particular —
+// the common fixture shape shared by TestRecordGrantStore_CreateIdempotentUpsert
+// and TestRecordGrantStore_RevokeRemovesRow, which previously wrote this out
+// twice inline (identical shape, only the deal name differed).
+func seedRecordGrantDealFixtures(ctx context.Context, t *testing.T, db *sql.DB, ws, dealName string) (ownerID, subjectID string, deal crmcore.Deal) {
+	t.Helper()
 
-	var ownerID string
 	if err := db.QueryRowContext(ctx,
 		`INSERT INTO app_user(workspace_id,email,display_name) VALUES($1,$2,$3) RETURNING id`,
 		ws, "owner@t.test", "Owner").Scan(&ownerID); err != nil {
 		t.Fatalf("seed owner: %v", err)
 	}
-	var subjectID string
 	if err := db.QueryRowContext(ctx,
 		`INSERT INTO app_user(workspace_id,email,display_name) VALUES($1,$2,$3) RETURNING id`,
 		ws, "subject@t.test", "Subject").Scan(&subjectID); err != nil {
@@ -48,12 +46,25 @@ func TestRecordGrantStore_CreateIdempotentUpsert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create stage: %v", err)
 	}
-	d := crmcore.NewDeal("Grant Test Deal", pl.ID, st.ID, prov.Provenance{Source: "api", CapturedBy: "human:test"})
+	d := crmcore.NewDeal(dealName, pl.ID, st.ID, prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	d.WorkspaceID = ws
-	deal, err := crmcore.NewDealStore(db).Create(ctx, d, "")
+	deal, err = crmcore.NewDealStore(db).Create(ctx, d, "")
 	if err != nil {
 		t.Fatalf("create deal: %v", err)
 	}
+	return ownerID, subjectID, deal
+}
+
+// TestRecordGrantStore_CreateIdempotentUpsert proves createRecordGrant is
+// idempotent on (record_type, record_id, subject_type, subject_id): a second
+// call with a different access/expires_at upgrades the existing row (upsert),
+// never creates a duplicate.
+func TestRecordGrantStore_CreateIdempotentUpsert(t *testing.T) {
+	db := sqlDB(t)
+	ws := newWorkspaceSQL(t, db)
+	ctx := context.Background()
+
+	ownerID, subjectID, deal := seedRecordGrantDealFixtures(ctx, t, db, ws, "Grant Test Deal")
 
 	store := crmcore.NewRecordGrantStore(db)
 	g1, err := store.Create(ctx, crmcore.CreateRecordGrantInput{
@@ -121,37 +132,7 @@ func TestRecordGrantStore_RevokeRemovesRow(t *testing.T) {
 	ws := newWorkspaceSQL(t, db)
 	ctx := context.Background()
 
-	var ownerID string
-	if err := db.QueryRowContext(ctx,
-		`INSERT INTO app_user(workspace_id,email,display_name) VALUES($1,$2,$3) RETURNING id`,
-		ws, "owner@t.test", "Owner").Scan(&ownerID); err != nil {
-		t.Fatalf("seed owner: %v", err)
-	}
-	var subjectID string
-	if err := db.QueryRowContext(ctx,
-		`INSERT INTO app_user(workspace_id,email,display_name) VALUES($1,$2,$3) RETURNING id`,
-		ws, "subject@t.test", "Subject").Scan(&subjectID); err != nil {
-		t.Fatalf("seed subject: %v", err)
-	}
-
-	pl, err := deals.NewPipelineStore(db).Create(ctx, deals.Pipeline{
-		WorkspaceID: ws, Name: "test-pipeline", IsDefault: false, Position: 1,
-	})
-	if err != nil {
-		t.Fatalf("create pipeline: %v", err)
-	}
-	st, err := deals.NewStageStore(db).Create(ctx, deals.Stage{
-		WorkspaceID: ws, PipelineID: pl.ID, Name: "Open", Position: 1, Semantic: "open", WinProbability: 10,
-	})
-	if err != nil {
-		t.Fatalf("create stage: %v", err)
-	}
-	d := crmcore.NewDeal("Revoke Test Deal", pl.ID, st.ID, prov.Provenance{Source: "api", CapturedBy: "human:test"})
-	d.WorkspaceID = ws
-	deal, err := crmcore.NewDealStore(db).Create(ctx, d, "")
-	if err != nil {
-		t.Fatalf("create deal: %v", err)
-	}
+	ownerID, subjectID, deal := seedRecordGrantDealFixtures(ctx, t, db, ws, "Revoke Test Deal")
 
 	store := crmcore.NewRecordGrantStore(db)
 	g, err := store.Create(ctx, crmcore.CreateRecordGrantInput{

@@ -102,6 +102,55 @@ func seedRGHandlerFixtures(t *testing.T, db *sql.DB, tag string) (granterID, sub
 	return granterID, subjectID, personID
 }
 
+// rgGrantBody builds the standard "grant subjectID read access to
+// person personID" request body shared by every create-path test below
+// (a plain read grant on a person record is the common fixture; tests
+// that need something different build their own body inline).
+func rgGrantBody(personID, subjectID string) map[string]any {
+	return map[string]any{
+		"record_type": "person", "record_id": personID,
+		"subject_type": "user", "subject_id": subjectID,
+		"access": "read",
+	}
+}
+
+// createRGGrant POSTs rgGrantBody(personID, subjectID) as granterID through h,
+// fails the test unless the response is 201, and returns the decoded response
+// body. Used by tests that need a pre-existing grant row as setup (e.g. to
+// revoke or list) and don't care about the create response's own shape.
+func createRGGrant(t *testing.T, h http.Handler, granterID, subjectID, personID string) map[string]any {
+	t.Helper()
+	b, _ := json.Marshal(rgGrantBody(personID, subjectID))
+	req := withRGWorkspace(httptest.NewRequest(http.MethodPost, "/record-grants", bytes.NewReader(b)), granterID)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("seed create status = %d, body=%s", w.Code, w.Body.String())
+	}
+	var created map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode seed create response: %v", err)
+	}
+	return created
+}
+
+// assertRGApprovalRequired asserts w is the 🟡 approval-gate's standard
+// 403 {"code":"approval_required"} rejection — shared by the agent-without-
+// token tests on both the create and revoke paths.
+func assertRGApprovalRequired(t *testing.T, w *httptest.ResponseRecorder) {
+	t.Helper()
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403, body=%s", w.Code, w.Body.String())
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if raw["code"] != "approval_required" {
+		t.Fatalf("code = %v, want %q", raw["code"], "approval_required")
+	}
+}
+
 // TestRecordGrantHandler_Create_ReturnsSnakeCaseJSON proves POST
 // /record-grants' response body is serialized with the contract's snake_case
 // field names (e.g. "id", not "id" cast from an untagged Go field which would
@@ -113,12 +162,7 @@ func TestRecordGrantHandler_Create_ReturnsSnakeCaseJSON(t *testing.T) {
 	granterID, subjectID, personID := seedRGHandlerFixtures(t, db, "create")
 	h := NewRecordGrantHandler(crmcore.NewRecordGrantStore(db), db)
 
-	body := map[string]any{
-		"record_type": "person", "record_id": personID,
-		"subject_type": "user", "subject_id": subjectID,
-		"access": "read",
-	}
-	b, _ := json.Marshal(body)
+	b, _ := json.Marshal(rgGrantBody(personID, subjectID))
 	req := httptest.NewRequest(http.MethodPost, "/record-grants", bytes.NewReader(b))
 	req = withRGWorkspace(req, granterID)
 	w := httptest.NewRecorder()
@@ -179,17 +223,7 @@ func TestRecordGrantHandler_List_ReturnsDataAndPageWithHasMore(t *testing.T) {
 	granterID, subjectID, personID := seedRGHandlerFixtures(t, db, "list")
 	h := NewRecordGrantHandler(crmcore.NewRecordGrantStore(db), db)
 
-	createBody, _ := json.Marshal(map[string]any{
-		"record_type": "person", "record_id": personID,
-		"subject_type": "user", "subject_id": subjectID,
-		"access": "read",
-	})
-	createReq := withRGWorkspace(httptest.NewRequest(http.MethodPost, "/record-grants", bytes.NewReader(createBody)), granterID)
-	createW := httptest.NewRecorder()
-	h.ServeHTTP(createW, createReq)
-	if createW.Code != http.StatusCreated {
-		t.Fatalf("seed create status = %d, body=%s", createW.Code, createW.Body.String())
-	}
+	createRGGrant(t, h, granterID, subjectID, personID)
 
 	listReq := withRGWorkspace(httptest.NewRequest(http.MethodGet, "/record-grants?record_type=person&record_id="+personID, nil), granterID)
 	listW := httptest.NewRecorder()
@@ -230,27 +264,13 @@ func TestRecordGrantHandler_Create_AgentWithoutToken_403ApprovalRequired(t *test
 	seedRGHandlerAgentUser(t, db)
 	h := NewRecordGrantHandler(crmcore.NewRecordGrantStore(db), db)
 
-	body := map[string]any{
-		"record_type": "person", "record_id": personID,
-		"subject_type": "user", "subject_id": subjectID,
-		"access": "read",
-	}
-	b, _ := json.Marshal(body)
+	b, _ := json.Marshal(rgGrantBody(personID, subjectID))
 	req := httptest.NewRequest(http.MethodPost, "/record-grants", bytes.NewReader(b))
 	req = withRGWorkspaceAgent(req)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403, body=%s", w.Code, w.Body.String())
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
-		t.Fatalf("decode error body: %v", err)
-	}
-	if raw["code"] != "approval_required" {
-		t.Fatalf("code = %v, want %q", raw["code"], "approval_required")
-	}
+	assertRGApprovalRequired(t, w)
 
 	var count int
 	if err := db.QueryRow(`SELECT count(*) FROM record_grant WHERE record_type='person' AND record_id=$1::uuid AND subject_id=$2::uuid`,
@@ -273,15 +293,8 @@ func TestRecordGrantHandler_Create_AgentWithValidToken_Succeeds(t *testing.T) {
 	seedRGHandlerAgentUser(t, db)
 	h := NewRecordGrantHandler(crmcore.NewRecordGrantStore(db), db)
 
-	body := map[string]any{
-		"record_type": "person", "record_id": personID,
-		"subject_type": "user", "subject_id": subjectID,
-		"access": "read",
-	}
-	diffHash := crmapprovals.HashDiff(map[string]any{
-		"record_type": "person", "record_id": personID,
-		"subject_type": "user", "subject_id": subjectID, "access": "read",
-	})
+	body := rgGrantBody(personID, subjectID)
+	diffHash := crmapprovals.HashDiff(rgGrantBody(personID, subjectID))
 	tok, err := crmapprovals.SignToken(crmapprovals.TokenClaims{
 		JTI: "rg-create-jti-" + personID, ApprovalID: "appr-rg-create", WorkspaceID: rgHandlerTestWorkspaceID,
 		Tool: "share_record", DiffHash: diffHash,
@@ -329,21 +342,7 @@ func TestRecordGrantHandler_Revoke_AgentWithoutToken_403ApprovalRequired(t *test
 	seedRGHandlerAgentUser(t, db)
 	h := NewRecordGrantHandler(crmcore.NewRecordGrantStore(db), db)
 
-	createBody, _ := json.Marshal(map[string]any{
-		"record_type": "person", "record_id": personID,
-		"subject_type": "user", "subject_id": subjectID,
-		"access": "read",
-	})
-	createReq := withRGWorkspace(httptest.NewRequest(http.MethodPost, "/record-grants", bytes.NewReader(createBody)), granterID)
-	createW := httptest.NewRecorder()
-	h.ServeHTTP(createW, createReq)
-	if createW.Code != http.StatusCreated {
-		t.Fatalf("seed create status = %d, body=%s", createW.Code, createW.Body.String())
-	}
-	var created map[string]any
-	if err := json.Unmarshal(createW.Body.Bytes(), &created); err != nil {
-		t.Fatalf("decode seed create response: %v", err)
-	}
+	created := createRGGrant(t, h, granterID, subjectID, personID)
 	grantID, _ := created["id"].(string)
 
 	delReq := httptest.NewRequest(http.MethodDelete, "/record-grants/"+grantID, nil)
@@ -352,16 +351,7 @@ func TestRecordGrantHandler_Revoke_AgentWithoutToken_403ApprovalRequired(t *test
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, delReq)
 
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403, body=%s", w.Code, w.Body.String())
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
-		t.Fatalf("decode error body: %v", err)
-	}
-	if raw["code"] != "approval_required" {
-		t.Fatalf("code = %v, want %q", raw["code"], "approval_required")
-	}
+	assertRGApprovalRequired(t, w)
 
 	var count int
 	if err := db.QueryRow(`SELECT count(*) FROM record_grant WHERE id=$1::uuid`, grantID).Scan(&count); err != nil {
@@ -383,21 +373,7 @@ func TestRecordGrantHandler_Revoke_AgentWithValidToken_Succeeds(t *testing.T) {
 	seedRGHandlerAgentUser(t, db)
 	h := NewRecordGrantHandler(crmcore.NewRecordGrantStore(db), db)
 
-	createBody, _ := json.Marshal(map[string]any{
-		"record_type": "person", "record_id": personID,
-		"subject_type": "user", "subject_id": subjectID,
-		"access": "read",
-	})
-	createReq := withRGWorkspace(httptest.NewRequest(http.MethodPost, "/record-grants", bytes.NewReader(createBody)), granterID)
-	createW := httptest.NewRecorder()
-	h.ServeHTTP(createW, createReq)
-	if createW.Code != http.StatusCreated {
-		t.Fatalf("seed create status = %d, body=%s", createW.Code, createW.Body.String())
-	}
-	var created map[string]any
-	if err := json.Unmarshal(createW.Body.Bytes(), &created); err != nil {
-		t.Fatalf("decode seed create response: %v", err)
-	}
+	created := createRGGrant(t, h, granterID, subjectID, personID)
 	grantID, _ := created["id"].(string)
 
 	diffHash := crmapprovals.HashDiff(map[string]any{"id": grantID})
@@ -447,21 +423,7 @@ func TestRecordGrantHandler_Revoke_ViaRealMux_DeletesRow(t *testing.T) {
 	granterID, subjectID, personID := seedRGHandlerFixtures(t, db, "revoke-real-mux")
 	h := NewRecordGrantHandler(crmcore.NewRecordGrantStore(db), db)
 
-	createBody, _ := json.Marshal(map[string]any{
-		"record_type": "person", "record_id": personID,
-		"subject_type": "user", "subject_id": subjectID,
-		"access": "read",
-	})
-	createReq := withRGWorkspace(httptest.NewRequest(http.MethodPost, "/record-grants", bytes.NewReader(createBody)), granterID)
-	createW := httptest.NewRecorder()
-	h.ServeHTTP(createW, createReq)
-	if createW.Code != http.StatusCreated {
-		t.Fatalf("seed create status = %d, body=%s", createW.Code, createW.Body.String())
-	}
-	var created map[string]any
-	if err := json.Unmarshal(createW.Body.Bytes(), &created); err != nil {
-		t.Fatalf("decode seed create response: %v", err)
-	}
+	created := createRGGrant(t, h, granterID, subjectID, personID)
 	grantID, _ := created["id"].(string)
 
 	// Mirror routes.go's crud() helper verbatim: a bare path and its

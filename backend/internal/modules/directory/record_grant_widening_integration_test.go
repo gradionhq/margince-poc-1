@@ -14,68 +14,129 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
+// recordGrantRoundTripCase bundles the record/party-identifying params of
+// assertGrantRevokeAuditRoundTrip into a single value (SonarCloud flags
+// functions with >7 parameters; the 5 fields below plus (ctx, t, db,
+// grantStore) would otherwise total 9).
+type recordGrantRoundTripCase struct {
+	WorkspaceID, RecordType, RecordID, OwnerA, SubjectB string
+}
+
 // assertGrantRevokeAuditRoundTrip does one create-grant -> assert row+audit
 // (record_share) -> revoke -> assert row-gone+audit (record_unshare)
 // round-trip for a single (recordType, recordID) pair, granted by ownerA to
 // subjectB in workspace ws. Shared by TestRecordGrant_PersonLeadCRUDOnly's
 // person and lead cases, which were previously written out twice inline
 // (identical shape).
-func assertGrantRevokeAuditRoundTrip(ctx context.Context, t *testing.T, db *sql.DB, grantStore *crmcore.RecordGrantStore, ws, recordType, recordID, ownerA, subjectB string) {
+func assertGrantRevokeAuditRoundTrip(ctx context.Context, t *testing.T, db *sql.DB, grantStore *crmcore.RecordGrantStore, c recordGrantRoundTripCase) {
 	t.Helper()
 
 	grant, err := grantStore.Create(ctx, crmcore.CreateRecordGrantInput{
-		WorkspaceID:      ws,
-		RecordType:       recordType,
-		RecordID:         recordID,
+		WorkspaceID:      c.WorkspaceID,
+		RecordType:       c.RecordType,
+		RecordID:         c.RecordID,
 		SubjectType:      "user",
-		SubjectID:        subjectB,
+		SubjectID:        c.SubjectB,
 		Access:           "read",
-		GrantedBy:        ownerA,
+		GrantedBy:        c.OwnerA,
 		GrantorOwnAccess: "write",
 	})
 	if err != nil {
-		t.Fatalf("Create %s grant: %v", recordType, err)
+		t.Fatalf("Create %s grant: %v", c.RecordType, err)
 	}
 
 	var grantCount int
 	if err := db.QueryRowContext(ctx,
 		`SELECT count(*) FROM record_grant WHERE id=$1::uuid`, grant.ID).Scan(&grantCount); err != nil {
-		t.Fatalf("count %s grant: %v", recordType, err)
+		t.Fatalf("count %s grant: %v", c.RecordType, err)
 	}
 	if grantCount != 1 {
-		t.Errorf("want 1 %s grant row, got %d", recordType, grantCount)
+		t.Errorf("want 1 %s grant row, got %d", c.RecordType, grantCount)
 	}
 
 	var auditCount int
 	if err := db.QueryRowContext(ctx,
 		`SELECT count(*) FROM audit_log WHERE action='record_share' AND entity_id=$1`, grant.ID).Scan(&auditCount); err != nil {
-		t.Fatalf("count %s audit: %v", recordType, err)
+		t.Fatalf("count %s audit: %v", c.RecordType, err)
 	}
 	if auditCount != 1 {
-		t.Errorf("want 1 %s audit entry (action=record_share), got %d", recordType, auditCount)
+		t.Errorf("want 1 %s audit entry (action=record_share), got %d", c.RecordType, auditCount)
 	}
 
-	if err := grantStore.Revoke(ctx, grant.ID, ws); err != nil {
-		t.Fatalf("Revoke %s grant: %v", recordType, err)
+	if err := grantStore.Revoke(ctx, grant.ID, c.WorkspaceID); err != nil {
+		t.Fatalf("Revoke %s grant: %v", c.RecordType, err)
 	}
 
 	var revokeCount int
 	if err := db.QueryRowContext(ctx,
 		`SELECT count(*) FROM record_grant WHERE id=$1::uuid`, grant.ID).Scan(&revokeCount); err != nil {
-		t.Fatalf("count %s grant after revoke: %v", recordType, err)
+		t.Fatalf("count %s grant after revoke: %v", c.RecordType, err)
 	}
 	if revokeCount != 0 {
-		t.Errorf("want 0 %s grant rows after revoke, got %d", recordType, revokeCount)
+		t.Errorf("want 0 %s grant rows after revoke, got %d", c.RecordType, revokeCount)
 	}
 
 	var revokeAuditCount int
 	if err := db.QueryRowContext(ctx,
 		`SELECT count(*) FROM audit_log WHERE action='record_unshare' AND entity_id=$1`, grant.ID).Scan(&revokeAuditCount); err != nil {
-		t.Fatalf("count %s revoke audit: %v", recordType, err)
+		t.Fatalf("count %s revoke audit: %v", c.RecordType, err)
 	}
 	if revokeAuditCount != 1 {
-		t.Errorf("want 1 %s audit entry (action=record_unshare), got %d", recordType, revokeAuditCount)
+		t.Errorf("want 1 %s audit entry (action=record_unshare), got %d", c.RecordType, revokeAuditCount)
 	}
+}
+
+// seedGrantTestUsers seeds an "ownerA" and a "subjectB" app_user row in
+// workspace ws, with emails distinguished by tag (e.g. a test-specific prefix
+// plus a nonce) so failure output stays unique across the record_grant test
+// suite. Shared by every TestRecordGrant_* test below, which previously wrote
+// this exact two-INSERT seed out inline.
+func seedGrantTestUsers(ctx context.Context, t *testing.T, db *sql.DB, ws, tag string) (ownerA, subjectB string) {
+	t.Helper()
+
+	if err := db.QueryRowContext(ctx,
+		`INSERT INTO app_user(workspace_id,email,display_name) VALUES($1,$2,$3) RETURNING id`,
+		ws, "ownerA-"+tag+"@test.com", "Owner A").Scan(&ownerA); err != nil {
+		t.Fatalf("seed ownerA: %v", err)
+	}
+
+	if err := db.QueryRowContext(ctx,
+		`INSERT INTO app_user(workspace_id,email,display_name) VALUES($1,$2,$3) RETURNING id`,
+		ws, "subjectB-"+tag+"@test.com", "Subject B").Scan(&subjectB); err != nil {
+		t.Fatalf("seed subjectB: %v", err)
+	}
+	return ownerA, subjectB
+}
+
+// seedGrantTestDeal seeds a pipeline+stage+deal (named dealName) owned by
+// ownerA in workspace ws. Shared by TestRecordGrant_WidensThenRevokes and
+// TestRecordGrant_WriteSatisfiesRead, which previously wrote this exact
+// pipeline-create -> stage-create -> deal-create sequence out inline.
+func seedGrantTestDeal(ctx context.Context, t *testing.T, db *sql.DB, ws, ownerA, dealName string) crmcore.Deal {
+	t.Helper()
+
+	pl, err := deals.NewPipelineStore(db).Create(ctx, deals.Pipeline{
+		WorkspaceID: ws, Name: "pipeline-" + dealName, IsDefault: false, Position: 1,
+	})
+	if err != nil {
+		t.Fatalf("create pipeline: %v", err)
+	}
+
+	st, err := deals.NewStageStore(db).Create(ctx, deals.Stage{
+		WorkspaceID: ws, PipelineID: pl.ID, Name: "Open", Position: 1, Semantic: "open", WinProbability: 10,
+	})
+	if err != nil {
+		t.Fatalf("create stage: %v", err)
+	}
+
+	d := crmcore.NewDeal(dealName, pl.ID, st.ID, prov.Provenance{Source: "api", CapturedBy: "human:test"})
+	d.WorkspaceID = ws
+	d.OwnerID = &ownerA
+	deal, err := crmcore.NewDealStore(db).Create(ctx, d, "")
+	if err != nil {
+		t.Fatalf("create deal: %v", err)
+	}
+	return deal
 }
 
 // TestRecordGrant_WidensThenRevokes proves AC-WS-B#2's full, real,
@@ -90,43 +151,10 @@ func TestRecordGrant_WidensThenRevokes(t *testing.T) {
 	nonce := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	// Create two users: ownerA and subjectB.
-	var ownerA string
-	if err := db.QueryRowContext(ctx,
-		`INSERT INTO app_user(workspace_id,email,display_name) VALUES($1,$2,$3) RETURNING id`,
-		ws, "ownerA-"+nonce+"@test.com", "Owner A").Scan(&ownerA); err != nil {
-		t.Fatalf("seed ownerA: %v", err)
-	}
+	ownerA, subjectB := seedGrantTestUsers(ctx, t, db, ws, nonce)
 
-	var subjectB string
-	if err := db.QueryRowContext(ctx,
-		`INSERT INTO app_user(workspace_id,email,display_name) VALUES($1,$2,$3) RETURNING id`,
-		ws, "subjectB-"+nonce+"@test.com", "Subject B").Scan(&subjectB); err != nil {
-		t.Fatalf("seed subjectB: %v", err)
-	}
-
-	// Create a pipeline and stage for the deal.
-	pl, err := deals.NewPipelineStore(db).Create(ctx, deals.Pipeline{
-		WorkspaceID: ws, Name: "test-" + nonce, IsDefault: false, Position: 1,
-	})
-	if err != nil {
-		t.Fatalf("create pipeline: %v", err)
-	}
-
-	st, err := deals.NewStageStore(db).Create(ctx, deals.Stage{
-		WorkspaceID: ws, PipelineID: pl.ID, Name: "Open", Position: 1, Semantic: "open", WinProbability: 10,
-	})
-	if err != nil {
-		t.Fatalf("create stage: %v", err)
-	}
-
-	// Create a deal owned by ownerA.
-	d := crmcore.NewDeal("Widening Test Deal-"+nonce, pl.ID, st.ID, prov.Provenance{Source: "api", CapturedBy: "human:test"})
-	d.WorkspaceID = ws
-	d.OwnerID = &ownerA
-	deal, err := crmcore.NewDealStore(db).Create(ctx, d, "")
-	if err != nil {
-		t.Fatalf("create deal: %v", err)
-	}
+	// Create a pipeline, stage, and a deal owned by ownerA.
+	deal := seedGrantTestDeal(ctx, t, db, ws, ownerA, "Widening Test Deal-"+nonce)
 
 	// 1. subjectB lists deals filtered by owner_id=subjectB — expect 0 results (subjectB owns nothing, no grant yet).
 	dealList, _, err := crmcore.NewDealStore(db).ListFiltered(ctx, ws, "", 100, crmcore.DealListFilter{OwnerID: subjectB})
@@ -190,19 +218,7 @@ func TestRecordGrant_OrganizationWidensThenRevokes(t *testing.T) {
 	nonce := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	// Create two users: ownerA and subjectB.
-	var ownerA string
-	if err := db.QueryRowContext(ctx,
-		`INSERT INTO app_user(workspace_id,email,display_name) VALUES($1,$2,$3) RETURNING id`,
-		ws, "ownerA-org-"+nonce+"@test.com", "Owner A").Scan(&ownerA); err != nil {
-		t.Fatalf("seed ownerA: %v", err)
-	}
-
-	var subjectB string
-	if err := db.QueryRowContext(ctx,
-		`INSERT INTO app_user(workspace_id,email,display_name) VALUES($1,$2,$3) RETURNING id`,
-		ws, "subjectB-org-"+nonce+"@test.com", "Subject B").Scan(&subjectB); err != nil {
-		t.Fatalf("seed subjectB: %v", err)
-	}
+	ownerA, subjectB := seedGrantTestUsers(ctx, t, db, ws, "org-"+nonce)
 
 	// Create an organization owned by ownerA.
 	org := crmcore.NewOrganization("Org-"+nonce, prov.Provenance{Source: "api", CapturedBy: "human:test"})
@@ -283,19 +299,7 @@ func TestRecordGrant_PersonLeadCRUDOnly(t *testing.T) {
 	nonce := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	// Create two users: ownerA and subjectB.
-	var ownerA string
-	if err := db.QueryRowContext(ctx,
-		`INSERT INTO app_user(workspace_id,email,display_name) VALUES($1,$2,$3) RETURNING id`,
-		ws, "ownerA-pl-"+nonce+"@test.com", "Owner A").Scan(&ownerA); err != nil {
-		t.Fatalf("seed ownerA: %v", err)
-	}
-
-	var subjectB string
-	if err := db.QueryRowContext(ctx,
-		`INSERT INTO app_user(workspace_id,email,display_name) VALUES($1,$2,$3) RETURNING id`,
-		ws, "subjectB-pl-"+nonce+"@test.com", "Subject B").Scan(&subjectB); err != nil {
-		t.Fatalf("seed subjectB: %v", err)
-	}
+	ownerA, subjectB := seedGrantTestUsers(ctx, t, db, ws, "pl-"+nonce)
 
 	// --- CRUD + audit round-trip for person ---
 	// Create a person.
@@ -307,7 +311,9 @@ func TestRecordGrant_PersonLeadCRUDOnly(t *testing.T) {
 	}
 
 	grantStore := crmcore.NewRecordGrantStore(db)
-	assertGrantRevokeAuditRoundTrip(ctx, t, db, grantStore, ws, "person", personID, ownerA, subjectB)
+	assertGrantRevokeAuditRoundTrip(ctx, t, db, grantStore, recordGrantRoundTripCase{
+		WorkspaceID: ws, RecordType: "person", RecordID: personID, OwnerA: ownerA, SubjectB: subjectB,
+	})
 
 	// --- CRUD + audit round-trip for lead ---
 	// Create a lead.
@@ -318,7 +324,9 @@ func TestRecordGrant_PersonLeadCRUDOnly(t *testing.T) {
 		t.Fatalf("create lead: %v", err)
 	}
 
-	assertGrantRevokeAuditRoundTrip(ctx, t, db, grantStore, ws, "lead", leadID, ownerA, subjectB)
+	assertGrantRevokeAuditRoundTrip(ctx, t, db, grantStore, recordGrantRoundTripCase{
+		WorkspaceID: ws, RecordType: "lead", RecordID: leadID, OwnerA: ownerA, SubjectB: subjectB,
+	})
 
 	// --- predicate-correctness-in-isolation only (NOT a visibility claim) ---
 	// Create a person and grant to subjectB directly (insert row directly).
@@ -387,42 +395,10 @@ func TestRecordGrant_WriteSatisfiesRead(t *testing.T) {
 	nonce := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	// Create two users.
-	var ownerA string
-	if err := db.QueryRowContext(ctx,
-		`INSERT INTO app_user(workspace_id,email,display_name) VALUES($1,$2,$3) RETURNING id`,
-		ws, "ownerA-wsr-"+nonce+"@test.com", "Owner A").Scan(&ownerA); err != nil {
-		t.Fatalf("seed ownerA: %v", err)
-	}
-
-	var subjectB string
-	if err := db.QueryRowContext(ctx,
-		`INSERT INTO app_user(workspace_id,email,display_name) VALUES($1,$2,$3) RETURNING id`,
-		ws, "subjectB-wsr-"+nonce+"@test.com", "Subject B").Scan(&subjectB); err != nil {
-		t.Fatalf("seed subjectB: %v", err)
-	}
+	ownerA, subjectB := seedGrantTestUsers(ctx, t, db, ws, "wsr-"+nonce)
 
 	// Create a pipeline, stage, and deal.
-	pl, err := deals.NewPipelineStore(db).Create(ctx, deals.Pipeline{
-		WorkspaceID: ws, Name: "wsr-" + nonce, IsDefault: false, Position: 1,
-	})
-	if err != nil {
-		t.Fatalf("create pipeline: %v", err)
-	}
-
-	st, err := deals.NewStageStore(db).Create(ctx, deals.Stage{
-		WorkspaceID: ws, PipelineID: pl.ID, Name: "Open", Position: 1, Semantic: "open", WinProbability: 10,
-	})
-	if err != nil {
-		t.Fatalf("create stage: %v", err)
-	}
-
-	d := crmcore.NewDeal("WriteSatisfiesRead-"+nonce, pl.ID, st.ID, prov.Provenance{Source: "api", CapturedBy: "human:test"})
-	d.WorkspaceID = ws
-	d.OwnerID = &ownerA
-	deal, err := crmcore.NewDealStore(db).Create(ctx, d, "")
-	if err != nil {
-		t.Fatalf("create deal: %v", err)
-	}
+	deal := seedGrantTestDeal(ctx, t, db, ws, ownerA, "WriteSatisfiesRead-"+nonce)
 
 	// Grant "write" access to the deal.
 	grantStore := crmcore.NewRecordGrantStore(db)
