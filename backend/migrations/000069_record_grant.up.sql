@@ -39,6 +39,8 @@ CREATE INDEX idx_record_grant_record  ON record_grant (workspace_id, record_type
 -- STABLE, not IMMUTABLE); indexing all rows is functionally equivalent, just without that
 -- optimization.
 CREATE INDEX idx_record_grant_subject ON record_grant (workspace_id, subject_type, subject_id);
+CREATE INDEX idx_record_grant_workspace ON record_grant (workspace_id);
+CREATE INDEX idx_record_grant_granted_by ON record_grant (granted_by);
 
 ALTER TABLE record_grant ENABLE ROW LEVEL SECURITY;
 ALTER TABLE record_grant FORCE ROW LEVEL SECURITY;
