@@ -3,8 +3,8 @@ status: skeleton
 module: backend/internal/shared/kernel
 derives-from:
   - margince-poc/docs/subsystems/trust-propagation.md @ a11d6c08
-  - margince specs/spec/narrative/05-agent-security.md#trust-model-provenance-tiers @ 5a0b29c
-  - margince specs/spec/narrative/03e-overlay-augmentation.md#34-how-f-1-trust-tiers--egress-applies-to-incumbent-data @ 5a0b29c
+  - specs/spec/narrative/05-agent-security.md#trust-model-provenance-tiers @ 5a0b29c
+  - specs/spec/narrative/03e-overlay-augmentation.md#34-how-f-1-trust-tiers--egress-applies-to-incumbent-data @ 5a0b29c
 ---
 # Trust propagation — the untrusted label travels with the data, end to end
 
@@ -124,7 +124,7 @@ the defense stack, and the intent-tools chapter for how compositions keep the la
 ## Appendix
 
 ### Acceptance
-Source: margince-poc/docs/subsystems/trust-propagation.md#guarantees-enforced @ a11d6c08; margince specs/spec/narrative/05-agent-security.md#verification-stage-6-gate--new-critical @ 5a0b29c
+Source: margince-poc/docs/subsystems/trust-propagation.md#guarantees-enforced @ a11d6c08; specs/spec/narrative/05-agent-security.md#verification-stage-6-gate--new-critical @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|

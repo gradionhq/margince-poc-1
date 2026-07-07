@@ -1,8 +1,8 @@
 ---
 derives-from:
   - margince-poc/docs/quality/security.md
-  - margince specs/spec/narrative/06-nonfunctional.md#69-product-security--eu-cra-conformity
-  - margince specs/spec/narrative/06-nonfunctional.md#62-security
+  - specs/spec/narrative/06-nonfunctional.md#69-product-security--eu-cra-conformity
+  - specs/spec/narrative/06-nonfunctional.md#62-security
 ---
 # Security — one disclosure door, a conformity posture that ships with every release
 
@@ -129,7 +129,7 @@ gates that block), acceptance-standards (the cross-cutting floor).
 ## Appendix
 
 ### Parameters — patch policy
-Source: margince specs/spec/narrative/06-nonfunctional.md#69-product-security--eu-cra-conformity @ 5a0b29c
+Source: specs/spec/narrative/06-nonfunctional.md#69-product-security--eu-cra-conformity @ 5a0b29c
 
 | ID | Name | Value | Meaning |
 |---|---|---|---|
@@ -147,7 +147,7 @@ Source: margince specs/spec/narrative/06-nonfunctional.md#69-product-security--e
 | SEC-PATCH-12 | PATCHABILITY_RED | no guarantee | Core-invariant overrides: the patch may conflict; the modifier is the CRA manufacturer (SEC-CRA-5) and resolves it themselves or buys the consulting fix (P14). The curated policy-seam set exists to keep common overrides in Green. |
 
 ### Acceptance — disclosure SLAs
-Source: margince-poc/docs/quality/security.md @ a11d6c08; margince specs/spec/narrative/06-nonfunctional.md#69-product-security--eu-cra-conformity @ 5a0b29c
+Source: margince-poc/docs/quality/security.md @ a11d6c08; specs/spec/narrative/06-nonfunctional.md#69-product-security--eu-cra-conformity @ 5a0b29c
 
 | ID | Requirement | Verification |
 |---|---|---|
@@ -160,7 +160,7 @@ Source: margince-poc/docs/quality/security.md @ a11d6c08; margince specs/spec/na
 | SEC-CVD-7 | Supplier incident notification: when an incident/vulnerability materially affects a customer deployment, Gradion notifies affected customers without undue delay, aligned to the 24h fast path (SEC-PATCH-6), so a NIS2-regulated customer can meet their Art. 23 clock (24h / 72h / 1 month). | Commitment shipped in the compliance pack (SEC-CRA-6) |
 
 ### Acceptance — CRA conformity gates
-Source: margince specs/spec/narrative/06-nonfunctional.md#69-product-security--eu-cra-conformity @ 5a0b29c
+Source: specs/spec/narrative/06-nonfunctional.md#69-product-security--eu-cra-conformity @ 5a0b29c
 
 | ID | Gate | Verification |
 |---|---|---|

@@ -2,14 +2,14 @@
 status: planned
 module: backend/internal/modules/capture
 derives-from:
-  - margince specs/spec/features/02-capture-and-comms.md#the-governing-stance-read-first @ 5a0b29c
-  - margince specs/spec/features/02-capture-and-comms.md#feature-1--email--calendar-sync--auto-logging @ 5a0b29c
-  - margince specs/spec/features/02-capture-and-comms.md#feature-3--automatic-contact--org--activity-creation--enrichment @ 5a0b29c
-  - margince specs/spec/features/02-capture-and-comms.md#cross-cutting-acceptance-criteria-whole-surface @ 5a0b29c
-  - margince specs/spec/features/07-ai-native-moments.md#4-capture-activation--relationship-strength @ 5a0b29c
-  - margince specs/spec/features/10-operational-depth.md#5-outreach-engine-promotes-d43-reply-tracking-d45-sequences-d411-bulk-activity-d48-telephony @ 5a0b29c
-  - margince specs/spec/product/epics/E02-zero-entry-capture.md @ 5a0b29c
-  - margince specs/spec/product/30-screen-acceptance.md#21-onboarding--cold-start @ 5a0b29c
+  - specs/spec/features/02-capture-and-comms.md#the-governing-stance-read-first @ 5a0b29c
+  - specs/spec/features/02-capture-and-comms.md#feature-1--email--calendar-sync--auto-logging @ 5a0b29c
+  - specs/spec/features/02-capture-and-comms.md#feature-3--automatic-contact--org--activity-creation--enrichment @ 5a0b29c
+  - specs/spec/features/02-capture-and-comms.md#cross-cutting-acceptance-criteria-whole-surface @ 5a0b29c
+  - specs/spec/features/07-ai-native-moments.md#4-capture-activation--relationship-strength @ 5a0b29c
+  - specs/spec/features/10-operational-depth.md#5-outreach-engine-promotes-d43-reply-tracking-d45-sequences-d411-bulk-activity-d48-telephony @ 5a0b29c
+  - specs/spec/product/epics/E02-zero-entry-capture.md @ 5a0b29c
+  - specs/spec/product/30-screen-acceptance.md#21-onboarding--cold-start @ 5a0b29c
 ---
 # Capture — the CRM fills itself, and every row says where it came from
 

@@ -2,13 +2,13 @@
 status: planned
 module: modules/drafting (backend) · web (composer draft surface, asset library, LinkedIn draft)
 derives-from:
-  - margince specs/spec/features/02-capture-and-comms.md#feature-6--baseline-ai-comms-summaries-draft-replies-nl-search
-  - margince specs/spec/features/07-ai-native-moments.md#7b-governed-proof-point--asset-library-for-drafting
-  - margince specs/spec/features/08-client-surfaces.md#2b-linkedin-draft-only-channel
-  - margince specs/spec/product/epics/E07-voice-and-drafting.md
-  - margince specs/spec/contract/data-model.md#voice--drafting-e07--features07-features09
-  - margince specs/spec/product/30-screen-acceptance.md#asset-libraryhtml--approved-asset-library-implements-s-e073
-  - margince specs/spec/product/30-screen-acceptance.md#linkedin-drafthtml--linkedin-message-in-my-voice-implements-s-e074
+  - specs/spec/features/02-capture-and-comms.md#feature-6--baseline-ai-comms-summaries-draft-replies-nl-search
+  - specs/spec/features/07-ai-native-moments.md#7b-governed-proof-point--asset-library-for-drafting
+  - specs/spec/features/08-client-surfaces.md#2b-linkedin-draft-only-channel
+  - specs/spec/product/epics/E07-voice-and-drafting.md
+  - specs/spec/contract/data-model.md#voice--drafting-e07--features07-features09
+  - specs/spec/product/30-screen-acceptance.md#asset-libraryhtml--approved-asset-library-implements-s-e073
+  - specs/spec/product/30-screen-acceptance.md#linkedin-drafthtml--linkedin-message-in-my-voice-implements-s-e074
   - margince-poc/docs/subsystems/drafts.md @ a11d6c08
 ---
 # Drafting — the CRM writes the reply; only a human sends it
@@ -206,7 +206,7 @@ lands), and [[retrieval-seam]] (context assembly and NL search).
 ## Appendix
 
 ### Parameters
-Source: margince specs/spec/product/30-screen-acceptance.md#linkedin-drafthtml--linkedin-message-in-my-voice-implements-s-e074 @ 5a0b29c
+Source: specs/spec/product/30-screen-acceptance.md#linkedin-drafthtml--linkedin-message-in-my-voice-implements-s-e074 @ 5a0b29c
 
 | ID | Name | Value | Meaning |
 |---|---|---|---|
@@ -219,7 +219,7 @@ chapter. The per-workspace AI budget guardrail is a runtime-config surface
 ([[runtime-config]]) — cited, not owned here.
 
 ### Schema
-Source: margince specs/spec/contract/data-model.md#voice--drafting-e07--features07-features09 @ 5a0b29c
+Source: specs/spec/contract/data-model.md#voice--drafting-e07--features07-features09 @ 5a0b29c
 
 Ownership verified against the data-model chapter's ownership index: `drafting_asset` is
 assigned to this chapter ([[data-model]] Schema — ownership index, row `drafting_asset`);
@@ -250,7 +250,7 @@ terms may reference a `drafting_asset` — pinned by [[offers-and-products]] (it
 A42 note).
 
 ### Wire
-Source: margince specs/spec/contract/crm.yaml (paths `/activities/{id}/draft-email`, `/activities/{id}/send-email`) @ 5a0b29c
+Source: specs/spec/contract/crm.yaml (paths `/activities/{id}/draft-email`, `/activities/{id}/send-email`) @ 5a0b29c
 
 Operations are cited by contract `operationId` — request/response shapes live in the
 contract, never restated here. Both are routed under an activity on the wire but are this
@@ -271,7 +271,7 @@ Summaries likewise have no dedicated operation pinned (the feature promises on-d
 thread/account/deal summaries) — same ticket-time contract work.
 
 ### Events
-Source: margince specs/spec/contract/events.md#55-activity @ 5a0b29c
+Source: specs/spec/contract/events.md#55-activity @ 5a0b29c
 
 Event definitions live in the central catalog ([[event-bus]]) — cited here, not redefined.
 The catalog defines **no drafting-specific events** @ 5a0b29c: drafting itself is 🟢 and
@@ -290,7 +290,7 @@ surface (DRAFT-WIRE-N-1), the one-mutation-one-audit-one-event rule
 catalog does not yet define — to be added with the contract work, catalog-first.
 
 ### Acceptance
-Source: margince specs/spec/product/epics/E07-voice-and-drafting.md @ 5a0b29c; margince specs/spec/product/20-traceability.md @ 5a0b29c
+Source: specs/spec/product/epics/E07-voice-and-drafting.md @ 5a0b29c; specs/spec/product/20-traceability.md @ 5a0b29c
 
 **Owned stories** (primacy verified against the traceability register; the epic-to-chapter
 split in [[scope]] assigns E07 to this chapter plus [[voice-profile]]):
@@ -303,7 +303,7 @@ split in [[scope]] assigns E07 to this chapter plus [[voice-profile]]):
 | S-E07.4 | Draft a LinkedIn message in my voice | V1-WOW | this chapter (draft mechanics; the extension host surface is the client-surfaces chapter's) |
 
 **Feature acceptance criteria (verbatim from the feature spec).**
-Source: margince specs/spec/features/02-capture-and-comms.md#feature-6--baseline-ai-comms-summaries-draft-replies-nl-search @ 5a0b29c
+Source: specs/spec/features/02-capture-and-comms.md#feature-6--baseline-ai-comms-summaries-draft-replies-nl-search @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -322,7 +322,7 @@ AIUC-22) — owned there, cited here.
 
 **Governed asset library acceptance (verbatim from the feature spec; new IDs — the source
 bullets are unnumbered).**
-Source: margince specs/spec/features/07-ai-native-moments.md#7b-governed-proof-point--asset-library-for-drafting @ 5a0b29c
+Source: specs/spec/features/07-ai-native-moments.md#7b-governed-proof-point--asset-library-for-drafting @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -333,7 +333,7 @@ Source: margince specs/spec/features/07-ai-native-moments.md#7b-governed-proof-p
 
 **LinkedIn draft-only channel acceptance (verbatim from the feature spec; new IDs — the
 source bullets are unnumbered).**
-Source: margince specs/spec/features/08-client-surfaces.md#2b-linkedin-draft-only-channel @ 5a0b29c
+Source: specs/spec/features/08-client-surfaces.md#2b-linkedin-draft-only-channel @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -343,7 +343,7 @@ Source: margince specs/spec/features/08-client-surfaces.md#2b-linkedin-draft-onl
 | DRAFT-AC-8 | Output renders the Art. 50 AI-assisted disclosure where shown in-product. | Backend + screen lane (GATE-AI-9) |
 
 **Asset-library screen acceptance criteria (verbatim; corpus IDs preserved).**
-Source: margince specs/spec/product/30-screen-acceptance.md#asset-libraryhtml--approved-asset-library-implements-s-e073 @ 5a0b29c
+Source: specs/spec/product/30-screen-acceptance.md#asset-libraryhtml--approved-asset-library-implements-s-e073 @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -358,7 +358,7 @@ Source: margince specs/spec/product/30-screen-acceptance.md#asset-libraryhtml--a
 | AC-asset-library-9 | Given the right-rail "Nothing is sent" panel, When the rep reviews the draft built from approved assets, Then it states citing approved material does not send anything — the draft leaves only on an explicit send (🟡 confirm gate inherited from S-E07.1). | Screen e2e lane |
 
 **LinkedIn-draft screen acceptance criteria (verbatim; corpus IDs preserved).**
-Source: margince specs/spec/product/30-screen-acceptance.md#linkedin-drafthtml--linkedin-message-in-my-voice-implements-s-e074 @ 5a0b29c
+Source: specs/spec/product/30-screen-acceptance.md#linkedin-drafthtml--linkedin-message-in-my-voice-implements-s-e074 @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|

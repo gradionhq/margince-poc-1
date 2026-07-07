@@ -2,9 +2,9 @@
 status: skeleton
 module: backend/internal/modules/identity
 derives-from:
-  - margince specs/spec/decisions/ADR-0043-human-auth-and-session.md
-  - margince specs/spec/contract/data-model.md#26-session--interactive-human-sessions-a58adr-0043
-  - margince specs/spec/contract/data-model.md#27-passport--the-agent-seat-passport-a34adr-0026-defined-here
+  - specs/spec/decisions/ADR-0043-human-auth-and-session.md
+  - specs/spec/contract/data-model.md#26-session--interactive-human-sessions-a58adr-0043
+  - specs/spec/contract/data-model.md#27-passport--the-agent-seat-passport-a34adr-0026-defined-here
   - margince-poc/docs/architecture/data-model.md#auth-tables
 ---
 # Auth & sessions — every request carries a provable, revocable principal

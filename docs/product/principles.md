@@ -1,7 +1,7 @@
 ---
 derives-from:
   - margince-poc/docs/principles.md (frozen)
-  - margince specs/spec/principles.md#the-principles
+  - specs/spec/principles.md#the-principles
 ---
 # Product principles — the P1–P14 rubric everything cites
 

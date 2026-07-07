@@ -2,10 +2,10 @@
 status: planned
 module: backend/internal/modules/activities (work-queue + proposal lifecycle); web (tasks surface)
 derives-from:
-  - margince specs/spec/product/epics/E16-tasks-and-work-queue.md
-  - margince specs/spec/features/01-core-objects.md#5-activity-timeline
-  - margince specs/spec/features/07-ai-native-moments.md#5-meeting--transcript-intelligence
-  - margince specs/spec/product/30-screen-acceptance.md#taskshtml--tasks-no-numbered-story-s-e033e043-write-here
+  - specs/spec/product/epics/E16-tasks-and-work-queue.md
+  - specs/spec/features/01-core-objects.md#5-activity-timeline
+  - specs/spec/features/07-ai-native-moments.md#5-meeting--transcript-intelligence
+  - specs/spec/product/30-screen-acceptance.md#taskshtml--tasks-no-numbered-story-s-e033e043-write-here
 ---
 # Tasks & work queue — one queue for everything you owe, and nothing in it you didn't agree to
 

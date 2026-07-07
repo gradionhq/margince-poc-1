@@ -2,9 +2,9 @@
 status: skeleton
 module: backend/internal/modules/agents
 derives-from:
-  - margince specs/spec/decisions/ADR-0036-approval-token-and-concurrency.md
-  - margince specs/spec/contract/interfaces.md#0-conventions-for-every-interface-here
-  - margince specs/spec/contract/interfaces.md#2-mcp-tool-contract-layer-1
+  - specs/spec/decisions/ADR-0036-approval-token-and-concurrency.md
+  - specs/spec/contract/interfaces.md#0-conventions-for-every-interface-here
+  - specs/spec/contract/interfaces.md#2-mcp-tool-contract-layer-1
   - margince-poc/docs/architecture/api-conventions.md#approval-gating-x-approval-token
 ---
 # Approvals & concurrency — what executes is exactly what was approved, against the world as it is now

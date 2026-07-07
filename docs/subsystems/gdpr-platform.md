@@ -3,7 +3,7 @@ status: skeleton
 module: backend/internal/modules/gdpr
 derives-from:
   - margince-poc/docs/subsystems/gdpr.md
-  - margince specs/spec/contract/data-model.md#34-consent--retention
+  - specs/spec/contract/data-model.md#34-consent--retention
 ---
 # GDPR platform — consent that defaults to no, and erasure that stays erased
 

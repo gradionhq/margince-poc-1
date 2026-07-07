@@ -1,11 +1,11 @@
 ---
 derives-from:
-  - margince specs/spec/narrative/06-nonfunctional.md#61-performance-budgets
-  - margince specs/spec/features/03-reporting-and-scoring.md#how-to-read-this-spec
-  - margince specs/spec/product/30-screen-acceptance.md#3a-standard-screen-state-matrix
-  - margince specs/spec/features/01-core-objects.md#7-cross-cutting-acceptance-gates
-  - margince specs/spec/features/07-ai-native-moments.md#11-cross-cutting-acceptance-gates
-  - margince specs/spec/features/08-client-surfaces.md#6-cross-cutting-acceptance-gates
+  - specs/spec/narrative/06-nonfunctional.md#61-performance-budgets
+  - specs/spec/features/03-reporting-and-scoring.md#how-to-read-this-spec
+  - specs/spec/product/30-screen-acceptance.md#3a-standard-screen-state-matrix
+  - specs/spec/features/01-core-objects.md#7-cross-cutting-acceptance-gates
+  - specs/spec/features/07-ai-native-moments.md#11-cross-cutting-acceptance-gates
+  - specs/spec/features/08-client-surfaces.md#6-cross-cutting-acceptance-gates
 ---
 # Acceptance standards — the floor every chapter inherits
 

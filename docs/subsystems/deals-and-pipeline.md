@@ -2,14 +2,14 @@
 status: planned
 module: backend/internal/modules/deals
 derives-from:
-  - margince specs/spec/features/01-core-objects.md#3-deals @ 5a0b29c
-  - margince specs/spec/features/01-core-objects.md#4-pipelines--stages @ 5a0b29c
-  - margince specs/spec/contract/formulas-and-rules.md#5-stage-win-probability-defaults-seeded-default-pipeline @ 5a0b29c
-  - margince specs/spec/contract/formulas-and-rules.md#6-weighted-pipeline-value--amount--stage-probability-roll-up @ 5a0b29c
-  - margince specs/spec/contract/formulas-and-rules.md#8-stalled-deal-rule--last_activity_at-threshold--asked-to-wait-suppression @ 5a0b29c
-  - margince specs/spec/contract/data-model.md#6-deals-pipelines-stages @ 5a0b29c
-  - margince specs/spec/product/epics/E03-pipeline-and-deals.md @ 5a0b29c
-  - margince specs/spec/product/30-screen-acceptance.md#23-deals-forecast-tasks @ 5a0b29c
+  - specs/spec/features/01-core-objects.md#3-deals @ 5a0b29c
+  - specs/spec/features/01-core-objects.md#4-pipelines--stages @ 5a0b29c
+  - specs/spec/contract/formulas-and-rules.md#5-stage-win-probability-defaults-seeded-default-pipeline @ 5a0b29c
+  - specs/spec/contract/formulas-and-rules.md#6-weighted-pipeline-value--amount--stage-probability-roll-up @ 5a0b29c
+  - specs/spec/contract/formulas-and-rules.md#8-stalled-deal-rule--last_activity_at-threshold--asked-to-wait-suppression @ 5a0b29c
+  - specs/spec/contract/data-model.md#6-deals-pipelines-stages @ 5a0b29c
+  - specs/spec/product/epics/E03-pipeline-and-deals.md @ 5a0b29c
+  - specs/spec/product/30-screen-acceptance.md#23-deals-forecast-tasks @ 5a0b29c
 ---
 # Deals & pipeline — parity executed excellently, on numbers a leader can check by hand
 

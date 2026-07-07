@@ -1,7 +1,7 @@
 ---
 derives-from:
-  - margince specs/spec/narrative/voice-and-tone-spec.md
-  - margince specs/spec/narrative/customization-portability.md#6-corrected-external-claim-wording
+  - specs/spec/narrative/voice-and-tone-spec.md
+  - specs/spec/narrative/customization-portability.md#6-corrected-external-claim-wording
 ---
 # Voice & copy — every generated string is product surface
 

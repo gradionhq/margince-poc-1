@@ -2,9 +2,9 @@
 status: planned
 module: backend/internal/modules/people
 derives-from:
-  - margince specs/spec/features/01-core-objects.md#5-activity-timeline
-  - margince specs/spec/contract/data-model.md#7-activity-timeline
-  - margince specs/spec/contract/crm.yaml
+  - specs/spec/features/01-core-objects.md#5-activity-timeline
+  - specs/spec/contract/data-model.md#7-activity-timeline
+  - specs/spec/contract/crm.yaml
 ---
 # Activities & timeline — every touch is one row, linked to everything it touched
 

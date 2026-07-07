@@ -1,9 +1,9 @@
 ---
 derives-from:
   - margince-poc/docs/architecture/data-model.md
-  - margince specs/spec/contract/data-model.md#1-conventions
-  - margince specs/spec/contract/data-semantics.md#1-multi-currency--fx-roll-ups
-  - margince specs/spec/contract/data-semantics.md#2-timezones
+  - specs/spec/contract/data-model.md#1-conventions
+  - specs/spec/contract/data-semantics.md#1-multi-currency--fx-roll-ups
+  - specs/spec/contract/data-semantics.md#2-timezones
 ---
 # Data model — the schema rules every table obeys
 
@@ -700,7 +700,7 @@ the indexed columns below.
 
 | ID | Resource | Allowed sort fields | Allowed filter fields |
 |---|---|---|---|
-| DM-VOCAB-1 | people | `created_at`, `updated_at`, `full_name`, `owner_id`, `strength` | `owner_id`, `organization_id` (via employment), `archived`, `q` |
+| DM-VOCAB-1 | people | `created_at`, `updated_at`, `full_name`, `owner_id` | `owner_id`, `organization_id` (via employment), `archived`, `q` |
 | DM-VOCAB-2 | organizations | `created_at`, `updated_at`, `display_name`, `owner_id` | `owner_id`, `industry`, `size_band`, `classification`, `archived` |
 | DM-VOCAB-3 | deals | `created_at`, `updated_at`, `amount_minor`, `expected_close_date`, `last_activity_at` | `pipeline_id`, `stage_id`, `owner_id`, `organization_id`, `status`, `forecast_category`, `partner_org_id` |
 | DM-VOCAB-4 | activities | `occurred_at`, `created_at`, `due_at` | `kind`, `entity_type`+`entity_id`, `direction`, `assignee_id`, `is_done` |

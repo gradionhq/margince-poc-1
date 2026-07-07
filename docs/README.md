@@ -7,7 +7,7 @@ This tree is **the spec**: the complete, buildable definition of the Margince pr
 Every ticket the factory builds derives from a chapter here; every normative fact a
 ticket needs — formulas with weights, schema shapes, thresholds, cut-lines, behavioral
 rules — lives here or in the contract file this package ships. The research corpus
-this tree distills from (`margince specs/` in the foundation repository) is decision
+this tree distills from (`specs/` in the foundation repository) is decision
 history: the *why*. Anything normative that lives only there does not exist for the
 build.
 

@@ -1,7 +1,7 @@
 ---
 derives-from:
-  - margince specs/spec/contract/glossary.md
-  - margince specs/spec/product/00-overview.md#tier-taxonomy
+  - specs/spec/contract/glossary.md
+  - specs/spec/product/00-overview.md#tier-taxonomy
 ---
 # Glossary — the canonical vocabulary
 

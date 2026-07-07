@@ -3,10 +3,6 @@ derives-from:
   - margince-poc/docs/overview.md @ a11d6c08 (map format)
   - factory/docs-plan/skeleton-docs-structure.md §2–§3 (ratified chapter roster)
 ---
-<!-- This map describes the TARGET tree. Rows for chapters not yet drafted are roster
-     entries (skeleton-docs-structure.md §3): their one-liners summarize intended scope
-     and must be kept true — sharpened, never contradicted — as each chapter lands.
-     Entry doc: no `## Appendix`. -->
 # Overview — the full chapter map
 
 > Every chapter in the spec, grouped, with one line each: enough to find the chapter that

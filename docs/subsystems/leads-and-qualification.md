@@ -2,13 +2,13 @@
 status: planned
 module: backend/internal/modules/people (lead domain) · frontend/src/features/leads
 derives-from:
-  - margince specs/spec/features/01-core-objects.md#6-leads--leadcontact-promotion
-  - margince specs/spec/contract/formulas-and-rules.md#2-leadcontact-promotion-trigger-genuine-engagement-deterministic
-  - margince specs/spec/decisions/ADR-0008-lead-object-and-promotion.md
-  - margince specs/spec/contract/data-model.md#8-leads-thin-segregated--adr-0008
-  - margince specs/spec/product/epics/E13-leads-and-qualification.md
-  - margince specs/spec/product/30-screen-acceptance.md#leadshtml--leads-list-implements-s-e131234
-  - margince specs/spec/contract/events.md#54-lead
+  - specs/spec/features/01-core-objects.md#6-leads--leadcontact-promotion
+  - specs/spec/contract/formulas-and-rules.md#2-leadcontact-promotion-trigger-genuine-engagement-deterministic
+  - specs/spec/decisions/ADR-0008-lead-object-and-promotion.md
+  - specs/spec/contract/data-model.md#8-leads-thin-segregated--adr-0008
+  - specs/spec/product/epics/E13-leads-and-qualification.md
+  - specs/spec/product/30-screen-acceptance.md#leadshtml--leads-list-implements-s-e131234
+  - specs/spec/contract/events.md#54-lead
 ---
 # Leads and qualification — machine-sourced prospects stay out of your contacts until they genuinely engage
 
@@ -192,7 +192,7 @@ Frontend: the leads feature (`frontend/src/features/leads`). Read next:
 ## Appendix
 
 ### Parameters
-Source: margince specs/spec/contract/formulas-and-rules.md#24-optional-engagement-signal-trigger--off-by-default-ratifiable @ 5a0b29c
+Source: specs/spec/contract/formulas-and-rules.md#24-optional-engagement-signal-trigger--off-by-default-ratifiable @ 5a0b29c
 
 | ID | Name | Value | Meaning |
 |---|---|---|---|
@@ -206,7 +206,7 @@ The dedupe tunables (`DEDUPE_*`) are pinned by [[people-and-organizations]]; the
 tunables (`LEADSCORE_*`) by [[lead-scoring]]. Cite, don't restate.
 
 ### Formulas
-Source: margince specs/spec/contract/formulas-and-rules.md#21-the-three-deterministic-triggers @ 5a0b29c
+Source: specs/spec/contract/formulas-and-rules.md#21-the-three-deterministic-triggers @ 5a0b29c
 
 **LEADS-FORM-1 — the promotion trigger (deterministic).**
 Inputs: a live lead (`status IN ('new','working')`) and a captured event.
@@ -262,7 +262,7 @@ documented manual recovery); a lead matching an existing person on promotion mer
 the dedupe path (merge-not-duplicate test).
 
 **LEADS-FORM-2 — `is_autoreply` (deterministic guard).**
-Source: margince specs/spec/contract/formulas-and-rules.md#22-is_autoreply-deterministic-guard @ 5a0b29c
+Source: specs/spec/contract/formulas-and-rules.md#22-is_autoreply-deterministic-guard @ 5a0b29c
 
 ```
 is_autoreply(msg) = msg.raw has header 'Auto-Submitted' != 'no'
@@ -274,7 +274,7 @@ Auto-replies do not promote (they are not engagement). A header/regex check, ful
 deterministic.
 
 **LEADS-FORM-3 — inbound-vs-echo classification (deterministic default).**
-Source: margince specs/spec/contract/formulas-and-rules.md#23-inbound-vs-echo-classification-the-one-ai-assisted-seam-with-deterministic-default @ 5a0b29c
+Source: specs/spec/contract/formulas-and-rules.md#23-inbound-vs-echo-classification-the-one-ai-assisted-seam-with-deterministic-default @ 5a0b29c
 
 v1 default is deterministic: the captured `direction` field (from the connector's own
 folder/label — Sent vs Inbox — or the SMTP envelope) decides. An L2 classifier is an
@@ -283,14 +283,14 @@ check is authoritative, and when direction is ambiguous the promotion is 🟡 (p
 rather than 🟢.
 
 **LEADS-FORM-4 — the optional engagement-signal trigger (OFF by default).**
-Source: margince specs/spec/contract/formulas-and-rules.md#24-optional-engagement-signal-trigger--off-by-default-ratifiable @ 5a0b29c
+Source: specs/spec/contract/formulas-and-rules.md#24-optional-engagement-signal-trigger--off-by-default-ratifiable @ 5a0b29c
 
 When enabled (post-ratification, LEADS-PARAM-1): `link_clicks ≥ 3 distinct opens AND ≥1
 form_fill within a 7-day window` (thresholds LEADS-PARAM-2 / LEADS-PARAM-3). Ships
 disabled.
 
 **LEADS-FORM-5 — the promotion transaction (non-lossy).**
-Source: margince specs/spec/contract/data-model.md#81-lead--person-promotion-mechanics-non-lossy-features01-64-adr-0008-4 @ 5a0b29c
+Source: specs/spec/contract/data-model.md#81-lead--person-promotion-mechanics-non-lossy-features01-64-adr-0008-4 @ 5a0b29c
 
 One transaction:
 1. Resolve target person: if the lead's email matches a live person email, **merge into
@@ -310,7 +310,7 @@ Cited, not pinned here: the person-dedupe confidence formula and merge mechanics
 ([[lead-scoring]] Formulas).
 
 ### Schema
-Source: margince specs/spec/contract/data-model.md#8-leads-thin-segregated--adr-0008 @ 5a0b29c
+Source: specs/spec/contract/data-model.md#8-leads-thin-segregated--adr-0008 @ 5a0b29c
 
 Ownership verified against the data-model chapter's ownership index: the `lead` table is
 assigned to this chapter ([[data-model]] Schema — ownership index, row `lead`).
@@ -376,7 +376,7 @@ Schema; the lead never appears in the typed `relationship` table —
 (365 days → anonymize) — [[data-model#DM-SEED-1]].
 
 ### Wire
-Source: margince specs/spec/contract/crm.yaml (paths `/leads`, `/leads/{id}`, `/leads/{id}/promote`) @ 5a0b29c
+Source: specs/spec/contract/crm.yaml (paths `/leads`, `/leads/{id}`, `/leads/{id}/promote`) @ 5a0b29c
 
 Operations are cited by contract `operationId` — request/response shapes live in the
 contract, never restated here.
@@ -395,7 +395,7 @@ re-import (LEADS-DDL-1, `uq_lead_source`). Leads are a distinct result type in
 cross-object search and never appear in the people listing.
 
 ### Events
-Source: margince specs/spec/contract/events.md#54-lead @ 5a0b29c
+Source: specs/spec/contract/events.md#54-lead @ 5a0b29c
 
 Event definitions live in the central catalog ([[event-bus]]) — cited here, not
 redefined.
@@ -416,7 +416,7 @@ Stream: [[event-bus#EVT-STREAM-4]]. One-mutation-one-audit-one-event:
 [[event-bus#EVT-SEM-1]].
 
 ### Acceptance
-Source: margince specs/spec/product/epics/E13-leads-and-qualification.md @ 5a0b29c; margince specs/spec/product/20-traceability.md @ 5a0b29c
+Source: specs/spec/product/epics/E13-leads-and-qualification.md @ 5a0b29c; specs/spec/product/20-traceability.md @ 5a0b29c
 
 **Owned stories** (primacy verified against the traceability register; the epic-to-chapter
 split in [[scope]] assigns E13 to this chapter plus [[lead-scoring]]):
@@ -431,7 +431,7 @@ split in [[scope]] assigns E13 to this chapter plus [[lead-scoring]]):
 | S-E13.6 | Manual scoring input (human-known signal feeds the transparent score) | V1-Must | **[[lead-scoring]]** — cited, not owned here |
 
 **Feature acceptance criteria (verbatim from the feature spec).**
-Source: margince specs/spec/features/01-core-objects.md#61-the-lead-object-thin-raw-machinebulk-sourced @ 5a0b29c
+Source: specs/spec/features/01-core-objects.md#61-the-lead-object-thin-raw-machinebulk-sourced @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -445,7 +445,7 @@ Source: margince specs/spec/features/01-core-objects.md#61-the-lead-object-thin-
 | LEADS-AC-8 | OpenAPI `crm.yaml` fully types `lead`; generated TS compiles (P3). | Contract-drift gate |
 | LEADS-AC-9 | **User-observable:** a rep working the lead list sees raw prospects with a source badge and a score, clearly in a *separate* place from their real contacts — they can tell at a glance "this is a cold prospect, not someone I know" (S-E13.2). | Screen e2e lane |
 
-Source: margince specs/spec/features/01-core-objects.md#62-bulk-machine-sourced-creation-makes-leads-segregated-by-construction @ 5a0b29c
+Source: specs/spec/features/01-core-objects.md#62-bulk-machine-sourced-creation-makes-leads-segregated-by-construction @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -457,7 +457,7 @@ Source: margince specs/spec/features/01-core-objects.md#62-bulk-machine-sourced-
 | LEADS-AC-15 | Every bulk-created lead is audit-logged with the sourcing agent/job. | Backend integration lane |
 | LEADS-AC-16 | **User-observable:** after a rep or Mor imports a list / lets the connector run, their **contacts are unchanged** — the new prospects show up only in the lead list, and contact dedupe, relationship strength, and "people we know" reporting are untouched (S-E13.1, S-E13.5). | Screen e2e lane |
 
-Source: margince specs/spec/features/01-core-objects.md#63-lead-scoring--routing-applies-the-existing-3-model-to-the-lead-object @ 5a0b29c
+Source: specs/spec/features/01-core-objects.md#63-lead-scoring--routing-applies-the-existing-3-model-to-the-lead-object @ 5a0b29c
 (the scoring/routing AC set — inherited AC-S1..AC-S8 applied to leads — is owned by
 [[lead-scoring]]; pinned here are only the segregation-boundary rows this chapter holds)
 
@@ -466,7 +466,7 @@ Source: margince specs/spec/features/01-core-objects.md#63-lead-scoring--routing
 | LEADS-AC-17 | A lead's score and behavioral signals are computed from signals on the **lead** and do **not** read from / write to the relationship-strength of the contact graph (the segregation boundary holds inside scoring too). | Backend integration lane |
 | LEADS-AC-18 | **User-observable:** a rep working the lead list can sort/triage by score, see who it was routed to and why, and click a score to read the weighted factors and open the source signals behind it — without any of this touching their real contacts (S-E13.2). | Screen e2e lane |
 
-Source: margince specs/spec/features/01-core-objects.md#64-promotion-leadperson-on-genuine-engagement-non-lossy-merge @ 5a0b29c
+Source: specs/spec/features/01-core-objects.md#64-promotion-leadperson-on-genuine-engagement-non-lossy-merge @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -481,7 +481,7 @@ Source: margince specs/spec/features/01-core-objects.md#64-promotion-leadperson-
 | LEADS-AC-27 | **User-observable:** if we already knew that person, promotion **merges into the one record** rather than creating a second — the rep/Mor never ends up with a duplicate, and the change is visible in the audit trail and reversible (S-E13.4). | Screen e2e lane |
 
 **Leads screen acceptance criteria (verbatim; corpus IDs preserved).**
-Source: margince specs/spec/product/30-screen-acceptance.md#leadshtml--leads-list-implements-s-e131234 @ 5a0b29c
+Source: specs/spec/product/30-screen-acceptance.md#leadshtml--leads-list-implements-s-e131234 @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -505,7 +505,7 @@ screen without restatement. The client-surface form of the segregation invariant
 rows) — cited, owned there.
 
 **Open build decision (carried honestly — the build ticket must resolve it).**
-Source: margince specs/spec/product/30-screen-acceptance.md#3-cross-cutting-build-gaps-roll-up-of-the-open-questions @ 5a0b29c (gap 5)
+Source: specs/spec/product/30-screen-acceptance.md#3-cross-cutting-build-gaps-roll-up-of-the-open-questions @ 5a0b29c (gap 5)
 
 | ID | Decision needed | Verification |
 |---|---|---|

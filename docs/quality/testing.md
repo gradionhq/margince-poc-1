@@ -1,8 +1,8 @@
 ---
 derives-from:
   - margince-poc/docs/quality/testing.md
-  - margince specs/spec/architecture/05-test-architecture.md#4-determinism--why-green-is-trustworthy-the-agent-edit-safety-contract
-  - margince specs/spec/contract/seed-and-fixtures.md#3-test-fixtures-back-the-features01-acceptance-criteria
+  - specs/spec/architecture/05-test-architecture.md#4-determinism--why-green-is-trustworthy-the-agent-edit-safety-contract
+  - specs/spec/contract/seed-and-fixtures.md#3-test-fixtures-back-the-features01-acceptance-criteria
 ---
 # Testing — catch it at the cheapest layer that can prove it
 
@@ -162,7 +162,7 @@ owns the performance budgets and screen-state floor the suites assert against.
 ## Appendix
 
 ### Parameters — determinism pins
-Source: margince specs/spec/architecture/05-test-architecture.md#4-determinism--why-green-is-trustworthy-the-agent-edit-safety-contract @ 5a0b29c; margince specs/spec/contract/seed-and-fixtures.md#3-test-fixtures @ 5a0b29c
+Source: specs/spec/architecture/05-test-architecture.md#4-determinism--why-green-is-trustworthy-the-agent-edit-safety-contract @ 5a0b29c; specs/spec/contract/seed-and-fixtures.md#3-test-fixtures @ 5a0b29c
 
 | ID | Name | Value | Meaning |
 |---|---|---|---|
@@ -196,7 +196,7 @@ functions; no decision logic is re-implemented in a test.
 | TEST-RBAC-5 | Auth-state | Each session state (none / valid / expired) yields the correct authentication outcome per endpoint — denied versus served. |
 
 ### Seed — named fixtures
-Source: margince specs/spec/contract/seed-and-fixtures.md#3-test-fixtures @ 5a0b29c
+Source: specs/spec/contract/seed-and-fixtures.md#3-test-fixtures @ 5a0b29c
 
 The canonical named fixtures the acceptance-criteria tests load. IDs are the fixture
 names, preserved verbatim from the corpus. Each fixture is loadable independently in

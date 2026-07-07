@@ -1,9 +1,9 @@
 ---
 derives-from:
-  - margince specs/spec/contract/runtime-config-surface.md#what-runtime-configuration-means-here
-  - margince specs/spec/contract/runtime-config-surface.md#the-p1-test-every-entry-must-pass-config-must-be-earned
-  - margince specs/spec/contract/runtime-config-surface.md#1-shipped-runtime-configuration-surfaces-normative-exhaustive
-  - margince specs/spec/contract/runtime-config-surface.md#2-the-bright-line-restated
+  - specs/spec/contract/runtime-config-surface.md#what-runtime-configuration-means-here
+  - specs/spec/contract/runtime-config-surface.md#the-p1-test-every-entry-must-pass-config-must-be-earned
+  - specs/spec/contract/runtime-config-surface.md#1-shipped-runtime-configuration-surfaces-normative-exhaustive
+  - specs/spec/contract/runtime-config-surface.md#2-the-bright-line-restated
 ---
 # Runtime config — every knob is earned, and this is all of them
 
@@ -115,7 +115,7 @@ register rows.
 ## Appendix
 
 ### Parameters — the earned-config test
-Source: margince specs/spec/contract/runtime-config-surface.md#the-p1-test-every-entry-must-pass-config-must-be-earned @ 5a0b29c
+Source: specs/spec/contract/runtime-config-surface.md#the-p1-test-every-entry-must-pass-config-must-be-earned @ 5a0b29c
 
 | ID | Criterion | A surface earns its place only if |
 |---|---|---|
@@ -128,7 +128,7 @@ A surface that fails any of the four is **not** runtime config — it is either
 source-level customization (P2) or it does not ship.
 
 ### Parameters — the config register
-Source: margince specs/spec/contract/runtime-config-surface.md#1-shipped-runtime-configuration-surfaces-normative-exhaustive; #2-the-bright-line-restated @ 5a0b29c
+Source: specs/spec/contract/runtime-config-surface.md#1-shipped-runtime-configuration-surfaces-normative-exhaustive; #2-the-bright-line-restated @ 5a0b29c
 
 Register rules:
 
