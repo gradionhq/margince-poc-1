@@ -73,10 +73,23 @@ components:
   dealtransport:     { in: internal/modules/directory/transport }
   deals:             { in: internal/modules/deals }
   dealstransport:    { in: internal/modules/deals/transport }
-  people:            { in: internal/modules/people/transport }
+  dealsdomain:       { in: internal/modules/deals/domain }
+  dealsports:        { in: internal/modules/deals/ports }
+  dealsadapters:     { in: internal/modules/deals/adapters }
+  dealsapp:          { in: internal/modules/deals/app }
+  people:            { in: internal/modules/people }
+  peopletransport:   { in: internal/modules/people/transport }
   contracts:         { in: internal/contracts/types }
+  identityadapters:  { in: internal/modules/identity/adapters }
   gdpr:              { in: internal/modules/gdpr }
+  gdprdomain:        { in: internal/modules/gdpr/domain }
+  gdprports:         { in: internal/modules/gdpr/ports }
+  gdpradapters:      { in: internal/modules/gdpr/adapters }
   approvals:         { in: internal/modules/approvals }
+  approvalsdomain:   { in: internal/modules/approvals/domain }
+  approvalsports:    { in: internal/modules/approvals/ports }
+  approvalsadapters: { in: internal/modules/approvals/adapters }
+  approvalsapp:      { in: internal/modules/approvals/app }
 deps:
   # Tier-0 seams + kernel are not listed -> may depend on nothing internal.
   # Exception: datasource aliases errs.ErrVersionSkew (ADR-0036/B-E18.1a) — both are Tier-0.
@@ -90,6 +103,8 @@ deps:
   blobstore:
     canUse: [minio]
   identity:
+    mayDependOn: [identityadapters, keyvault]
+  identityadapters:
     mayDependOn: [keyvault]
     canUse: [crypto]
   # httpserver (extracted from cmd/api, 1c restructure) wraps auth/session
@@ -122,7 +137,13 @@ deps:
   # platform/toolgate itself (D9: only the composition root wires the two
   # together).
   deals:
-    mayDependOn: [crmctx, errs, ids, mcp]
+    mayDependOn: [dealsdomain, dealsadapters, mcp]
+  dealsdomain:
+    mayDependOn: [mcp]
+  dealsports:
+    mayDependOn: [dealsdomain]
+  dealsadapters:
+    mayDependOn: [dealsdomain, errs, ids]
     canUse: [pq]
   # people is the person-specific HTTP transport layer only (handler_person.go);
   # it depends on directory for the Person type/store (see directory's note
@@ -131,7 +152,7 @@ deps:
   # (WS-D-b, AC-D2, D9) rather than a duplicated inline gate. approvals is
   # still listed here (its now-unused allowance is removed by Task 7/10, not
   # jumped ahead here).
-  people:
+  peopletransport:
     mayDependOn: [directory, crmctx, errs, prov, approvals, mcp, approvalsport, toolgate]
   # dealtransport is the deal module's HTTP transport layer (handler_deal.go, T11);
   # same shape as people above — depends on directory for the Deal type/store plus
@@ -150,15 +171,27 @@ deps:
   dealstransport:
     mayDependOn: [deals, crmctx, errs, prov]
   gdpr:
-    mayDependOn: [crmctx, audit, ids]
+    mayDependOn: [gdpradapters, gdprdomain, gdprports, crmctx, audit, ids]
+    canUse: [river]
+  gdprports:
+    mayDependOn: [gdprdomain]
+  gdpradapters:
+    mayDependOn: [gdprdomain, gdprports, audit, errs, ids, crmctx]
     canUse: [river]
   # approvals additionally depends on approvalsport (Tier-0, WS-D-b/D9): its
   # own Binding is now a type alias onto approvalsport.Binding, and DBVerifier
   # adapts VerifyAndConsume to approvalsport.Verifier for cmd/api composition
   # to hand to platform/toolgate.
   approvals:
-    mayDependOn: [mcp, datasource, audit, errs, ids, approvalsport]
+    mayDependOn: [approvalsdomain, approvalsports, approvalsadapters, approvalsapp, mcp, datasource, audit, errs, ids, approvalsport]
     canUse: [river]
+  approvalsports:
+    mayDependOn: [approvalsdomain]
+  approvalsadapters:
+    mayDependOn: [approvalsdomain, approvalsports, errs, ids, approvalsport, audit]
+    canUse: [river]
+  approvalsapp:
+    mayDependOn: [approvalsdomain, approvalsports, datasource, audit, errs]
   # toolgate is the Tier-1 tool-boundary gate (WS-D-b, AC-D2, D9): it depends
   # only on the Tier-0 mcp/approvalsport/crmctx/ids seams — never on
   # modules/approvals directly, which would recreate the exact
