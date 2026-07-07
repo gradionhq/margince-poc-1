@@ -112,7 +112,7 @@ func (s *PersonStore) Create(ctx context.Context, p domain.Person, emails []doma
 	}
 	social := marshalJSON(p.Social)
 	address := marshalJSON(p.Address)
-	var reviewFlag *dedupe.DedupeReviewFlag
+	var reviewFlag *dedupe.ReviewFlag
 	err := workspacetx.WithWorkspaceTx(ctx, s.db, p.WorkspaceID, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO person (id, workspace_id, full_name, first_name, last_name, title,

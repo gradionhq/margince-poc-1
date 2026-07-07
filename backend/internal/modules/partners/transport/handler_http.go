@@ -7,11 +7,8 @@ package transport
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
-	"net/url"
 	"strconv"
-	"strings"
 
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
@@ -33,15 +30,6 @@ const (
 type fieldError struct {
 	Field string `json:"field"`
 	Code  string `json:"code"`
-}
-
-func pathID(path, prefix string) string {
-	rest := strings.TrimPrefix(path, prefix)
-	rest = strings.TrimPrefix(rest, "/")
-	if i := strings.Index(rest, "/"); i >= 0 {
-		rest = rest[:i]
-	}
-	return rest
 }
 
 func workspaceID(r *http.Request) string {
@@ -67,47 +55,9 @@ func queryLimit(r *http.Request) int {
 	return 20
 }
 
-// parseIfMatch returns the version from the If-Match header, or 0 if absent,
-// or malformed=true when the value is present but not a valid int64.
-func parseIfMatch(r *http.Request) (version int64, malformed bool) {
-	s := r.Header.Get("If-Match")
-	if s == "" {
-		return 0, false
-	}
-	v, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		return 0, true
-	}
-	return v, false
-}
-
-// parseQuery returns the request's URL query parameters.
-func parseQuery(r *http.Request) url.Values {
-	return r.URL.Query()
-}
-
-// paginationParams extracts cursor and limit from the request query string.
-func paginationParams(r *http.Request) (cursor string, limit int) {
-	return r.URL.Query().Get("cursor"), queryLimit(r)
-}
-
 func jsonOK(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v) //nolint:errcheck,gosec
-}
-
-// textResponse writes a plain-text response with the given status code.
-func textResponse(w http.ResponseWriter, status int, text string) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(status)
-	_, _ = w.Write([]byte(text))
-}
-
-// setCursor sets the X-Next-Cursor response header when cursor is non-empty.
-func setCursor(w http.ResponseWriter, cursor string) {
-	if cursor != "" {
-		w.Header().Set("X-Next-Cursor", cursor)
-	}
 }
 
 // jsonValidationError writes a 422 problem+json body with field-level details.
@@ -171,26 +121,4 @@ func pageResponse(data any, nextCursor string) map[string]any {
 
 func provenanceOf(source, capturedBy string) prov.Provenance {
 	return prov.Provenance{Source: source, CapturedBy: capturedBy}
-}
-
-// writeUpdateResult maps a store Update/Patch error to its problem+json
-// response, or writes v as 200 on success.
-func writeUpdateResult[T any](w http.ResponseWriter, v T, err error) {
-	if errors.Is(err, errs.ErrConflict) {
-		jsonProblem(w, http.StatusConflict, "conflict")
-		return
-	}
-	if errors.Is(err, errs.ErrVersionSkew) {
-		jsonProblem(w, http.StatusConflict, "version_skew")
-		return
-	}
-	if errors.Is(err, errs.ErrNotFound) {
-		jsonProblem(w, http.StatusNotFound, "not_found")
-		return
-	}
-	if err != nil {
-		jsonErr(w, err)
-		return
-	}
-	jsonOK(w, v)
 }

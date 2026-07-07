@@ -139,7 +139,7 @@ func personDedupeCandidates(ctx context.Context, tx *sql.Tx, workspaceID, exclud
 // entirely) or no live candidate clears dedupe.DedupeReviewThreshold. Ties
 // resolve to the lowest person id — candidates are iterated in id-ascending
 // order and a strict `>` keeps the first (lowest-id) winner on an exact tie.
-func (s *PersonStore) fuzzyDedupe(ctx context.Context, tx *sql.Tx, workspaceID, excludeID, fullName string, emails []domain.PersonEmailInput) (*dedupe.DedupeReviewFlag, error) {
+func (s *PersonStore) fuzzyDedupe(ctx context.Context, tx *sql.Tx, workspaceID, excludeID, fullName string, emails []domain.PersonEmailInput) (*dedupe.ReviewFlag, error) {
 	normalizedName := dedupe.NormalizeName(fullName)
 	if normalizedName == "" {
 		return nil, nil //nolint:nilnil // empty name skips the fuzzy tier entirely — nil flag + nil error is the "no review" result
@@ -152,7 +152,7 @@ func (s *PersonStore) fuzzyDedupe(ctx context.Context, tx *sql.Tx, workspaceID, 
 	if err != nil {
 		return nil, err
 	}
-	var best *dedupe.DedupeReviewFlag
+	var best *dedupe.ReviewFlag
 	for _, c := range candidates {
 		candCurrentOrgID, err := candidateCurrentOrgID(ctx, tx, workspaceID, c.id)
 		if err != nil {
@@ -166,7 +166,7 @@ func (s *PersonStore) fuzzyDedupe(ctx context.Context, tx *sql.Tx, workspaceID, 
 		orgMatch := dedupe.OrgMatchScore(newOrgID, candCurrentOrgID, candDomainOrgID, "", "")
 		confidence := dedupe.PersonConfidence(nameSim, orgMatch)
 		if best == nil || confidence > best.Confidence {
-			best = &dedupe.DedupeReviewFlag{CandidateID: c.id, Confidence: confidence}
+			best = &dedupe.ReviewFlag{CandidateID: c.id, Confidence: confidence}
 		}
 	}
 	if best == nil || best.Confidence < dedupe.DedupeReviewThreshold {

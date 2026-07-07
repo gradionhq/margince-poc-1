@@ -7,7 +7,6 @@ package transport
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -165,25 +164,4 @@ func pageResponse(data any, nextCursor string) map[string]any {
 			"has_more":    hasMore,
 		},
 	}
-}
-
-// writeUpdateResult maps a store Update error to its HTTP response.
-func writeUpdateResult[T any](w http.ResponseWriter, v T, err error) {
-	if errors.Is(err, errs.ErrConflict) {
-		jsonProblem(w, http.StatusConflict, "conflict")
-		return
-	}
-	if errors.Is(err, errs.ErrVersionSkew) {
-		jsonProblem(w, http.StatusConflict, "version_skew")
-		return
-	}
-	if errors.Is(err, errs.ErrNotFound) {
-		jsonProblem(w, http.StatusNotFound, "not_found")
-		return
-	}
-	if err != nil {
-		jsonErr(w, err)
-		return
-	}
-	jsonOK(w, v)
 }

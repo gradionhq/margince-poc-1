@@ -14,6 +14,10 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/ports/datasource"
 )
 
+// fieldTypeString is the datasource.FieldDef.Type value for every native
+// entity field currently exposed by ListFields — they are all plain strings.
+const fieldTypeString = "string"
+
 // DatasourceProvider wraps the domain stores and implements the 11-method datasource.Provider seam.
 type DatasourceProvider struct {
 	workspaceID string
@@ -152,7 +156,7 @@ func (p *DatasourceProvider) Update(ctx context.Context, in datasource.UpdateInp
 		return datasource.EntityRef{}, err
 	}
 
-	patch := domain.ToMap(in.Patch)
+	patch := domain.ToMapValue(in.Patch)
 
 	switch in.Type {
 	case datasource.EntityPerson:
@@ -304,20 +308,20 @@ func (p *DatasourceProvider) ListObjects(_ context.Context) ([]datasource.Object
 // ListFields returns the field definitions for one native entity type.
 func (p *DatasourceProvider) ListFields(_ context.Context, t datasource.EntityType) ([]datasource.FieldDef, error) {
 	base := []datasource.FieldDef{
-		{Name: "id", Type: "string", Label: "ID", Required: true},
-		{Name: "workspace_id", Type: "string", Label: "Workspace ID", Required: true},
+		{Name: "id", Type: fieldTypeString, Label: "ID", Required: true},
+		{Name: "workspace_id", Type: fieldTypeString, Label: "Workspace ID", Required: true},
 	}
 	switch t {
 	case datasource.EntityPerson:
-		return append(base, datasource.FieldDef{Name: "full_name", Type: "string", Label: "Full Name", Required: true}), nil
+		return append(base, datasource.FieldDef{Name: "full_name", Type: fieldTypeString, Label: "Full Name", Required: true}), nil
 	case datasource.EntityOrganization:
-		return append(base, datasource.FieldDef{Name: "display_name", Type: "string", Label: "Display Name", Required: true}), nil
+		return append(base, datasource.FieldDef{Name: "display_name", Type: fieldTypeString, Label: "Display Name", Required: true}), nil
 	case datasource.EntityDeal:
-		return append(base, datasource.FieldDef{Name: "name", Type: "string", Label: "Name", Required: true}), nil
+		return append(base, datasource.FieldDef{Name: "name", Type: fieldTypeString, Label: "Name", Required: true}), nil
 	case datasource.EntityActivity:
-		return append(base, datasource.FieldDef{Name: "kind", Type: "string", Label: "Kind", Required: true}), nil
+		return append(base, datasource.FieldDef{Name: "kind", Type: fieldTypeString, Label: "Kind", Required: true}), nil
 	case datasource.EntityLead:
-		return append(base, datasource.FieldDef{Name: "status", Type: "string", Label: "Status", Required: true}), nil
+		return append(base, datasource.FieldDef{Name: "status", Type: fieldTypeString, Label: "Status", Required: true}), nil
 	default:
 		return base, nil
 	}

@@ -67,7 +67,7 @@ func (s *OrgStore) Create(ctx context.Context, o domain.Organization) (domain.Or
 	}
 	o.Classification = classification
 	o.Domains = domains
-	var reviewFlag *dedupe.DedupeReviewFlag
+	var reviewFlag *dedupe.ReviewFlag
 	err := workspacetx.WithWorkspaceTx(ctx, s.db, o.WorkspaceID, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO organization (id, workspace_id, name, website, classification, relevance,

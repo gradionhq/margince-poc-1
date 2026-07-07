@@ -102,6 +102,6 @@ func LeadFromFields(v any) Lead {
 	return l
 }
 
-// ToMap coerces v to map[string]any for use by the provider's Update path.
+// ToMapValue coerces v to map[string]any for use by the provider's Update path.
 // Returns an empty map for nil or non-map inputs.
-func ToMap(v any) map[string]any { return toMap(v) }
+func ToMapValue(v any) map[string]any { return toMap(v) }

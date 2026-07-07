@@ -66,8 +66,6 @@ func followOrgMergeChain(ctx context.Context, tx *sql.Tx, id, workspaceID string
 // validateOrgMergePair reads both loser and target rows inside tx, returning
 // the loser's version + before-snapshot or a typed 422/404 error if the pair
 // is not eligible for merge.
-//
-//nolint:dupl // parallel per-entity merge validation: mirrors validateMergePair (store_merge_person.go) for organization
 func validateOrgMergePair(ctx context.Context, tx *sql.Tx, loserID, targetID, workspaceID string) (mergeLoserState, error) {
 	var state mergeLoserState
 	var loserMergedInto sql.NullString

@@ -14,7 +14,7 @@ import (
 // (per ticket: all five tunables are hand-fixed, not contract/config fields).
 const (
 	// DedupeReviewThreshold is the minimum fuzzy confidence score that triggers
-	// a non-blocking PO-AC-19 DedupeReviewFlag on Create (DEDUPE_REVIEW_THRESHOLD).
+	// a non-blocking PO-AC-19 ReviewFlag on Create (DEDUPE_REVIEW_THRESHOLD).
 	DedupeReviewThreshold = 0.72
 	dedupeNameWeight      = 0.55 // DEDUPE_NAME_WEIGHT (internal — used in PersonConfidence)
 	dedupeOrgWeight       = 0.45 // DEDUPE_ORGDOMAIN_WEIGHT (internal)
@@ -189,12 +189,12 @@ func OrgMatchScore(newDomainOrgID, candCurrentOrgID, candDomainOrgID *string, ne
 	return 0.0
 }
 
-// DedupeReviewFlag is the non-blocking PO-AC-19 review-flag attached to a
+// ReviewFlag is the non-blocking PO-AC-19 review-flag attached to a
 // Create response when the fuzzy tier's best candidate scores >=
 // DedupeReviewThreshold. NEVER persisted — computed fresh on every Create call.
 // Fuzzy scoring never auto-merges at any confidence (DEDUPE_FUZZY_AUTOMERGE is
 // unconditionally "never").
-type DedupeReviewFlag struct {
+type ReviewFlag struct {
 	CandidateID string  `json:"candidate_id"`
 	Confidence  float64 `json:"confidence"`
 }

@@ -34,9 +34,9 @@ type PersonStrength struct {
 	NoRecentActivity bool    `json:"no_recent_activity,omitempty"`
 }
 
-// PersonStrengthFrom converts a strength.StrengthResult into the wire
+// PersonStrengthFrom converts a strength.Result into the wire
 // PersonStrength, or nil for the no-signal-yet case.
-func PersonStrengthFrom(r strength.StrengthResult) *PersonStrength {
+func PersonStrengthFrom(r strength.Result) *PersonStrength {
 	if r.NoSignalYet {
 		return nil
 	}
@@ -71,8 +71,8 @@ type Person struct {
 	UpdatedAt  time.Time       `json:"updated_at"`
 	ArchivedAt *time.Time      `json:"archived_at"`
 	// ReviewFlag is PO-AC-19's non-blocking fuzzy-dedupe flag, computed fresh on
-	// every Create call and never persisted (dedupe.DedupeReviewFlag).
-	ReviewFlag    *dedupe.DedupeReviewFlag           `json:"dedupe_review,omitempty"`
+	// every Create call and never persisted (dedupe.ReviewFlag).
+	ReviewFlag    *dedupe.ReviewFlag                 `json:"dedupe_review,omitempty"`
 	Relationships []relationshipsdomain.Relationship `json:"relationships,omitempty"`
 	Deals         []dealsdomain.Deal                 `json:"deals,omitempty"`
 	Activities    []activitiesdomain.ActivityRef     `json:"activities,omitempty"`

@@ -16,13 +16,16 @@ import (
 	"github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
 )
 
-// Type aliases for external callers so they can refer to org types via the
-// module package rather than reaching into sub-packages directly.
-type (
-	Organization  = domain.Organization
-	OrgStore      = adapters.OrgStore
-	OrgListFilter = domain.OrgListFilter
-)
+// Organization is a type alias for domain.Organization, re-exported so
+// external callers can refer to org types via the module package rather than
+// reaching into sub-packages directly.
+type Organization = domain.Organization
+
+// OrgStore is a type alias for adapters.OrgStore.
+type OrgStore = adapters.OrgStore
+
+// OrgListFilter is a type alias for domain.OrgListFilter.
+type OrgListFilter = domain.OrgListFilter
 
 // NewOrgStore is a convenience constructor for external wiring.
 func NewOrgStore(db *sql.DB) *OrgStore { return adapters.NewOrgStore(db) }

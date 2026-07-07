@@ -15,13 +15,3 @@ func requireProvenance(source, capturedBy string) error {
 	}
 	return nil
 }
-
-// nullStr reads a *string from an updates map; nil when key is absent or not a string.
-func nullStr(m map[string]any, key string) *string {
-	if v, ok := m[key]; ok {
-		if s, ok := v.(string); ok {
-			return &s
-		}
-	}
-	return nil
-}

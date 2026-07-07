@@ -1,6 +1,6 @@
 // Package adapters — OrgStore fuzzy-dedupe (organizations module, WS-E-a).
 // Ported from modules/directory/store_org_dedupe.go (package crmcore → package adapters).
-// DedupeReviewFlag, jaroWinkler, and normalizeCompanyName come from
+// ReviewFlag, jaroWinkler, and normalizeCompanyName come from
 // github.com/gradionhq/margince/backend/internal/shared/kernel/dedupe.
 package adapters
 
@@ -46,7 +46,7 @@ func orgDedupeCandidates(ctx context.Context, tx *sql.Tx, workspaceID, excludeID
 // tx after the exact-domain tier has already succeeded. confidence is the
 // legal-suffix-normalized Jaro-Winkler name_sim alone (no org-match term —
 // an org has no "org" to match against). Ties resolve to the lowest org id.
-func (s *OrgStore) fuzzyDedupe(ctx context.Context, tx *sql.Tx, workspaceID, excludeID, displayName string) (*dedupe.DedupeReviewFlag, error) {
+func (s *OrgStore) fuzzyDedupe(ctx context.Context, tx *sql.Tx, workspaceID, excludeID, displayName string) (*dedupe.ReviewFlag, error) {
 	normalizedName := dedupe.NormalizeCompanyName(displayName)
 	if normalizedName == "" {
 		return nil, nil //nolint:nilnil // empty name skips the fuzzy tier entirely — nil flag + nil error is the "no review" result
@@ -55,11 +55,11 @@ func (s *OrgStore) fuzzyDedupe(ctx context.Context, tx *sql.Tx, workspaceID, exc
 	if err != nil {
 		return nil, err
 	}
-	var best *dedupe.DedupeReviewFlag
+	var best *dedupe.ReviewFlag
 	for _, c := range candidates {
 		confidence := dedupe.JaroWinkler(normalizedName, dedupe.NormalizeCompanyName(c.name))
 		if best == nil || confidence > best.Confidence {
-			best = &dedupe.DedupeReviewFlag{CandidateID: c.id, Confidence: confidence}
+			best = &dedupe.ReviewFlag{CandidateID: c.id, Confidence: confidence}
 		}
 	}
 	if best == nil || best.Confidence < dedupe.DedupeReviewThreshold {

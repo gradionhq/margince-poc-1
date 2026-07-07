@@ -38,10 +38,10 @@ type Organization struct {
 	ArchivedAt *time.Time      `json:"archived_at"`
 	// ReviewFlag is PO-AC-19's non-blocking fuzzy-dedupe flag (PO-F-2
 	// name-only tier), computed fresh on every Create call, never persisted.
-	ReviewFlag    *dedupe.DedupeReviewFlag `json:"dedupe_review,omitempty"`
-	Relationships []RelationshipRef        `json:"relationships,omitempty"`
-	Deals         []DealRef                `json:"deals,omitempty"`
-	Activities    []ActivityRef            `json:"activities,omitempty"`
+	ReviewFlag    *dedupe.ReviewFlag `json:"dedupe_review,omitempty"`
+	Relationships []RelationshipRef  `json:"relationships,omitempty"`
+	Deals         []DealRef          `json:"deals,omitempty"`
+	Activities    []ActivityRef      `json:"activities,omitempty"`
 }
 
 // OrganizationDomain is a normalized domain owned by an organization
@@ -88,7 +88,7 @@ type OrgListFilter struct {
 // tie-breaking among people with a computed strength.
 type OrgStrengthInput struct {
 	PersonID        string
-	Strength        *strength.StrengthResult
+	Strength        *strength.Result
 	LastInteraction time.Time
 }
 

@@ -119,8 +119,8 @@ func (s *PersonStore) listByStrength(ctx context.Context, workspaceID, cursor st
 
 // strengthActivitiesFor batch-fetches every live email/call/meeting activity
 // linked to any of personIDs, grouped by person_id.
-func (s *PersonStore) strengthActivitiesFor(ctx context.Context, tx *sql.Tx, workspaceID string, personIDs []string) (map[string][]strength.StrengthActivity, error) {
-	out := map[string][]strength.StrengthActivity{}
+func (s *PersonStore) strengthActivitiesFor(ctx context.Context, tx *sql.Tx, workspaceID string, personIDs []string) (map[string][]strength.Activity, error) {
+	out := map[string][]strength.Activity{}
 	if len(personIDs) == 0 {
 		return out, nil
 	}
@@ -138,7 +138,7 @@ func (s *PersonStore) strengthActivitiesFor(ctx context.Context, tx *sql.Tx, wor
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var personID string
-		var a strength.StrengthActivity
+		var a strength.Activity
 		if err := rows.Scan(&personID, &a.ID, &a.Kind, &a.Subject, &a.OccurredAt, &a.Direction); err != nil {
 			return nil, err
 		}
@@ -219,11 +219,11 @@ func (s *PersonStore) attachStrength(ctx context.Context, tx *sql.Tx, workspaceI
 // literal factor values plus the contributing activities, for the
 // non-black-box evidence read (PO-EXT-2). ErrNotFound if the person doesn't
 // exist or is archived (mirrors Get).
-func (s *PersonStore) StrengthBreakdown(ctx context.Context, id, workspaceID string) (strength.StrengthResult, error) {
+func (s *PersonStore) StrengthBreakdown(ctx context.Context, id, workspaceID string) (strength.Result, error) {
 	if _, err := s.Get(ctx, id, workspaceID); err != nil {
-		return strength.StrengthResult{}, err
+		return strength.Result{}, err
 	}
-	var result strength.StrengthResult
+	var result strength.Result
 	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		byPerson, err := s.strengthActivitiesFor(ctx, tx, workspaceID, []string{id})
 		if err != nil {

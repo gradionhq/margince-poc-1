@@ -10,7 +10,6 @@ import (
 
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
-	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
 const (
@@ -148,10 +147,6 @@ func pageResponse(data any, nextCursor string) map[string]any {
 			"has_more":    hasMore,
 		},
 	}
-}
-
-func provenanceOf(source, capturedBy string) prov.Provenance {
-	return prov.Provenance{Source: source, CapturedBy: capturedBy}
 }
 
 // writeUpdateResult maps a store Update/Patch error to its problem+json

@@ -63,8 +63,6 @@ type mergeLoserState struct {
 // validateMergePair reads both loser and target rows inside tx, returning the
 // loser's version + before-snapshot or a typed 422/404 error if the pair is
 // not eligible for merge (already-merged loser, invalid target).
-//
-//nolint:dupl // parallel per-entity merge validation: mirrored by validateOrgMergePair (store_merge_org.go) for organization; the SQL table names and error wiring differ by entity, a generic version would read worse than the explicit form
 func validateMergePair(ctx context.Context, tx *sql.Tx, loserID, targetID, workspaceID string) (mergeLoserState, error) {
 	var state mergeLoserState
 	var loserMergedInto sql.NullString

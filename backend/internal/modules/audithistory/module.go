@@ -25,8 +25,8 @@ import (
 // Domain type aliases
 // ---------------------------------------------------------------------------
 
-// AuditHistoryEntry is one rendered history line for a record mutation.
-type AuditHistoryEntry = domain.AuditHistoryEntry
+// Entry is one rendered history line for a record mutation.
+type Entry = domain.AuditHistoryEntry
 
 // EntityFieldMask is the set of field names to hide in before/after for an entity type.
 type EntityFieldMask = domain.EntityFieldMask
@@ -45,8 +45,8 @@ type HistoryReader = ports.HistoryReader
 // Adapter type aliases
 // ---------------------------------------------------------------------------
 
-// AuditHistoryReader is the database-backed HistoryReader implementation.
-type AuditHistoryReader = adapters.AuditHistoryReader
+// Reader is the database-backed HistoryReader implementation.
+type Reader = adapters.AuditHistoryReader
 
 // ---------------------------------------------------------------------------
 // App type aliases
@@ -72,8 +72,8 @@ func New(db *sql.DB, az authz.Authorizer) *Module {
 	return &Module{Handler: handler}
 }
 
-// NewAuditHistoryReader returns a database-backed AuditHistoryReader.
-func NewAuditHistoryReader(db *sql.DB) *AuditHistoryReader {
+// NewAuditHistoryReader returns a database-backed Reader.
+func NewAuditHistoryReader(db *sql.DB) *Reader {
 	return adapters.NewAuditHistoryReader(db)
 }
 

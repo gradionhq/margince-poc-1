@@ -20,5 +20,5 @@ type PersonStorer interface {
 	Archive(ctx context.Context, id, workspaceID string) (domain.Person, error)
 	Restore(ctx context.Context, id, workspaceID string) (domain.Person, error)
 	Merge(ctx context.Context, loserID, targetID, workspaceID string) (domain.Person, error)
-	StrengthBreakdown(ctx context.Context, id, workspaceID string) (strength.StrengthResult, error)
+	StrengthBreakdown(ctx context.Context, id, workspaceID string) (strength.Result, error)
 }

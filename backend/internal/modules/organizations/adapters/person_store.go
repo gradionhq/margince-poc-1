@@ -8,8 +8,9 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/gradionhq/margince/backend/internal/shared/kernel/strength"
 	"github.com/lib/pq"
+
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/strength"
 )
 
 // PersonStore is a minimal store used by OrgStore to fetch person-level
@@ -23,8 +24,8 @@ func NewPersonStore(db *sql.DB) *PersonStore { return &PersonStore{db: db} }
 // strengthActivitiesFor batch-fetches every live email/call/meeting activity
 // linked to any of personIDs, grouped by person_id. Mirrors
 // directory.PersonStore.strengthActivitiesFor exactly (same query, same shape).
-func (s *PersonStore) strengthActivitiesFor(ctx context.Context, tx *sql.Tx, workspaceID string, personIDs []string) (map[string][]strength.StrengthActivity, error) {
-	out := map[string][]strength.StrengthActivity{}
+func (s *PersonStore) strengthActivitiesFor(ctx context.Context, tx *sql.Tx, workspaceID string, personIDs []string) (map[string][]strength.Activity, error) {
+	out := map[string][]strength.Activity{}
 	if len(personIDs) == 0 {
 		return out, nil
 	}
@@ -42,7 +43,7 @@ func (s *PersonStore) strengthActivitiesFor(ctx context.Context, tx *sql.Tx, wor
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var personID string
-		var a strength.StrengthActivity
+		var a strength.Activity
 		if err := rows.Scan(&personID, &a.ID, &a.Kind, &a.Subject, &a.OccurredAt, &a.Direction); err != nil {
 			return nil, err
 		}

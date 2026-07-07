@@ -12,13 +12,14 @@ import (
 	"github.com/gradionhq/margince/backend/internal/modules/activities/transport"
 )
 
-// Domain type aliases
-type (
-	Activity    = domain.Activity
-	ActivityRef = domain.ActivityRef
-)
+// Activity is a type alias for domain.Activity, re-exported so callers can
+// refer to activities domain types via this package.
+type Activity = domain.Activity
 
-// Adapter type aliases
+// ActivityRef is a type alias for domain.ActivityRef.
+type ActivityRef = domain.ActivityRef
+
+// ActivityStore is a type alias for adapters.ActivityStore.
 type ActivityStore = adapters.ActivityStore
 
 // NewActivityStore returns an ActivityStore backed by db.

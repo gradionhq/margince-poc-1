@@ -1,6 +1,6 @@
 // Package adapters — org-strength aggregation (organizations module, WS-E-a).
 // Ported from modules/directory/store_org_strength.go (package crmcore → package adapters).
-// StrengthActivity, ComputeStrength, StrengthBucket come from the shared
+// Activity, ComputeStrength, Bucket come from the shared
 // github.com/gradionhq/margince/backend/internal/shared/kernel/strength package.
 package adapters
 
@@ -123,7 +123,7 @@ func personDisplayNames(ctx context.Context, tx *sql.Tx, personIDs []string) (ma
 func attachOrgAggregates(
 	ctx context.Context,
 	tx *sql.Tx,
-	strengthActivities func(context.Context, *sql.Tx, string, []string) (map[string][]strength.StrengthActivity, error),
+	strengthActivities func(context.Context, *sql.Tx, string, []string) (map[string][]strength.Activity, error),
 	workspaceID string,
 	orgs []*domain.Organization,
 ) error {
@@ -187,7 +187,7 @@ func attachOrgAggregates(
 		}
 		o.Strength = &domain.OrgStrengthBlock{
 			Score:         score,
-			Bucket:        strength.StrengthBucket(score),
+			Bucket:        strength.Bucket(score),
 			TopPersonID:   topPersonID,
 			TopPersonName: names[topPersonID],
 		}

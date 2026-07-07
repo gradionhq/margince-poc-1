@@ -1,3 +1,6 @@
+// Package strength implements PO-F-3's relationship-strength scoring: a pure,
+// dependency-free function that turns a person's recent activity history into
+// a 0-100 score and a weak/moderate/strong display bucket.
 package strength
 
 import (
@@ -24,9 +27,9 @@ const (
 	StrengthBucketStrong   = "strong"
 )
 
-// StrengthActivity is the minimal shape ComputeStrength needs from a live
+// Activity is the minimal shape ComputeStrength needs from a live
 // email/call/meeting activity linked to a person.
-type StrengthActivity struct {
+type Activity struct {
 	ID         string
 	Kind       string
 	Subject    *string
@@ -34,8 +37,8 @@ type StrengthActivity struct {
 	Direction  *string // inbound | outbound | nil
 }
 
-// StrengthResult is PO-F-3's output for one person.
-type StrengthResult struct {
+// Result is PO-F-3's output for one person.
+type Result struct {
 	Score                  int
 	Bucket                 string
 	Recency                float64
@@ -43,22 +46,22 @@ type StrengthResult struct {
 	Reciprocity            float64
 	NoSignalYet            bool
 	NoRecentActivity       bool
-	ContributingActivities []StrengthActivity
+	ContributingActivities []Activity
 }
 
 // ComputeStrength implements PO-F-3 exactly. now is the caller's clock (UTC);
 // production passes time.Now().UTC(), tests pin a fixed instant (TEST-DET-1).
 // Pure function — no DB/context access.
-func ComputeStrength(now time.Time, activities []StrengthActivity) StrengthResult {
+func ComputeStrength(now time.Time, activities []Activity) Result {
 	if len(activities) == 0 {
-		return StrengthResult{
+		return Result{
 			Bucket:      StrengthBucketWeak,
 			NoSignalYet: true,
 		}
 	}
 
 	windowStart := now.Add(-time.Duration(RelStrengthWindowDays) * 24 * time.Hour)
-	windowed := make([]StrengthActivity, 0, len(activities))
+	windowed := make([]Activity, 0, len(activities))
 	var lastInteraction time.Time
 	for i, activity := range activities {
 		if i == 0 || activity.OccurredAt.After(lastInteraction) {
@@ -70,7 +73,7 @@ func ComputeStrength(now time.Time, activities []StrengthActivity) StrengthResul
 	}
 
 	if len(windowed) == 0 {
-		return StrengthResult{
+		return Result{
 			Score:            0,
 			Bucket:           StrengthBucketWeak,
 			NoRecentActivity: true,
@@ -90,9 +93,9 @@ func ComputeStrength(now time.Time, activities []StrengthActivity) StrengthResul
 	reciprocity := reciprocityScore(inbound, outbound)
 
 	score := int(math.Round(100 * recency * frequency * reciprocity))
-	return StrengthResult{
+	return Result{
 		Score:                  score,
-		Bucket:                 StrengthBucket(score),
+		Bucket:                 Bucket(score),
 		Recency:                recency,
 		Frequency:              frequency,
 		Reciprocity:            reciprocity,
@@ -100,8 +103,8 @@ func ComputeStrength(now time.Time, activities []StrengthActivity) StrengthResul
 	}
 }
 
-// StrengthBucket maps a 0-100 score to its PO-PARAM-3 display bucket.
-func StrengthBucket(score int) string {
+// Bucket maps a 0-100 score to its PO-PARAM-3 display bucket.
+func Bucket(score int) string {
 	switch {
 	case score < 25:
 		return StrengthBucketWeak
@@ -120,7 +123,7 @@ func recencyScore(now, lastInteraction time.Time) float64 {
 	return math.Pow(2, -daysSince/RelStrengthHalfLifeDays)
 }
 
-func directionalCounts(activities []StrengthActivity) (inbound, outbound float64) {
+func directionalCounts(activities []Activity) (inbound, outbound float64) {
 	for _, activity := range activities {
 		if activity.Direction == nil {
 			continue
