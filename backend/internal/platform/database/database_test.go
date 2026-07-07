@@ -25,6 +25,7 @@ func (f *fakeExec) ExecContext(_ context.Context, query string, args ...any) (sq
 	if f.fail != "" && query == f.fail {
 		return nil, errors.New("boom")
 	}
+	//nolint:nilnil // test fake: no real sql.Result needed, callers only assert on captured statements/args
 	return nil, nil
 }
 

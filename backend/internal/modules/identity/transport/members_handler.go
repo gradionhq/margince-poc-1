@@ -246,14 +246,15 @@ func HandleAssignRole(db *sql.DB) http.HandlerFunc {
 // HandleRevokeRole DELETE /members/{user_id}/roles/{role_key} — last-admin-guarded.
 func HandleRevokeRole(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		p, _ := crmctx.From(r.Context())
+		ctx := r.Context()
+		p, _ := crmctx.From(ctx)
 		ws := p.TenantID
 		userID := r.PathValue("user_id")
 		roleKey := r.PathValue("role_key")
 
 		// Resolve the role within the workspace (404 if unknown).
 		var roleID string
-		err := db.QueryRowContext(r.Context(),
+		err := db.QueryRowContext(ctx,
 			`SELECT id FROM role WHERE workspace_id=$1::uuid AND key=$2`, ws, roleKey).Scan(&roleID)
 		if errors.Is(err, sql.ErrNoRows) {
 			httpserver.WriteProblem(w, http.StatusNotFound, httpserver.CodeNotFound)
@@ -267,7 +268,7 @@ func HandleRevokeRole(db *sql.DB) http.HandlerFunc {
 		// Last-admin guard: never strand a workspace without an admin.
 		if roleKey == "admin" {
 			var adminCount int
-			if err := db.QueryRowContext(r.Context(), `
+			if err := db.QueryRowContext(ctx, `
 				SELECT count(*) FROM role_assignment ra
 				JOIN role r ON r.id = ra.role_id
 				WHERE ra.workspace_id=$1::uuid AND r.key='admin'`, ws).Scan(&adminCount); err != nil {
@@ -275,7 +276,7 @@ func HandleRevokeRole(db *sql.DB) http.HandlerFunc {
 				return
 			}
 			var holdsAdmin int
-			holdsErr := db.QueryRowContext(r.Context(),
+			holdsErr := db.QueryRowContext(ctx,
 				`SELECT 1 FROM role_assignment WHERE workspace_id=$1::uuid AND role_id=$2::uuid AND user_id=$3::uuid`,
 				ws, roleID, userID).Scan(&holdsAdmin)
 			userHoldsAdmin := holdsErr == nil
@@ -289,17 +290,17 @@ func HandleRevokeRole(db *sql.DB) http.HandlerFunc {
 			}
 		}
 
-		err = database.WithWorkspaceTx(r.Context(), db, ws, func(tx *sql.Tx) error {
+		err = database.WithWorkspaceTx(ctx, db, ws, func(tx *sql.Tx) error {
 			var assignmentID string
-			e := tx.QueryRowContext(r.Context(), `
+			e := tx.QueryRowContext(ctx, `
 				DELETE FROM role_assignment
 				WHERE workspace_id=$1::uuid AND role_id=$2::uuid AND user_id=$3::uuid
 				RETURNING id`, ws, roleID, userID).Scan(&assignmentID)
 			if e != nil {
 				return e
 			}
-			entry := crmaudit.EntryFromPrincipal(r.Context(), "archive", "role_assignment", &assignmentID, nil, nil)
-			_, e = crmaudit.WriteTx(r.Context(), tx, entry)
+			entry := crmaudit.EntryFromPrincipal(ctx, "archive", "role_assignment", &assignmentID, nil, nil)
+			_, e = crmaudit.WriteTx(ctx, tx, entry)
 			return e
 		})
 		if errors.Is(err, sql.ErrNoRows) {

@@ -25,6 +25,7 @@ type RecordGrantHandler struct {
 	db    *sql.DB
 }
 
+// NewRecordGrantHandler returns a RecordGrantHandler.
 func NewRecordGrantHandler(store *directory.RecordGrantStore, db *sql.DB) *RecordGrantHandler {
 	return &RecordGrantHandler{store: store, db: db}
 }
