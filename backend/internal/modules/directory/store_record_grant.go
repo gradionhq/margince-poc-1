@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 )
 
 // ErrGrantExceedsGrantorAccess is returned by RecordGrantStore.Create when the
@@ -78,7 +78,8 @@ func (s *RecordGrantStore) Create(ctx context.Context, in CreateRecordGrantInput
 
 	var g RecordGrant
 	err := database.WithWorkspaceTx(ctx, s.db, in.WorkspaceID, func(tx *sql.Tx) error {
-		err := tx.QueryRowContext(ctx, `
+		err := tx.QueryRowContext(
+			ctx, `
 			INSERT INTO record_grant (workspace_id, record_type, record_id, subject_type, subject_id, access, granted_by, reason, expires_at)
 			VALUES ($1::uuid,$2,$3::uuid,$4,$5::uuid,$6,$7::uuid,$8,$9)
 			ON CONFLICT (workspace_id, record_type, record_id, subject_type, subject_id)

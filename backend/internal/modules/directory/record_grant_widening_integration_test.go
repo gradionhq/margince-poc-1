@@ -516,7 +516,7 @@ func TestRecordGrant_WriteSatisfiesRead(t *testing.T) {
 		RecordID:         deal.ID,
 		SubjectType:      "user",
 		SubjectID:        subjectB,
-		Access:           "write", // Trying to escalate to write...
+		Access:           "write",  // Trying to escalate to write...
 		GrantedBy:        subjectB, // ...from a principal who only has read
 		GrantorOwnAccess: "read",   // Only read access
 	})

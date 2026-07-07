@@ -176,7 +176,8 @@ func (r *pgConsentRepository) FindForPurpose(ctx context.Context, workspaceID, p
 	}
 	var state string
 	err := database.WithWorkspaceTx(ctx, r.db, workspaceID, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `
+		return tx.QueryRowContext(
+			ctx, `
 			SELECT pc.state
 			FROM person_consent pc
 			JOIN consent_purpose cp ON cp.id = pc.purpose_id

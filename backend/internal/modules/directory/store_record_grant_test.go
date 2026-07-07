@@ -100,11 +100,11 @@ func TestRecordGrantStore_RejectsScopeExceedingGrant(t *testing.T) {
 	// record_id and subject_id do not need to reference real rows.
 	_, err := store.Create(ctx, crmcore.CreateRecordGrantInput{
 		WorkspaceID:      ws,
-		GrantedBy:        ws,    // any UUID; check fires before the DB INSERT
+		GrantedBy:        ws, // any UUID; check fires before the DB INSERT
 		RecordType:       "deal",
-		RecordID:         ws,    // any UUID
+		RecordID:         ws, // any UUID
 		SubjectType:      "user",
-		SubjectID:        ws,    // any UUID
+		SubjectID:        ws, // any UUID
 		Access:           "write",
 		GrantorOwnAccess: "read",
 	})
