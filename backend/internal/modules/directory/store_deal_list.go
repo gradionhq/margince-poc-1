@@ -78,7 +78,14 @@ func buildDealListWhereBasic(f DealListFilter, where string, args []any, n int) 
 	if f.OwnerID != "" {
 		n++
 		args = append(args, f.OwnerID)
-		where += fmt.Sprintf(` AND owner_id=$%d::uuid`, n)
+		ownerArg := n
+		n++
+		args = append(args, f.OwnerID)
+		where += fmt.Sprintf(` AND (owner_id=$%d::uuid OR EXISTS (
+			SELECT 1 FROM record_grant rg
+			WHERE rg.workspace_id = deal.workspace_id AND rg.record_type = 'deal' AND rg.record_id = deal.id
+			  AND rg.subject_type = 'user' AND rg.subject_id = $%d::uuid
+			  AND (rg.expires_at IS NULL OR rg.expires_at > now())))`, ownerArg, n)
 	}
 	if f.OrganizationID != "" {
 		n++

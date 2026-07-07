@@ -64,6 +64,7 @@ var adminPermissionsJSON = func() string {
 		"passport":           all(httpserver.ActionRead, httpserver.ActionCreate, httpserver.ActionArchive),
 		"approval":           all(httpserver.ActionRead, "decide"),
 		"workspace":          map[string]any{"manage_members": map[string]any{"row_scope": "all"}},
+		"record_grant":       all(httpserver.ActionRead, httpserver.ActionCreate, httpserver.ActionArchive),
 	}
 	b, err := json.Marshal(perms)
 	if err != nil {

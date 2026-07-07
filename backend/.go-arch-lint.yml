@@ -127,7 +127,7 @@ deps:
   # verify/consume seam) — advanceDeal's tier-gate decision is an HTTP-boundary
   # concern, made here before the store's tx opens.
   dealtransport:
-    mayDependOn: [directory, crmctx, errs, prov, deals, approvals]
+    mayDependOn: [directory, crmctx, errs, prov, deals, approvals, database]
   # dealstransport is the pipeline/stage module's HTTP transport layer
   # (handler_pipeline.go, handler_stage.go, T10); same shape as
   # dealtransport/people above — depends on deals for the
