@@ -1,4 +1,4 @@
-package crmgdpr
+package adapters
 
 import (
 	"context"
@@ -8,20 +8,15 @@ import (
 
 	"github.com/riverqueue/river"
 
+	"github.com/gradionhq/margince/backend/internal/modules/gdpr/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
 
-// RetentionSweepArgs is the payload for the nightly retention sweep job.
-type RetentionSweepArgs struct{}
-
-// Kind implements river.JobArgs.
-func (RetentionSweepArgs) Kind() string { return "retention_sweep" }
-
 // RetentionWorker evaluates all retention policies across workspaces and applies
 // the archive/anonymize/erase ladder, skipping records with legal_hold=true.
 type RetentionWorker struct {
-	river.WorkerDefaults[RetentionSweepArgs]
+	river.WorkerDefaults[domain.RetentionSweepArgs]
 	db *sql.DB
 }
 
@@ -38,23 +33,17 @@ func isLostDeal(status string) bool { return status == statusLost }
 func isTranscript(sourceSystem string) bool { return sourceSystem == sourceTranscript }
 
 // nonPersonEraseSupported reports whether the non-person erase action has a real
-// implementation for the given object type. Only activities are erasable on this
-// path (person erase is handled by the dedicated Erase flow). Used to refuse a
-// lead/deal erase before it writes a success-claiming audit row for a no-op.
+// implementation for the given object type. Only activities are erasable on this path.
 func nonPersonEraseSupported(objectType string) bool { return objectType == objectActivity }
 
 // workItem pairs a record ID with the policy that applies to it.
 type workItem struct {
 	id     string
-	policy Policy
+	policy domain.Policy
 }
 
 // Work runs the nightly retention sweep across all workspaces.
-// Phase 1: read-only tx per workspace to collect over-age IDs.
-// Phase 2: one write tx per record to apply actions.
-// Keeping these phases separate prevents the dedicated-conn deadlock when the
-// pool is small (or has size 1 in tests).
-func (w *RetentionWorker) Work(ctx context.Context, job *river.Job[RetentionSweepArgs]) error {
+func (w *RetentionWorker) Work(ctx context.Context, job *river.Job[domain.RetentionSweepArgs]) error {
 	now := time.Now().UTC()
 
 	wsIDs, err := w.allWorkspaceIDs(ctx)
@@ -70,7 +59,7 @@ func (w *RetentionWorker) Work(ctx context.Context, job *river.Job[RetentionSwee
 	return nil
 }
 
-// allWorkspaceIDs returns all workspace IDs. The workspace table has no RLS.
+// allWorkspaceIDs returns all workspace IDs.
 func (w *RetentionWorker) allWorkspaceIDs(ctx context.Context) ([]string, error) {
 	rows, err := w.db.QueryContext(ctx, `SELECT id FROM workspace`)
 	if err != nil {
@@ -105,8 +94,6 @@ func (w *RetentionWorker) processWorkspace(ctx context.Context, wsID string, now
 
 // collectWorkItems opens a read-only transaction, sets the workspace GUC, loads
 // all enabled policies, and returns all over-age record IDs with their policies.
-// The transaction is committed (read-only, no writes) before returning so the
-// connection is returned to the pool before phase 2 begins.
 func (w *RetentionWorker) collectWorkItems(ctx context.Context, wsID string, now time.Time) ([]workItem, error) {
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -141,9 +128,7 @@ func (w *RetentionWorker) collectWorkItems(ctx context.Context, wsID string, now
 }
 
 // loadPoliciesTx returns all enabled retention policies for the given workspace.
-// The workspace_id filter is explicit (not RLS-only) so the sweep stays scoped
-// even under a BYPASSRLS/superuser connection (e.g. the integration-test role).
-func loadPoliciesTx(ctx context.Context, tx *sql.Tx, wsID string) ([]Policy, error) {
+func loadPoliciesTx(ctx context.Context, tx *sql.Tx, wsID string) ([]domain.Policy, error) {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT object_type, COALESCE(category,''), retain_days, action
 		 FROM retention_policy WHERE workspace_id = $1::uuid AND enabled = true`, wsID)
@@ -152,9 +137,9 @@ func loadPoliciesTx(ctx context.Context, tx *sql.Tx, wsID string) ([]Policy, err
 	}
 	defer rows.Close() //nolint:errcheck
 
-	var policies []Policy
+	var policies []domain.Policy
 	for rows.Next() {
-		var p Policy
+		var p domain.Policy
 		if err := rows.Scan(&p.ObjectType, &p.Category, &p.RetainDays, &p.Action); err != nil {
 			return nil, fmt.Errorf("loadPolicies scan: %w", err)
 		}
@@ -164,8 +149,8 @@ func loadPoliciesTx(ctx context.Context, tx *sql.Tx, wsID string) ([]Policy, err
 }
 
 // selectOverAgeQuery returns IDs of records that match the policy's category filter and
-// are older than the cutoff. Legal-hold records are excluded at the SQL level where applicable.
-func selectOverAgeQuery(ctx context.Context, tx *sql.Tx, wsID string, p Policy, cutoff time.Time) ([]string, error) {
+// are older than the cutoff.
+func selectOverAgeQuery(ctx context.Context, tx *sql.Tx, wsID string, p domain.Policy, cutoff time.Time) ([]string, error) {
 	key := p.ObjectType + "/" + p.Category
 	var query string
 	switch key {
@@ -224,9 +209,7 @@ func selectOverAgeQuery(ctx context.Context, tx *sql.Tx, wsID string, p Policy, 
 }
 
 // applyAction applies the ladder action for one record and writes an audit row.
-// For action=erase on a person, delegates to Erase (which manages its own tx+audit).
-// All other cases run in a fresh transaction.
-func (w *RetentionWorker) applyAction(ctx context.Context, wsID string, p Policy, recordID string) error {
+func (w *RetentionWorker) applyAction(ctx context.Context, wsID string, p domain.Policy, recordID string) error {
 	if p.Action == actionErase && p.ObjectType == objectPerson {
 		eraseCtx := crmctx.With(ctx, crmctx.Principal{TenantID: wsID})
 		return Erase(eraseCtx, w.db, recordID)
@@ -255,11 +238,6 @@ func (w *RetentionWorker) applyAction(ctx context.Context, wsID string, p Policy
 		}
 		auditAction = "update"
 	case actionErase:
-		// Non-person erase is only implemented for activities (e.g.
-		// activity/transcript): null PII + archive. A lead/deal erase policy would
-		// match zero rows here, so writing an "erase" audit row claiming success
-		// would be a dishonest audit (T7). Refuse instead — no row touched, no
-		// audit row written. (Person erase is handled by the early Erase branch.)
 		if !nonPersonEraseSupported(p.ObjectType) {
 			return fmt.Errorf("applyAction: erase action unsupported for object_type %q (only person and activity are erasable)", p.ObjectType)
 		}
@@ -309,8 +287,7 @@ func applyArchive(ctx context.Context, tx *sql.Tx, objectType, recordID string) 
 	return nil
 }
 
-// applyAnonymize nulls PII fields for the record (lighter than full erase — no suppression list,
-// no embedding deletion, no linked-record nulling).
+// applyAnonymize nulls PII fields for the record.
 func applyAnonymize(ctx context.Context, tx *sql.Tx, wsID, objectType, recordID string) error {
 	switch objectType {
 	case objectLead:

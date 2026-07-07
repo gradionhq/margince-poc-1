@@ -1,4 +1,5 @@
-package crmapprovals
+// Package app contains the approvals module's application-service (use-case) layer.
+package app
 
 import (
 	"context"
@@ -6,8 +7,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gradionhq/margince/backend/internal/modules/approvals/domain"
+	"github.com/gradionhq/margince/backend/internal/modules/approvals/ports"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
-	"github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 )
 
 // DefaultApprovalTTL is the expiry window applied to a staged approval_item when
@@ -28,11 +31,7 @@ type StageInput struct {
 
 // Stage is the commit-block: it writes a pending approval_item + one audit_log
 // row (action=capture) in the caller's tx and returns ErrRequiresApproval.
-// No primary-table write occurs — Stage only touches approval_item + audit_log.
-//
-// B6: Stage sets the app.workspace_id GUC for the caller's tx so both FORCE-RLS
-// INSERTs pass (same pattern as crmaudit.Write and crmgdpr.Record).
-func Stage(ctx context.Context, tx DBExec, repo Repository, in StageInput) (string, error) {
+func Stage(ctx context.Context, tx ports.DBExec, repo ports.Repository, in StageInput) (string, error) {
 	if in.WorkspaceID == "" {
 		return "", fmt.Errorf("crmapprovals stage: empty workspace_id")
 	}
@@ -47,14 +46,14 @@ func Stage(ctx context.Context, tx DBExec, repo Repository, in StageInput) (stri
 	}
 	expiresAt := time.Now().Add(ttl)
 
-	itemID, err := repo.Create(ctx, tx, Item{
+	itemID, err := repo.Create(ctx, tx, domain.Item{
 		WorkspaceID:        in.WorkspaceID,
 		ActionType:         in.ActionType,
 		Payload:            in.Payload,
 		DryRunPreview:      in.DryRunPreview,
 		TrustTiers:         in.TrustTiers,
 		ContentEgressFlags: in.ContentEgressFlags,
-		Status:             StatusPending,
+		Status:             domain.StatusPending,
 		RequestedBy:        in.RequestedBy,
 		ExpiresAt:          &expiresAt,
 	})
@@ -68,7 +67,7 @@ func Stage(ctx context.Context, tx DBExec, repo Repository, in StageInput) (stri
 		ActorType:         "agent",
 		ActorID:           in.RequestedBy,
 		Action:            "capture",
-		EntityType:        entityApproval,
+		EntityType:        "approval_item",
 		EntityID:          &itemID,
 		After:             map[string]any{"state": "pending_approval"},
 		AuthorizationRule: &authRule,

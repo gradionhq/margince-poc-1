@@ -1,23 +1,16 @@
-package crmgdpr
+package adapters
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
+
+	"github.com/gradionhq/margince/backend/internal/modules/gdpr/domain"
 )
 
-// Policy is a retention rule for an object type + optional category.
-type Policy struct {
-	ObjectType string
-	Category   string
-	RetainDays int
-	Action     string
-}
-
 // defaultPolicies returns the 5 spec §3.4 seed rows (generic, no jurisdiction strings).
-func defaultPolicies() []Policy {
-	return []Policy{
+func defaultPolicies() []domain.Policy {
+	return []domain.Policy{
 		{ObjectType: objectLead, Category: "unconverted", RetainDays: 365, Action: actionAnonymize},
 		{ObjectType: objectActivity, Category: "", RetainDays: 1095, Action: actionArchive},
 		{ObjectType: objectActivity, Category: sourceTranscript, RetainDays: 365, Action: actionErase},
@@ -46,11 +39,4 @@ func SeedDefaults(ctx context.Context, tx *sql.Tx, workspaceID string) error {
 		}
 	}
 	return nil
-}
-
-// OverAge reports whether lastActivity is more than retainDays×24h before asOf.
-// Exactly retainDays is NOT over age; one second beyond is.
-func OverAge(asOf time.Time, retainDays int, lastActivity time.Time) bool {
-	threshold := time.Duration(retainDays) * 24 * time.Hour
-	return asOf.Sub(lastActivity) > threshold
 }

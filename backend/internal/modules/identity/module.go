@@ -181,4 +181,3 @@ func AuthorizePerms(perms RolePermissions, object, action string) error {
 func LoadUserScopesFromPerms(perms RolePermissions) []string {
 	return adapters.LoadUserScopesFromPerms(perms)
 }
-

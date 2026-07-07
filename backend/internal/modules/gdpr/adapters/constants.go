@@ -1,4 +1,4 @@
-package crmgdpr
+package adapters
 
 // Object/entity types the GDPR engine operates over.
 const (

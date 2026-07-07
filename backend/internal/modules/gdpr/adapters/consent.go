@@ -1,23 +1,14 @@
-// Package crmgdpr implements GDPR engine: consent, retention, erasure and SAR.
-package crmgdpr
+package adapters
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
 
+	"github.com/gradionhq/margince/backend/internal/modules/gdpr/domain"
+	"github.com/gradionhq/margince/backend/internal/modules/gdpr/ports"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
-)
-
-// ConsentState is the current consent status for a given (person, purpose) pair.
-type ConsentState string
-
-// The consent states a (person, purpose) pair can be in.
-const (
-	Granted   ConsentState = "granted"
-	Withdrawn ConsentState = "withdrawn"
-	Unknown   ConsentState = "unknown"
 )
 
 // consentQueryer is the read surface Check needs — satisfied by *sql.Tx and *sql.DB.
@@ -44,7 +35,7 @@ func Check(ctx context.Context, q consentQueryer, workspaceID, personID, purpose
 	if err != nil {
 		return false, fmt.Errorf("crmgdpr.Check: %w", err)
 	}
-	return state == string(Granted), nil
+	return state == string(domain.Granted), nil
 }
 
 // ConsentRequest carries everything needed to record one consent signal.
@@ -52,7 +43,7 @@ type ConsentRequest struct {
 	WorkspaceID    string
 	PersonID       string
 	PurposeName    string
-	NewState       ConsentState // must be Granted or Withdrawn
+	NewState       domain.ConsentState // must be Granted or Withdrawn
 	Channel        string
 	LawfulBasis    string
 	PolicyWording  string
@@ -70,7 +61,7 @@ func Record(ctx context.Context, db *sql.DB, w ConsentRequest) error {
 	if db == nil {
 		return fmt.Errorf("crmgdpr.Record: db is nil")
 	}
-	if w.NewState != Granted && w.NewState != Withdrawn {
+	if w.NewState != domain.Granted && w.NewState != domain.Withdrawn {
 		return fmt.Errorf("crmgdpr.Record: NewState must be granted or withdrawn, got %q", w.NewState)
 	}
 
@@ -164,17 +155,10 @@ func persistConsent(ctx context.Context, tx *sql.Tx, wsID string, w ConsentReque
 	return consentID, nil
 }
 
-// ConsentRepository is the GDPR consent read seam for per-call consent checks.
-// workspaceID is an explicit param (not derived from ctx) so callers without a
-// crmctx principal can still query — matching the seam doc (N3).
-type ConsentRepository interface {
-	FindForPurpose(ctx context.Context, workspaceID, personID, purpose string) (ConsentState, error)
-}
-
-// NewConsentRepository returns a PostgreSQL-backed ConsentRepository.
+// NewConsentRepository returns a PostgreSQL-backed ports.ConsentRepository.
 //
 //nolint:ireturn // seam returns the ConsentRepository interface by design
-func NewConsentRepository(db *sql.DB) ConsentRepository {
+func NewConsentRepository(db *sql.DB) ports.ConsentRepository {
 	return &pgConsentRepository{db: db}
 }
 
@@ -182,9 +166,9 @@ type pgConsentRepository struct{ db *sql.DB }
 
 // FindForPurpose returns Granted/Withdrawn/Unknown. Default-deny: no row or wrong
 // purpose → Unknown. Caller is responsible for setting the RLS GUC if needed.
-func (r *pgConsentRepository) FindForPurpose(ctx context.Context, workspaceID, personID, purpose string) (ConsentState, error) {
+func (r *pgConsentRepository) FindForPurpose(ctx context.Context, workspaceID, personID, purpose string) (domain.ConsentState, error) {
 	if r.db == nil {
-		return Unknown, fmt.Errorf("crmgdpr.FindForPurpose: db is nil")
+		return domain.Unknown, fmt.Errorf("crmgdpr.FindForPurpose: db is nil")
 	}
 	var state string
 	err := r.db.QueryRowContext(
@@ -198,18 +182,18 @@ func (r *pgConsentRepository) FindForPurpose(ctx context.Context, workspaceID, p
 		personID, purpose, workspaceID,
 	).Scan(&state)
 	if err == sql.ErrNoRows {
-		return Unknown, nil
+		return domain.Unknown, nil
 	}
 	if err != nil {
-		return Unknown, fmt.Errorf("crmgdpr.FindForPurpose: %w", err)
+		return domain.Unknown, fmt.Errorf("crmgdpr.FindForPurpose: %w", err)
 	}
-	switch ConsentState(state) {
-	case Granted:
-		return Granted, nil
-	case Withdrawn:
-		return Withdrawn, nil
+	switch domain.ConsentState(state) {
+	case domain.Granted:
+		return domain.Granted, nil
+	case domain.Withdrawn:
+		return domain.Withdrawn, nil
 	default:
-		return Unknown, nil
+		return domain.Unknown, nil
 	}
 }
 

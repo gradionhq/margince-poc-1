@@ -1,13 +1,15 @@
-package crmgdpr
+package crmgdpr_test
 
 import (
 	"encoding/json"
 	"testing"
+
+	crmgdpr "github.com/gradionhq/margince/backend/internal/modules/gdpr"
 )
 
 // TestSARPackage_ShapeFromFixture verifies that the SARPackage struct covers all linked stores.
 func TestSARPackage_ShapeFromFixture(t *testing.T) {
-	pkg := SARPackage{
+	pkg := crmgdpr.SARPackage{
 		Person:        json.RawMessage(`{"id":"abc","full_name":"Alice"}`),
 		Emails:        []json.RawMessage{json.RawMessage(`{"email":"alice@example.com"}`)},
 		Activities:    []json.RawMessage{json.RawMessage(`{"subject":"Meeting"}`)},

@@ -1,4 +1,4 @@
-package crmgdpr
+package adapters
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// querier is satisfied by *sql.DB, *sql.Tx, and *sql.Conn.
-type querier interface {
+// Querier is satisfied by *sql.DB, *sql.Tx, and *sql.Conn.
+type Querier interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }
@@ -23,7 +23,7 @@ func Hash(email string) string {
 
 // IsSuppressed reports whether email is in erasure_suppression for wsID.
 // q must be a *sql.DB or *sql.Tx with app.workspace_id GUC already set.
-func IsSuppressed(ctx context.Context, q querier, wsID, email string) (bool, error) {
+func IsSuppressed(ctx context.Context, q Querier, wsID, email string) (bool, error) {
 	var n int
 	err := q.QueryRowContext(
 		ctx,

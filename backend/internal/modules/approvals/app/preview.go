@@ -1,4 +1,4 @@
-package crmapprovals
+package app
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/ports/datasource"
 )
 
@@ -59,13 +59,9 @@ func previewRecordEdit(ctx context.Context, p datasource.Provider, payload json.
 	case errors.Is(err, errs.ErrNotFound):
 		// Legitimately no prior record (a create-shaped edit): before stays nil.
 	default:
-		// A real Read failure (provider down, etc.) must NOT silently produce a
-		// before:null preview that reads to the human as "no prior value". Surface it
-		// so the gate can flag the staged item preview_unavailable (AC-MCP-4).
 		return nil, fmt.Errorf("crmapprovals preview record read: %w", err)
 	}
 
-	// Build after by merging fields onto the current record.
 	after := make(map[string]any)
 	if m, ok := current.(map[string]any); ok {
 		for k, v := range m {

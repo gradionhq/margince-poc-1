@@ -6,9 +6,8 @@ import (
 	"errors"
 	"time"
 
-	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
-
 	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
+	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 )
 
 // RollupStore computes GET /pipelines/{id}/rollup over live open deals.

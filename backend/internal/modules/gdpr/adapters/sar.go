@@ -1,4 +1,4 @@
-package crmgdpr
+package adapters
 
 import (
 	"context"
@@ -6,19 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/gradionhq/margince/backend/internal/modules/gdpr/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
-
-// SARPackage holds all data held about a subject for an Art. 15 Subject Access Request.
-type SARPackage struct {
-	Person        json.RawMessage
-	Emails        []json.RawMessage
-	Activities    []json.RawMessage
-	Deals         []json.RawMessage
-	Organizations []json.RawMessage
-	RawCapture    []json.RawMessage
-}
 
 // sarManifest is stored in audit_log.after — counts only, no PII.
 type sarManifest struct {
@@ -30,10 +21,9 @@ type sarManifest struct {
 }
 
 // Assemble gathers all data held about personID and writes a PII-free audit row.
-// The ctx Principal must be set (admin actor); the audit row records act + counts, not the payload.
-func Assemble(ctx context.Context, db *sql.DB, personID string) (SARPackage, error) {
+func Assemble(ctx context.Context, db *sql.DB, personID string) (domain.SARPackage, error) {
 	if db == nil {
-		return SARPackage{}, fmt.Errorf("crmgdpr.Assemble: db is nil")
+		return domain.SARPackage{}, fmt.Errorf("crmgdpr.Assemble: db is nil")
 	}
 
 	wsID := ""
@@ -41,25 +31,24 @@ func Assemble(ctx context.Context, db *sql.DB, personID string) (SARPackage, err
 		wsID = p.TenantID
 	}
 	if wsID == "" {
-		return SARPackage{}, fmt.Errorf("crmgdpr.Assemble: workspace_id is empty")
+		return domain.SARPackage{}, fmt.Errorf("crmgdpr.Assemble: workspace_id is empty")
 	}
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return SARPackage{}, fmt.Errorf("crmgdpr.Assemble begin: %w", err)
+		return domain.SARPackage{}, fmt.Errorf("crmgdpr.Assemble begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.workspace_id', $1, true)`, wsID); err != nil {
-		return SARPackage{}, fmt.Errorf("crmgdpr.Assemble set guc: %w", err)
+		return domain.SARPackage{}, fmt.Errorf("crmgdpr.Assemble set guc: %w", err)
 	}
 
 	pkg, err := gatherSAR(ctx, tx, personID, wsID)
 	if err != nil {
-		return SARPackage{}, err
+		return domain.SARPackage{}, err
 	}
 
-	// Audit: record the act (count/manifest), not the PII payload.
 	manifest := sarManifest{
 		Emails:        len(pkg.Emails),
 		Activities:    len(pkg.Activities),
@@ -79,17 +68,15 @@ func Assemble(ctx context.Context, db *sql.DB, personID string) (SARPackage, err
 	attributeActor(ctx, &entry)
 
 	if _, err := crmaudit.WriteTx(ctx, tx, entry); err != nil {
-		return SARPackage{}, fmt.Errorf("crmgdpr.Assemble audit: %w", err)
+		return domain.SARPackage{}, fmt.Errorf("crmgdpr.Assemble audit: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return SARPackage{}, fmt.Errorf("crmgdpr.Assemble commit: %w", err)
+		return domain.SARPackage{}, fmt.Errorf("crmgdpr.Assemble commit: %w", err)
 	}
 	return pkg, nil
 }
 
-// SAR data-gathering queries. $1 = person id, $2 = workspace id. Each returns a
-// single json/jsonb column (except sarPersonQuery, which is scanned directly).
 const (
 	sarPersonQuery = `SELECT row_to_json(p) FROM person p WHERE id=$1::uuid AND workspace_id=$2::uuid`
 
@@ -159,39 +146,37 @@ const (
 		) raws`
 )
 
-// gatherSAR reads every category of data held about the subject within tx
-// (already workspace-scoped) into a SARPackage.
-func gatherSAR(ctx context.Context, tx *sql.Tx, personID, wsID string) (SARPackage, error) {
-	var pkg SARPackage
+// gatherSAR reads every category of data held about the subject within tx.
+func gatherSAR(ctx context.Context, tx *sql.Tx, personID, wsID string) (domain.SARPackage, error) {
+	var pkg domain.SARPackage
 
 	var personJSON []byte
 	if err := tx.QueryRowContext(ctx, sarPersonQuery, personID, wsID).Scan(&personJSON); err != nil {
-		return SARPackage{}, fmt.Errorf("crmgdpr.Assemble person: %w", err)
+		return domain.SARPackage{}, fmt.Errorf("crmgdpr.Assemble person: %w", err)
 	}
 	pkg.Person = personJSON
 
 	var err error
 	if pkg.Emails, err = queryJSONRows(ctx, tx, "emails", sarEmailsQuery, personID, wsID); err != nil {
-		return SARPackage{}, err
+		return domain.SARPackage{}, err
 	}
 	if pkg.Activities, err = queryJSONRows(ctx, tx, "activities", sarActivitiesQuery, personID, wsID); err != nil {
-		return SARPackage{}, err
+		return domain.SARPackage{}, err
 	}
 	if pkg.Deals, err = queryJSONRows(ctx, tx, "deals", sarDealsQuery, personID, wsID); err != nil {
-		return SARPackage{}, err
+		return domain.SARPackage{}, err
 	}
 	if pkg.Organizations, err = queryJSONRows(ctx, tx, "organizations", sarOrgsQuery, personID, wsID); err != nil {
-		return SARPackage{}, err
+		return domain.SARPackage{}, err
 	}
 	if pkg.RawCapture, err = queryJSONRows(ctx, tx, "raw", sarRawQuery, personID, wsID); err != nil {
-		return SARPackage{}, err
+		return domain.SARPackage{}, err
 	}
 
 	return pkg, nil
 }
 
-// queryJSONRows runs a single-column json/jsonb query and collects its rows,
-// wrapping any failure with the section label for an Assemble error.
+// queryJSONRows runs a single-column json/jsonb query and collects its rows.
 func queryJSONRows(ctx context.Context, tx *sql.Tx, label, query string, args ...any) ([]json.RawMessage, error) {
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {

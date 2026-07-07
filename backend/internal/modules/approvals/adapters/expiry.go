@@ -1,4 +1,4 @@
-package crmapprovals
+package adapters
 
 import (
 	"context"
@@ -8,35 +8,38 @@ import (
 
 	"github.com/riverqueue/river"
 
+	"github.com/gradionhq/margince/backend/internal/modules/approvals/domain"
+	"github.com/gradionhq/margince/backend/internal/modules/approvals/ports"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 )
 
-// ExpiryArgs is the River job payload for the approval expiry sweep.
-type ExpiryArgs struct{}
+// Internal audit-field constants for the expiry worker.
+const (
+	actorTypeSystem = "system"
+	entityApproval  = "approval_item"
+	decisionKey     = "decision"
+	decisionExpired = "expired"
+	itemIDKey       = "item_id"
+)
 
-// Kind implements river.JobArgs.
-func (ExpiryArgs) Kind() string { return "approval_expiry_sweep" }
+// Topic constants for approval lifecycle events.
+const (
+	TopicApprovalRequested = "approval.requested"
+	TopicApprovalDecided   = "approval.decided"
+)
 
 // ExpiryWorker sweeps for expired pending approval_items and marks them expired.
 type ExpiryWorker struct {
-	river.WorkerDefaults[ExpiryArgs]
+	river.WorkerDefaults[domain.ExpiryArgs]
 	db      *sql.DB
-	Emitter EventEmitter
+	Emitter ports.EventEmitter
 }
 
 // NewExpiryWorker returns an ExpiryWorker backed by db.
 func NewExpiryWorker(db *sql.DB) *ExpiryWorker { return &ExpiryWorker{db: db} }
 
-// Work runs the approval expiry sweep. It reads all pending items past their
-// expires_at without RLS (privileged sweep), then transitions each one.
-//
-// The unscoped read is INTENTIONAL: this is a single global background worker that
-// must fail-close expired items across every workspace (a per-workspace fan-out
-// would need a workspace enumerator the sweep doesn't own). It fails closed
-// (pending→expired, never auto-commit) and writes a per-item audit row under each
-// item's own workspace GUC below, so the cross-workspace read is a worker-scope
-// read, not a tenant-isolation hole.
-func (w *ExpiryWorker) Work(ctx context.Context, job *river.Job[ExpiryArgs]) error {
+// Work runs the approval expiry sweep.
+func (w *ExpiryWorker) Work(ctx context.Context, job *river.Job[domain.ExpiryArgs]) error {
 	rows, err := w.db.QueryContext(ctx,
 		`SELECT id::text, workspace_id::text FROM approval_item
 		 WHERE status='pending' AND expires_at < now()`)
@@ -89,7 +92,6 @@ func (w *ExpiryWorker) expireOne(ctx context.Context, id, workspaceID string) er
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		// Already transitioned by another process; skip quietly.
 		return nil
 	}
 
@@ -108,7 +110,6 @@ func (w *ExpiryWorker) expireOne(ctx context.Context, id, workspaceID string) er
 	}
 
 	if w.Emitter != nil {
-		// fixed string map: marshal cannot fail.
 		p, _ := json.Marshal(map[string]string{decisionKey: decisionExpired, itemIDKey: id})
 		if err := w.Emitter.Emit(ctx, tx, TopicApprovalDecided, workspaceID, id, p); err != nil {
 			return fmt.Errorf("expireOne emit: %w", err)

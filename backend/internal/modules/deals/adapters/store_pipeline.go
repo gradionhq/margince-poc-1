@@ -9,10 +9,9 @@ import (
 
 	"github.com/lib/pq"
 
+	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
-
-	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
 )
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-package crmgdpr
+package adapters
 
 import "testing"
 
@@ -32,9 +32,6 @@ func TestIsLostDeal(t *testing.T) {
 }
 
 func TestNonPersonEraseSupported(t *testing.T) {
-	// Only activities are erasable on the non-person erase path. A lead/deal erase
-	// must be refused so applyAction never writes a success-claiming audit row for
-	// a query that touched zero rows.
 	if !nonPersonEraseSupported("activity") {
 		t.Error("activity must be erasable on the non-person erase path")
 	}

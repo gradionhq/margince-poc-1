@@ -1,6 +1,4 @@
-// Package crmapprovals owns the approval-inbox for staged 🟡 MCP tool actions.
-// It imports only crm-audit + datasource + errs + crmctx + ids (ADR-0014).
-package crmapprovals
+package adapters
 
 import (
 	"context"
@@ -8,87 +6,31 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/gradionhq/margince/backend/internal/modules/approvals/domain"
+	"github.com/gradionhq/margince/backend/internal/modules/approvals/ports"
 )
 
-// Status is the lifecycle state of an approval_item row.
-type Status string
+// DefaultListPageLimit bounds a page when the caller passes a non-positive limit.
+const DefaultListPageLimit = 50
 
-// The approval_item lifecycle states.
-const (
-	StatusPending  Status = "pending"
-	StatusApproved Status = "approved"
-	StatusRejected Status = "rejected"
-	StatusModified Status = "modified"
-	StatusExpired  Status = "expired"
-)
-
-// Item is one approval_item row.
-type Item struct {
-	ID                 string
-	WorkspaceID        string
-	ActionType         string
-	Payload            json.RawMessage
-	DryRunPreview      json.RawMessage
-	TrustTiers         json.RawMessage
-	ContentEgressFlags json.RawMessage
-	ResumeWindow       json.RawMessage
-	Status             Status
-	RequestedBy        string
-	DecidedBy          *string
-	DecidedAt          *time.Time
-	ExpiresAt          *time.Time
-	CreatedAt          time.Time
-}
-
-// DBExec is satisfied by *sql.Tx and *sql.DB — the minimal exec/query surface
-// needed by the approvals repository.
-type DBExec interface {
-	ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error)
-	QueryRowContext(ctx context.Context, q string, args ...any) *sql.Row
-	QueryContext(ctx context.Context, q string, args ...any) (*sql.Rows, error)
-}
-
-// Repository is the persistence seam for approval_item rows.
-type Repository interface {
-	Create(ctx context.Context, tx DBExec, it Item) (string, error)
-	Get(ctx context.Context, tx DBExec, id string) (Item, error)
-	ListByStatus(ctx context.Context, tx DBExec, workspaceID string, status Status) ([]Item, error)
-	Transition(ctx context.Context, tx DBExec, id string, to Status, decidedBy string) error
-	// SetResumeWindow stores the runner's suspend-time window snapshot on a pending
-	// item so a resumed run replays from exactly where it suspended. Idempotent.
-	SetResumeWindow(ctx context.Context, tx DBExec, id string, window json.RawMessage) error
-}
-
-// PageRepository is Repository plus the cursor-paged inbox projection. The
-// /approvals REST read surface depends on this wider seam; the staging/gate
-// consumers keep using the narrower Repository, so their fakes need not grow a
-// ListPage method (ListPage is additive — it never appears on Repository).
-type PageRepository interface {
-	Repository
-	// ListPage is the cursor-paged sibling of ListByStatus for the /approvals inbox
-	// projection: workspace-scoped, id-keyed cursor (afterID; "" starts at the head),
-	// optional action_type (kind) filter, ORDER BY id. It returns the page (never nil)
-	// plus the next-cursor id ("" when exhausted).
-	ListPage(ctx context.Context, tx DBExec, workspaceID string, status Status, kind, afterID string, limit int) ([]Item, string, error)
-}
-
-// NewRepository returns a PostgreSQL-backed Repository.
+// NewRepository returns a PostgreSQL-backed ports.Repository.
 //
 //nolint:ireturn // seam returns the Repository interface by design
-func NewRepository() Repository { return &pgRepository{} }
+func NewRepository() ports.Repository { return &pgRepository{} }
 
 // NewPageRepository returns the PostgreSQL-backed repository typed as the wider
-// PageRepository (Repository + ListPage) for the /approvals read surface.
+// ports.PageRepository (Repository + ListPage) for the /approvals read surface.
 //
 //nolint:ireturn // seam returns the PageRepository interface by design
-func NewPageRepository() PageRepository { return &pgRepository{} }
+func NewPageRepository() ports.PageRepository { return &pgRepository{} }
 
 type pgRepository struct{}
 
-func (r *pgRepository) Create(ctx context.Context, tx DBExec, it Item) (string, error) {
+func (r *pgRepository) Create(ctx context.Context, tx ports.DBExec, it domain.Item) (string, error) {
 	expiresAt := it.ExpiresAt
 	if expiresAt == nil {
-		t := time.Now().Add(DefaultApprovalTTL)
+		t := time.Now().Add(defaultApprovalTTL)
 		expiresAt = &t
 	}
 	var id string
@@ -109,8 +51,8 @@ func (r *pgRepository) Create(ctx context.Context, tx DBExec, it Item) (string, 
 	return id, nil
 }
 
-func (r *pgRepository) Get(ctx context.Context, tx DBExec, id string) (Item, error) {
-	var it Item
+func (r *pgRepository) Get(ctx context.Context, tx ports.DBExec, id string) (domain.Item, error) {
+	var it domain.Item
 	var decidedBy sql.NullString
 	var decidedAt, expiresAt sql.NullTime
 	var payload, preview, tiers, flags, window []byte
@@ -123,7 +65,7 @@ func (r *pgRepository) Get(ctx context.Context, tx DBExec, id string) (Item, err
 		&it.RequestedBy, &decidedBy, &decidedAt, &expiresAt, &tiers, &flags, &window, &it.CreatedAt,
 	)
 	if err != nil {
-		return Item{}, fmt.Errorf("crmapprovals get: %w", err)
+		return domain.Item{}, fmt.Errorf("crmapprovals get: %w", err)
 	}
 	it.Payload = json.RawMessage(payload)
 	if len(preview) > 0 {
@@ -150,7 +92,7 @@ func (r *pgRepository) Get(ctx context.Context, tx DBExec, id string) (Item, err
 	return it, nil
 }
 
-func (r *pgRepository) ListByStatus(ctx context.Context, tx DBExec, workspaceID string, status Status) ([]Item, error) {
+func (r *pgRepository) ListByStatus(ctx context.Context, tx ports.DBExec, workspaceID string, status domain.Status) ([]domain.Item, error) {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT id::text, workspace_id::text, action_type, payload, status, requested_by,
 		       decided_by, decided_at, expires_at
@@ -161,9 +103,9 @@ func (r *pgRepository) ListByStatus(ctx context.Context, tx DBExec, workspaceID 
 		return nil, fmt.Errorf("crmapprovals list: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var items []Item
+	var items []domain.Item
 	for rows.Next() {
-		var it Item
+		var it domain.Item
 		var decidedBy sql.NullString
 		var decidedAt, expiresAt sql.NullTime
 		var payload []byte
@@ -186,14 +128,10 @@ func (r *pgRepository) ListByStatus(ctx context.Context, tx DBExec, workspaceID 
 	return items, rows.Err()
 }
 
-// DefaultListPageLimit bounds a page when the caller passes a non-positive limit.
-const DefaultListPageLimit = 50
-
-func (r *pgRepository) ListPage(ctx context.Context, tx DBExec, workspaceID string, status Status, kind, afterID string, limit int) ([]Item, string, error) {
+func (r *pgRepository) ListPage(ctx context.Context, tx ports.DBExec, workspaceID string, status domain.Status, kind, afterID string, limit int) ([]domain.Item, string, error) {
 	if limit <= 0 {
 		limit = DefaultListPageLimit
 	}
-	// Same projection columns as ListByStatus; id-keyed cursor + optional kind filter.
 	q := `
 		SELECT id::text, workspace_id::text, action_type, payload, status, requested_by,
 		       decided_by, decided_at, expires_at, created_at
@@ -208,7 +146,6 @@ func (r *pgRepository) ListPage(ctx context.Context, tx DBExec, workspaceID stri
 		args = append(args, kind)
 		q += fmt.Sprintf(" AND action_type = $%d", len(args))
 	}
-	// Fetch limit+1 so we can detect (and emit a cursor for) a next page.
 	args = append(args, limit+1)
 	q += fmt.Sprintf(" ORDER BY id LIMIT $%d", len(args))
 
@@ -217,9 +154,9 @@ func (r *pgRepository) ListPage(ctx context.Context, tx DBExec, workspaceID stri
 		return nil, "", fmt.Errorf("crmapprovals list page: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	items := []Item{}
+	items := []domain.Item{}
 	for rows.Next() {
-		var it Item
+		var it domain.Item
 		var decidedBy sql.NullString
 		var decidedAt, expiresAt sql.NullTime
 		var payload []byte
@@ -242,7 +179,6 @@ func (r *pgRepository) ListPage(ctx context.Context, tx DBExec, workspaceID stri
 	if err := rows.Err(); err != nil {
 		return nil, "", fmt.Errorf("crmapprovals list page rows: %w", err)
 	}
-	// More than `limit` rows means a next page exists; the cursor is the page's last id.
 	next := ""
 	if len(items) > limit {
 		next = items[limit-1].ID
@@ -251,7 +187,7 @@ func (r *pgRepository) ListPage(ctx context.Context, tx DBExec, workspaceID stri
 	return items, next, nil
 }
 
-func (r *pgRepository) Transition(ctx context.Context, tx DBExec, id string, to Status, decidedBy string) error {
+func (r *pgRepository) Transition(ctx context.Context, tx ports.DBExec, id string, to domain.Status, decidedBy string) error {
 	res, err := tx.ExecContext(ctx, `
 		UPDATE approval_item
 		   SET status=$1, decided_by=$2, decided_at=now()
@@ -266,7 +202,7 @@ func (r *pgRepository) Transition(ctx context.Context, tx DBExec, id string, to 
 	return nil
 }
 
-func (r *pgRepository) SetResumeWindow(ctx context.Context, tx DBExec, id string, window json.RawMessage) error {
+func (r *pgRepository) SetResumeWindow(ctx context.Context, tx ports.DBExec, id string, window json.RawMessage) error {
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE approval_item SET resume_window=$2 WHERE id=$1::uuid`, id, nullJSON(window)); err != nil {
 		return fmt.Errorf("crmapprovals set resume_window: %w", err)
@@ -282,11 +218,14 @@ func nullJSON(b json.RawMessage) any {
 }
 
 // emptyObjectJSON coalesces an absent payload to an empty JSON object for the
-// NOT-NULL payload column: a yellow tool can be staged with no args (e.g. a
-// parameterless action), and a staged item must still carry a payload.
+// NOT-NULL payload column.
 func emptyObjectJSON(b json.RawMessage) []byte {
 	if len(b) == 0 {
 		return []byte("{}")
 	}
 	return []byte(b)
 }
+
+// defaultApprovalTTL is used internally by pgRepository.Create.
+// The exported constant lives in app/staging.go and is re-exported via module.go.
+const defaultApprovalTTL = 72 * time.Hour

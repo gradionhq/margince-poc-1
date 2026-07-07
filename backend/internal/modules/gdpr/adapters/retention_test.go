@@ -1,8 +1,10 @@
-package crmgdpr
+package adapters
 
 import (
 	"testing"
 	"time"
+
+	"github.com/gradionhq/margince/backend/internal/modules/gdpr/domain"
 )
 
 func TestOverAge_Boundary(t *testing.T) {
@@ -11,13 +13,13 @@ func TestOverAge_Boundary(t *testing.T) {
 
 	// Exactly N days ago: not over age.
 	exactly := asOf.Add(-time.Duration(retainDays) * 24 * time.Hour)
-	if OverAge(asOf, retainDays, exactly) {
+	if domain.OverAge(asOf, retainDays, exactly) {
 		t.Error("OverAge: exactly N days should NOT be over age")
 	}
 
 	// One second past N days: over age.
 	justOver := exactly.Add(-time.Second)
-	if !OverAge(asOf, retainDays, justOver) {
+	if !domain.OverAge(asOf, retainDays, justOver) {
 		t.Error("OverAge: N days + 1 second should be over age")
 	}
 }

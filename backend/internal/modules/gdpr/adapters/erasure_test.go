@@ -1,4 +1,4 @@
-package crmgdpr
+package adapters
 
 import (
 	"testing"

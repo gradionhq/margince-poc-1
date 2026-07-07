@@ -1,4 +1,4 @@
-package crmgdpr
+package adapters
 
 import (
 	"context"
@@ -26,7 +26,6 @@ func buildErasureTombstone(personID string) crmaudit.Entry {
 
 // eraseNormalized irreversibly removes/anonymizes PII across normalized tables
 // for the given person within the caller's transaction.
-// Task 3 wires eraseRawAndVector + suppression after this step inside Erase.
 func eraseNormalized(ctx context.Context, tx *sql.Tx, wsID, personID string) error {
 	// 1. Null PII on person; keep id+workspace_id as tombstone anchor.
 	//    social is NOT NULL, so set to empty object instead of NULL.
@@ -114,28 +113,19 @@ func eraseNormalized(ctx context.Context, tx *sql.Tx, wsID, personID string) err
 	return nil
 }
 
-// eraseRawAndVector deletes ALL of the subject's embedding rows from pgvector —
-// not only the person vector, but every activity/lead/deal vector that belongs to
-// the subject (mirroring the same join paths eraseNormalized uses to null PII).
-// gdpr.md promises erasure is *total* across pgvector; a person-only delete would
-// leave the subject's text recoverable via the surviving activity/lead/deal
-// vectors. The subqueries are PII-free (id-only) so the statement is itself safe.
+// eraseRawAndVector deletes ALL of the subject's embedding rows from pgvector.
 func eraseRawAndVector(ctx context.Context, tx *sql.Tx, wsID, personID string) error {
 	if _, err := tx.ExecContext(
 		ctx, `
 		DELETE FROM embedding e
 		WHERE e.workspace_id = $1::uuid
 		  AND (
-		    -- the person vector itself
 		    (e.source_type = 'person'   AND e.source_id = $2::uuid)
-		    -- the source lead the person was converted from
 		    OR (e.source_type = 'lead'  AND e.source_id = (
 		        SELECT converted_from_lead_id FROM person
 		        WHERE id = $2::uuid AND workspace_id = $1::uuid))
-		    -- every activity linked to the subject
 		    OR (e.source_type = 'activity' AND e.source_id IN (
 		        SELECT activity_id FROM activity_link WHERE person_id = $2::uuid))
-		    -- every deal reached via the subject's activity chain
 		    OR (e.source_type = 'deal'  AND e.source_id IN (
 		        SELECT al2.deal_id
 		        FROM activity_link al1
@@ -211,8 +201,7 @@ func Erase(ctx context.Context, db *sql.DB, personID string) error {
 	return nil
 }
 
-// captureEmails reads the subject's emails before they are deleted, so they can be
-// added to the suppression list after eraseNormalized runs.
+// captureEmails reads the subject's emails before they are deleted.
 func captureEmails(ctx context.Context, tx *sql.Tx, wsID, personID string) ([]string, error) {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT email FROM person_email WHERE person_id=$1::uuid AND workspace_id=$2::uuid`,
