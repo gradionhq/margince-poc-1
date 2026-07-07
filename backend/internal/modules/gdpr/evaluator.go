@@ -9,6 +9,7 @@ import (
 	"github.com/riverqueue/river"
 
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
 
@@ -108,36 +109,25 @@ func (w *RetentionWorker) processWorkspace(ctx context.Context, wsID string, now
 // The transaction is committed (read-only, no writes) before returning so the
 // connection is returned to the pool before phase 2 begins.
 func (w *RetentionWorker) collectWorkItems(ctx context.Context, wsID string, now time.Time) ([]workItem, error) {
-	tx, err := w.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("collectWorkItems begin: %w", err)
-	}
-	defer tx.Rollback() //nolint:errcheck
-
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.workspace_id',$1,true)`, wsID); err != nil {
-		return nil, fmt.Errorf("collectWorkItems set guc: %w", err)
-	}
-
-	policies, err := loadPoliciesTx(ctx, tx, wsID)
-	if err != nil {
-		return nil, err
-	}
-
 	var items []workItem
-	for _, p := range policies {
-		cutoff := now.Add(-time.Duration(p.RetainDays) * 24 * time.Hour)
-		ids, err := selectOverAgeQuery(ctx, tx, wsID, p, cutoff)
+	err := database.WithWorkspaceTx(ctx, w.db, wsID, func(tx *sql.Tx) error {
+		policies, err := loadPoliciesTx(ctx, tx, wsID)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		for _, id := range ids {
-			items = append(items, workItem{id: id, policy: p})
+		for _, p := range policies {
+			cutoff := now.Add(-time.Duration(p.RetainDays) * 24 * time.Hour)
+			ids, err := selectOverAgeQuery(ctx, tx, wsID, p, cutoff)
+			if err != nil {
+				return err
+			}
+			for _, id := range ids {
+				items = append(items, workItem{id: id, policy: p})
+			}
 		}
-	}
-
-	// Commit to release the connection immediately; all changes are reads only.
-	_ = tx.Commit()
-	return items, nil
+		return nil
+	})
+	return items, err
 }
 
 // loadPoliciesTx returns all enabled retention policies for the given workspace.
@@ -232,58 +222,45 @@ func (w *RetentionWorker) applyAction(ctx context.Context, wsID string, p Policy
 		return Erase(eraseCtx, w.db, recordID)
 	}
 
-	tx, err := w.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("applyAction begin: %w", err)
-	}
-	defer tx.Rollback() //nolint:errcheck
-
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.workspace_id',$1,true)`, wsID); err != nil {
-		return fmt.Errorf("applyAction set guc: %w", err)
-	}
-
-	var auditAction string
-	switch p.Action {
-	case actionArchive:
-		if err := applyArchive(ctx, tx, p.ObjectType, recordID); err != nil {
-			return err
+	return database.WithWorkspaceTx(ctx, w.db, wsID, func(tx *sql.Tx) error {
+		var auditAction string
+		switch p.Action {
+		case actionArchive:
+			if err := applyArchive(ctx, tx, p.ObjectType, recordID); err != nil {
+				return err
+			}
+			auditAction = actionArchive
+		case actionAnonymize:
+			if err := applyAnonymize(ctx, tx, wsID, p.ObjectType, recordID); err != nil {
+				return err
+			}
+			auditAction = "update"
+		case actionErase:
+			// Non-person erase is only implemented for activities (e.g.
+			// activity/transcript): null PII + archive. A lead/deal erase policy would
+			// match zero rows here, so writing an "erase" audit row claiming success
+			// would be a dishonest audit (T7). Refuse instead — no row touched, no
+			// audit row written. (Person erase is handled by the early Erase branch.)
+			if !nonPersonEraseSupported(p.ObjectType) {
+				return fmt.Errorf("applyAction: erase action unsupported for object_type %q (only person and activity are erasable)", p.ObjectType)
+			}
+			if err := applyActivityErase(ctx, tx, recordID); err != nil {
+				return err
+			}
+			auditAction = actionErase
+		default:
+			return fmt.Errorf("applyAction: unknown action %q", p.Action)
 		}
-		auditAction = actionArchive
-	case actionAnonymize:
-		if err := applyAnonymize(ctx, tx, wsID, p.ObjectType, recordID); err != nil {
-			return err
-		}
-		auditAction = "update"
-	case actionErase:
-		// Non-person erase is only implemented for activities (e.g.
-		// activity/transcript): null PII + archive. A lead/deal erase policy would
-		// match zero rows here, so writing an "erase" audit row claiming success
-		// would be a dishonest audit (T7). Refuse instead — no row touched, no
-		// audit row written. (Person erase is handled by the early Erase branch.)
-		if !nonPersonEraseSupported(p.ObjectType) {
-			return fmt.Errorf("applyAction: erase action unsupported for object_type %q (only person and activity are erasable)", p.ObjectType)
-		}
-		if err := applyActivityErase(ctx, tx, recordID); err != nil {
-			return err
-		}
-		auditAction = actionErase
-	default:
-		return fmt.Errorf("applyAction: unknown action %q", p.Action)
-	}
 
-	entry := crmaudit.Entry{
-		WorkspaceID: wsID,
-		ActorType:   actorSystem,
-		ActorID:     actorSystem,
-		Action:      auditAction,
-		EntityType:  p.ObjectType,
-		EntityID:    &recordID,
-	}
-	if _, err := crmaudit.WriteTx(ctx, tx, entry); err != nil {
-		return fmt.Errorf("applyAction audit: %w", err)
-	}
-
-	return tx.Commit()
+		entry := crmaudit.Entry{
+			WorkspaceID: wsID, ActorType: actorSystem, ActorID: actorSystem,
+			Action: auditAction, EntityType: p.ObjectType, EntityID: &recordID,
+		}
+		if _, err := crmaudit.WriteTx(ctx, tx, entry); err != nil {
+			return fmt.Errorf("applyAction audit: %w", err)
+		}
+		return nil
+	})
 }
 
 // applyArchive sets archived_at=now() on the given record.
