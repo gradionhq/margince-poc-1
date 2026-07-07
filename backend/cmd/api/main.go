@@ -21,7 +21,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/platform/httpserver"
 	obs "github.com/gradionhq/margince/backend/internal/shared/kernel/obs"
 	crmmigrate "github.com/gradionhq/margince/backend/internal/shared/ports/migrate"
-	"github.com/gradionhq/margince/backend/pkg/jurisdiction"
+	"github.com/gradionhq/margince/backend/pkg/shared/ports/jurisdiction"
 )
 
 func main() {

@@ -14,7 +14,7 @@ import (
 
 	_ "github.com/lib/pq"
 
-	"github.com/gradionhq/margince/backend/pkg/jurisdiction"
+	"github.com/gradionhq/margince/backend/pkg/shared/ports/jurisdiction"
 )
 
 // openTestDB mirrors crm/crm-capture/integration_test.go::openTestDB: skip

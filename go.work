@@ -4,5 +4,5 @@ use (
 	./backend
 	./cli/craft
 	./cli/crm-gen
-	./crm-de
+	./jurisdictions/de
 )

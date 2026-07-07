@@ -7,4 +7,4 @@ package main
 // Remove a line to build a binary without that jurisdiction. This is the ONLY
 // place packs are wired; the require-set in cmd/server/go.mod is the real
 // compile-time boundary (ADR-0042).
-import _ "github.com/gradionhq/margince/crm-de"
+import _ "github.com/gradionhq/margince/jurisdictions/de"
