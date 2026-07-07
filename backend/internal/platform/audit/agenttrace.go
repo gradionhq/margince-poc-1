@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 )
 
 // ToolCall is one ordered tool invocation in a trace.
@@ -31,26 +33,17 @@ func Ingest(ctx context.Context, db *sql.DB, te TraceEntry) (string, error) {
 	if te.WorkspaceID == "" || te.TraceID == "" {
 		return "", fmt.Errorf("crmaudit ingest: workspace_id and trace_id required")
 	}
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.workspace_id',$1,true)`, te.WorkspaceID); err != nil {
-		return "", err
-	}
-	calls, _ := json.Marshal(te.ToolCalls)
 	var id string
-	err = tx.QueryRowContext(ctx, `
-		INSERT INTO agent_trace (workspace_id, trace_id, audit_log_id, actor_id, inputs, tool_calls, outputs, approval_state)
-		VALUES ($1::uuid,$2,$3::uuid,$4,$5,$6,$7,$8) RETURNING id`,
-		te.WorkspaceID, te.TraceID, te.AuditLogID, te.ActorID,
-		jsonOrNil(te.Inputs), calls, jsonOrNil(te.Outputs), nullStr(te.ApprovalState)).Scan(&id)
+	err := database.WithWorkspaceTx(ctx, db, te.WorkspaceID, func(tx *sql.Tx) error {
+		calls, _ := json.Marshal(te.ToolCalls)
+		return tx.QueryRowContext(ctx, `
+			INSERT INTO agent_trace (workspace_id, trace_id, audit_log_id, actor_id, inputs, tool_calls, outputs, approval_state)
+			VALUES ($1::uuid,$2,$3::uuid,$4,$5,$6,$7,$8) RETURNING id`,
+			te.WorkspaceID, te.TraceID, te.AuditLogID, te.ActorID,
+			jsonOrNil(te.Inputs), calls, jsonOrNil(te.Outputs), nullStr(te.ApprovalState)).Scan(&id)
+	})
 	if err != nil {
 		return "", fmt.Errorf("crmaudit ingest insert: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return "", err
 	}
 	return id, nil
 }
