@@ -79,7 +79,7 @@ func SessionMiddleware(sessions *crmauth.SessionStore, passports *crmauth.Passpo
 						UserID:   rec.UserID,
 						TenantID: rec.WorkspaceID,
 					})
-					sessions.Touch(ctx, rec.ID)
+					sessions.Touch(ctx, rec.WorkspaceID, rec.ID)
 				}
 			}
 			// Also check Authorization: Bearer <passport_token> for agent calls.
@@ -154,6 +154,10 @@ const ObjRelationship = "relationship"
 // ObjActivity is the canonical RBAC object name for activities, shared by
 // the /activities route wiring and the seeded role_permission rows.
 const ObjActivity = "activity"
+
+// ObjRecordGrant is the canonical RBAC object name for record grants, shared
+// by the /record-grants route wiring and approval-gating.
+const ObjRecordGrant = "record_grant"
 
 // MethodToAction maps an HTTP method to the canonical RBAC action name.
 func MethodToAction(method string) string {

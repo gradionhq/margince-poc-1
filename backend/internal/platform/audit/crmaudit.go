@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
 
@@ -138,21 +139,14 @@ func Write(ctx context.Context, db *sql.DB, e Entry) (string, error) {
 	if e.WorkspaceID == "" {
 		return "", fmt.Errorf("crmaudit: empty workspace_id")
 	}
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return "", fmt.Errorf("crmaudit begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx,
-		`SELECT set_config('app.workspace_id', $1, true)`, e.WorkspaceID); err != nil {
-		return "", fmt.Errorf("crmaudit set guc: %w", err)
-	}
-	auditID, err := WriteTx(ctx, tx, e)
+	var auditID string
+	err := database.WithWorkspaceTx(ctx, db, e.WorkspaceID, func(tx *sql.Tx) error {
+		var err error
+		auditID, err = WriteTx(ctx, tx, e)
+		return err
+	})
 	if err != nil {
 		return "", err
-	}
-	if err := tx.Commit(); err != nil {
-		return "", fmt.Errorf("crmaudit commit: %w", err)
 	}
 	return auditID, nil
 }

@@ -3,30 +3,17 @@ package deals
 import (
 	"context"
 	"database/sql"
+
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 )
 
-// withWorkspaceTx runs fn inside a single tx as the non-superuser margince_app
-// role with app.workspace_id set, so FORCE RLS is actually enforced on every
-// CRUD query (data-model §1.3). Duplicated from modules/directory/store.go
-// rather than exported solely for this package's benefit — same
-// minimal-duplication convention as modules/directory/transport's HTTP
-// helpers (see that package's doc comment).
+// withWorkspaceTx runs fn inside a single tx as the non-superuser margince_app role
+// with app.workspace_id set, so FORCE RLS is actually enforced on every CRUD query
+// (data-model §1.3). Delegates to the shared platform/database seam (GH-209 WS-A) —
+// kept as a same-package unexported wrapper (not re-exported at every call site) so
+// none of this file's existing withWorkspaceTx(...) callers need to change.
 func withWorkspaceTx(ctx context.Context, db *sql.DB, workspaceID string, fn func(tx *sql.Tx) error) error {
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `SET LOCAL ROLE margince_app`); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.workspace_id', $1, true)`, workspaceID); err != nil {
-		return err
-	}
-	if err := fn(tx); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return database.WithWorkspaceTx(ctx, db, workspaceID, fn)
 }
 
 func nullStr(m map[string]any, key string) *string {

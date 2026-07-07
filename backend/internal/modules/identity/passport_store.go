@@ -8,6 +8,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 )
 
 // PassportRecord is a loaded passport row.
@@ -35,11 +37,13 @@ func (s *PassportStore) Create(ctx context.Context, workspaceID, grantedBy strin
 	hash := sha256sum(rawToken)
 	expiresAt := time.Now().UTC().Add(expiresIn)
 	scopeArr := "{" + strings.Join(scopes, ",") + "}"
-	err = s.db.QueryRowContext(ctx, `
-		INSERT INTO passport (workspace_id, granted_by, scopes, token_hash, expires_at)
-		VALUES ($1::uuid, $2::uuid, $3::text[], $4, $5)
-		RETURNING id`,
-		workspaceID, grantedBy, scopeArr, hash, expiresAt).Scan(&rec.ID)
+	err = database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `
+			INSERT INTO passport (workspace_id, granted_by, scopes, token_hash, expires_at)
+			VALUES ($1::uuid, $2::uuid, $3::text[], $4, $5)
+			RETURNING id`,
+			workspaceID, grantedBy, scopeArr, hash, expiresAt).Scan(&rec.ID)
+	})
 	if err != nil {
 		return "", rec, err
 	}
@@ -50,10 +54,16 @@ func (s *PassportStore) Create(ctx context.Context, workspaceID, grantedBy strin
 }
 
 // Lookup returns a valid (not revoked, not expired) passport by raw token.
+//
+// rls-exempt: same chicken-and-egg shape as SessionStore.Lookup (GH-209
+// escalation resolution, Option 1) — the workspace is unknown until this
+// opaque passport token resolves it. The raw token's entropy is the security
+// boundary pre-resolution.
 func (s *PassportStore) Lookup(ctx context.Context, rawToken string) (PassportRecord, error) {
 	hash := sha256sum(rawToken)
 	var rec PassportRecord
 	var scopesRaw []byte
+	// rls-exempt: see doc comment above.
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, workspace_id, granted_by, scopes, revoked_at
 		FROM passport
@@ -72,16 +82,18 @@ func (s *PassportStore) Lookup(ctx context.Context, rawToken string) (PassportRe
 
 // Revoke sets revoked_at for a passport.
 func (s *PassportStore) Revoke(ctx context.Context, id, workspaceID string) error {
-	res, err := s.db.ExecContext(ctx, `
-		UPDATE passport SET revoked_at=now() WHERE id=$1::uuid AND workspace_id=$2::uuid AND revoked_at IS NULL`,
-		id, workspaceID)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `
+			UPDATE passport SET revoked_at=now() WHERE id=$1::uuid AND workspace_id=$2::uuid AND revoked_at IS NULL`,
+			id, workspaceID)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return ErrNotFound
+		}
+		return nil
+	})
 }
 
 func parsePostgresTextArray(s string) []string {

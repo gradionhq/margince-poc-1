@@ -142,7 +142,7 @@ func TestAuthStateMatrix(t *testing.T) {
 			if err != nil {
 				t.Fatalf("lookup session: %v", err)
 			}
-			if err := sessions.Delete(ctx, rec.ID); err != nil {
+			if err := sessions.Delete(ctx, rec.WorkspaceID, rec.ID); err != nil {
 				t.Fatalf("delete session: %v", err)
 			}
 			return tok
@@ -225,7 +225,7 @@ func TestLogout(t *testing.T) {
 		cookie, cerr := r.Cookie(crmauth.CookieName)
 		if cerr == nil {
 			if rec, lerr := sessions.Lookup(r.Context(), cookie.Value); lerr == nil {
-				_ = sessions.Delete(r.Context(), rec.ID)
+				_ = sessions.Delete(r.Context(), rec.WorkspaceID, rec.ID)
 			}
 		}
 		http.SetCookie(w, &http.Cookie{

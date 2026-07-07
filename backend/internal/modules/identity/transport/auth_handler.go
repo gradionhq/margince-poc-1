@@ -64,6 +64,7 @@ var adminPermissionsJSON = func() string {
 		"passport":           all(httpserver.ActionRead, httpserver.ActionCreate, httpserver.ActionArchive),
 		"approval":           all(httpserver.ActionRead, "decide"),
 		"workspace":          map[string]any{"manage_members": map[string]any{"row_scope": "all"}},
+		"record_grant":       all(httpserver.ActionRead, httpserver.ActionCreate, httpserver.ActionArchive),
 	}
 	b, err := json.Marshal(perms)
 	if err != nil {
@@ -195,7 +196,7 @@ func HandleLogout(sessions *crmauth.SessionStore) http.HandlerFunc {
 		cookie, err := r.Cookie(crmauth.CookieName)
 		if err == nil {
 			if rec, err := sessions.Lookup(r.Context(), cookie.Value); err == nil {
-				_ = sessions.Delete(r.Context(), rec.ID)
+				_ = sessions.Delete(r.Context(), rec.WorkspaceID, rec.ID)
 			}
 		}
 		// Mirror the login cookie's attributes on the clearing cookie so browsers

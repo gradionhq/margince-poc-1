@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
 
@@ -166,47 +167,49 @@ func Erase(ctx context.Context, db *sql.DB, personID string) error {
 		return fmt.Errorf("crmgdpr.Erase: workspace_id is empty")
 	}
 
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("crmgdpr.Erase begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	return database.WithWorkspaceTx(ctx, db, wsID, func(tx *sql.Tx) error {
+		// Capture emails BEFORE eraseNormalized deletes them.
+		emails, err := captureEmails(ctx, tx, wsID, personID)
+		if err != nil {
+			return err
+		}
 
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.workspace_id', $1, true)`, wsID); err != nil {
-		return fmt.Errorf("crmgdpr.Erase set guc: %w", err)
-	}
+		if err := eraseNormalized(ctx, tx, wsID, personID); err != nil {
+			return err
+		}
 
-	// Capture emails BEFORE eraseNormalized deletes them.
-	emails, err := captureEmails(ctx, tx, wsID, personID)
-	if err != nil {
-		return err
-	}
+		if err := eraseRawAndVector(ctx, tx, wsID, personID); err != nil {
+			return err
+		}
 
-	if err := eraseNormalized(ctx, tx, wsID, personID); err != nil {
-		return err
-	}
+		if err := suppressEmails(ctx, tx, wsID, emails); err != nil {
+			return err
+		}
 
-	if err := eraseRawAndVector(ctx, tx, wsID, personID); err != nil {
-		return err
-	}
+		return writeErasureAudit(ctx, tx, wsID, personID)
+	})
+}
 
+// suppressEmails adds each of the subject's captured emails to the workspace
+// suppression list, within the caller's transaction.
+func suppressEmails(ctx context.Context, tx *sql.Tx, wsID string, emails []string) error {
 	for _, email := range emails {
 		if err := suppressionAdd(ctx, tx, wsID, email); err != nil {
 			return err
 		}
 	}
+	return nil
+}
 
-	// Write a PII-free tombstone; actor attribution via ctx.
+// writeErasureAudit builds a PII-free erasure tombstone, attributes the actor
+// from ctx, and writes it within the caller's transaction.
+func writeErasureAudit(ctx context.Context, tx *sql.Tx, wsID, personID string) error {
 	entry := buildErasureTombstone(personID)
 	entry.WorkspaceID = wsID
 	attributeActor(ctx, &entry)
 
 	if _, err := crmaudit.WriteTx(ctx, tx, entry); err != nil {
 		return fmt.Errorf("crmgdpr.Erase audit: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("crmgdpr.Erase commit: %w", err)
 	}
 	return nil
 }

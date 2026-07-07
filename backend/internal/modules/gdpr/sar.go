@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
 
@@ -44,46 +45,39 @@ func Assemble(ctx context.Context, db *sql.DB, personID string) (SARPackage, err
 		return SARPackage{}, fmt.Errorf("crmgdpr.Assemble: workspace_id is empty")
 	}
 
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return SARPackage{}, fmt.Errorf("crmgdpr.Assemble begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	var pkg SARPackage
+	err := database.WithWorkspaceTx(ctx, db, wsID, func(tx *sql.Tx) error {
+		var err error
+		pkg, err = gatherSAR(ctx, tx, personID, wsID)
+		if err != nil {
+			return err
+		}
 
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.workspace_id', $1, true)`, wsID); err != nil {
-		return SARPackage{}, fmt.Errorf("crmgdpr.Assemble set guc: %w", err)
-	}
+		manifest := sarManifest{
+			Emails:        len(pkg.Emails),
+			Activities:    len(pkg.Activities),
+			Deals:         len(pkg.Deals),
+			Organizations: len(pkg.Organizations),
+			RawCapture:    len(pkg.RawCapture),
+		}
+		pid := personID
+		entry := crmaudit.Entry{
+			WorkspaceID: wsID,
+			Action:      "export",
+			EntityType:  objectPerson,
+			EntityID:    &pid,
+			Before:      nil,
+			After:       manifest,
+		}
+		attributeActor(ctx, &entry)
 
-	pkg, err := gatherSAR(ctx, tx, personID, wsID)
+		if _, err := crmaudit.WriteTx(ctx, tx, entry); err != nil {
+			return fmt.Errorf("crmgdpr.Assemble audit: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
 		return SARPackage{}, err
-	}
-
-	// Audit: record the act (count/manifest), not the PII payload.
-	manifest := sarManifest{
-		Emails:        len(pkg.Emails),
-		Activities:    len(pkg.Activities),
-		Deals:         len(pkg.Deals),
-		Organizations: len(pkg.Organizations),
-		RawCapture:    len(pkg.RawCapture),
-	}
-	pid := personID
-	entry := crmaudit.Entry{
-		WorkspaceID: wsID,
-		Action:      "export",
-		EntityType:  objectPerson,
-		EntityID:    &pid,
-		Before:      nil,
-		After:       manifest,
-	}
-	attributeActor(ctx, &entry)
-
-	if _, err := crmaudit.WriteTx(ctx, tx, entry); err != nil {
-		return SARPackage{}, fmt.Errorf("crmgdpr.Assemble audit: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return SARPackage{}, fmt.Errorf("crmgdpr.Assemble commit: %w", err)
 	}
 	return pkg, nil
 }

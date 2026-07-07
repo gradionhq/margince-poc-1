@@ -11,6 +11,7 @@ import (
 	"time"
 
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	"github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 )
@@ -21,26 +22,11 @@ import (
 
 // withWorkspaceTx runs fn inside a single tx as the non-superuser margince_app role
 // with app.workspace_id set, so FORCE RLS is actually enforced on every CRUD query
-// (data-model §1.3). This mirrors ContextGraphStore.withWorkspace — the per-workspace
-// CRUD stores were the laggard that queried the bare superuser pool and leaned on the
-// app-layer workspace_id predicate alone. fn must use the supplied tx (never the pool)
-// so the role+GUC are in scope for its statements.
+// (data-model §1.3). Delegates to the shared platform/database seam (GH-209 WS-A) —
+// kept as a same-package unexported wrapper (not re-exported at every call site) so
+// none of this file's ~49 existing withWorkspaceTx(...) callers need to change.
 func withWorkspaceTx(ctx context.Context, db *sql.DB, workspaceID string, fn func(tx *sql.Tx) error) error {
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `SET LOCAL ROLE margince_app`); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.workspace_id', $1, true)`, workspaceID); err != nil {
-		return err
-	}
-	if err := fn(tx); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return database.WithWorkspaceTx(ctx, db, workspaceID, fn)
 }
 
 // requireProvenance rejects an empty source or captured_by with a typed sentinel
