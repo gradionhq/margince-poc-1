@@ -36,7 +36,7 @@ func Check(ctx context.Context, q consentQueryer, workspaceID, personID, purpose
 		SELECT pc.state
 		FROM person_consent pc
 		JOIN consent_purpose cp ON cp.id = pc.purpose_id
-		WHERE pc.person_id = $1::uuid AND cp.name = $2 AND pc.workspace_id = $3::uuid`,
+		WHERE pc.person_id = $1::uuid AND cp.key = $2 AND pc.workspace_id = $3::uuid`,
 		personID, purposeName, workspaceID).Scan(&state)
 	if err == sql.ErrNoRows {
 		return false, nil
@@ -122,7 +122,7 @@ func persistConsent(ctx context.Context, tx *sql.Tx, wsID string, w ConsentReque
 	var purposeID string
 	if err := tx.QueryRowContext(
 		ctx,
-		`SELECT id FROM consent_purpose WHERE name = $1`, w.PurposeName,
+		`SELECT id FROM consent_purpose WHERE workspace_id = $1 AND key = $2`, wsID, w.PurposeName,
 	).Scan(&purposeID); err != nil {
 		return "", fmt.Errorf("crmgdpr.Record resolve purpose %q: %w", w.PurposeName, err)
 	}
@@ -193,7 +193,7 @@ func (r *pgConsentRepository) FindForPurpose(ctx context.Context, workspaceID, p
 		FROM person_consent pc
 		JOIN consent_purpose cp ON cp.id = pc.purpose_id
 		WHERE pc.person_id    = $1::uuid
-		  AND cp.name         = $2
+		  AND cp.key          = $2
 		  AND pc.workspace_id = $3::uuid`,
 		personID, purpose, workspaceID,
 	).Scan(&state)
