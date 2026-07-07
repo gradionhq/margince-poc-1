@@ -65,7 +65,7 @@ func TestDealHandler_Advance_AgentWithoutTokenOnYellowTransition_403(t *testing.
 		deal:         directory.Deal{ID: "deal-1", StageID: "open-stage"},
 		semanticByID: map[string]string{"open-stage": "open", "won-stage": "won"},
 	}
-	h := &DealHandler{store: fake, db: nil}
+	h := &DealHandler{store: fake, verifier: nil}
 
 	req := httptest.NewRequest(http.MethodPost, "/deals/deal-1/advance",
 		strings.NewReader(`{"to_stage_id":"won-stage","status":"won"}`))
@@ -86,7 +86,7 @@ func TestDealHandler_Advance_HumanOnYellowTransition_NoTokenNeeded(t *testing.T)
 		deal:         directory.Deal{ID: "deal-2", StageID: "open-stage"},
 		semanticByID: map[string]string{"open-stage": "open", "won-stage": "won"},
 	}
-	h := &DealHandler{store: fake, db: nil}
+	h := &DealHandler{store: fake, verifier: nil}
 
 	req := httptest.NewRequest(http.MethodPost, "/deals/deal-2/advance",
 		strings.NewReader(`{"to_stage_id":"won-stage","status":"won"}`))

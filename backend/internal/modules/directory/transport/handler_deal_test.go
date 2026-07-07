@@ -16,6 +16,7 @@ import (
 
 	_ "github.com/lib/pq"
 
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
@@ -42,7 +43,7 @@ func withDealWorkspace(r *http.Request) *http.Request {
 }
 
 func dealHandlerForTest(db *sql.DB, store *crmcore.DealStore) *DealHandler {
-	return NewDealHandler(store, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
+	return NewDealHandler(store, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 }
 
 func seedDealFixtures(t *testing.T, db *sql.DB, tag string) (pipelineID, stageID, otherStageID string) {

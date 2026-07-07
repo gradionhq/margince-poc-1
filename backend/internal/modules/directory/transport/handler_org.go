@@ -2,22 +2,27 @@ package transport
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
-	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
+	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
+	"github.com/gradionhq/margince/backend/internal/shared/ports/mcp"
 )
 
 var orgSortAllowed = map[string]bool{
 	"": true, "id": true, "strength": true, "-strength": true,
 }
+
+// mergeOrgTool is the mergeOrganization x-mcp-tool declaration (crm.yaml:557,
+// merge_records/organization/yellow — see tools_gen.go's generated table).
+var mergeOrgTool = mcp.GeneratedTool{OperationID: "mergeOrganization", Verb: "merge_records", RecordType: "organization", Tier: mcp.TierYellow}
 
 // OrganizationHandler routes /organizations and /organizations/{id} requests
 // to the OrgStore.
@@ -26,12 +31,12 @@ type OrganizationHandler struct {
 	relStore      *directory.RelationshipStore
 	dealStore     *directory.DealStore
 	activityStore *directory.ActivityStore
-	db            *sql.DB // used only for the merge endpoint's VerifyAndConsume (🟡 gate)
+	verifier      approvalsport.Verifier // used only by the merge endpoint's toolgate.Enforce call (🟡 gate)
 }
 
 // NewOrganizationHandler returns an OrganizationHandler.
-func NewOrganizationHandler(store *directory.OrgStore, relStore *directory.RelationshipStore, dealStore *directory.DealStore, activityStore *directory.ActivityStore, db *sql.DB) *OrganizationHandler {
-	return &OrganizationHandler{store: store, relStore: relStore, dealStore: dealStore, activityStore: activityStore, db: db}
+func NewOrganizationHandler(store *directory.OrgStore, relStore *directory.RelationshipStore, dealStore *directory.DealStore, activityStore *directory.ActivityStore, verifier approvalsport.Verifier) *OrganizationHandler {
+	return &OrganizationHandler{store: store, relStore: relStore, dealStore: dealStore, activityStore: activityStore, verifier: verifier}
 }
 
 func (h *OrganizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -88,23 +93,14 @@ func (h *OrganizationHandler) merge(w http.ResponseWriter, r *http.Request, id s
 		return
 	}
 	p, _ := crmctx.From(r.Context())
-	if p.IsAgent {
-		token := r.Header.Get("X-Approval-Token")
-		if token == "" {
+	diffFields := map[string]any{"organization_id": id, "target_id": body.TargetID}
+	if err := toolgate.Enforce(r.Context(), p, h.verifier, mergeOrgTool, wsID, diffFields, nil, r.Header.Get("X-Approval-Token")); err != nil {
+		if errors.Is(err, toolgate.ErrApprovalRequired) {
 			jsonProblem(w, http.StatusForbidden, "approval_required")
-			return
-		}
-		diffHash := crmapprovals.HashDiff(map[string]any{"organization_id": id, "target_id": body.TargetID})
-		if err := crmapprovals.VerifyAndConsume(r.Context(), h.db, token, crmapprovals.Binding{
-			// Tool MUST be the contract's declared x-mcp-tool verb ("merge_records",
-			// crm.yaml:557), not a per-entity string — see handler_person.go's merge
-			// for the full rationale. Person vs. org is disambiguated by diff_hash
-			// (organization_id/target_id here) alone.
-			WorkspaceID: wsID, Tool: "merge_records", DiffHash: diffHash,
-		}); err != nil {
+		} else {
 			jsonProblem(w, http.StatusForbidden, "approval_token_invalid")
-			return
 		}
+		return
 	}
 	merged, err := h.store.Merge(r.Context(), id, body.TargetID, wsID)
 	if errors.Is(err, directory.ErrSelfMerge) {

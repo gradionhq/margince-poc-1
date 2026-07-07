@@ -7,6 +7,7 @@ import (
 
 	"github.com/riverqueue/river"
 
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	dealstransport "github.com/gradionhq/margince/backend/internal/modules/deals/transport"
 	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
@@ -15,6 +16,7 @@ import (
 	identitytransport "github.com/gradionhq/margince/backend/internal/modules/identity/transport"
 	peopletransport "github.com/gradionhq/margince/backend/internal/modules/people/transport"
 	"github.com/gradionhq/margince/backend/internal/platform/httpserver"
+	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
 
@@ -28,6 +30,7 @@ type routeKit struct {
 	riverClient   *river.Client[*sql.Tx]
 	sessionStore  *crmauth.SessionStore
 	passportStore *crmauth.PassportStore
+	verifier      *crmapprovals.DBVerifier
 	workspaceWrap func(http.Handler) http.Handler
 	domainWrap    func(string, http.Handler) http.Handler
 }
@@ -68,6 +71,12 @@ func buildMux(ctx context.Context, db *sql.DB, cfg Config, riverClient *river.Cl
 		return workspaceWrap(httpserver.RbacMiddleware(db, object)(h))
 	}
 
+	// The advanceDeal x-mcp-tool is TierDynamic (tools_gen.go): its tier is
+	// resolved per-call from the from/to stage semantics the deal-advance
+	// handler already computes, via deals.ResolveTier (D9 — toolgate itself
+	// never imports the deals domain module).
+	toolgate.RegisterResolver("target_stage_semantic", deals.ResolveDynamicTier)
+
 	k := &routeKit{
 		db:            db,
 		ctx:           ctx,
@@ -75,6 +84,7 @@ func buildMux(ctx context.Context, db *sql.DB, cfg Config, riverClient *river.Cl
 		riverClient:   riverClient,
 		sessionStore:  sessionStore,
 		passportStore: passportStore,
+		verifier:      &crmapprovals.DBVerifier{DB: db},
 		workspaceWrap: workspaceWrap,
 		domainWrap:    domainWrap,
 	}
@@ -114,9 +124,9 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 		mux.Handle(path, wrapped)
 		mux.Handle(path+"/", wrapped)
 	}
-	crud("/people", httpserver.ObjPerson, peopletransport.NewPersonHandler(directory.NewPersonStore(k.db), directory.NewRelationshipStore(k.db), directory.NewDealStore(k.db), directory.NewActivityStore(k.db), k.db))
-	crud("/organizations", httpserver.ObjOrganization, dealtransport.NewOrganizationHandler(directory.NewOrgStore(k.db), directory.NewRelationshipStore(k.db), directory.NewDealStore(k.db), directory.NewActivityStore(k.db), k.db))
-	dealHandler := dealtransport.NewDealHandler(directory.NewDealStore(k.db), directory.NewRelationshipStore(k.db), directory.NewActivityStore(k.db), k.db)
+	crud("/people", httpserver.ObjPerson, peopletransport.NewPersonHandler(directory.NewPersonStore(k.db), directory.NewRelationshipStore(k.db), directory.NewDealStore(k.db), directory.NewActivityStore(k.db), k.verifier))
+	crud("/organizations", httpserver.ObjOrganization, dealtransport.NewOrganizationHandler(directory.NewOrgStore(k.db), directory.NewRelationshipStore(k.db), directory.NewDealStore(k.db), directory.NewActivityStore(k.db), k.verifier))
+	dealHandler := dealtransport.NewDealHandler(directory.NewDealStore(k.db), directory.NewRelationshipStore(k.db), directory.NewActivityStore(k.db), k.verifier)
 	crud("/deals", httpserver.ObjDeal, dealHandler)
 	mux.Handle("POST /deals/{id}/advance", instrument("/deals/advance", k.domainWrap(httpserver.ObjDeal, dealHandler)))
 	mux.Handle("GET /deals/{id}/stakeholders", instrument("/deals/stakeholders", k.domainWrap(httpserver.ObjDeal, dealHandler)))

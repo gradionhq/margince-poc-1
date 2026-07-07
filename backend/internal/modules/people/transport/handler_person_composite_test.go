@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
@@ -31,7 +32,7 @@ func TestPersonHandler_Get_Composite360(t *testing.T) {
 	relStore := directory.NewRelationshipStore(db)
 	dealStore := directory.NewDealStore(db)
 	activityStore := directory.NewActivityStore(db)
-	h := NewPersonHandler(personStore, relStore, dealStore, activityStore, db)
+	h := NewPersonHandler(personStore, relStore, dealStore, activityStore, &crmapprovals.DBVerifier{DB: db})
 
 	subject, err := personStore.Create(ctx, directory.Person{WorkspaceID: personCompositeWS, FullName: "Composite Subject", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
@@ -142,7 +143,7 @@ func TestPersonHandler_Get_EmptyCompositeShowsEmptyArrays_NotNull(t *testing.T) 
 	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
 
 	personStore := directory.NewPersonStore(db)
-	h := NewPersonHandler(personStore, directory.NewRelationshipStore(db), directory.NewDealStore(db), directory.NewActivityStore(db), db)
+	h := NewPersonHandler(personStore, directory.NewRelationshipStore(db), directory.NewDealStore(db), directory.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 
 	p, err := personStore.Create(ctx, directory.Person{WorkspaceID: personCompositeWS, FullName: "Lonely Person", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
@@ -191,7 +192,7 @@ func TestPersonHandler_Get_ArchivedStillFetchableWithComposite(t *testing.T) {
 	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
 
 	personStore := directory.NewPersonStore(db)
-	h := NewPersonHandler(personStore, directory.NewRelationshipStore(db), directory.NewDealStore(db), directory.NewActivityStore(db), db)
+	h := NewPersonHandler(personStore, directory.NewRelationshipStore(db), directory.NewDealStore(db), directory.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 
 	p, err := personStore.Create(ctx, directory.Person{WorkspaceID: personCompositeWS, FullName: "Archive Me", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
@@ -223,7 +224,7 @@ func TestPersonHandler_Get_Composite360_P95Under100ms(t *testing.T) {
 	relStore := directory.NewRelationshipStore(db)
 	dealStore := directory.NewDealStore(db)
 	activityStore := directory.NewActivityStore(db)
-	h := NewPersonHandler(personStore, relStore, dealStore, activityStore, db)
+	h := NewPersonHandler(personStore, relStore, dealStore, activityStore, &crmapprovals.DBVerifier{DB: db})
 
 	p, err := personStore.Create(ctx, directory.Person{WorkspaceID: ws, FullName: "Perf Subject", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {

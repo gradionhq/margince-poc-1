@@ -21,6 +21,7 @@ import (
 	"time"
 
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
 )
 
 // TokenClaims is the ApprovalToken claim set (crm.yaml
@@ -114,8 +115,9 @@ func parseToken(token string) (TokenClaims, error) {
 	return claims, nil
 }
 
-// Binding is the exact operation being executed — the token's claims must
-// match every field here (APPR-AC-7's claim-binding requirement).
+// Binding is now the Tier-0 approvalsport.Binding (D9, WS-D-b): the shared
+// shape lives in the port so platform/toolgate never has to import this
+// domain module directly.
 //
 // Deliberately excludes passport_id, even though crm.yaml's ApprovalToken
 // schema and the X-Approval-Token parameter description both state the
@@ -126,12 +128,7 @@ func parseToken(token string) (TokenClaims, error) {
 // exposes claims.PassportID for a future caller, but no current caller can
 // check it. Flag this explicitly in the PR description as a fast-follow once
 // a Passport-bearing seam reaches this handler (ADR-0013).
-type Binding struct {
-	WorkspaceID   string
-	Tool          string
-	DiffHash      string
-	TargetVersion *int64
-}
+type Binding = approvalsport.Binding
 
 // VerifyAndConsume validates a compact-JWS X-Approval-Token against the
 // operation it must authorize, then atomically records its jti as consumed
@@ -194,14 +191,16 @@ func consumeJTI(ctx context.Context, db *sql.DB, workspaceID, jti string) (bool,
 	return true, tx.Commit()
 }
 
-// HashDiff computes the diff_hash claim binding: a deterministic hash of the
-// canonical fields the token authorizes. encoding/json sorts map[string]any
-// keys alphabetically, so this is stable regardless of insertion order. Both
-// the (future) minting path and this ticket's test helper must use this
-// exact function so a token signed in a test matches what VerifyAndConsume
-// recomputes against the live request.
-func HashDiff(fields map[string]any) string {
-	canon, _ := json.Marshal(fields)
-	sum := sha256.Sum256(canon)
-	return b64url(sum[:])
+// DBVerifier adapts the *sql.DB-backed VerifyAndConsume above to the Tier-0
+// approvalsport.Verifier shape platform/toolgate depends on (D9). The
+// concrete instance is constructed once at cmd/api composition and injected
+// into every toolgate.Enforce call site via whichever handler already holds
+// an approvalsport.Verifier-typed field.
+type DBVerifier struct {
+	DB *sql.DB
+}
+
+// VerifyAndConsume implements approvalsport.Verifier.
+func (v *DBVerifier) VerifyAndConsume(ctx context.Context, token string, want approvalsport.Binding) error {
+	return VerifyAndConsume(ctx, v.DB, token, want)
 }

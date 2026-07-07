@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
@@ -33,7 +34,7 @@ func TestDealHandler_Archive_HappyPath200(t *testing.T) {
 
 	d := createArchivableTestDeal(ctx, t, dealStore, pipelineID, stageID, "Handler Archivable Deal")
 
-	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
+	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 	req := httptest.NewRequest(http.MethodDelete, "/deals/"+d.ID, nil)
 	req = withDealWorkspace(req)
 	w := httptest.NewRecorder()
@@ -54,7 +55,7 @@ func TestDealHandler_Archive_HappyPath200(t *testing.T) {
 func TestDealHandler_Archive_NonExistentReturns404(t *testing.T) {
 	db := openDealTestDB(t)
 	_, _, _ = seedDealFixtures(t, db, "archive-404")
-	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
+	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 
 	req := httptest.NewRequest(http.MethodDelete, "/deals/00000000-0000-0000-0000-000000000099", nil)
 	req = withDealWorkspace(req)
@@ -81,7 +82,7 @@ func TestDealHandler_Archive_WrongWorkspaceReturns404(t *testing.T) {
 
 	d := createArchivableTestDeal(ctx, t, dealStore, pipelineID, stageID, "Wrong Workspace Deal")
 
-	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
+	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 	// Send request with a different workspace ID
 	req := httptest.NewRequest(http.MethodDelete, "/deals/"+d.ID, nil)
 	req = req.WithContext(crmctx.With(req.Context(), crmctx.Principal{TenantID: "00000000-0000-0000-0000-000000000099", UserID: "human:test"}))
@@ -101,7 +102,7 @@ func TestDealHandler_Archive_ArchivedDealExcludedFromList(t *testing.T) {
 
 	d := createArchivableTestDeal(ctx, t, dealStore, pipelineID, stageID, "Archivable for List")
 
-	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
+	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 
 	// Archive the deal
 	archiveReq := httptest.NewRequest(http.MethodDelete, "/deals/"+d.ID, nil)

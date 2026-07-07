@@ -11,11 +11,16 @@ import (
 	"errors"
 	"net/http"
 
-	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
+	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	"github.com/gradionhq/margince/backend/internal/shared/ports/mcp"
 )
+
+// mergePersonTool is the mergePerson x-mcp-tool declaration (crm.yaml:335,
+// merge_records/person/yellow — see tools_gen.go's generated table).
+var mergePersonTool = mcp.GeneratedTool{OperationID: "mergePerson", Verb: "merge_records", RecordType: "person", Tier: mcp.TierYellow}
 
 // jsonProblemDetails writes a problem+json body with request-specific detail data.
 // Duplicated from directory/transport's handler_org.go (see package doc above).
@@ -54,24 +59,14 @@ func (h *PersonHandler) merge(w http.ResponseWriter, r *http.Request, id string)
 		return
 	}
 	p, _ := crmctx.From(r.Context())
-	if p.IsAgent {
-		token := r.Header.Get("X-Approval-Token")
-		if token == "" {
+	diffFields := map[string]any{"person_id": id, "target_id": body.TargetID}
+	if err := toolgate.Enforce(r.Context(), p, h.verifier, mergePersonTool, wsID, diffFields, nil, r.Header.Get("X-Approval-Token")); err != nil {
+		if errors.Is(err, toolgate.ErrApprovalRequired) {
 			jsonProblem(w, http.StatusForbidden, "approval_required")
-			return
-		}
-		diffHash := crmapprovals.HashDiff(map[string]any{"person_id": id, "target_id": body.TargetID})
-		if err := crmapprovals.VerifyAndConsume(r.Context(), h.db, token, crmapprovals.Binding{
-			// Tool MUST be the contract's declared x-mcp-tool verb ("merge_records",
-			// crm.yaml:335), not a per-entity string — a real minted token carries the
-			// declared verb and VerifyAndConsume exact-matches it (token.go:146).
-			// Person vs. org is disambiguated by diff_hash (person_id/target_id here)
-			// alone, exactly as the org handler's mirror does for organization_id.
-			WorkspaceID: wsID, Tool: "merge_records", DiffHash: diffHash,
-		}); err != nil {
+		} else {
 			jsonProblem(w, http.StatusForbidden, "approval_token_invalid")
-			return
 		}
+		return
 	}
 	merged, err := h.store.Merge(r.Context(), id, body.TargetID, wsID)
 	if errors.Is(err, directory.ErrSelfMerge) {

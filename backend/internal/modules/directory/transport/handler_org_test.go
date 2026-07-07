@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
@@ -47,7 +48,7 @@ func withOrgWorkspace(r *http.Request) *http.Request {
 }
 
 func orgHandlerForTest(db *sql.DB, store *crmcore.OrgStore) *OrganizationHandler {
-	return NewOrganizationHandler(store, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db), db)
+	return NewOrganizationHandler(store, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 }
 
 func TestOrganizationHandler_List_EmptyWorkspace(t *testing.T) {

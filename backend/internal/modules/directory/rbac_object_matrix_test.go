@@ -12,6 +12,7 @@ import (
 
 	_ "github.com/lib/pq"
 
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
 	directorytransport "github.com/gradionhq/margince/backend/internal/modules/directory/transport"
 	crmauth "github.com/gradionhq/margince/backend/internal/modules/identity"
@@ -106,8 +107,8 @@ func buildRBACMux(t *testing.T, db *sql.DB) http.Handler {
 		})
 	}
 	orgStore := crmcore.NewOrgStore(db)
-	mux.Handle("/people", authWrap("person", "read", peopletransport.NewPersonHandler(personStore, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db), db)))
-	mux.Handle("/organizations", authWrap("organization", "read", directorytransport.NewOrganizationHandler(orgStore, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db), db)))
+	mux.Handle("/people", authWrap("person", "read", peopletransport.NewPersonHandler(personStore, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})))
+	mux.Handle("/organizations", authWrap("organization", "read", directorytransport.NewOrganizationHandler(orgStore, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})))
 	return mux
 }
 
