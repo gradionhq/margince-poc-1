@@ -4,6 +4,7 @@ package crmcore_test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 	"time"
@@ -12,6 +13,70 @@ import (
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
+
+// assertGrantRevokeAuditRoundTrip does one create-grant -> assert row+audit
+// (record_share) -> revoke -> assert row-gone+audit (record_unshare)
+// round-trip for a single (recordType, recordID) pair, granted by ownerA to
+// subjectB in workspace ws. Shared by TestRecordGrant_PersonLeadCRUDOnly's
+// person and lead cases, which were previously written out twice inline
+// (identical shape).
+func assertGrantRevokeAuditRoundTrip(ctx context.Context, t *testing.T, db *sql.DB, grantStore *crmcore.RecordGrantStore, ws, recordType, recordID, ownerA, subjectB string) {
+	t.Helper()
+
+	grant, err := grantStore.Create(ctx, crmcore.CreateRecordGrantInput{
+		WorkspaceID:      ws,
+		RecordType:       recordType,
+		RecordID:         recordID,
+		SubjectType:      "user",
+		SubjectID:        subjectB,
+		Access:           "read",
+		GrantedBy:        ownerA,
+		GrantorOwnAccess: "write",
+	})
+	if err != nil {
+		t.Fatalf("Create %s grant: %v", recordType, err)
+	}
+
+	var grantCount int
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM record_grant WHERE id=$1::uuid`, grant.ID).Scan(&grantCount); err != nil {
+		t.Fatalf("count %s grant: %v", recordType, err)
+	}
+	if grantCount != 1 {
+		t.Errorf("want 1 %s grant row, got %d", recordType, grantCount)
+	}
+
+	var auditCount int
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM audit_log WHERE action='record_share' AND entity_id=$1`, grant.ID).Scan(&auditCount); err != nil {
+		t.Fatalf("count %s audit: %v", recordType, err)
+	}
+	if auditCount != 1 {
+		t.Errorf("want 1 %s audit entry (action=record_share), got %d", recordType, auditCount)
+	}
+
+	if err := grantStore.Revoke(ctx, grant.ID, ws); err != nil {
+		t.Fatalf("Revoke %s grant: %v", recordType, err)
+	}
+
+	var revokeCount int
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM record_grant WHERE id=$1::uuid`, grant.ID).Scan(&revokeCount); err != nil {
+		t.Fatalf("count %s grant after revoke: %v", recordType, err)
+	}
+	if revokeCount != 0 {
+		t.Errorf("want 0 %s grant rows after revoke, got %d", recordType, revokeCount)
+	}
+
+	var revokeAuditCount int
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM audit_log WHERE action='record_unshare' AND entity_id=$1`, grant.ID).Scan(&revokeAuditCount); err != nil {
+		t.Fatalf("count %s revoke audit: %v", recordType, err)
+	}
+	if revokeAuditCount != 1 {
+		t.Errorf("want 1 %s audit entry (action=record_unshare), got %d", recordType, revokeAuditCount)
+	}
+}
 
 // TestRecordGrant_WidensThenRevokes proves AC-WS-B#2's full, real,
 // end-to-end acceptance test for deal — the type whose app-layer OwnerID
@@ -241,64 +306,8 @@ func TestRecordGrant_PersonLeadCRUDOnly(t *testing.T) {
 		t.Fatalf("create person: %v", err)
 	}
 
-	// Grant read access to the person.
 	grantStore := crmcore.NewRecordGrantStore(db)
-	personGrant, err := grantStore.Create(ctx, crmcore.CreateRecordGrantInput{
-		WorkspaceID:      ws,
-		RecordType:       "person",
-		RecordID:         personID,
-		SubjectType:      "user",
-		SubjectID:        subjectB,
-		Access:           "read",
-		GrantedBy:        ownerA,
-		GrantorOwnAccess: "write",
-	})
-	if err != nil {
-		t.Fatalf("Create person grant: %v", err)
-	}
-
-	// Verify the grant was written and an audit log entry exists.
-	var personGrantCount int
-	if err := db.QueryRowContext(ctx,
-		`SELECT count(*) FROM record_grant WHERE id=$1::uuid`, personGrant.ID).Scan(&personGrantCount); err != nil {
-		t.Fatalf("count person grant: %v", err)
-	}
-	if personGrantCount != 1 {
-		t.Errorf("want 1 person grant row, got %d", personGrantCount)
-	}
-
-	var personAuditCount int
-	if err := db.QueryRowContext(ctx,
-		`SELECT count(*) FROM audit_log WHERE action='record_share' AND entity_id=$1`, personGrant.ID).Scan(&personAuditCount); err != nil {
-		t.Fatalf("count person audit: %v", err)
-	}
-	if personAuditCount != 1 {
-		t.Errorf("want 1 person audit entry (action=record_share), got %d", personAuditCount)
-	}
-
-	// Revoke the person grant.
-	if err := grantStore.Revoke(ctx, personGrant.ID, ws); err != nil {
-		t.Fatalf("Revoke person grant: %v", err)
-	}
-
-	// Verify the grant was deleted and an audit log entry exists.
-	var personRevokeCount int
-	if err := db.QueryRowContext(ctx,
-		`SELECT count(*) FROM record_grant WHERE id=$1::uuid`, personGrant.ID).Scan(&personRevokeCount); err != nil {
-		t.Fatalf("count person grant after revoke: %v", err)
-	}
-	if personRevokeCount != 0 {
-		t.Errorf("want 0 person grant rows after revoke, got %d", personRevokeCount)
-	}
-
-	var personRevokeAuditCount int
-	if err := db.QueryRowContext(ctx,
-		`SELECT count(*) FROM audit_log WHERE action='record_unshare' AND entity_id=$1`, personGrant.ID).Scan(&personRevokeAuditCount); err != nil {
-		t.Fatalf("count person revoke audit: %v", err)
-	}
-	if personRevokeAuditCount != 1 {
-		t.Errorf("want 1 person audit entry (action=record_unshare), got %d", personRevokeAuditCount)
-	}
+	assertGrantRevokeAuditRoundTrip(ctx, t, db, grantStore, ws, "person", personID, ownerA, subjectB)
 
 	// --- CRUD + audit round-trip for lead ---
 	// Create a lead.
@@ -309,63 +318,7 @@ func TestRecordGrant_PersonLeadCRUDOnly(t *testing.T) {
 		t.Fatalf("create lead: %v", err)
 	}
 
-	// Grant read access to the lead.
-	leadGrant, err := grantStore.Create(ctx, crmcore.CreateRecordGrantInput{
-		WorkspaceID:      ws,
-		RecordType:       "lead",
-		RecordID:         leadID,
-		SubjectType:      "user",
-		SubjectID:        subjectB,
-		Access:           "read",
-		GrantedBy:        ownerA,
-		GrantorOwnAccess: "write",
-	})
-	if err != nil {
-		t.Fatalf("Create lead grant: %v", err)
-	}
-
-	// Verify the grant was written and an audit log entry exists.
-	var leadGrantCount int
-	if err := db.QueryRowContext(ctx,
-		`SELECT count(*) FROM record_grant WHERE id=$1::uuid`, leadGrant.ID).Scan(&leadGrantCount); err != nil {
-		t.Fatalf("count lead grant: %v", err)
-	}
-	if leadGrantCount != 1 {
-		t.Errorf("want 1 lead grant row, got %d", leadGrantCount)
-	}
-
-	var leadAuditCount int
-	if err := db.QueryRowContext(ctx,
-		`SELECT count(*) FROM audit_log WHERE action='record_share' AND entity_id=$1`, leadGrant.ID).Scan(&leadAuditCount); err != nil {
-		t.Fatalf("count lead audit: %v", err)
-	}
-	if leadAuditCount != 1 {
-		t.Errorf("want 1 lead audit entry (action=record_share), got %d", leadAuditCount)
-	}
-
-	// Revoke the lead grant.
-	if err := grantStore.Revoke(ctx, leadGrant.ID, ws); err != nil {
-		t.Fatalf("Revoke lead grant: %v", err)
-	}
-
-	// Verify the grant was deleted and an audit log entry exists.
-	var leadRevokeCount int
-	if err := db.QueryRowContext(ctx,
-		`SELECT count(*) FROM record_grant WHERE id=$1::uuid`, leadGrant.ID).Scan(&leadRevokeCount); err != nil {
-		t.Fatalf("count lead grant after revoke: %v", err)
-	}
-	if leadRevokeCount != 0 {
-		t.Errorf("want 0 lead grant rows after revoke, got %d", leadRevokeCount)
-	}
-
-	var leadRevokeAuditCount int
-	if err := db.QueryRowContext(ctx,
-		`SELECT count(*) FROM audit_log WHERE action='record_unshare' AND entity_id=$1`, leadGrant.ID).Scan(&leadRevokeAuditCount); err != nil {
-		t.Fatalf("count lead revoke audit: %v", err)
-	}
-	if leadRevokeAuditCount != 1 {
-		t.Errorf("want 1 lead audit entry (action=record_unshare), got %d", leadRevokeAuditCount)
-	}
+	assertGrantRevokeAuditRoundTrip(ctx, t, db, grantStore, ws, "lead", leadID, ownerA, subjectB)
 
 	// --- predicate-correctness-in-isolation only (NOT a visibility claim) ---
 	// Create a person and grant to subjectB directly (insert row directly).

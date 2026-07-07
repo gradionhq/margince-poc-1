@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // registers the "postgres" database/sql driver
 
 	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"

@@ -14,6 +14,9 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
 
+// recordGrantsPath is the collection path for GET/POST /record-grants.
+const recordGrantsPath = "/record-grants"
+
 // RecordGrantHandler implements GET/POST /record-grants and
 // DELETE /record-grants/{id} (crm.yaml listRecordGrants/createRecordGrant/
 // revokeRecordGrant). Both writes are 🟡 (x-mcp-tool share_record) — an agent
@@ -32,9 +35,9 @@ func NewRecordGrantHandler(store *directory.RecordGrantStore, db *sql.DB) *Recor
 
 func (h *RecordGrantHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
-	case r.Method == http.MethodGet && r.URL.Path == "/record-grants":
+	case r.Method == http.MethodGet && r.URL.Path == recordGrantsPath:
 		h.list(w, r)
-	case r.Method == http.MethodPost && r.URL.Path == "/record-grants":
+	case r.Method == http.MethodPost && r.URL.Path == recordGrantsPath:
 		h.create(w, r)
 	case r.Method == http.MethodDelete:
 		h.revoke(w, r)
@@ -46,7 +49,14 @@ func (h *RecordGrantHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *RecordGrantHandler) list(w http.ResponseWriter, r *http.Request) {
 	wsID := workspaceID(r)
 	q := r.URL.Query()
-	grants, next, err := h.store.List(r.Context(), wsID, q.Get("record_type"), q.Get("record_id"), q.Get("subject_type"), q.Get("subject_id"), q.Get("cursor"), 20)
+	filter := directory.RecordGrantListFilter{
+		RecordType:  q.Get("record_type"),
+		RecordID:    q.Get("record_id"),
+		SubjectType: q.Get("subject_type"),
+		SubjectID:   q.Get("subject_id"),
+		Cursor:      q.Get("cursor"),
+	}
+	grants, next, err := h.store.List(r.Context(), wsID, filter, 20)
 	if err != nil {
 		jsonErr(w, err)
 		return
@@ -113,7 +123,7 @@ func (h *RecordGrantHandler) create(w http.ResponseWriter, r *http.Request) {
 
 func (h *RecordGrantHandler) revoke(w http.ResponseWriter, r *http.Request) {
 	wsID := workspaceID(r)
-	id := pathID(r.URL.Path, "/record-grants")
+	id := pathID(r.URL.Path, recordGrantsPath)
 
 	p, _ := crmctx.From(r.Context())
 	if p.IsAgent {
@@ -138,14 +148,6 @@ func (h *RecordGrantHandler) revoke(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// recordTypeTables maps a record_type enum value to its owning table — the
-// only four values record_grant.record_type's CHECK constraint allows
-// (migration 000069), so a plain map is sufficient (no need for a query
-// against information_schema).
-var recordTypeTables = map[string]string{
-	"deal": "deal", "person": "person", "organization": "organization", "lead": "lead",
-}
-
 // resolveGrantorOwnAccess is the scope-intersection approximation described in
 // the plan's Task 6 design note (design deviation D2 — no general row-scope
 // resolver exists to consult role.permissions.row_scope precisely): "write" if
@@ -154,16 +156,27 @@ var recordTypeTables = map[string]string{
 // that this principal can see the record at all to be requesting a grant on
 // it in the first place).
 func (h *RecordGrantHandler) resolveGrantorOwnAccess(ctx context.Context, wsID, userID, recordType, recordID string) (string, error) {
-	table, ok := recordTypeTables[recordType]
-	if !ok {
+	// ownerQuery is a fixed, literal, per-record-type SELECT — never built
+	// from interpolated input — covering the only four values
+	// record_grant.record_type's CHECK constraint allows (migration 000069).
+	var ownerQuery string
+	switch recordType {
+	case "deal":
+		ownerQuery = `SELECT owner_id FROM deal WHERE id=$1::uuid AND workspace_id=$2::uuid`
+	case "person":
+		ownerQuery = `SELECT owner_id FROM person WHERE id=$1::uuid AND workspace_id=$2::uuid`
+	case "organization":
+		ownerQuery = `SELECT owner_id FROM organization WHERE id=$1::uuid AND workspace_id=$2::uuid`
+	case "lead":
+		ownerQuery = `SELECT owner_id FROM lead WHERE id=$1::uuid AND workspace_id=$2::uuid`
+	default:
 		return "", fmt.Errorf("resolveGrantorOwnAccess: unknown record_type %q", recordType)
 	}
 
 	var access string
 	err := database.WithWorkspaceTx(ctx, h.db, wsID, func(tx *sql.Tx) error {
 		var ownerID string
-		q := fmt.Sprintf(`SELECT owner_id FROM %s WHERE id=$1::uuid AND workspace_id=$2::uuid`, table)
-		err := tx.QueryRowContext(ctx, q, recordID, wsID).Scan(&ownerID)
+		err := tx.QueryRowContext(ctx, ownerQuery, recordID, wsID).Scan(&ownerID)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}

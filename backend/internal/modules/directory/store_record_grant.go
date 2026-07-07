@@ -126,38 +126,57 @@ func (s *RecordGrantStore) Revoke(ctx context.Context, id, workspaceID string) e
 	})
 }
 
-// List returns grants matching the given filters (all optional — the
+// RecordGrantListFilter holds optional predicates for List (all optional —
+// the contract's listRecordGrants supports filtering by record OR by
+// subject). Zero value = no extra filters.
+type RecordGrantListFilter struct {
+	RecordType  string
+	RecordID    string
+	SubjectType string
+	SubjectID   string
+	Cursor      string
+}
+
+// buildRecordGrantListWhere builds the dynamic filter fragment of List's WHERE
+// clause from filter's optional predicates. $1 and $2 are reserved by the
+// caller for workspace_id and cursor, so numbering starts at 3.
+func buildRecordGrantListWhere(filter RecordGrantListFilter) (whereClause string, args []any, nextArgIdx int) {
+	n := 2
+	if filter.RecordType != "" {
+		n++
+		whereClause += fmt.Sprintf(` AND record_type=$%d`, n)
+		args = append(args, filter.RecordType)
+	}
+	if filter.RecordID != "" {
+		n++
+		whereClause += fmt.Sprintf(` AND record_id=$%d::uuid`, n)
+		args = append(args, filter.RecordID)
+	}
+	if filter.SubjectType != "" {
+		n++
+		whereClause += fmt.Sprintf(` AND subject_type=$%d`, n)
+		args = append(args, filter.SubjectType)
+	}
+	if filter.SubjectID != "" {
+		n++
+		whereClause += fmt.Sprintf(` AND subject_id=$%d::uuid`, n)
+		args = append(args, filter.SubjectID)
+	}
+	return whereClause, args, n
+}
+
+// List returns grants matching the given filter (all optional — the
 // contract's listRecordGrants supports filtering by record OR by subject).
-func (s *RecordGrantStore) List(ctx context.Context, workspaceID, recordType, recordID, subjectType, subjectID, cursor string, limit int) ([]RecordGrant, string, error) {
+func (s *RecordGrantStore) List(ctx context.Context, workspaceID string, filter RecordGrantListFilter, limit int) ([]RecordGrant, string, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
+	extraWhere, extraArgs, n := buildRecordGrantListWhere(filter)
 	out := []RecordGrant{}
 	var nextCursor string
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		where := `workspace_id=$1::uuid AND ($2 = '' OR id::text > $2)`
-		args := []any{workspaceID, cursor}
-		n := 2
-		if recordType != "" {
-			n++
-			where += fmt.Sprintf(` AND record_type=$%d`, n)
-			args = append(args, recordType)
-		}
-		if recordID != "" {
-			n++
-			where += fmt.Sprintf(` AND record_id=$%d::uuid`, n)
-			args = append(args, recordID)
-		}
-		if subjectType != "" {
-			n++
-			where += fmt.Sprintf(` AND subject_type=$%d`, n)
-			args = append(args, subjectType)
-		}
-		if subjectID != "" {
-			n++
-			where += fmt.Sprintf(` AND subject_id=$%d::uuid`, n)
-			args = append(args, subjectID)
-		}
+		where := `workspace_id=$1::uuid AND ($2 = '' OR id::text > $2)` + extraWhere
+		args := append([]any{workspaceID, filter.Cursor}, extraArgs...)
 		n++
 		args = append(args, limit+1)
 		rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
