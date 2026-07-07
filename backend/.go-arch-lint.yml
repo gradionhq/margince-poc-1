@@ -76,30 +76,45 @@ components:
   # Split catalog modules (WS-E-b, Task 6)
   organizations:           { in: internal/modules/organizations }
   orgsdomain:              { in: internal/modules/organizations/domain }
+  orgsports:               { in: internal/modules/organizations/ports }
   orgsadapters:            { in: internal/modules/organizations/adapters }
+  orgsapp:                 { in: internal/modules/organizations/app }
   orgstransport:           { in: internal/modules/organizations/transport }
   activities:              { in: internal/modules/activities }
   activitiesdomain:        { in: internal/modules/activities/domain }
+  activitiesports:         { in: internal/modules/activities/ports }
   activitiesadapters:      { in: internal/modules/activities/adapters }
+  activitiesapp:           { in: internal/modules/activities/app }
   activitiestransport:     { in: internal/modules/activities/transport }
   relationships:           { in: internal/modules/relationships }
   relsdomain:              { in: internal/modules/relationships/domain }
+  relsports:               { in: internal/modules/relationships/ports }
   relsadapters:            { in: internal/modules/relationships/adapters }
+  relsapp:                 { in: internal/modules/relationships/app }
   relstransport:           { in: internal/modules/relationships/transport }
   leads:                   { in: internal/modules/leads }
   leadsdomain:             { in: internal/modules/leads/domain }
+  leadsports:              { in: internal/modules/leads/ports }
   leadsadapters:           { in: internal/modules/leads/adapters }
+  leadsapp:                { in: internal/modules/leads/app }
+  leadstransport:          { in: internal/modules/leads/transport }
   partners:                { in: internal/modules/partners }
   partnersdomain:          { in: internal/modules/partners/domain }
+  partnersports:           { in: internal/modules/partners/ports }
   partnersadapters:        { in: internal/modules/partners/adapters }
+  partnersapp:             { in: internal/modules/partners/app }
   partnerstransport:       { in: internal/modules/partners/transport }
   audithistory:            { in: internal/modules/audithistory }
   audithistorydomain:      { in: internal/modules/audithistory/domain }
+  audithistoryports:       { in: internal/modules/audithistory/ports }
   audithistoryadapters:    { in: internal/modules/audithistory/adapters }
+  audithistoryapp:         { in: internal/modules/audithistory/app }
   audithistorytransport:   { in: internal/modules/audithistory/transport }
   datasourcebindings:      { in: internal/modules/datasourcebindings }
   datasourcebindingsdomain: { in: internal/modules/datasourcebindings/domain }
+  datasourcebindingsports: { in: internal/modules/datasourcebindings/ports }
   datasourcebindingsadapters: { in: internal/modules/datasourcebindings/adapters }
+  datasourcebindingsapp:   { in: internal/modules/datasourcebindings/app }
   deals:             { in: internal/modules/deals }
   dealstransport:    { in: internal/modules/deals/transport }
   dealsdomain:       { in: internal/modules/deals/domain }
@@ -108,7 +123,9 @@ components:
   dealsapp:          { in: internal/modules/deals/app }
   people:            { in: internal/modules/people }
   peopledomain:      { in: internal/modules/people/domain }
+  peopleports:       { in: internal/modules/people/ports }
   peopleadapters:    { in: internal/modules/people/adapters }
+  peopleapp:         { in: internal/modules/people/app }
   peopletransport:   { in: internal/modules/people/transport }
   contracts:         { in: internal/contracts/types }
   identityadapters:  { in: internal/modules/identity/adapters }
@@ -153,82 +170,105 @@ deps:
     mayDependOn: [crmctx, ids]
   # Split catalog modules (WS-E-b, Task 6)
   orgsdomain:
-    mayDependOn: [prov, ids]
+    mayDependOn: [prov, ids, dedupekern, strengthkern]
+  orgsports:
+    mayDependOn: [orgsdomain]
   orgsadapters:
-    mayDependOn: [orgsdomain, errs, ids, prov, workspacetx]
+    mayDependOn: [orgsdomain, errs, ids, prov, workspacetx, audit, dedupekern, strengthkern]
     canUse: [pq]
   organizations:
     mayDependOn: [orgsdomain, orgsadapters]
   orgstransport:
-    mayDependOn: [orgsadapters, orgsdomain, relationships, relsadapters, deals, dealsadapters, activities, activitiesadapters, approvalsport, toolgate, mcp, crmctx, errs]
+    mayDependOn: [orgsadapters, orgsdomain, relationships, relsadapters, relsdomain, deals, dealsadapters, dealsdomain, activities, activitiesadapters, activitiesdomain, approvalsport, toolgate, mcp, crmctx, errs]
   activitiesdomain:
     mayDependOn: [prov, ids]
+  activitiesports:
+    mayDependOn: [activitiesdomain]
   activitiesadapters:
     mayDependOn: [activitiesdomain, errs, ids, workspacetx]
     canUse: [pq]
+  activitiesapp:
+    mayDependOn: [activitiesdomain, activitiesports]
   activities:
-    mayDependOn: [activitiesdomain, activitiesadapters]
+    mayDependOn: [activitiesdomain, activitiesadapters, activitiesapp, activitiestransport]
   activitiestransport:
     mayDependOn: [activities, activitiesadapters, activitiesdomain, crmctx, errs]
   relsdomain:
     mayDependOn: [prov, ids]
+  relsports:
+    mayDependOn: [relsdomain]
   relsadapters:
-    mayDependOn: [relsdomain, errs, ids, workspacetx]
+    mayDependOn: [relsdomain, errs, ids, workspacetx, audit]
     canUse: [pq]
+  relsapp:
+    mayDependOn: [relsports]
   relationships:
     mayDependOn: [relsdomain, relsadapters]
   relstransport:
-    mayDependOn: [relationships, relsadapters, relsdomain, crmctx, errs]
+    mayDependOn: [relationships, relsadapters, relsdomain, crmctx, errs, prov]
   leadsdomain:
     mayDependOn: [prov, ids]
+  leadsports:
+    mayDependOn: [leadsdomain]
   leadsadapters:
-    mayDependOn: [leadsdomain, errs, ids, workspacetx]
+    mayDependOn: [leadsdomain, errs, ids, workspacetx, audit]
     canUse: [pq]
   leads:
-    mayDependOn: [leadsdomain, leadsadapters]
+    mayDependOn: [leadsdomain, leadsadapters, prov]
   partnersdomain:
     mayDependOn: [prov, ids]
+  partnersports:
+    mayDependOn: [partnersdomain]
   partnersadapters:
-    mayDependOn: [partnersdomain, errs, ids, workspacetx]
+    mayDependOn: [partnersdomain, errs, ids, workspacetx, audit]
     canUse: [pq]
   partners:
-    mayDependOn: [partnersdomain, partnersadapters]
+    mayDependOn: [partnersdomain, partnersadapters, prov]
   partnerstransport:
-    mayDependOn: [partners, partnersadapters, partnersdomain, crmctx, errs]
+    mayDependOn: [partners, partnersadapters, partnersdomain, crmctx, errs, prov]
   audithistorydomain:
     mayDependOn: [ids]
+  audithistoryports:
+    mayDependOn: [audithistorydomain]
   audithistoryadapters:
     mayDependOn: [audithistorydomain, errs, ids]
     canUse: [pq]
+  audithistoryapp:
+    mayDependOn: [audithistorydomain, audithistoryports]
   audithistorytransport:
-    mayDependOn: [audithistoryadapters, audithistorydomain, authzkern, crmctx, errs]
+    mayDependOn: [audithistoryadapters, audithistorydomain, audithistoryports, authzkern, crmctx, errs]
   audithistory:
-    mayDependOn: [audithistorydomain, audithistoryadapters, audithistorytransport, authzkern]
+    mayDependOn: [audithistorydomain, audithistoryadapters, audithistoryapp, audithistoryports, audithistorytransport, authzkern]
   datasourcebindingsdomain:
     mayDependOn: [datasource, ids]
+  datasourcebindingsports:
+    mayDependOn: [datasourcebindingsdomain]
   datasourcebindingsadapters:
-    mayDependOn: [datasourcebindingsdomain, errs, ids]
+    mayDependOn: [datasourcebindingsdomain, errs, ids, datasource, datasourcebindingsports]
     canUse: [pq]
   datasourcebindings:
-    mayDependOn: [datasourcebindingsdomain, datasourcebindingsadapters, datasource]
+    mayDependOn: [datasourcebindingsdomain, datasourcebindingsadapters, datasourcebindingsports, datasource]
   # deals additionally depends on mcp (Tier-0) for ResolveDynamicTier.
   deals:
-    mayDependOn: [dealsdomain, dealsadapters, mcp]
+    mayDependOn: [dealsdomain, dealsadapters, mcp, prov]
   dealsdomain:
-    mayDependOn: [mcp]
+    mayDependOn: [mcp, ids, prov]
   dealsports:
     mayDependOn: [dealsdomain]
   dealsadapters:
-    mayDependOn: [dealsdomain, errs, ids, workspacetx]
+    mayDependOn: [dealsdomain, errs, ids, workspacetx, audit]
     canUse: [pq]
   # dealstransport now owns pipeline/stage AND deal-entity handlers (WS-E-b).
   dealstransport:
-    mayDependOn: [deals, dealsadapters, dealsdomain, mcp, approvalsport, toolgate, crmctx, errs, prov]
-  # people domain uses strengthkern for PersonStrengthFrom.
+    mayDependOn: [deals, dealsadapters, dealsdomain, mcp, approvalsport, toolgate, crmctx, errs, prov, activitiesdomain, relsdomain]
+  # people domain uses strengthkern for PersonStrengthFrom; peopledomain composes
+  # ActivityRef/deal/relationship refs (intentional cross-module composite-reference sharing).
   peopledomain:
-    mayDependOn: [prov, ids, strengthkern]
+    mayDependOn: [prov, ids, strengthkern, dedupekern, activitiesdomain, dealsdomain, relsdomain]
+  peopleports:
+    mayDependOn: [peopledomain, strengthkern]
   peopleadapters:
-    mayDependOn: [peopledomain, errs, ids, prov, workspacetx, dedupekern, strengthkern]
+    mayDependOn: [peopledomain, errs, ids, prov, workspacetx, dedupekern, strengthkern, audit]
     canUse: [pq]
   people:
     mayDependOn: [peopledomain, peopleadapters, prov]
