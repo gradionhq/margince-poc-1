@@ -40,7 +40,7 @@ GOLANGCI_CONFIG := $(CURDIR)/.golangci.yml
 # cache inside $(CURDIR) gives every worktree — and the main checkout — its own.
 export GOLANGCI_LINT_CACHE := $(CURDIR)/.tmp/golangci-cache
 
-.PHONY: help check check-backend check-q check-go check-fe check-fe-static check-craft-doc check-doc-style craft fmt fmt-check vet lint go-file-length test test-v test-cover test-cover-check test-integration test-it test-integration-serial test-liveuat test-lanes arch-lint fitness-jurisdiction audit-coverage audit-coherence rls-store-path contract-lint gen-types gen-types-check contract-breaking-check gen-field gen-manifests gen-manifests-check tools tools-go tidy build run dev psql clean install fe-install fe-build fe-preview fe-lint fe-typecheck fe-format fe-dev storybook fe-test test-contracts infra-up infra-down infra-reset infra-logs db-wait migrate-up migrate-down migrate-status migrate-create test-db-up test-db-reset seed seed-dev seed-reset ds-purity font-lock icon-lint check-image-pins uat_env uat_env_stop fe-uat
+.PHONY: help check check-backend check-q check-go check-fe check-fe-static check-craft-doc check-doc-style craft fmt fmt-check vet lint go-file-length test test-v test-cover test-cover-check test-integration test-it test-integration-serial test-liveuat test-lanes arch-lint fitness-jurisdiction audit-coverage audit-coherence rls-store-path contract-lint gen-types gen-types-check contract-breaking-check gen-field gen-manifests gen-manifests-check tools tools-go tidy build run dev psql clean install fe-install fe-playwright fe-build fe-preview fe-lint fe-typecheck fe-format fe-dev storybook fe-test test-contracts infra-up infra-down infra-reset infra-logs db-wait migrate-up migrate-down migrate-status migrate-create test-db-up test-db-reset seed seed-dev seed-reset ds-purity font-lock icon-lint check-image-pins uat_env uat_env_stop fe-uat
 
 help: ## Show targets
 	@grep -hE "^[a-zA-Z_-]+:.*## " $(MAKEFILE_LIST) | awk "BEGIN{FS=\":.*## \"}{printf \"  %-20s %s\\n\",\$$1,\$$2}"
@@ -194,7 +194,8 @@ craft: ## Build the craftsmanship gate CLI (review / annotate / residue / eval /
 	@cd cli/craft && go build -o ../../bin/craft . && echo "built bin/craft"
 
 # --- Tooling bootstrap ---
-tools: tools-go ## Install codegen + lint binaries + Playwright browser (full machine bootstrap)
+tools: tools-go fe-playwright ## Install codegen + lint binaries + Playwright browser (full machine bootstrap)
+fe-playwright: ## Install the Playwright Chromium browser (requires frontend deps — run after fe-install)
 	@cd frontend && pnpm exec playwright install chromium && echo "Playwright Chromium installed"
 tools-go: ## Install Go lint/codegen binaries at PINNED versions — machine-wide ($(HOME)/go/bin)
 	# Versions are pinned, not @latest: a floating generator silently drifts committed
@@ -214,7 +215,7 @@ tools-go: ## Install Go lint/codegen binaries at PINNED versions — machine-wid
 	@echo "Go lint/codegen tools ready in $(HOME)/go/bin"
 
 # --- Frontend (skip cleanly if deps not installed) ---
-install: fe-install tools-go ## One-shot fresh-worktree setup (called by `swarm worktree-init`): frontend deps + lint/codegen tools; extend here as new setup steps are needed
+install: fe-install fe-playwright tools-go ## One-shot fresh-worktree setup (called by `swarm worktree-init`): frontend deps + Playwright browser + lint/codegen tools; extend here as new setup steps are needed
 fe-install: ## Install frontend deps
 	@pnpm install
 fe-build: ## Production build of the web app
