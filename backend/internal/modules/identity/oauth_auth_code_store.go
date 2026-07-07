@@ -10,6 +10,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 )
 
 // ErrInvalidGrant is returned by AuthCodeStore.Consume on any failure that
@@ -53,11 +55,14 @@ func (s *AuthCodeStore) Issue(ctx context.Context, clientID, workspaceID, codeCh
 	hash := sha256sum(rawCode)
 	expiresAt := time.Now().UTC().Add(ttl)
 	scopeArr := "{" + strings.Join(scopes, ",") + "}"
-	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO oauth_auth_code
-			(code_hash, client_id, workspace_id, code_challenge, redirect_uri, scopes, granted_by, expires_at)
-		VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6::text[], $7::uuid, $8)`,
-		hash, clientID, workspaceID, codeChallenge, redirectURI, scopeArr, grantedBy, expiresAt)
+	err = database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO oauth_auth_code
+				(code_hash, client_id, workspace_id, code_challenge, redirect_uri, scopes, granted_by, expires_at)
+			VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6::text[], $7::uuid, $8)`,
+			hash, clientID, workspaceID, codeChallenge, redirectURI, scopeArr, grantedBy, expiresAt)
+		return err
+	})
 	if err != nil {
 		return "", err
 	}
@@ -69,6 +74,13 @@ func (s *AuthCodeStore) Issue(ctx context.Context, clientID, workspaceID, codeCh
 // code_challenge, then UPDATE used_at. Any failure returns ErrInvalidGrant
 // (fail closed) — a reused or expired code, or a verifier mismatch, never
 // yields a grant.
+//
+// TODO(GH-209-followup): Consume opens its own tx via s.db.BeginTx and never
+// scopes it through platform/database — a real RLS-bypass gap the widened
+// check-rls-store-path.sh does not currently catch (it never calls
+// set_config, and it accesses `tx`, not `s.db`, once the tx is open). Left
+// unfixed here deliberately — out of this task's bounded scope (the escalation's
+// enumerated site list) — flag for the human-filed WS-A follow-up ticket.
 func (s *AuthCodeStore) Consume(ctx context.Context, rawCode, codeVerifier string) (AuthCodeRecord, error) {
 	hash := sha256sum(rawCode)
 	tx, err := s.db.BeginTx(ctx, nil)

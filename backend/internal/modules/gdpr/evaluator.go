@@ -73,6 +73,7 @@ func (w *RetentionWorker) Work(ctx context.Context, job *river.Job[RetentionSwee
 
 // allWorkspaceIDs returns all workspace IDs. The workspace table has no RLS.
 func (w *RetentionWorker) allWorkspaceIDs(ctx context.Context) ([]string, error) {
+	// rls-exempt: workspace table has no RLS (migration 000002) — no workspace_id to scope by; this IS the workspace list.
 	rows, err := w.db.QueryContext(ctx, `SELECT id FROM workspace`)
 	if err != nil {
 		return nil, err

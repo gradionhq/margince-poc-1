@@ -81,7 +81,7 @@ deps:
   blobstore:
     canUse: [minio]
   identity:
-    mayDependOn: [keyvault]
+    mayDependOn: [keyvault, database]
     canUse: [crypto]
   # httpserver (extracted from cmd/api, 1c restructure) wraps auth/session
   # middleware, so it depends on identity the same way cmd/api used to; its

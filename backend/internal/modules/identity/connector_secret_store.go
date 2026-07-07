@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	"github.com/gradionhq/margince/backend/internal/platform/keyvault"
 )
 
@@ -49,7 +50,11 @@ func NewConnectorSecretStore(db DBExec, provider keyvault.KeyProvider) *Connecto
 // 'active'. Shared by Rotate and Lookup so both fail closed identically on a
 // revoked connection.
 func (s *ConnectorSecretStore) requireActiveConnection(ctx context.Context, workspaceID, connectionID string) error {
+	if err := database.SetWorkspaceScope(ctx, s.db, workspaceID); err != nil {
+		return fmt.Errorf("connector secret: guc: %w", err)
+	}
 	var status string
+	// rls-exempt: SetWorkspaceScope already called above on the caller-supplied DBExec (D1 shape — caller owns tx lifecycle).
 	if err := s.db.QueryRowContext(ctx, `
 		SELECT status FROM incumbent_connection WHERE id=$1::uuid AND workspace_id=$2::uuid`,
 		connectionID, workspaceID).Scan(&status); err != nil {
@@ -76,6 +81,10 @@ func (s *ConnectorSecretStore) Put(ctx context.Context, workspaceID, connectionI
 	if err != nil {
 		return rec, fmt.Errorf("connector secret: seal: %w", err)
 	}
+	if err := database.SetWorkspaceScope(ctx, s.db, workspaceID); err != nil {
+		return rec, fmt.Errorf("connector secret: guc: %w", err)
+	}
+	// rls-exempt: SetWorkspaceScope already called above on the caller-supplied DBExec (D1 shape — caller owns tx lifecycle).
 	err = s.db.QueryRowContext(ctx, `
 		INSERT INTO connector_secret (workspace_id, connection_id, ciphertext, kms_key_id)
 		VALUES ($1::uuid, $2::uuid, $3, $4)
@@ -109,9 +118,12 @@ func (s *ConnectorSecretStore) Lookup(ctx context.Context, workspaceID, connecti
 	if err := s.requireActiveConnection(ctx, workspaceID, connectionID); err != nil {
 		return nil, err
 	}
-
+	if err := database.SetWorkspaceScope(ctx, s.db, workspaceID); err != nil {
+		return nil, fmt.Errorf("connector secret: guc: %w", err)
+	}
 	var ciphertext []byte
 	var kmsKeyID string
+	// rls-exempt: SetWorkspaceScope already called above on the caller-supplied DBExec (D1 shape — caller owns tx lifecycle).
 	err := s.db.QueryRowContext(ctx, `
 		SELECT ciphertext, kms_key_id FROM connector_secret
 		WHERE workspace_id=$1::uuid AND connection_id=$2::uuid
