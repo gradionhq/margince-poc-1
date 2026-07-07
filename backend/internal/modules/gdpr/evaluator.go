@@ -224,33 +224,9 @@ func (w *RetentionWorker) applyAction(ctx context.Context, wsID string, p Policy
 	}
 
 	return database.WithWorkspaceTx(ctx, w.db, wsID, func(tx *sql.Tx) error {
-		var auditAction string
-		switch p.Action {
-		case actionArchive:
-			if err := applyArchive(ctx, tx, p.ObjectType, recordID); err != nil {
-				return err
-			}
-			auditAction = actionArchive
-		case actionAnonymize:
-			if err := applyAnonymize(ctx, tx, wsID, p.ObjectType, recordID); err != nil {
-				return err
-			}
-			auditAction = "update"
-		case actionErase:
-			// Non-person erase is only implemented for activities (e.g.
-			// activity/transcript): null PII + archive. A lead/deal erase policy would
-			// match zero rows here, so writing an "erase" audit row claiming success
-			// would be a dishonest audit (T7). Refuse instead — no row touched, no
-			// audit row written. (Person erase is handled by the early Erase branch.)
-			if !nonPersonEraseSupported(p.ObjectType) {
-				return fmt.Errorf("applyAction: erase action unsupported for object_type %q (only person and activity are erasable)", p.ObjectType)
-			}
-			if err := applyActivityErase(ctx, tx, recordID); err != nil {
-				return err
-			}
-			auditAction = actionErase
-		default:
-			return fmt.Errorf("applyAction: unknown action %q", p.Action)
+		auditAction, err := runRetentionAction(ctx, tx, wsID, p, recordID)
+		if err != nil {
+			return err
 		}
 
 		entry := crmaudit.Entry{
@@ -262,6 +238,38 @@ func (w *RetentionWorker) applyAction(ctx context.Context, wsID string, p Policy
 		}
 		return nil
 	})
+}
+
+// runRetentionAction applies the ladder action for one record within the
+// caller's transaction and returns the audit action string to record.
+func runRetentionAction(ctx context.Context, tx *sql.Tx, wsID string, p Policy, recordID string) (string, error) {
+	switch p.Action {
+	case actionArchive:
+		if err := applyArchive(ctx, tx, p.ObjectType, recordID); err != nil {
+			return "", err
+		}
+		return actionArchive, nil
+	case actionAnonymize:
+		if err := applyAnonymize(ctx, tx, wsID, p.ObjectType, recordID); err != nil {
+			return "", err
+		}
+		return "update", nil
+	case actionErase:
+		// Non-person erase is only implemented for activities (e.g.
+		// activity/transcript): null PII + archive. A lead/deal erase policy would
+		// match zero rows here, so writing an "erase" audit row claiming success
+		// would be a dishonest audit (T7). Refuse instead — no row touched, no
+		// audit row written. (Person erase is handled by the early Erase branch.)
+		if !nonPersonEraseSupported(p.ObjectType) {
+			return "", fmt.Errorf("applyAction: erase action unsupported for object_type %q (only person and activity are erasable)", p.ObjectType)
+		}
+		if err := applyActivityErase(ctx, tx, recordID); err != nil {
+			return "", err
+		}
+		return actionErase, nil
+	default:
+		return "", fmt.Errorf("applyAction: unknown action %q", p.Action)
+	}
 }
 
 // applyArchive sets archived_at=now() on the given record.

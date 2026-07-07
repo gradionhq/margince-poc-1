@@ -182,22 +182,36 @@ func Erase(ctx context.Context, db *sql.DB, personID string) error {
 			return err
 		}
 
-		for _, email := range emails {
-			if err := suppressionAdd(ctx, tx, wsID, email); err != nil {
-				return err
-			}
+		if err := suppressEmails(ctx, tx, wsID, emails); err != nil {
+			return err
 		}
 
-		// Write a PII-free tombstone; actor attribution via ctx.
-		entry := buildErasureTombstone(personID)
-		entry.WorkspaceID = wsID
-		attributeActor(ctx, &entry)
-
-		if _, err := crmaudit.WriteTx(ctx, tx, entry); err != nil {
-			return fmt.Errorf("crmgdpr.Erase audit: %w", err)
-		}
-		return nil
+		return writeErasureAudit(ctx, tx, wsID, personID)
 	})
+}
+
+// suppressEmails adds each of the subject's captured emails to the workspace
+// suppression list, within the caller's transaction.
+func suppressEmails(ctx context.Context, tx *sql.Tx, wsID string, emails []string) error {
+	for _, email := range emails {
+		if err := suppressionAdd(ctx, tx, wsID, email); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeErasureAudit builds a PII-free erasure tombstone, attributes the actor
+// from ctx, and writes it within the caller's transaction.
+func writeErasureAudit(ctx context.Context, tx *sql.Tx, wsID, personID string) error {
+	entry := buildErasureTombstone(personID)
+	entry.WorkspaceID = wsID
+	attributeActor(ctx, &entry)
+
+	if _, err := crmaudit.WriteTx(ctx, tx, entry); err != nil {
+		return fmt.Errorf("crmgdpr.Erase audit: %w", err)
+	}
+	return nil
 }
 
 // captureEmails reads the subject's emails before they are deleted, so they can be
