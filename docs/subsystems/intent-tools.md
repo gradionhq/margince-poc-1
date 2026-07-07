@@ -3,8 +3,8 @@ status: skeleton
 module: backend/internal/modules/agents
 derives-from:
   - margince-poc/docs/subsystems/intent-tools.md @ a11d6c08
-  - margince specs/spec/contract/interfaces.md#22-intent-level-tools-verbs-not-tables--03c-41-decisions-a18-adr-0009 @ 5a0b29c
-  - margince specs/spec/narrative/03c-agentic-concept.md#43-tool-surface-verbs-over-tables-plus-ui @ 5a0b29c
+  - specs/spec/contract/interfaces.md#22-intent-level-tools-verbs-not-tables--03c-41-decisions-a18-adr-0009 @ 5a0b29c
+  - specs/spec/narrative/03c-agentic-concept.md#43-tool-surface-verbs-over-tables-plus-ui @ 5a0b29c
 ---
 # Intent tools — bundles that can never do more than their parts
 
@@ -122,7 +122,7 @@ admission gate the compositions pass through.
 ## Appendix
 
 ### Acceptance
-Source: margince-poc/docs/subsystems/intent-tools.md#guarantees-enforced @ a11d6c08; margince specs/spec/contract/interfaces.md#22-intent-level-tools-verbs-not-tables--03c-41-decisions-a18-adr-0009 @ 5a0b29c
+Source: margince-poc/docs/subsystems/intent-tools.md#guarantees-enforced @ a11d6c08; specs/spec/contract/interfaces.md#22-intent-level-tools-verbs-not-tables--03c-41-decisions-a18-adr-0009 @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|

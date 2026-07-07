@@ -1,8 +1,8 @@
 ---
 derives-from:
-  - margince specs/spec/narrative/05-agent-security.md
-  - margince specs/spec/architecture/06-governance-as-structure.md#5-security-as-structure-d1d8--owning-seam-source-marker-ci-gate
-  - margince specs/spec/compliance/DPIA.md
+  - specs/spec/narrative/05-agent-security.md
+  - specs/spec/architecture/06-governance-as-structure.md#5-security-as-structure-d1d8--owning-seam-source-marker-ci-gate
+  - specs/spec/compliance/DPIA.md
 ---
 # Threat model — the trifecta is designed in, so the controls constrain outcomes
 
@@ -196,7 +196,7 @@ build: the privacy notice must state AI processing of captured content
 ## Appendix
 
 ### Parameters — trust tiers
-Source: margince specs/spec/narrative/05-agent-security.md#trust-model-provenance-tiers @ 5a0b29c
+Source: specs/spec/narrative/05-agent-security.md#trust-model-provenance-tiers @ 5a0b29c
 
 | ID | Tier | Definition |
 |---|---|---|
@@ -205,7 +205,7 @@ Source: margince specs/spec/narrative/05-agent-security.md#trust-model-provenanc
 | T2 | captured / external — UNTRUSTED | Auto-captured email bodies, form input, transcripts, enrichment payloads, anything attacker-influenceable. The default for the capture firehose. T2 content is data, never instructions. |
 
 ### Acceptance — attack model
-Source: margince specs/spec/narrative/05-agent-security.md#the-primary-attack-chain @ 5a0b29c
+Source: specs/spec/narrative/05-agent-security.md#the-primary-attack-chain @ 5a0b29c
 
 | ID | Attack | Description |
 |---|---|---|
@@ -216,7 +216,7 @@ Source: margince specs/spec/narrative/05-agent-security.md#the-primary-attack-ch
 | TM-ATTACK-5 | Tool-result injection | A connector returns attacker-influenced data into the agent's context. |
 
 ### Acceptance — defenses
-Source: margince specs/spec/narrative/05-agent-security.md#defenses-defense-in-depth @ 5a0b29c; margince specs/spec/architecture/06-governance-as-structure.md#5-security-as-structure-d1d8--owning-seam-source-marker-ci-gate @ 5a0b29c
+Source: specs/spec/narrative/05-agent-security.md#defenses-defense-in-depth @ 5a0b29c; specs/spec/architecture/06-governance-as-structure.md#5-security-as-structure-d1d8--owning-seam-source-marker-ci-gate @ 5a0b29c
 
 Corpus IDs D1–D8 preserved verbatim; TM-CTRL-* are the three structural controls
 the governance map lists alongside them. Module names use the target layout
@@ -237,7 +237,7 @@ the governance map lists alongside them. Module names use the target layout
 | D8 | Governing the capture firehose: the auto-capture writer is a named system-service exception with its own distinct, audited capability (not a BYO agent, not bound to a connecting human's RBAC per write); connector-created records are tagged T2 + `captured_by`, default to the originating user's visibility scope (not workspace-global) until a T1 human promotes them; a poisoned auto-created org/contact is quarantined pending review, never instantly trusted by scoring/routing. | capture writer in `modules/capture` (enumerated exception) | capture-isolation test (TM-VERIFY-3) |
 
 ### Acceptance — residual risk
-Source: margince specs/spec/narrative/05-agent-security.md#what-we-explicitly-accept-residual-risk @ 5a0b29c
+Source: specs/spec/narrative/05-agent-security.md#what-we-explicitly-accept-residual-risk @ 5a0b29c
 
 | ID | Accepted risk | Bound |
 |---|---|---|
@@ -246,7 +246,7 @@ Source: margince specs/spec/narrative/05-agent-security.md#what-we-explicitly-ac
 | TM-RESID-3 | A determined insider with legitimate broad scope can still misuse access. This is an RBAC/personnel risk, not an agent risk. | D3 volume gates + D6 audit |
 
 ### Acceptance — verification gates
-Source: margince specs/spec/narrative/05-agent-security.md#verification-stage-6-gate--new-critical @ 5a0b29c
+Source: specs/spec/narrative/05-agent-security.md#verification-stage-6-gate--new-critical @ 5a0b29c
 
 Registered in the gate registry as [[quality-gates#G-c]]; the pass conditions are
 pinned here.
@@ -258,7 +258,7 @@ pinned here.
 | TM-VERIFY-3 | Capture-isolation test | Connector-created records default to the originating user's scope, never workspace-global. |
 
 ### Acceptance — data protection
-Source: margince specs/spec/compliance/DPIA.md @ 5a0b29c (controller/processor framing note; §2 special-categories; §4 Art. 22 table; §6 residual-risk verdict)
+Source: specs/spec/compliance/DPIA.md @ 5a0b29c (controller/processor framing note; §2 special-categories; §4 Art. 22 table; §6 residual-risk verdict)
 
 | ID | Obligation | Detail |
 |---|---|---|
@@ -267,4 +267,4 @@ Source: margince specs/spec/compliance/DPIA.md @ 5a0b29c (controller/processor f
 | TM-DPIA-3 | Not-Art. 22 conditions (must stay true) | No feature performs solely-automated processing with legal or similarly significant effect, because on every feature at least one limb fails: scores are advisory (they inform a human, never decide) and consequential actions are 🟡-staged behind a recorded human approval ([[acceptance-standards#GATE-AI-7]]). All seven assessed features carry this verdict — lead score, relationship strength, brief ranking/warm-room, overnight agent proposals, transcript intelligence/dossier, internal champion/risk signals, rep-performance coaching. Any design change that makes a score decisive or un-stages a consequential action reopens the Art. 22 analysis. Meaningful-logic access ships in-product ("Explain this score", no-mystery-number breakdowns, evidence-or-omit). |
 | TM-DPIA-4 | M9 counsel re-check flag | Rep-performance coaching (backlog M9) requires counsel/DPO re-check before shipping. Only transparent, aggregate, rep-visible coaching is admissible; covert manager scoreboards are explicitly rejected ([[scope#NEVER-8]]); works-council agreement where required (Germany, BetrVG §87(1)(6)); re-run the AI-Act Annex III analysis if scope drifts toward worker evaluation. |
 | TM-DPIA-5 | Build gap — privacy notice | The privacy notice must state AI processing of captured content (Art. 13/14). Recorded for build; open until closed. |
-| TM-DPIA-6 | Build gap — contact-facing SAR | Erasure is MVP; the subject-access-request package is fast-follow. The scope decision (promote contact-facing SAR to V1?) is open and owned by product. |
+| TM-DPIA-6 | Build gap — contact-facing SAR | Erasure is MVP; the SAR flow is admin-mediated in V1 with a contact-facing portal fast-follow (decided — Lars, 2026-06-22; pinned at [[gdpr-compliance-surfaces#GCS-PARAM-5]]). |

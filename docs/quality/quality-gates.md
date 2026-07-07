@@ -1,7 +1,7 @@
 ---
 derives-from:
   - margince-poc/docs/quality/quality-gates.md
-  - margince specs/spec/architecture/05-test-architecture.md#2-the-five-mandated-guardrail-tests
+  - specs/spec/architecture/05-test-architecture.md#2-the-five-mandated-guardrail-tests
 ---
 # Quality gates — every check, what it verifies, where it blocks
 
@@ -99,7 +99,7 @@ aggregate target).
 | QG-4 | `go-file-length` | No Go file exceeds the file-length cap (the "god file" guard) | Aggregate + CI |
 | QG-5 | `govulncheck` | No known security vulnerability (CVE) in a dependency or in our own code — adds the public CVE database on top of QG-3's SAST/import guards | Aggregate + CI |
 | QG-6 | `gen-types-check` | The generated Go + TypeScript types still match the API contract | Aggregate + CI |
-| QG-7 | `contract-breaking-check` | No breaking change to the API contract since the default branch — severity-classified: breaking blocks; additive fields and deprecations pass | Aggregate + CI |
+| QG-7 | `contract-breaking-check` | No breaking change to the API contract since the default branch — severity-classified: breaking blocks; additive fields and deprecations pass. **Blocking only when `CONTRACT_STABILITY=stable`; advisory (detect-and-print) while `pre-live`, the default until first external consumer** (CP-BREAK-26 / ADR-0017 Amendment 3) | Aggregate + CI |
 | QG-8 | `gen-manifests-check` | The generated wiring matches the connectors/workflows/tools on disk | Aggregate + CI |
 | QG-9 | `arch-lint` | Code only imports across module boundaries through an allowed seam — the module map is respected | Aggregate + CI |
 | QG-10 | `fitness-jurisdiction` | No country-specific code or strings leak into the shared core | Aggregate + CI |
@@ -131,7 +131,7 @@ Notes carried from the source registry:
   rather than invented as a registry row.
 
 ### Acceptance — guardrail tests
-Source: margince specs/spec/architecture/05-test-architecture.md#2-the-five-mandated-guardrail-tests @ 5a0b29c
+Source: specs/spec/architecture/05-test-architecture.md#2-the-five-mandated-guardrail-tests @ 5a0b29c
 
 The five mandated, merge-blocking guardrail tests. IDs are corpus IDs, preserved
 verbatim.

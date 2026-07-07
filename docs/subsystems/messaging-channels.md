@@ -2,9 +2,9 @@
 status: planned
 module: backend/internal/modules/capture
 derives-from:
-  - margince specs/spec/features/02-capture-and-comms.md#feature-7--messaging-capture-whatsapp--telegram-adr-0022
-  - margince specs/spec/features/02-capture-and-comms.md#cross-cutting-acceptance-criteria-whole-surface
-  - margince specs/spec/decisions/ADR-0022-capture-build-borrow-boundary.md
+  - specs/spec/features/02-capture-and-comms.md#feature-7--messaging-capture-whatsapp--telegram-adr-0022
+  - specs/spec/features/02-capture-and-comms.md#cross-cutting-acceptance-criteria-whole-surface
+  - specs/spec/decisions/ADR-0022-capture-build-borrow-boundary.md
 ---
 # Messaging channels — WhatsApp & Telegram on the record, honest about who is in the path
 

@@ -2,12 +2,12 @@
 status: planned
 module: backend/internal/modules/people
 derives-from:
-  - margince specs/spec/features/01-core-objects.md#10-offers--angebote--the-bounded-line-item-quote-engine-a48adr-0037
-  - margince specs/spec/features/07-ai-native-moments.md#5e-offerangebot-authoring--draft-from-context--regenerate-from-signal
-  - margince specs/spec/contract/data-model.md#126-offers--angebote-the-bounded-line-item-quote-engine--a48adr-0037
-  - margince specs/spec/decisions/ADR-0037-offers-angebote-engine.md
-  - margince specs/spec/product/epics/E03-pipeline-and-deals.md#s-e037--build-send--close-on-a-real-offer-angebot-ai-drafted-from-the-conversation
-  - margince specs/spec/product/30-screen-acceptance.md#offerhtml--offer--angebote-builder-implements-s-e037
+  - specs/spec/features/01-core-objects.md#10-offers--angebote--the-bounded-line-item-quote-engine-a48adr-0037
+  - specs/spec/features/07-ai-native-moments.md#5e-offerangebot-authoring--draft-from-context--regenerate-from-signal
+  - specs/spec/contract/data-model.md#126-offers--angebote-the-bounded-line-item-quote-engine--a48adr-0037
+  - specs/spec/decisions/ADR-0037-offers-angebote-engine.md
+  - specs/spec/product/epics/E03-pipeline-and-deals.md#s-e037--build-send--close-on-a-real-offer-angebot-ai-drafted-from-the-conversation
+  - specs/spec/product/30-screen-acceptance.md#offerhtml--offer--angebote-builder-implements-s-e037
 ---
 # Offers & products — the Angebot as a first-class sales record: AI-drafted, server-priced, immutable once sent
 

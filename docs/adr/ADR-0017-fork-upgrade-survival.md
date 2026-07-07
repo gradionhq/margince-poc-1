@@ -42,3 +42,21 @@ This makes the *client-custom-column* edge collision-proof rather than disciplin
 - **Indexes built `CONCURRENTLY`**; new `CHECK`/`NOT NULL` added `NOT VALID` then `VALIDATE`d separately; column adds are nullable-then-backfilled-in-batches (expand/contract, mechanized).
 - **Backfills batched** as River jobs, never inline in the migration.
 - **Runtime add-field (ADR-0002 Amendment 2) obeys all of the above.** On a multi-tenant shared binary it runs under the online-DDL discipline and, for large tables, is gated behind a maintenance-window scheduler so a tenant-initiated `ALTER TABLE` cannot stall other tenants; on single-tenant deployments it runs immediately. Removes the "tenant-initiated DDL is an availability bomb" hole.
+
+## Amendment 3 (2026-07-07) — pre-1.0 contract stance: the HTTP breaking-change gate is advisory until first external consumer
+
+Decision 1's "additive, deprecate-before-remove, `oasdiff`-gated on release" rule for the HTTP contract (`crm.yaml`) exists to protect **external API/MCP consumers**. Before any exist, the rule protects no one and instead forces avoidable ceremony: a breaking realignment of the contract to its own spec (e.g. removing a wrong enum value or an unwanted property) has to be laundered through a deprecate-then-remove window against consumers that are not there. The three spec-gate escalations of 2026-07-04 (poc-1 #58 the sharpest) were this ceremony surfacing as a human decision on every breaking contract edit.
+
+**Decision.** The contract carries an explicit **stability stance** with two states:
+
+- **`pre-live` (the default until the milestone below).** `crm.yaml` has no external consumers. Breaking changes to the HTTP contract — enum-value removal/renumber (CP-BREAK-13), property removal (CP-BREAK-9), operation removal without a deprecation window (CP-BREAK-17) — are made **directly**, not via deprecate-then-remove. The `oasdiff` HTTP breaking-change gate (`check-contract-breaking.sh`, ADR-0015 wiring) runs **advisory**: it still detects and prints every breaking change, but does not block the merge.
+- **`stable` (from the milestone on).** The full Decision-1 posture returns — `--fail-on ERR`, deprecate-before-remove, expand/contract — because breaking now breaks someone.
+
+**The stability milestone** (the flip point) is **the first external consumer of the contract**: a design partner granted API/MCP access, or a published connector, whichever comes first. Flipping is a one-line, reviewed change (`CONTRACT_STABILITY=stable`) plus a `BREAKING:`-tagged changelog note that the contract is now frozen going forward.
+
+**Scope — deliberately narrow.** This carve-out is the **HTTP/wire contract only**. It does **not** touch:
+- the **seam-interface freeze** (Decision 1's Go-interface half, CP-BREAK-1..6/21..23) — a seam a fork *implements* stays additive-only regardless of stance;
+- the **migration namespaces, expand/contract, and `x_`-column guard** (Decisions 2/3, Amendment 1) — those protect fork *source* and *data*, which is a separate consumer class from API clients;
+- the **drift gate** (generated code vs contract) — always blocking; being pre-live never licenses committing stale generated types.
+
+**Trade-off, stated.** Defaulting to `pre-live` means the HTTP breaking-change gate ships *off-by-default* — a safety gate you must remember to arm. Mitigated by: the gate printing its stance loudly on every run, this ADR and CP-BREAK-26 naming the exact flip condition, and the flip being a tracked changelog event rather than a silent config drift.

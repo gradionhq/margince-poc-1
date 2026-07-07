@@ -1,5 +1,5 @@
 ---
-derives-from: margince specs/spec/decisions/ (ADR-0001…ADR-0052 + DECISIONS.md); margince-poc docs/decisions/README.md (index format) @ 5a0b29c
+derives-from: specs/spec/decisions/ (ADR-0001…ADR-0052 + DECISIONS.md); margince-poc docs/decisions/README.md (index format) @ 5a0b29c
 ---
 # Decisions (ADRs)
 

@@ -3,8 +3,8 @@ status: skeleton
 module: backend/internal/platform
 derives-from:
   - margince-poc/docs/subsystems/audit-observability.md
-  - margince specs/spec/contract/data-model.md#11-audit-log
-  - margince specs/spec/narrative/06-nonfunctional.md#66-observability
+  - specs/spec/contract/data-model.md#11-audit-log
+  - specs/spec/narrative/06-nonfunctional.md#66-observability
 ---
 # Audit & observability — the wall every mutation crosses
 

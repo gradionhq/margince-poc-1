@@ -1,7 +1,7 @@
 ---
 derives-from:
   - margince-poc/docs/product.md (frozen)
-  - margince specs/spec/narrative/01-prfaq.md#press-release
+  - specs/spec/narrative/01-prfaq.md#press-release
 ---
 # What Margince is
 

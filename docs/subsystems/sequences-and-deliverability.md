@@ -2,16 +2,16 @@
 status: planned
 module: backend/internal/modules/comms · frontend/src/features/sequences
 derives-from:
-  - margince specs/spec/features/06-deliverability-and-migration.md#part-1--email-sending--deliverability @ 5a0b29c
-  - margince specs/spec/features/02-capture-and-comms.md#feature-4--email-templates--sequences--cadences @ 5a0b29c
-  - margince specs/spec/features/02-capture-and-comms.md#feature-5--telephony-click-to-call-auto-log @ 5a0b29c
-  - margince specs/spec/features/10-operational-depth.md#5-outreach-engine-promotes-d43-reply-tracking-d45-sequences-d411-bulk-activity-d48-telephony @ 5a0b29c
-  - margince specs/spec/product/epics/E15-operational-depth.md#s-e155--sequences-reply-tracking--bulk-activity @ 5a0b29c
-  - margince specs/spec/product/epics/E11-access-trust-exit.md#s-e119--buyer-facing-preference-center--one-click-unsubscribe @ 5a0b29c
-  - margince specs/spec/product/build-backlog/E15.md#e-outreach-engine-features10-5 @ 5a0b29c
-  - margince specs/spec/contract/data-model.md#12-deferred-tables @ 5a0b29c
-  - margince specs/spec/contract/events.md#511-engagement--signals-e08-warm-room-e15-reply-tracking @ 5a0b29c
-  - margince specs/spec/product/30-screen-acceptance.md#sequenceshtml--sequence-builder--reply-tracking-implements-s-e155a-s-e155b @ 5a0b29c
+  - specs/spec/features/06-deliverability-and-migration.md#part-1--email-sending--deliverability @ 5a0b29c
+  - specs/spec/features/02-capture-and-comms.md#feature-4--email-templates--sequences--cadences @ 5a0b29c
+  - specs/spec/features/02-capture-and-comms.md#feature-5--telephony-click-to-call-auto-log @ 5a0b29c
+  - specs/spec/features/10-operational-depth.md#5-outreach-engine-promotes-d43-reply-tracking-d45-sequences-d411-bulk-activity-d48-telephony @ 5a0b29c
+  - specs/spec/product/epics/E15-operational-depth.md#s-e155--sequences-reply-tracking--bulk-activity @ 5a0b29c
+  - specs/spec/product/epics/E11-access-trust-exit.md#s-e119--buyer-facing-preference-center--one-click-unsubscribe @ 5a0b29c
+  - specs/spec/product/build-backlog/E15.md#e-outreach-engine-features10-5 @ 5a0b29c
+  - specs/spec/contract/data-model.md#12-deferred-tables @ 5a0b29c
+  - specs/spec/contract/events.md#511-engagement--signals-e08-warm-room-e15-reply-tracking @ 5a0b29c
+  - specs/spec/product/30-screen-acceptance.md#sequenceshtml--sequence-builder--reply-tracking-implements-s-e155a-s-e155b @ 5a0b29c
 ---
 # Sequences and deliverability — gated outbound that reaches the inbox and stops the moment someone replies
 
@@ -267,7 +267,7 @@ preference center), and [[event-bus]] (the reply event that stops a cadence).
 ## Appendix
 
 ### Parameters
-Source: margince specs/spec/features/06-deliverability-and-migration.md#12-deliverability-mechanics @ 5a0b29c; margince specs/spec/product/30-screen-acceptance.md#sequenceshtml--sequence-builder--reply-tracking-implements-s-e155a-s-e155b @ 5a0b29c
+Source: specs/spec/features/06-deliverability-and-migration.md#12-deliverability-mechanics @ 5a0b29c; specs/spec/product/30-screen-acceptance.md#sequenceshtml--sequence-builder--reply-tracking-implements-s-e155a-s-e155b @ 5a0b29c
 
 | ID | Name | Value | Meaning |
 |---|---|---|---|
@@ -285,7 +285,7 @@ bulk-actions screen ([[access-and-admin]], AC-bulk-actions-6); the approval-toke
 TTLs are [[approvals-and-concurrency#APPR-PARAM-1]]..2.
 
 ### Formulas
-Source: margince specs/spec/features/06-deliverability-and-migration.md#13-how-this-wires-into-sequences-and-the-agent-send-path @ 5a0b29c; margince specs/spec/features/10-operational-depth.md#5-outreach-engine-promotes-d43-reply-tracking-d45-sequences-d411-bulk-activity-d48-telephony @ 5a0b29c
+Source: specs/spec/features/06-deliverability-and-migration.md#13-how-this-wires-into-sequences-and-the-agent-send-path @ 5a0b29c; specs/spec/features/10-operational-depth.md#5-outreach-engine-promotes-d43-reply-tracking-d45-sequences-d411-bulk-activity-d48-telephony @ 5a0b29c
 
 **SEQDEL-FORM-1 — the send gate (deterministic, ordered; every transmit path).**
 Inputs: a send intent (sender principal, recipients, purpose, optional approval
@@ -332,7 +332,7 @@ the same step would auto-send, paced within the daily cap. One enrolled recipien
 (hard-bounced earlier) is on the suppression table and receives nothing either way.
 
 ### Schema
-Source: margince specs/spec/contract/data-model.md#12-deferred-tables @ 5a0b29c
+Source: specs/spec/contract/data-model.md#12-deferred-tables @ 5a0b29c
 
 Ownership verified against the data-model chapter's ownership index: the deferred
 sequence tables are assigned to this chapter ([[data-model]] Schema — deferred
@@ -425,7 +425,7 @@ Telephony adds no table: a call lands as an activity row (owned by
 platform blob conventions.
 
 ### Wire
-Source: margince specs/spec/contract/crm.yaml (deferred-stub comment block: `/sequences`, `/sequences/{id}/steps`, `/enrollments`, `/calls`, `/telephony/*`) @ 5a0b29c
+Source: specs/spec/contract/crm.yaml (deferred-stub comment block: `/sequences`, `/sequences/{id}/steps`, `/enrollments`, `/calls`, `/telephony/*`) @ 5a0b29c
 
 **Honest contract-coverage finding (SEQDEL-GAP-2, D-H2 contract-extension item):**
 at pin time the contract defines **no** sequence, enrolment, telephony,
@@ -452,7 +452,7 @@ recipient without proven consent for the purpose answers 409 `consent_not_grante
 | SEQDEL-WIRE-7 | preference-center read/save | Public signed-link surface (no login); reads per-purpose consent state, saves staged changes as append-only consent proof events with wording + timestamp ([[gdpr-platform]]); DE/EN. |
 
 ### Events
-Source: margince specs/spec/contract/events.md#511-engagement--signals-e08-warm-room-e15-reply-tracking @ 5a0b29c; margince specs/spec/contract/events.md#5-the-catalog @ 5a0b29c
+Source: specs/spec/contract/events.md#511-engagement--signals-e08-warm-room-e15-reply-tracking @ 5a0b29c; specs/spec/contract/events.md#5-the-catalog @ 5a0b29c
 
 Event definitions live in the central catalog ([[event-bus]]) — cited here, never
 redefined.
@@ -472,7 +472,7 @@ in the central catalog with that contract extension — this chapter deliberatel
 does not invent them here.
 
 ### Tools
-Source: margince specs/spec/features/02-capture-and-comms.md#feature-4--email-templates--sequences--cadences @ 5a0b29c; margince specs/spec/decisions/ADR-0026-per-tool-autonomy-tiers.md @ 5a0b29c
+Source: specs/spec/features/02-capture-and-comms.md#feature-4--email-templates--sequences--cadences @ 5a0b29c; specs/spec/decisions/ADR-0026-per-tool-autonomy-tiers.md @ 5a0b29c
 
 The governed tool registry is owned by [[intent-tools]]; pinned here are only the
 tier declarations this chapter's operations carry.
@@ -485,7 +485,7 @@ tier declarations this chapter's operations carry.
 | SEQDEL-TOOL-4 | `draft_email` | 🟢 | Cited for contrast — drafting is free, transmit is gated; owned by [[drafting]]. |
 
 ### Acceptance
-Source: margince specs/spec/product/epics/E15-operational-depth.md#s-e155--sequences-reply-tracking--bulk-activity @ 5a0b29c; margince specs/spec/product/20-traceability.md @ 5a0b29c
+Source: specs/spec/product/epics/E15-operational-depth.md#s-e155--sequences-reply-tracking--bulk-activity @ 5a0b29c; specs/spec/product/20-traceability.md @ 5a0b29c
 
 **Owned stories** (primacy verified against the traceability register):
 
@@ -500,7 +500,7 @@ Source: margince specs/spec/product/epics/E15-operational-depth.md#s-e155--seque
 | S-E12.3 | Start sequence / insert AI draft from inbox | V1-Must | **[[client-surfaces]]** — cited, not owned here |
 
 **Feature acceptance criteria (verbatim from the feature spec).**
-Source: margince specs/spec/features/02-capture-and-comms.md#feature-4--email-templates--sequences--cadences @ 5a0b29c
+Source: specs/spec/features/02-capture-and-comms.md#feature-4--email-templates--sequences--cadences @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -511,7 +511,7 @@ Source: margince specs/spec/features/02-capture-and-comms.md#feature-4--email-te
 | AC4.5 | Bounce/unsubscribe auto-updates contact status and adds them to suppression. *(test)* | Backend integration lane |
 | AC4.6 | **(user-observable)** The rep opens a draft reply/follow-up that is already personalized from the contact's captured history (recent activity, deal stage) rather than a blank composer or a raw template, and can edit it; nothing is sent until they explicitly approve the send. The user can always see they are approving, not auto-sending (S-E07.1). | Screen e2e lane (draft content: [[drafting]]) |
 
-Source: margince specs/spec/features/02-capture-and-comms.md#feature-5--telephony-click-to-call-auto-log @ 5a0b29c
+Source: specs/spec/features/02-capture-and-comms.md#feature-5--telephony-click-to-call-auto-log @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -521,7 +521,7 @@ Source: margince specs/spec/features/02-capture-and-comms.md#feature-5--telephon
 | AC5.4 | Logged call appears on the timeline within **60 s p95** of hangup. | Performance gate |
 
 **Deliverability acceptance criteria (verbatim from the feature spec).**
-Source: margince specs/spec/features/06-deliverability-and-migration.md#15-acceptance-criteria @ 5a0b29c
+Source: specs/spec/features/06-deliverability-and-migration.md#15-acceptance-criteria @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -538,7 +538,7 @@ Source: margince specs/spec/features/06-deliverability-and-migration.md#15-accep
 
 **Outreach-engine acceptance criteria (verbatim from the promotion of record;
 corpus bullets carry no IDs — minted here).**
-Source: margince specs/spec/features/10-operational-depth.md#5-outreach-engine-promotes-d43-reply-tracking-d45-sequences-d411-bulk-activity-d48-telephony @ 5a0b29c
+Source: specs/spec/features/10-operational-depth.md#5-outreach-engine-promotes-d43-reply-tracking-d45-sequences-d411-bulk-activity-d48-telephony @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -550,7 +550,7 @@ Source: margince specs/spec/features/10-operational-depth.md#5-outreach-engine-p
 | SEQDEL-AC-6 | A **no-open-pixel test** asserts no tracking-pixel / covert-open mechanism exists — reply, not open, is the only engagement signal (the honest-signal decision, BACKLOG §I; RT-PR-H2). | Static check + backend integration lane (per B-E15.18; bus semantics [[event-bus#EVT-SEM-14]]) |
 
 **Sequences screen acceptance criteria (verbatim; corpus IDs preserved).**
-Source: margince specs/spec/product/30-screen-acceptance.md#sequenceshtml--sequence-builder--reply-tracking-implements-s-e155a-s-e155b @ 5a0b29c
+Source: specs/spec/product/30-screen-acceptance.md#sequenceshtml--sequence-builder--reply-tracking-implements-s-e155a-s-e155b @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -564,7 +564,7 @@ Source: margince specs/spec/product/30-screen-acceptance.md#sequenceshtml--seque
 | AC-sequences-8 | Given the right-rail Bulk activity panel, When the user clicks Enrol / Log / Task, Then the action stages as one governed, audited batch bounded by permissions, with partial failures reported rather than silently dropped. | Screen e2e lane (batch engine: [[access-and-admin]]) |
 
 **Telephony screen acceptance criteria (verbatim; corpus IDs preserved).**
-Source: margince specs/spec/product/30-screen-acceptance.md#telephonyhtml--click-to-call--recording-implements-s-e156 @ 5a0b29c
+Source: specs/spec/product/30-screen-acceptance.md#telephonyhtml--click-to-call--recording-implements-s-e156 @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -578,7 +578,7 @@ Source: margince specs/spec/product/30-screen-acceptance.md#telephonyhtml--click
 | AC-telephony-8 | Given staged follow-ups exist, When I click "Accept all & add to timeline", Then the staged items persist, the dashed staging banner is replaced by a green "Added to the timeline" confirmation linking to Anna Weber and the deal with provenance captured_by=agent:telephony; or When I click "Dismiss", Then the staged card is hidden and a toast notes the call is kept as a bare log entry only. | Screen e2e lane |
 
 **Preference-center screen acceptance criteria (verbatim; corpus IDs preserved).**
-Source: margince specs/spec/product/30-screen-acceptance.md#preference-centerhtml--buyer-preference-center-implements-s-e119 @ 5a0b29c
+Source: specs/spec/product/30-screen-acceptance.md#preference-centerhtml--buyer-preference-center-implements-s-e119 @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -604,7 +604,7 @@ carries the owner's ID):
 | R5c pixel guard | No per-recipient open-pixel path ships (static check); deal-room view tracking is disclosed and consent-gated | [[deal-rooms]] (features/08 §5b) |
 
 **Open build decisions (carried honestly — the build tickets must resolve them).**
-Source: margince specs/spec/product/30-screen-acceptance.md#sequenceshtml--sequence-builder--reply-tracking-implements-s-e155a-s-e155b @ 5a0b29c (States & edge cases, "Missing in prototype")
+Source: specs/spec/product/30-screen-acceptance.md#sequenceshtml--sequence-builder--reply-tracking-implements-s-e155a-s-e155b @ 5a0b29c (States & edge cases, "Missing in prototype")
 
 | ID | Decision needed | Verification |
 |---|---|---|

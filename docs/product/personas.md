@@ -1,6 +1,6 @@
 ---
 derives-from:
-  - margince specs/spec/product/01-personas.md
+  - specs/spec/product/01-personas.md
 ---
 # Personas — the five people the product is judged by
 

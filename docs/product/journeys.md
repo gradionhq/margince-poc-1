@@ -1,6 +1,6 @@
 ---
 derives-from:
-  - margince specs/spec/product/10-journeys.md
+  - specs/spec/product/10-journeys.md
 ---
 # Journeys — the demo script and the dogfood probe in one
 

@@ -2,15 +2,15 @@
 status: planned
 module: backend/internal/modules/people (transport) + backend/internal/modules/directory (spine stores) + frontend/src/features/people
 derives-from:
-  - margince specs/spec/features/01-core-objects.md#1-people--contacts @ 5a0b29c
-  - margince specs/spec/features/01-core-objects.md#2-organizations--companies @ 5a0b29c
-  - margince specs/spec/contract/formulas-and-rules.md#1-dedupe-matching--person--org @ 5a0b29c
-  - margince specs/spec/contract/formulas-and-rules.md#4-relationship-strength-baseline--recency--frequency--reciprocity @ 5a0b29c
-  - margince specs/spec/contract/data-model.md#3-people @ 5a0b29c
-  - margince specs/spec/contract/data-model.md#4-organizations @ 5a0b29c
-  - margince specs/spec/contract/data-model.md#5-the-typed-relationship-table @ 5a0b29c
-  - margince specs/spec/product/epics/E02-zero-entry-capture.md @ 5a0b29c
-  - margince specs/spec/product/30-screen-acceptance.md#22-people--orgs @ 5a0b29c
+  - specs/spec/features/01-core-objects.md#1-people--contacts @ 5a0b29c
+  - specs/spec/features/01-core-objects.md#2-organizations--companies @ 5a0b29c
+  - specs/spec/contract/formulas-and-rules.md#1-dedupe-matching--person--org @ 5a0b29c
+  - specs/spec/contract/formulas-and-rules.md#4-relationship-strength-baseline--recency--frequency--reciprocity @ 5a0b29c
+  - specs/spec/contract/data-model.md#3-people @ 5a0b29c
+  - specs/spec/contract/data-model.md#4-organizations @ 5a0b29c
+  - specs/spec/contract/data-model.md#5-the-typed-relationship-table @ 5a0b29c
+  - specs/spec/product/epics/E02-zero-entry-capture.md @ 5a0b29c
+  - specs/spec/product/30-screen-acceptance.md#22-people--orgs @ 5a0b29c
 ---
 # People & organizations — the relational spine that builds itself
 
@@ -916,7 +916,7 @@ every row: the live-stack UI lane ([[testing#TEST-LANE-3]]); the standard screen
 | AC-person-5 | Given the warm-room signal card (E08), When it renders, Then it shows a "Warm signal" flag, a headline, a "high confidence" indicator, an AI suggestion, and a "Show the evidence" toggle revealing the captured quote with source + why-warm rationale. |
 | AC-person-6 | Given the warm-signal action footer, When I click "Draft a reply" / "Send booking link" / "Create follow-up", Then each is confirm-first / accept-to-persist (nothing sent or persisted without approval); "Dismiss" dismisses the signal and feeds agent learning. |
 | AC-person-7 | Given the Record tabs (Activity / Deals / Notes), When I select a tab, Then only that pane shows; Activity is the default. |
-| AC-person-8 | Given the Activity tab, When it renders, Then every timeline row carries a kind (Email/Meeting/Call), a body, and a provenance chip ("connector · Gmail thread" etc.), with a caption "You logged none of this — every row carries its source." |
+| AC-person-8 | Given the Activity tab, When it renders, Then every timeline row carries a kind (Email/Meeting/Call), a body, and a provenance chip naming its capture source ("connector · Gmail thread" for a Gmail-captured email), with a caption "You logged none of this — every row carries its source." |
 | AC-person-9 | Given the Notes tab with no notes, When it renders, Then it shows an empty state plus a textarea labelled "will be typed-by-you"; saving a non-empty note marks it typed-by-you (🟢); saving empty is rejected. |
 | AC-person-10 | Given the Consent (per purpose) card, When it renders, Then it lists each purpose with grant/withdrawal timestamp + source + policy version, states outbound is default-deny per purpose (unknown = no-consent; a grant for one purpose never authorises another), and "View consent history" opens the append-only proof log. |
 | AC-person-11 | Given the "Enriched from signature" card, When it renders, Then it shows the captured signature quote, a source line, an "agent:enrich" chip, and a confidence indicator. |

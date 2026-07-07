@@ -2,14 +2,14 @@
 status: planned
 module: backend/internal/modules/meetings (dossier, transcript intelligence, booking, profiler); web (booking + profiler surfaces)
 derives-from:
-  - margince specs/spec/features/02-capture-and-comms.md#feature-2--call--meeting-transcription-capture
-  - margince specs/spec/features/07-ai-native-moments.md#5-meeting--transcript-intelligence
-  - margince specs/spec/features/07-ai-native-moments.md#5b-deal-qualification-checklist-agentic-gap-only
-  - margince specs/spec/features/07-ai-native-moments.md#5c-smart-booking--self-scheduling-link
-  - margince specs/spec/features/07-ai-native-moments.md#5d-deep-research-person-profiler
-  - margince specs/spec/product/epics/E04-meetings-and-calls.md
-  - margince specs/spec/product/30-screen-acceptance.md#bookhtml--public-meeting-booking-implements-s-e041
-  - margince specs/spec/product/30-screen-acceptance.md#profilerhtml--deep-research-person-profiler-implements-s-e046
+  - specs/spec/features/02-capture-and-comms.md#feature-2--call--meeting-transcription-capture
+  - specs/spec/features/07-ai-native-moments.md#5-meeting--transcript-intelligence
+  - specs/spec/features/07-ai-native-moments.md#5b-deal-qualification-checklist-agentic-gap-only
+  - specs/spec/features/07-ai-native-moments.md#5c-smart-booking--self-scheduling-link
+  - specs/spec/features/07-ai-native-moments.md#5d-deep-research-person-profiler
+  - specs/spec/product/epics/E04-meetings-and-calls.md
+  - specs/spec/product/30-screen-acceptance.md#bookhtml--public-meeting-booking-implements-s-e041
+  - specs/spec/product/30-screen-acceptance.md#profilerhtml--deep-research-person-profiler-implements-s-e046
 ---
 # Meetings & transcripts — the conversation is the record; the human only confirms it
 

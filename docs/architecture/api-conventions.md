@@ -1,10 +1,10 @@
 ---
 derives-from:
   - margince-poc/docs/architecture/api-conventions.md
-  - margince specs/spec/contract/README.md#conventions
-  - margince specs/spec/contract/interfaces.md#0-conventions-for-every-interface-here
-  - margince specs/spec/contract/api-rate-limits-and-abuse.md#1-rest-api-limits
-  - margince specs/spec/features/05-notifications-and-collaboration.md#the-versionetag-approach-normative
+  - specs/spec/contract/README.md#conventions
+  - specs/spec/contract/interfaces.md#0-conventions-for-every-interface-here
+  - specs/spec/contract/api-rate-limits-and-abuse.md#1-rest-api-limits
+  - specs/spec/features/05-notifications-and-collaboration.md#the-versionetag-approach-normative
 ---
 # API conventions — one wire contract for humans and agents
 

@@ -1,8 +1,8 @@
 ---
 derives-from:
   - margince-poc/docs/quality/craftsmanship.md (frozen)
-  - margince specs/spec/architecture/15-code-craftsmanship.md#2-the-anti-tell-catalog
-  - margince specs/spec/architecture/18-code-quality-operating-model.md#1-the-three-tier-enforcement-model
+  - specs/spec/architecture/15-code-craftsmanship.md#2-the-anti-tell-catalog
+  - specs/spec/architecture/18-code-quality-operating-model.md#1-the-three-tier-enforcement-model
 ---
 # Code craftsmanship — the quality bar, in two layers
 
@@ -56,7 +56,12 @@ up toward "the reviewer will catch it."
   decisions belong to the admission gate rather than inside handlers (CRAFT-DECAY-6).
 - **The lint gate** (owner: the architect plus the gate itself). Formatting, vet, the committed lint
   ruleset, the file-length cap, the dependency-DAG check, codegen drift, and the test suite: style,
-  idiom, complexity, swallowed errors, SQL injection, DAG edges, and doc–code drift.
+  idiom, complexity, swallowed errors, SQL injection, DAG edges, and doc–code drift. The **`craft static`**
+  subcommand (the `static` package of this `cli/craft` binary, ADR-0045 Am.1) is the deterministic arm of
+  *this* gate for the objective anti-tells — `swallowed-errors` and `test-sleep` as BLOCKER; `boolean-trap`,
+  `naked-any`, `panic-in-domain`, `assertion-free-test`, `large-file`, `long-func` as MAJOR;
+  `todo-without-ref` as MINOR. It runs before the taste gate, stdlib-only, no tokens; false positives are
+  waived in-source with a reason (`//craft:ignore <check> <reason>`).
 - **The taste gate** (owner: the taste gate). An LLM rubric over the diff against the anti-tell
   catalog: over-abstraction, textbook naming, papered-over edge cases — the tells a linter cannot
   see.

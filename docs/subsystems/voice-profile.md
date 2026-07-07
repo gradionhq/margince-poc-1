@@ -2,11 +2,11 @@
 status: planned
 module: modules/voice (backend) · web (voice management surface)
 derives-from:
-  - margince specs/spec/features/07-ai-native-moments.md#7-voice-dna
-  - margince specs/spec/features/09-onboarding-and-voice-tasks.md#b-voice-dna-fd-14--v1-wow
-  - margince specs/spec/product/epics/E07-voice-and-drafting.md#s-e072--voice-dna-the-draft-sounds-like-me
-  - margince specs/spec/contract/data-model.md#voice--drafting-e07--features07-features09
-  - margince specs/spec/product/30-screen-acceptance.md#voicehtml--voice-profile-management-implements-s-e0712
+  - specs/spec/features/07-ai-native-moments.md#7-voice-dna
+  - specs/spec/features/09-onboarding-and-voice-tasks.md#b-voice-dna-fd-14--v1-wow
+  - specs/spec/product/epics/E07-voice-and-drafting.md#s-e072--voice-dna-the-draft-sounds-like-me
+  - specs/spec/contract/data-model.md#voice--drafting-e07--features07-features09
+  - specs/spec/product/30-screen-acceptance.md#voicehtml--voice-profile-management-implements-s-e0712
   - margince-poc/docs/subsystems/voice.md @ a11d6c08
 ---
 # Voice profile — drafts that sound like you, learned only from your own words
@@ -198,7 +198,7 @@ voice drafts ride), and [[ai-evals]] (the voice-draft quality band).
 ## Appendix
 
 ### Parameters
-Source: margince specs/spec/features/09-onboarding-and-voice-tasks.md#b-voice-dna-fd-14--v1-wow @ 5a0b29c; margince specs/spec/features/07-ai-native-moments.md#7-voice-dna @ 5a0b29c
+Source: specs/spec/features/09-onboarding-and-voice-tasks.md#b-voice-dna-fd-14--v1-wow @ 5a0b29c; specs/spec/features/07-ai-native-moments.md#7-voice-dna @ 5a0b29c
 
 | ID | Name | Value | Meaning |
 |---|---|---|---|
@@ -210,7 +210,7 @@ The cross-cutting AI budgets and screen-state floor are [[acceptance-standards]]
 draft-quality eval thresholds are [[ai-evals]]'s (AIEVAL-12/13) — cited, not owned here.
 
 ### Schema
-Source: margince specs/spec/contract/data-model.md#voice--drafting-e07--features07-features09 @ 5a0b29c
+Source: specs/spec/contract/data-model.md#voice--drafting-e07--features07-features09 @ 5a0b29c
 
 Ownership verified against the data-model chapter's ownership index: `voice_profile` and
 `voice_corpus_source` are assigned to this chapter ([[data-model]] Schema — ownership
@@ -255,7 +255,7 @@ the build ticket lands; §B is the decided source of truth for the shape, the DD
 the current corpus baseline.
 
 ### Wire
-Source: margince specs/spec/contract/crm.yaml @ 5a0b29c; margince specs/spec/contract/data-model.md#voice--drafting-e07--features07-features09 @ 5a0b29c
+Source: specs/spec/contract/crm.yaml @ 5a0b29c; specs/spec/contract/data-model.md#voice--drafting-e07--features07-features09 @ 5a0b29c
 
 Honest report: **no voice operations exist in the contract at the pinned corpus version**
 — `crm.yaml` @ 5a0b29c defines no `operationId` for profile read, identity edit
@@ -269,7 +269,7 @@ reversible via versioning); no voice operation may ever be or invoke a send —
 [[drafting]]'s send operation (its DRAFT-WIRE-2) is the only outbound door and stays 🟡.
 
 ### Events
-Source: margince specs/spec/contract/events.md#5-the-catalog @ 5a0b29c
+Source: specs/spec/contract/events.md#5-the-catalog @ 5a0b29c
 
 Honest report: the central catalog defines **no voice events** @ 5a0b29c — no
 profile-rebuilt, version, or corpus-source events exist. Continuous learning consumes the
@@ -280,7 +280,7 @@ fall under the one-mutation-one-audit-one-event rule ([[event-bus#EVT-SEM-1]]) a
 catalog rows added catalog-first with the contract work.
 
 ### Acceptance
-Source: margince specs/spec/product/epics/E07-voice-and-drafting.md#s-e072--voice-dna-the-draft-sounds-like-me @ 5a0b29c; margince specs/spec/product/20-traceability.md @ 5a0b29c
+Source: specs/spec/product/epics/E07-voice-and-drafting.md#s-e072--voice-dna-the-draft-sounds-like-me @ 5a0b29c; specs/spec/product/20-traceability.md @ 5a0b29c
 
 **Owned stories** (primacy verified against the traceability register; the epic-to-chapter
 split in [[scope]] assigns E07 to [[drafting]] plus this chapter):
@@ -304,7 +304,7 @@ source bullets are unnumbered).**
 | VOICE-AC-5 | Given Sam wants to see why a draft sounds the way it does, when Sam asks, then the CRM can point to the kind of past messages the voice was learned from (Sam's own corpus), so the personalization is inspectable and Sam-owned, not a black box trained on others. | Screen e2e lane (corpus provenance renders — AC-voice-1/9) |
 
 **Task-level exit gates (verbatim from the feature decomposition).**
-Source: margince specs/spec/features/09-onboarding-and-voice-tasks.md#b-voice-dna-fd-14--v1-wow @ 5a0b29c
+Source: specs/spec/features/09-onboarding-and-voice-tasks.md#b-voice-dna-fd-14--v1-wow @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -318,7 +318,7 @@ Source: margince specs/spec/features/09-onboarding-and-voice-tasks.md#b-voice-dn
 **Voice screen acceptance criteria (verbatim; corpus IDs preserved).** The screen→story
 index tags this screen to S-E07.1/.2; the surface is the voice management screen and is
 owned here — its sample-draft rows exercise [[drafting]]'s baseline path, cited not owned.
-Source: margince specs/spec/product/30-screen-acceptance.md#voicehtml--voice-profile-management-implements-s-e0712 @ 5a0b29c
+Source: specs/spec/product/30-screen-acceptance.md#voicehtml--voice-profile-management-implements-s-e0712 @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
@@ -326,7 +326,7 @@ Source: margince specs/spec/product/30-screen-acceptance.md#voicehtml--voice-pro
 | AC-voice-2 | Given the hero stats, When they render, Then they show words-in-corpus, samples, sources, and quality band — the quantified Voice Profile. | Screen e2e lane |
 | AC-voice-3 | Given the "Learning continuously" bar, When it renders, Then it shows the weekly delta ("+N words this week from M sent emails & K calls"), states there is no re-training step to trigger, and offers "see what changed →" surfacing what shifted. | Screen e2e lane |
 | AC-voice-4 | Given the Identity card, When it renders, Then it shows a prose voice description and an "Edit identity" control; editing saves as typed-by-you and is "kept on rebuild". | Screen e2e lane (full-document replacement — features/09 B5.2, decided) |
-| AC-voice-5 | Given the Stats-snapshot card, When it renders, Then it shows quantified style metrics (sentence length, questions, exclaims, em-dash rate, etc.) "per 100 words where rated" and a "Top words" list with counts. | Screen e2e lane |
+| AC-voice-5 | Given the Stats-snapshot card, When it renders, Then it shows quantified style metrics (at minimum: sentence length, questions, exclaims, em-dash rate) "per 100 words where rated" and a "Top words" list with counts. | Screen e2e lane |
 | AC-voice-6 | Given the Signature moves and Anti-patterns cards, When they render, Then signature moves list positive patterns (checks) and anti-patterns list forbidden patterns (x), e.g. "Never em-dashes." | Screen e2e lane |
 | AC-voice-7 | Given the "Sample drafts in your voice" card, When it renders, Then it shows ≥2 live example drafts each with a "🟡 draft only" pill and "every real draft lands draft-only, never sent automatically." | Screen e2e lane |
 | AC-voice-8 | Given the never-send gate note, When it renders, Then it states drafts are always yours to approve; Voice DNA style-transfers but never sends/advances a deal regardless of confidence; the 🟡 send gate is inherited, never relaxed. | Screen e2e lane |
@@ -341,7 +341,7 @@ nothing-grounded) is inherited from [[acceptance-standards]] (STATE-1..5) and no
 restated.
 
 **Open build decisions (carried honestly — the build tickets must resolve them).**
-Source: margince specs/spec/features/09-onboarding-and-voice-tasks.md#b-voice-dna-fd-14--v1-wow @ 5a0b29c; margince specs/spec/product/30-screen-acceptance.md#voicehtml--voice-profile-management-implements-s-e0712 @ 5a0b29c
+Source: specs/spec/features/09-onboarding-and-voice-tasks.md#b-voice-dna-fd-14--v1-wow @ 5a0b29c; specs/spec/product/30-screen-acceptance.md#voicehtml--voice-profile-management-implements-s-e0712 @ 5a0b29c
 
 | ID | Decision needed | Verification |
 |---|---|---|

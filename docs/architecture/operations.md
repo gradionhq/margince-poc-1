@@ -1,12 +1,12 @@
 ---
 derives-from:
-  - margince specs/spec/narrative/06-nonfunctional.md#63-the-three-deployment-modes--the-customization-posture
-  - margince specs/spec/narrative/06-nonfunctional.md#66-observability
-  - margince specs/spec/narrative/06-nonfunctional.md#67-scalability
-  - margince specs/spec/narrative/06-nonfunctional.md#68-backup--disaster-recovery
-  - margince specs/spec/narrative/06-nonfunctional.md#610-operational-runtime-addendum-deep-red-team-2026-06-23
-  - margince specs/spec/architecture/09-build-release-config.md#part-a--build-determinism--releaseversioning-m6
-  - margince specs/spec/architecture/09-build-release-config.md#part-b--config--secrets-plumbing-as-code-structure-m7
+  - specs/spec/narrative/06-nonfunctional.md#63-the-three-deployment-modes--the-customization-posture
+  - specs/spec/narrative/06-nonfunctional.md#66-observability
+  - specs/spec/narrative/06-nonfunctional.md#67-scalability
+  - specs/spec/narrative/06-nonfunctional.md#68-backup--disaster-recovery
+  - specs/spec/narrative/06-nonfunctional.md#610-operational-runtime-addendum-deep-red-team-2026-06-23
+  - specs/spec/architecture/09-build-release-config.md#part-a--build-determinism--releaseversioning-m6
+  - specs/spec/architecture/09-build-release-config.md#part-b--config--secrets-plumbing-as-code-structure-m7
 ---
 # Operations — Gradion ships software; an operator keeps it alive
 
@@ -226,7 +226,7 @@ boundary, and the security chapter for the release and conformity machinery.
 ## Appendix
 
 ### Parameters — deployment modes
-Source: margince specs/spec/narrative/06-nonfunctional.md#63-the-three-deployment-modes--the-customization-posture @ 5a0b29c
+Source: specs/spec/narrative/06-nonfunctional.md#63-the-three-deployment-modes--the-customization-posture @ 5a0b29c
 
 | ID | Mode | Operated by | Customization posture | Delivery mechanism |
 |---|---|---|---|---|
@@ -240,7 +240,7 @@ Source: margince specs/spec/narrative/06-nonfunctional.md#63-the-three-deploymen
 | OPS-MODE-5 | **Source customization and shared multi-tenant hosting are never offered in the same mode** (P1/P2/P7): source freedom is a single-tenant property (OPS-MODE-2/3); the partner-hosted tier gets bounded configuration + vertical templates instead (the runtime-config register). No runtime metadata engine exists in any mode. |
 
 ### Parameters — config precedence & profiles
-Source: margince specs/spec/architecture/09-build-release-config.md#b1-the-config-loading-layer-precedence; #b2-the-profile-selector--egress-posture--model-routing-a8-ladder; #b3-the-credential-injection-seam-credentials-never-enter-model-context; #b4-opsdeploy-flags-vs-product-runtime-config-disambiguation--review-correction-f @ 5a0b29c
+Source: specs/spec/architecture/09-build-release-config.md#b1-the-config-loading-layer-precedence; #b2-the-profile-selector--egress-posture--model-routing-a8-ladder; #b3-the-credential-injection-seam-credentials-never-enter-model-context; #b4-opsdeploy-flags-vs-product-runtime-config-disambiguation--review-correction-f @ 5a0b29c
 
 | ID | Rule |
 |---|---|
@@ -255,7 +255,7 @@ Source: margince specs/spec/architecture/09-build-release-config.md#b1-the-confi
 | OPS-CFG-9 | **Ops flags vs product config:** operational/deploy configuration (the profile selector, kill switches, rollout gates, endpoints, topology) shapes *whether/where the software runs*, is operator-set through this layer, and is **P1-exempt** — it never appears in the runtime-config register. Anything that shapes *what the product does for users* is product runtime config and must be a register row ([[runtime-config#RC-REG-1]]). |
 
 ### Parameters — DR
-Source: margince specs/spec/narrative/06-nonfunctional.md#68-backup--disaster-recovery; #610-operational-runtime-addendum-deep-red-team-2026-06-23 @ 5a0b29c
+Source: specs/spec/narrative/06-nonfunctional.md#68-backup--disaster-recovery; #610-operational-runtime-addendum-deep-red-team-2026-06-23 @ 5a0b29c
 
 | ID | Name | Value | Meaning |
 |---|---|---|---|
@@ -273,7 +273,7 @@ Source: margince specs/spec/narrative/06-nonfunctional.md#68-backup--disaster-re
 | OPS-DR-9 | **Trivial full export in open formats** (P7) is both the anti-lock-in feature and the recovery/exit path of last resort. |
 
 ### Parameters — secrets & storage ops
-Source: margince specs/spec/narrative/06-nonfunctional.md#610-operational-runtime-addendum-deep-red-team-2026-06-23 @ 5a0b29c
+Source: specs/spec/narrative/06-nonfunctional.md#610-operational-runtime-addendum-deep-red-team-2026-06-23 @ 5a0b29c
 
 | ID | Rule |
 |---|---|
@@ -284,7 +284,7 @@ Source: margince specs/spec/narrative/06-nonfunctional.md#610-operational-runtim
 | OPS-STOR-5 | **Read-your-writes:** a write busts the entity's read-model cache key **synchronously in the commit hook** (not only via the async read-model consumer), so the writer reads its own write; other readers converge eventually. Connection pooling is transaction-mode ([[data-model#DM-CONV-7]]), compatible with transaction-scoped settings. |
 
 ### Wire — structured log schema
-Source: margince specs/spec/narrative/06-nonfunctional.md#610-operational-runtime-addendum-deep-red-team-2026-06-23 @ 5a0b29c
+Source: specs/spec/narrative/06-nonfunctional.md#610-operational-runtime-addendum-deep-red-team-2026-06-23 @ 5a0b29c
 
 Fixed base fields — every log line carries all of them (error fields on errors only):
 
@@ -309,7 +309,7 @@ Fixed base fields — every log line carries all of them (error fields on errors
 | OPS-LOG-14 | **Tracing spans async hops:** the event envelope carries **W3C `traceparent`** alongside the domain `correlation_id`, so one trace spans outbox → relay → stream → consumer unbroken; a long-running agent run (including its suspend window) is one trace, with a span per reason-act cycle. (The envelope definition is owned by the event-bus chapter.) |
 
 ### Wire — metrics
-Source: margince specs/spec/narrative/06-nonfunctional.md#610-operational-runtime-addendum-deep-red-team-2026-06-23 @ 5a0b29c
+Source: specs/spec/narrative/06-nonfunctional.md#610-operational-runtime-addendum-deep-red-team-2026-06-23 @ 5a0b29c
 
 The named V1 metric set:
 
@@ -329,7 +329,7 @@ The named V1 metric set:
 | OPS-MET-9 | **All labels are bounded.** No `workspace_id` or entity-id labels, ever — per-workspace and per-entity detail goes to logs and traces; metric cardinality is bounded/bucketed at multi-tenant scale. |
 
 ### Limits — queue & stream hygiene
-Source: margince specs/spec/narrative/06-nonfunctional.md#610-operational-runtime-addendum-deep-red-team-2026-06-23 @ 5a0b29c
+Source: specs/spec/narrative/06-nonfunctional.md#610-operational-runtime-addendum-deep-red-team-2026-06-23 @ 5a0b29c
 
 | ID | Rule |
 |---|---|

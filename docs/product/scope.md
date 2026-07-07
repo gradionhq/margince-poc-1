@@ -1,8 +1,8 @@
 ---
 derives-from:
-  - margince specs/spec/product/00-overview.md#tier-taxonomy-the-product-priority-axis
-  - margince specs/spec/product/20-traceability.md#tier-roll-up
-  - margince specs/spec/product/epics/ (E01–E20)
+  - specs/spec/product/00-overview.md#tier-taxonomy-the-product-priority-axis
+  - specs/spec/product/20-traceability.md#tier-roll-up
+  - specs/spec/product/epics/ (E01–E20)
 ---
 # Scope — what ships, and what explicitly does not
 

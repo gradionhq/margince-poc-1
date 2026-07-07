@@ -3,7 +3,7 @@ status: skeleton
 module: backend/internal/platform
 derives-from:
   - margince-poc/docs/subsystems/overlay-budget.md @ a11d6c08
-  - margince specs/spec/narrative/03e-overlay-augmentation.md#31-incumbent-api-rate-limits--latency-bottleneck-the-agents @ 5a0b29c
+  - specs/spec/narrative/03e-overlay-augmentation.md#31-incumbent-api-rate-limits--latency-bottleneck-the-agents @ 5a0b29c
 ---
 # Overlay budget — the per-incumbent consumption meter
 
@@ -111,7 +111,7 @@ api-conventions chapter for the budget-exhausted error contract.
 ## Appendix
 
 ### Parameters
-Source: margince-poc/docs/subsystems/overlay-budget.md#how-it-works @ a11d6c08; margince specs/spec/narrative/03e-overlay-augmentation.md#31-incumbent-api-rate-limits--latency-bottleneck-the-agents @ 5a0b29c
+Source: margince-poc/docs/subsystems/overlay-budget.md#how-it-works @ a11d6c08; specs/spec/narrative/03e-overlay-augmentation.md#31-incumbent-api-rate-limits--latency-bottleneck-the-agents @ 5a0b29c
 
 These are the skeleton's shipped defaults and this chapter is their single home — the
 corpus leaves incumbent-budget calibration open, so these values stand until ratified
@@ -127,7 +127,7 @@ deliberately not pinned here.)
 | OVB-PARAM-5 | Unknown-headroom sentinel | `~unknown` | Rendered wherever headroom cannot be attributed to our own counts; never replaced by a fabricated number. |
 
 ### Acceptance
-Source: margince-poc/docs/subsystems/overlay-budget.md#guarantees-enforced @ a11d6c08; margince specs/spec/narrative/03e-overlay-augmentation.md#62-machine-verifiable-acceptance-criteria @ 5a0b29c
+Source: margince-poc/docs/subsystems/overlay-budget.md#guarantees-enforced @ a11d6c08; specs/spec/narrative/03e-overlay-augmentation.md#62-machine-verifiable-acceptance-criteria @ 5a0b29c
 
 | ID | Given/When/Then | Verification |
 |---|---|---|
