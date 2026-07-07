@@ -11,7 +11,7 @@ import (
 
 	"github.com/gradionhq/margince/backend/internal/modules/people/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
-	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 )
 
@@ -19,7 +19,7 @@ import (
 // event and one audit_log row in the same workspace-scoped tx. The record must
 // already be archived and must not be a merge target.
 func (s *PersonStore) Restore(ctx context.Context, id, workspaceID string) (domain.Person, error) {
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		var archivedAt sql.NullTime
 		var mergedInto sql.NullString
 		if err := tx.QueryRowContext(ctx, `

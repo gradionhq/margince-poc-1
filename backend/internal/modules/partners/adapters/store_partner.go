@@ -10,7 +10,7 @@ import (
 
 	"github.com/gradionhq/margince/backend/internal/modules/partners/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
-	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 )
@@ -73,7 +73,7 @@ func (s *PartnerStore) Upsert(ctx context.Context, p domain.Partner) (domain.Par
 
 	var partnerID string
 	var inserted bool
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, p.WorkspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, p.WorkspaceID, func(tx *sql.Tx) error {
 		row := tx.QueryRowContext(ctx, `
 			INSERT INTO partner (
 			    id, workspace_id, organization_id, cert_status, partner_role, margin_tier,
@@ -133,7 +133,7 @@ func (s *PartnerStore) Upsert(ctx context.Context, p domain.Partner) (domain.Par
 // Get returns the live partner row extending organizationID; ErrNotFound if absent.
 func (s *PartnerStore) Get(ctx context.Context, organizationID, workspaceID string) (domain.Partner, error) {
 	var p domain.Partner
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		row := tx.QueryRowContext(ctx, `
 			SELECT id, workspace_id, organization_id, cert_status, partner_role, margin_tier,
 			       certified_staff, retention_rate, joined_at, renews_at,
@@ -161,7 +161,7 @@ func (s *PartnerStore) List(ctx context.Context, workspaceID, cursor string, lim
 	}
 
 	out := []domain.Partner{}
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		args := []any{workspaceID, cursor, limit + 1}
 		where := ""
 		if filter.PartnerRole != "" {

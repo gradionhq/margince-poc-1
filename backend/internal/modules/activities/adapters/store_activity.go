@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/gradionhq/margince/backend/internal/modules/activities/domain"
-	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 )
@@ -117,7 +117,7 @@ func (s *ActivityStore) Create(ctx context.Context, a domain.Activity) (domain.A
 		return domain.Activity{}, err
 	}
 	a.ID = ids.New()
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, a.WorkspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, a.WorkspaceID, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO activity (id, workspace_id, kind, subject, body,
 			    occurred_at, due_at, assignee_id, remind_at, is_done, duration_seconds,
@@ -139,7 +139,7 @@ func (s *ActivityStore) Create(ctx context.Context, a domain.Activity) (domain.A
 // Get returns one activity by id, workspace-scoped; ErrNotFound if absent.
 func (s *ActivityStore) Get(ctx context.Context, id, workspaceID string) (domain.Activity, error) {
 	var a domain.Activity
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		return tx.QueryRowContext(ctx, `
 			SELECT id, workspace_id, kind, subject, body,
 			       occurred_at, due_at, assignee_id, remind_at, is_done, done_at,
@@ -172,7 +172,7 @@ func (s *ActivityStore) List(ctx context.Context, workspaceID, entityType, entit
 	curOccurred, curID, hasCursor := decodeKeysetCursor(cursor)
 
 	out := []domain.Activity{}
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		var rows *sql.Rows
 		var err error
 		if entityType != "" && entityID != "" {
@@ -260,7 +260,7 @@ func (s *ActivityStore) Update(ctx context.Context, id, workspaceID string, upda
 		}
 	}
 
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		// The optimistic-concurrency guard is folded into the WHERE: ifMatch==0 skips the
 		// version check (last-write-wins); a non-zero ifMatch requires the row version to match.
 		res, err := tx.ExecContext(ctx, `
@@ -306,7 +306,7 @@ func (s *ActivityStore) Update(ctx context.Context, id, workspaceID string, upda
 
 // Archive soft-deletes an activity (sets archived_at).
 func (s *ActivityStore) Archive(ctx context.Context, id, workspaceID string) (domain.Activity, error) {
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx,
 			`UPDATE activity SET archived_at=now() WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
 			id, workspaceID)
@@ -321,7 +321,7 @@ func (s *ActivityStore) Archive(ctx context.Context, id, workspaceID string) (do
 // getAny fetches an activity by id regardless of archived_at status.
 func (s *ActivityStore) getAny(ctx context.Context, id, workspaceID string) (domain.Activity, error) {
 	var a domain.Activity
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		return tx.QueryRowContext(ctx, `
 			SELECT id, workspace_id, kind, subject, body,
 			       occurred_at, due_at, assignee_id, remind_at, is_done, done_at,

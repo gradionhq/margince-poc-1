@@ -1,6 +1,6 @@
 // Package adapters — OrgStore CRUD (organizations module, WS-E-a).
 // Ported from modules/directory/store_org.go (package crmcore → package adapters).
-// withWorkspaceTx → workspacetx.WithWorkspaceTx.
+// withWorkspaceTx → database.WithWorkspaceTx.
 package adapters
 
 import (
@@ -13,7 +13,7 @@ import (
 
 	"github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
-	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/dedupe"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
@@ -68,7 +68,7 @@ func (s *OrgStore) Create(ctx context.Context, o domain.Organization) (domain.Or
 	o.Classification = classification
 	o.Domains = domains
 	var reviewFlag *dedupe.ReviewFlag
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, o.WorkspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, o.WorkspaceID, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO organization (id, workspace_id, name, website, classification, relevance,
 			    owner_id, social, address, source, captured_by, version)
@@ -146,7 +146,7 @@ func insertOrgDomains(ctx context.Context, tx *sql.Tx, workspaceID, orgID string
 func (s *OrgStore) Get(ctx context.Context, id, workspaceID string) (domain.Organization, error) {
 	var o domain.Organization
 	var socialRaw, addrRaw []byte
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		err := tx.QueryRowContext(ctx, `
 			SELECT id, workspace_id, name, website, classification, relevance,
 			       owner_id, social, address, parent_org_id, merged_into_id,
@@ -185,7 +185,7 @@ func (s *OrgStore) Get(ctx context.Context, id, workspaceID string) (domain.Orga
 // organization.updated outbox event in the same tx (PO-AC-3, GATE-CORE-3/5); ifMatch==0
 // skips the version check (last-write-wins).
 func (s *OrgStore) Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (domain.Organization, error) {
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		var res sql.Result
 		var err error
 		if ifMatch == 0 {
@@ -246,7 +246,7 @@ func (s *OrgStore) Update(ctx context.Context, id, workspaceID string, updates m
 // organization.archived outbox event in the same tx when a row was actually
 // archived (mirrors PersonStore.Archive's n>0 guard).
 func (s *OrgStore) Archive(ctx context.Context, id, workspaceID string) (domain.Organization, error) {
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,
 			`UPDATE organization SET archived_at=now() WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
 			id, workspaceID)
@@ -278,7 +278,7 @@ func (s *OrgStore) Archive(ctx context.Context, id, workspaceID string) (domain.
 // It refuses live records, merged records, and restores that would collide with an
 // active domain on another organization.
 func (s *OrgStore) Restore(ctx context.Context, id, workspaceID string) (domain.Organization, error) {
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		var archivedAt sql.NullTime
 		var mergedInto sql.NullString
 		if err := tx.QueryRowContext(ctx, `
@@ -346,7 +346,7 @@ func (s *OrgStore) Restore(ctx context.Context, id, workspaceID string) (domain.
 func (s *OrgStore) GetAny(ctx context.Context, id, workspaceID string) (domain.Organization, error) {
 	var o domain.Organization
 	var socialRaw, addrRaw []byte
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		err := tx.QueryRowContext(ctx, `
 			SELECT id, workspace_id, name, website, classification, relevance,
 			       owner_id, social, address, parent_org_id, merged_into_id,

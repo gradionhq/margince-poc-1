@@ -14,7 +14,7 @@ import (
 
 	"github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
-	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 )
 
@@ -116,7 +116,7 @@ func (s *OrgStore) Merge(ctx context.Context, loserID, targetID, workspaceID str
 	if loserID == targetID {
 		return domain.Organization{}, ErrSelfMerge
 	}
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		state, err := validateOrgMergePair(ctx, tx, loserID, targetID, workspaceID)
 		if err != nil {
 			return err

@@ -10,7 +10,7 @@ import (
 
 	"github.com/gradionhq/margince/backend/internal/modules/people/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
-	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 )
 
@@ -123,7 +123,7 @@ func (s *PersonStore) Merge(ctx context.Context, loserID, targetID, workspaceID 
 	if loserID == targetID {
 		return domain.Person{}, ErrSelfMerge
 	}
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		state, err := validateMergePair(ctx, tx, loserID, targetID, workspaceID)
 		if err != nil {
 			return err

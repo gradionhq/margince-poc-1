@@ -9,12 +9,12 @@ import (
 
 	"github.com/gradionhq/margince/backend/internal/modules/people/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
-	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 )
 
 // Archive soft-deletes a person and returns the archived entity.
 func (s *PersonStore) Archive(ctx context.Context, id, workspaceID string) (domain.Person, error) {
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,
 			`UPDATE person SET archived_at=now() WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
 			id, workspaceID)

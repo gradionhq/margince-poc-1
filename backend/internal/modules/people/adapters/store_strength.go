@@ -11,7 +11,7 @@ import (
 	"github.com/lib/pq"
 
 	"github.com/gradionhq/margince/backend/internal/modules/people/domain"
-	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/strength"
 )
 
@@ -44,7 +44,7 @@ func (s *PersonStore) listByStrength(ctx context.Context, workspaceID, cursor st
 	offset := decodeOffsetCursor(cursor)
 	// Non-nil so an empty result marshals to a JSON array ([]), never null.
 	all := []domain.Person{}
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `
 			SELECT id, workspace_id, full_name, first_name, last_name, title,
 			       owner_id, social, version, source, captured_by, created_at, updated_at
@@ -224,7 +224,7 @@ func (s *PersonStore) StrengthBreakdown(ctx context.Context, id, workspaceID str
 		return strength.Result{}, err
 	}
 	var result strength.Result
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		byPerson, err := s.strengthActivitiesFor(ctx, tx, workspaceID, []string{id})
 		if err != nil {
 			return err

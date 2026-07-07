@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
-	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 )
 
 func buildOrgListWhere(f domain.OrgListFilter, args []any, n int) (string, []any) {
@@ -67,7 +67,7 @@ func (s *OrgStore) List(ctx context.Context, workspaceID, cursor string, limit i
 
 func (s *OrgStore) listByOrgID(ctx context.Context, workspaceID, cursor string, limit int, filter domain.OrgListFilter) ([]domain.Organization, string, error) {
 	out := []domain.Organization{}
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		args := []any{workspaceID, cursor, limit + 1}
 		extraWhere, args := buildOrgListWhere(filter, args, 3)
 		//nolint:gosec // G202: extraWhere injects only bound-param indices ($N); all filter values are passed via args
@@ -118,7 +118,7 @@ func (s *OrgStore) listByOrgID(ctx context.Context, workspaceID, cursor string, 
 func (s *OrgStore) listByOrgStrength(ctx context.Context, workspaceID, cursor string, limit int, descending bool, filter domain.OrgListFilter) ([]domain.Organization, string, error) {
 	offset := decodeOffsetCursor(cursor)
 	all := []domain.Organization{}
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		args := []any{workspaceID}
 		extraWhere, args := buildOrgListWhere(filter, args, 1)
 		//nolint:gosec // G202: extraWhere injects only bound-param indices ($N); all filter values are passed via args

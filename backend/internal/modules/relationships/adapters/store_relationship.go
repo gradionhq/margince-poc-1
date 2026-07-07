@@ -13,7 +13,7 @@ import (
 
 	"github.com/gradionhq/margince/backend/internal/modules/relationships/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
-	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 )
@@ -130,7 +130,7 @@ func (s *RelationshipStore) Create(ctx context.Context, rel domain.Relationship)
 		return domain.Relationship{}, err
 	}
 	rel.ID = ids.New()
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, rel.WorkspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, rel.WorkspaceID, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO relationship (
 			    id, workspace_id, kind, person_id, organization_id, deal_id,
@@ -171,7 +171,7 @@ func (s *RelationshipStore) Create(ctx context.Context, rel domain.Relationship)
 // absent or archived.
 func (s *RelationshipStore) Get(ctx context.Context, id, workspaceID string) (domain.Relationship, error) {
 	var rel domain.Relationship
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		row := tx.QueryRowContext(ctx,
 			`SELECT `+relationshipSelectCols+` FROM relationship
 			 WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
@@ -193,7 +193,7 @@ func (s *RelationshipStore) List(ctx context.Context, workspaceID, cursor string
 	}
 
 	out := []domain.Relationship{}
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		args := []any{workspaceID, cursor, limit + 1}
 		where := ""
 		if !filter.IncludeArchived {
@@ -253,7 +253,7 @@ func (s *RelationshipStore) List(ctx context.Context, workspaceID, cursor string
 func (s *RelationshipStore) Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (domain.Relationship, error) {
 	var kind string
 	var personID, dealID *string
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		err := tx.QueryRowContext(ctx, `
 			UPDATE relationship
 			SET role       = COALESCE($3, role),
@@ -307,7 +307,7 @@ func (s *RelationshipStore) Update(ctx context.Context, id, workspaceID string, 
 // Archive soft-deletes a relationship and returns the archived row. Repeating
 // the archive is a no-op.
 func (s *RelationshipStore) Archive(ctx context.Context, id, workspaceID string) (domain.Relationship, error) {
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		var kind string
 		var personID, dealID *string
 		if err := tx.QueryRowContext(ctx,
@@ -353,7 +353,7 @@ func (s *RelationshipStore) Archive(ctx context.Context, id, workspaceID string)
 // getAny fetches a relationship by id regardless of archived_at status.
 func (s *RelationshipStore) getAny(ctx context.Context, id, workspaceID string) (domain.Relationship, error) {
 	var rel domain.Relationship
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		row := tx.QueryRowContext(ctx,
 			`SELECT `+relationshipSelectCols+` FROM relationship
 			 WHERE id=$1::uuid AND workspace_id=$2::uuid`,

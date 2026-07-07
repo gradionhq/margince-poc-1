@@ -18,7 +18,7 @@ import (
 
 	"github.com/gradionhq/margince/backend/internal/modules/people/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
-	"github.com/gradionhq/margince/backend/internal/platform/workspacetx"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/dedupe"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
@@ -113,7 +113,7 @@ func (s *PersonStore) Create(ctx context.Context, p domain.Person, emails []doma
 	social := marshalJSON(p.Social)
 	address := marshalJSON(p.Address)
 	var reviewFlag *dedupe.ReviewFlag
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, p.WorkspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, p.WorkspaceID, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO person (id, workspace_id, full_name, first_name, last_name, title,
 			    owner_id, social, address, source, captured_by, version)
@@ -191,7 +191,7 @@ func insertPersonEmails(ctx context.Context, tx *sql.Tx, workspaceID, personID, 
 func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (domain.Person, error) {
 	var p domain.Person
 	var socialRaw, addrRaw []byte
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		err := tx.QueryRowContext(ctx, `
 			SELECT id, workspace_id, full_name, first_name, last_name, title,
 			       owner_id, social, address, merged_into_id, converted_from_lead_id,
@@ -235,7 +235,7 @@ func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (domain.P
 func (s *PersonStore) GetAny(ctx context.Context, id, workspaceID string) (domain.Person, error) {
 	var p domain.Person
 	var socialRaw, addrRaw []byte
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		err := tx.QueryRowContext(ctx, `
 			SELECT id, workspace_id, full_name, first_name, last_name, title,
 			       owner_id, social, address, merged_into_id, converted_from_lead_id,
@@ -290,7 +290,7 @@ func (s *PersonStore) List(ctx context.Context, workspaceID, cursor string, limi
 func (s *PersonStore) listByID(ctx context.Context, workspaceID, cursor string, limit int) ([]domain.Person, string, error) {
 	// Non-nil so an empty result marshals to a JSON array ([]), never null.
 	out := []domain.Person{}
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `
 			SELECT id, workspace_id, full_name, first_name, last_name, title,
 			       owner_id, social, version, source, captured_by, created_at, updated_at
@@ -341,7 +341,7 @@ func (s *PersonStore) listByID(ctx context.Context, workspaceID, cursor string, 
 // Update applies partial updates to a person using optimistic concurrency.
 // When ifMatch==0 the version check is skipped (last-write-wins).
 func (s *PersonStore) Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (domain.Person, error) {
-	err := workspacetx.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		var res sql.Result
 		var err error
 		if ifMatch == 0 {

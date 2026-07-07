@@ -71,7 +71,6 @@ components:
   database:     { in: internal/platform/database }
   httpserver:   { in: internal/platform/httpserver }
   toolgate:     { in: internal/platform/toolgate }
-  workspacetx:  { in: internal/platform/workspacetx }
   # Tier-1 / Tier-2 domain modules
   identity:          { in: internal/modules/identity }
   identitytransport: { in: internal/modules/identity/transport }
@@ -159,8 +158,6 @@ deps:
   dedupekern:
     canUse: [text]
   # Tier-1 platform
-  workspacetx:
-    mayDependOn: [crmctx]
   identity:
     mayDependOn: [identityadapters, keyvault]
   identityadapters:
@@ -181,7 +178,7 @@ deps:
   orgsports:
     mayDependOn: [orgsdomain]
   orgsadapters:
-    mayDependOn: [orgsdomain, errs, ids, prov, workspacetx, audit, dedupekern, strengthkern]
+    mayDependOn: [orgsdomain, errs, ids, prov, database, audit, dedupekern, strengthkern]
     canUse: [pq]
   organizations:
     mayDependOn: [orgsdomain, orgsadapters]
@@ -192,7 +189,7 @@ deps:
   activitiesports:
     mayDependOn: [activitiesdomain]
   activitiesadapters:
-    mayDependOn: [activitiesdomain, errs, ids, workspacetx]
+    mayDependOn: [activitiesdomain, errs, ids, database]
     canUse: [pq]
   activitiesapp:
     mayDependOn: [activitiesdomain, activitiesports]
@@ -205,7 +202,7 @@ deps:
   relsports:
     mayDependOn: [relsdomain]
   relsadapters:
-    mayDependOn: [relsdomain, errs, ids, workspacetx, audit]
+    mayDependOn: [relsdomain, errs, ids, database, audit]
     canUse: [pq]
   relsapp:
     mayDependOn: [relsports]
@@ -222,7 +219,7 @@ deps:
   leadsports:
     mayDependOn: [leadsdomain]
   leadsadapters:
-    mayDependOn: [leadsdomain, errs, ids, workspacetx, audit]
+    mayDependOn: [leadsdomain, errs, ids, audit]
     canUse: [pq]
   leads:
     mayDependOn: [leadsdomain, leadsadapters, prov]
@@ -231,7 +228,7 @@ deps:
   partnersports:
     mayDependOn: [partnersdomain]
   partnersadapters:
-    mayDependOn: [partnersdomain, errs, ids, workspacetx, audit]
+    mayDependOn: [partnersdomain, errs, ids, database, audit]
     canUse: [pq]
   partners:
     mayDependOn: [partnersdomain, partnersadapters, prov]
@@ -267,7 +264,7 @@ deps:
   dealsports:
     mayDependOn: [dealsdomain]
   dealsadapters:
-    mayDependOn: [dealsdomain, errs, ids, workspacetx, audit, database]
+    mayDependOn: [dealsdomain, errs, ids, audit, database]
     canUse: [pq]
   # dealstransport now owns pipeline/stage AND deal-entity handlers (WS-E-b).
   dealstransport:
@@ -279,7 +276,7 @@ deps:
   peopleports:
     mayDependOn: [peopledomain, strengthkern]
   peopleadapters:
-    mayDependOn: [peopledomain, errs, ids, prov, workspacetx, dedupekern, strengthkern, audit, database]
+    mayDependOn: [peopledomain, errs, ids, prov, dedupekern, strengthkern, audit, database]
     canUse: [pq]
   people:
     mayDependOn: [peopledomain, peopleadapters, prov]
