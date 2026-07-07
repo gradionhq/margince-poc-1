@@ -30,9 +30,9 @@ func buildAllOperations(k *routeKit) *server.AllOperations {
 	}
 
 	return server.NewAllOperations(
-		server.PeopleAdapter{H: peopletransport.NewPersonHandler(directory.NewPersonStore(k.db), directory.NewRelationshipStore(k.db), directory.NewDealStore(k.db), directory.NewActivityStore(k.db), k.db)},
-		server.OrganizationsAdapter{H: dealtransport.NewOrganizationHandler(directory.NewOrgStore(k.db), directory.NewRelationshipStore(k.db), directory.NewDealStore(k.db), directory.NewActivityStore(k.db), k.db)},
-		server.DealsAdapter{H: dealtransport.NewDealHandler(directory.NewDealStore(k.db), directory.NewRelationshipStore(k.db), directory.NewActivityStore(k.db), k.db)},
+		server.PeopleAdapter{H: peopletransport.NewPersonHandler(directory.NewPersonStore(k.db), directory.NewRelationshipStore(k.db), directory.NewDealStore(k.db), directory.NewActivityStore(k.db), k.verifier)},
+		server.OrganizationsAdapter{H: dealtransport.NewOrganizationHandler(directory.NewOrgStore(k.db), directory.NewRelationshipStore(k.db), directory.NewDealStore(k.db), directory.NewActivityStore(k.db), k.verifier)},
+		server.DealsAdapter{H: dealtransport.NewDealHandler(directory.NewDealStore(k.db), directory.NewRelationshipStore(k.db), directory.NewActivityStore(k.db), k.verifier)},
 		server.PipelinesAdapter{
 			P: dealstransport.NewPipelineHandler(deals.NewPipelineStore(k.db), deals.NewStageStore(k.db), deals.NewRollupStore(k.db)),
 			S: dealstransport.NewStageHandler(deals.NewStageStore(k.db)),
