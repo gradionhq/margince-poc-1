@@ -8,7 +8,6 @@ package transport
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -16,12 +15,19 @@ import (
 	"strings"
 	"time"
 
-	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
-	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
+	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
+	"github.com/gradionhq/margince/backend/internal/shared/ports/mcp"
 )
+
+// advanceDealTool is the advanceDeal x-mcp-tool declaration (DEAL-WIRE-4,
+// advance_deal/deal/dynamic — see tools_gen.go's generated table). Its tier
+// is resolved per-call by the "target_stage_semantic" resolver (registered
+// at cmd/api composition, backed by deals.ResolveDynamicTier).
+var advanceDealTool = mcp.GeneratedTool{OperationID: "advanceDeal", Verb: "advance_deal", RecordType: "deal", Tier: mcp.TierDynamic, Resolver: "target_stage_semantic"}
 
 const (
 	codeStageNotInPipeline = "stage_not_in_pipeline"
@@ -55,15 +61,16 @@ type DealHandler struct {
 	store         stageSemanticReader
 	relStore      dealStakeholderReader
 	activityStore *directory.ActivityStore
-	db            *sql.DB // used only for VerifyAndConsume on the 🟡 advance path
+	verifier      approvalsport.Verifier // used only by the 🟡 advance path's toolgate.Enforce call
 }
 
 // NewDealHandler returns a DealHandler. relStore backs listDealStakeholders
 // and the deal-360 stakeholders array; activityStore backs the deal-360
-// timeline array; db is the raw pool the approval-token consumption seam
-// writes through — kept separate from store so store tx boundaries are untouched.
-func NewDealHandler(store *directory.DealStore, relStore *directory.RelationshipStore, activityStore *directory.ActivityStore, db *sql.DB) *DealHandler {
-	return &DealHandler{store: store, relStore: relStore, activityStore: activityStore, db: db}
+// timeline array; verifier is the approval-token verify/consume seam
+// toolgate.Enforce calls on the 🟡 advance path — kept separate from store
+// so store tx boundaries are untouched.
+func NewDealHandler(store *directory.DealStore, relStore *directory.RelationshipStore, activityStore *directory.ActivityStore, verifier approvalsport.Verifier) *DealHandler {
+	return &DealHandler{store: store, relStore: relStore, activityStore: activityStore, verifier: verifier}
 }
 
 // ServeHTTP dispatches on method + path suffix.
@@ -322,35 +329,34 @@ func (h *DealHandler) advance(w http.ResponseWriter, r *http.Request, id string)
 }
 
 // checkApprovalGate enforces the X-Approval-Token requirement for agent
-// callers on 🟡 transitions. Returns false if the request was rejected (w
-// already has a problem response); returns true to let the caller proceed.
-// Green-tier transitions and human callers always return true without writing.
+// callers on 🟡 transitions via toolgate.Enforce (AC-D2): the
+// "target_stage_semantic" dynamic resolver (registered at cmd/api
+// composition) re-derives the tier from from_semantic/to_semantic, so this
+// call site no longer computes deals.ResolveTier directly. Returns false if
+// the request was rejected (w already has a problem response); returns true
+// to let the caller proceed. Green-tier transitions and human callers always
+// return true without writing.
 func (h *DealHandler) checkApprovalGate(r *http.Request, w http.ResponseWriter, id, wsID, fromSemantic, toSemantic, toStageID string, lostReason *string, ifMatch int64, p crmctx.Principal) bool {
-	if deals.ResolveTier(fromSemantic, toSemantic) != deals.TierYellow || !p.IsAgent {
-		return true
-	}
-	token := r.Header.Get("X-Approval-Token")
-	if token == "" {
-		jsonProblem(w, http.StatusForbidden, "approval_required")
-		return false
-	}
 	diffFields := map[string]any{
-		"deal_id":      id,
-		fieldToStageID: toStageID,
-		"status":       toSemantic,
+		"deal_id":       id,
+		fieldToStageID:  toStageID,
+		"status":        toSemantic,
+		"from_semantic": fromSemantic,
+		"to_semantic":   toSemantic,
 	}
 	if lostReason != nil {
 		diffFields["lost_reason"] = *lostReason
 	}
-	diffHash := crmapprovals.HashDiff(diffFields)
 	var targetVersion *int64
 	if ifMatch != 0 {
 		targetVersion = &ifMatch
 	}
-	if err := crmapprovals.VerifyAndConsume(r.Context(), h.db, token, crmapprovals.Binding{
-		WorkspaceID: wsID, Tool: "advance_deal", DiffHash: diffHash, TargetVersion: targetVersion,
-	}); err != nil {
-		jsonProblem(w, http.StatusForbidden, "approval_token_invalid")
+	if err := toolgate.Enforce(r.Context(), p, h.verifier, advanceDealTool, wsID, diffFields, targetVersion, r.Header.Get("X-Approval-Token")); err != nil {
+		if errors.Is(err, toolgate.ErrApprovalRequired) {
+			jsonProblem(w, http.StatusForbidden, "approval_required")
+		} else {
+			jsonProblem(w, http.StatusForbidden, "approval_token_invalid")
+		}
 		return false
 	}
 	return true

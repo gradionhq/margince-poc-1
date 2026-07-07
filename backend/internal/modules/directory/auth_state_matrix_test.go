@@ -14,6 +14,7 @@ import (
 
 	_ "github.com/lib/pq"
 
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
 	crmauth "github.com/gradionhq/margince/backend/internal/modules/identity"
 	identitytransport "github.com/gradionhq/margince/backend/internal/modules/identity/transport"
@@ -45,7 +46,7 @@ func buildAuthMux(t *testing.T, db *sql.DB) (http.Handler, *crmauth.SessionStore
 			http.Error(w, `{"code":"unauthorized"}`, http.StatusUnauthorized) //nolint:forbidigo // test mock handler, not a production JSON path
 			return
 		}
-		peopletransport.NewPersonHandler(personStore, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db), db).ServeHTTP(w, r)
+		peopletransport.NewPersonHandler(personStore, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db}).ServeHTTP(w, r)
 	})
 	// Session middleware: resolve the cookie to a Principal before serving.
 	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -14,9 +14,22 @@ import (
 	_ "github.com/lib/pq"
 
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
+	"github.com/gradionhq/margince/backend/internal/modules/deals"
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
+	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
 )
+
+// dealHandlerForTest builds a DealHandler directly (bypassing cmd/api's
+// composition root), so this test binary registers the same
+// "target_stage_semantic" dynamic-tier resolver cmd/api's buildMux registers
+// in production — otherwise advanceDealTool's TierDynamic would have no
+// resolver to consult and toolgate.Enforce would floor every transition to
+// 🟡, breaking UAT1's open-to-open 🟢 case.
+func init() {
+	toolgate.RegisterResolver("target_stage_semantic", deals.ResolveDynamicTier)
+}
 
 const advHandlerTestWorkspaceID = "00000000-0000-0000-0000-000000000a99"
 
@@ -174,7 +187,7 @@ func TestAdvanceDeal_UAT3_AgentWithValidToken_SucceedsThenReplayRejected(t *test
 	dealID := created["id"].(string)
 	version := int64(created["version"].(float64))
 
-	diffHash := crmapprovals.HashDiff(map[string]any{"deal_id": dealID, "to_stage_id": won, "status": "won"})
+	diffHash := approvalsport.HashDiff(map[string]any{"deal_id": dealID, "to_stage_id": won, "status": "won", "from_semantic": "open", "to_semantic": "won"})
 	tok, err := crmapprovals.SignToken(crmapprovals.TokenClaims{
 		JTI: "uat3-jti-" + dealID, ApprovalID: "appr-uat3", WorkspaceID: advHandlerTestWorkspaceID,
 		Tool: "advance_deal", DiffHash: diffHash, TargetVersion: &version,
@@ -246,7 +259,7 @@ func TestAdvanceDeal_UAT5_Reopen_AgentGatedThenClearsOnSuccess(t *testing.T) {
 		t.Fatalf("expected 403 on agent reopen without token, got %d: %s", wNoToken.Code, wNoToken.Body.String())
 	}
 
-	diffHash := crmapprovals.HashDiff(map[string]any{"deal_id": dealID, "to_stage_id": openA, "status": "open"})
+	diffHash := approvalsport.HashDiff(map[string]any{"deal_id": dealID, "to_stage_id": openA, "status": "open", "from_semantic": "lost", "to_semantic": "open"})
 	tok, err := crmapprovals.SignToken(crmapprovals.TokenClaims{
 		JTI: "uat5-jti-" + dealID, WorkspaceID: advHandlerTestWorkspaceID,
 		Tool: "advance_deal", DiffHash: diffHash, TargetVersion: &closedVersion,

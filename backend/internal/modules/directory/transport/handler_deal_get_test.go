@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	"github.com/gradionhq/margince/backend/internal/modules/deals"
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
@@ -47,7 +48,7 @@ func TestDealHandler_Get_Composite360(t *testing.T) {
 	dealStore := crmcore.NewDealStore(db)
 	relStore := crmcore.NewRelationshipStore(db)
 	activityStore := crmcore.NewActivityStore(db)
-	h := NewDealHandler(dealStore, relStore, activityStore, db)
+	h := NewDealHandler(dealStore, relStore, activityStore, &crmapprovals.DBVerifier{DB: db})
 
 	d := crmcore.NewDeal("Deal360 Test Deal", pl.ID, st.ID, p0)
 	d.WorkspaceID = dealGetTestWS
@@ -127,7 +128,7 @@ func TestDealHandler_Get_ArchivedStillFetchable(t *testing.T) {
 	}
 
 	dealStore := crmcore.NewDealStore(db)
-	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
+	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 
 	d := crmcore.NewDeal("Archive Me Deal", pl.ID, st.ID, p0)
 	d.WorkspaceID = dealGetTestWS
@@ -156,7 +157,7 @@ func TestDealHandler_Get_NonexistentID_Returns404(t *testing.T) {
 		t.Fatalf("seed workspace: %v", err)
 	}
 
-	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
+	h := NewDealHandler(crmcore.NewDealStore(db), crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 
 	req := httptest.NewRequest(http.MethodGet, "/deals/00000000-0000-0000-0000-0000000000ff", nil)
 	req = withDealGetWorkspace(req)
@@ -206,7 +207,7 @@ func TestDealHandler_Get_ForeignWorkspaceID_Returns404(t *testing.T) {
 	}
 
 	dealStore := crmcore.NewDealStore(db)
-	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
+	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 
 	d := crmcore.NewDeal("Tenant A Deal", pl.ID, st.ID, p0)
 	d.WorkspaceID = dealGetTestWS
@@ -258,7 +259,7 @@ func TestDealHandler_Get_Composite360_P95Under100ms(t *testing.T) {
 	}
 
 	dealStore := crmcore.NewDealStore(db)
-	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), db)
+	h := NewDealHandler(dealStore, crmcore.NewRelationshipStore(db), crmcore.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 
 	d := crmcore.NewDeal("Perf Deal", pl.ID, st.ID, p0)
 	d.WorkspaceID = ws

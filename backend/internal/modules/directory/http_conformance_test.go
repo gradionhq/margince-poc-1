@@ -25,6 +25,7 @@ import (
 
 	_ "github.com/lib/pq"
 
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
 	peopletransport "github.com/gradionhq/margince/backend/internal/modules/people/transport"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
@@ -45,7 +46,7 @@ func buildServerMux(t *testing.T, db *sql.DB) http.Handler {
 		})
 	}
 	personStore := crmcore.NewPersonStore(db)
-	personH := wrap(peopletransport.NewPersonHandler(personStore, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db), db))
+	personH := wrap(peopletransport.NewPersonHandler(personStore, crmcore.NewRelationshipStore(db), crmcore.NewDealStore(db), crmcore.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db}))
 	mux.Handle("/people", personH)
 	mux.Handle("/people/", personH)
 	return mux

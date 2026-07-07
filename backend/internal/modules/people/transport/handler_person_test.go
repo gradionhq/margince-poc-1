@@ -14,6 +14,7 @@ import (
 
 	_ "github.com/lib/pq"
 
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
@@ -78,7 +79,7 @@ func seedWorkspace(t *testing.T, db *sql.DB, wsID string) {
 }
 
 func personHandlerForTest(db *sql.DB, store *directory.PersonStore) *PersonHandler {
-	return NewPersonHandler(store, directory.NewRelationshipStore(db), directory.NewDealStore(db), directory.NewActivityStore(db), db)
+	return NewPersonHandler(store, directory.NewRelationshipStore(db), directory.NewDealStore(db), directory.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 }
 
 func TestPersonHandler_CreateAndGet(t *testing.T) {

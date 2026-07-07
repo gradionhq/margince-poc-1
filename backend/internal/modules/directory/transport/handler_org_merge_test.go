@@ -15,6 +15,7 @@ import (
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
 )
 
 // seedWorkspace mirrors modules/directory's helpers_shared_test.go helper of
@@ -104,7 +105,7 @@ func TestMergeOrgAgentRequiresApprovalToken(t *testing.T) {
 		t.Fatalf("no-token status = %d, want 403", w.Code)
 	}
 
-	diffHash := crmapprovals.HashDiff(map[string]any{"organization_id": loser.ID, "target_id": target.ID})
+	diffHash := approvalsport.HashDiff(map[string]any{"organization_id": loser.ID, "target_id": target.ID})
 	token, err := crmapprovals.SignToken(crmapprovals.TokenClaims{
 		JTI: ids.New(), WorkspaceID: ws, Tool: "merge_records", DiffHash: diffHash,
 		Exp: time.Now().Add(time.Hour), SingleUse: true,

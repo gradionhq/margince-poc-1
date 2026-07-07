@@ -16,7 +16,6 @@ package transport
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -27,6 +26,7 @@ import (
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
+	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
 )
 
 // problem+json response field names and machine-readable codes, and the
@@ -59,12 +59,12 @@ type PersonHandler struct {
 	relStore      *directory.RelationshipStore
 	dealStore     *directory.DealStore
 	activityStore *directory.ActivityStore
-	db            *sql.DB // used only for the merge endpoint's VerifyAndConsume (🟡 gate)
+	verifier      approvalsport.Verifier // used only by the merge endpoint's toolgate.Enforce call (🟡 gate)
 }
 
 // NewPersonHandler returns a PersonHandler.
-func NewPersonHandler(store *directory.PersonStore, relStore *directory.RelationshipStore, dealStore *directory.DealStore, activityStore *directory.ActivityStore, db *sql.DB) *PersonHandler {
-	return &PersonHandler{store: store, relStore: relStore, dealStore: dealStore, activityStore: activityStore, db: db}
+func NewPersonHandler(store *directory.PersonStore, relStore *directory.RelationshipStore, dealStore *directory.DealStore, activityStore *directory.ActivityStore, verifier approvalsport.Verifier) *PersonHandler {
+	return &PersonHandler{store: store, relStore: relStore, dealStore: dealStore, activityStore: activityStore, verifier: verifier}
 }
 
 // ServeHTTP dispatches on method + path suffix.
