@@ -28,7 +28,14 @@ func buildOrgListWhere(f domain.OrgListFilter, args []any, n int) (string, []any
 	if f.OwnerID != "" {
 		n++
 		args = append(args, f.OwnerID)
-		where += fmt.Sprintf(` AND owner_id=$%d::uuid`, n)
+		ownerArg := n
+		n++
+		args = append(args, f.OwnerID)
+		where += fmt.Sprintf(` AND (owner_id=$%d::uuid OR EXISTS (
+			SELECT 1 FROM record_grant rg
+			WHERE rg.workspace_id = organization.workspace_id AND rg.record_type = 'organization' AND rg.record_id = organization.id
+			  AND rg.subject_type = 'user' AND rg.subject_id = $%d::uuid
+			  AND (rg.expires_at IS NULL OR rg.expires_at > now())))`, ownerArg, n)
 	}
 	if domainVal := strings.ToLower(strings.TrimSpace(f.Domain)); domainVal != "" {
 		n++

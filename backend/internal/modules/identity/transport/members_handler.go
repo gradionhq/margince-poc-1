@@ -9,6 +9,7 @@ import (
 
 	crmauth "github.com/gradionhq/margince/backend/internal/modules/identity"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	"github.com/gradionhq/margince/backend/internal/platform/httpserver"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
@@ -164,41 +165,28 @@ func resolveWorkspaceRole(ctx context.Context, db *sql.DB, ws string, body assig
 // one audit_log row in the SAME tx (mutation + audit atomic). A re-assign returns
 // the existing row id so the audit entry is still written.
 func assignRoleTx(ctx context.Context, db *sql.DB, ws, roleID, userID string) error {
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback() //nolint:errcheck // rolled back unless Commit succeeds
+	return database.WithWorkspaceTx(ctx, db, ws, func(tx *sql.Tx) error {
+		var assignmentID string
+		err := tx.QueryRowContext(ctx, `
+			INSERT INTO role_assignment (workspace_id, role_id, user_id)
+			VALUES ($1::uuid,$2::uuid,$3::uuid)
+			ON CONFLICT (role_id, user_id, COALESCE(team_id,'00000000-0000-0000-0000-000000000000'::uuid))
+			DO NOTHING
+			RETURNING id`, ws, roleID, userID).Scan(&assignmentID)
+		if errors.Is(err, sql.ErrNoRows) {
+			err = tx.QueryRowContext(ctx, `
+				SELECT id FROM role_assignment
+				WHERE workspace_id=$1::uuid AND role_id=$2::uuid AND user_id=$3::uuid AND team_id IS NULL`,
+				ws, roleID, userID).Scan(&assignmentID)
+		}
+		if err != nil {
+			return err
+		}
 
-	// Set the workspace GUC so role_assignment + audit_log RLS pass.
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.workspace_id',$1,true)`, ws); err != nil {
+		e := crmaudit.EntryFromPrincipal(ctx, "assign", "role_assignment", &assignmentID, nil, nil)
+		_, err = crmaudit.WriteTx(ctx, tx, e)
 		return err
-	}
-
-	// Idempotent insert keyed on the partial-unique index expression.
-	var assignmentID string
-	err = tx.QueryRowContext(ctx, `
-		INSERT INTO role_assignment (workspace_id, role_id, user_id)
-		VALUES ($1::uuid,$2::uuid,$3::uuid)
-		ON CONFLICT (role_id, user_id, COALESCE(team_id,'00000000-0000-0000-0000-000000000000'::uuid))
-		DO NOTHING
-		RETURNING id`, ws, roleID, userID).Scan(&assignmentID)
-	if errors.Is(err, sql.ErrNoRows) {
-		// Already assigned — fetch the existing row id for the audit entry.
-		err = tx.QueryRowContext(ctx, `
-			SELECT id FROM role_assignment
-			WHERE workspace_id=$1::uuid AND role_id=$2::uuid AND user_id=$3::uuid AND team_id IS NULL`,
-			ws, roleID, userID).Scan(&assignmentID)
-	}
-	if err != nil {
-		return err
-	}
-
-	e := crmaudit.EntryFromPrincipal(ctx, "assign", "role_assignment", &assignmentID, nil, nil)
-	if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
-		return err
-	}
-	return tx.Commit()
+	})
 }
 
 // HandleAssignRole POST /members/{user_id}/roles — idempotent assign.
@@ -258,14 +246,15 @@ func HandleAssignRole(db *sql.DB) http.HandlerFunc {
 // HandleRevokeRole DELETE /members/{user_id}/roles/{role_key} — last-admin-guarded.
 func HandleRevokeRole(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		p, _ := crmctx.From(r.Context())
+		ctx := r.Context()
+		p, _ := crmctx.From(ctx)
 		ws := p.TenantID
 		userID := r.PathValue("user_id")
 		roleKey := r.PathValue("role_key")
 
 		// Resolve the role within the workspace (404 if unknown).
 		var roleID string
-		err := db.QueryRowContext(r.Context(),
+		err := db.QueryRowContext(ctx,
 			`SELECT id FROM role WHERE workspace_id=$1::uuid AND key=$2`, ws, roleKey).Scan(&roleID)
 		if errors.Is(err, sql.ErrNoRows) {
 			httpserver.WriteProblem(w, http.StatusNotFound, httpserver.CodeNotFound)
@@ -279,7 +268,7 @@ func HandleRevokeRole(db *sql.DB) http.HandlerFunc {
 		// Last-admin guard: never strand a workspace without an admin.
 		if roleKey == "admin" {
 			var adminCount int
-			if err := db.QueryRowContext(r.Context(), `
+			if err := db.QueryRowContext(ctx, `
 				SELECT count(*) FROM role_assignment ra
 				JOIN role r ON r.id = ra.role_id
 				WHERE ra.workspace_id=$1::uuid AND r.key='admin'`, ws).Scan(&adminCount); err != nil {
@@ -287,7 +276,7 @@ func HandleRevokeRole(db *sql.DB) http.HandlerFunc {
 				return
 			}
 			var holdsAdmin int
-			holdsErr := db.QueryRowContext(r.Context(),
+			holdsErr := db.QueryRowContext(ctx,
 				`SELECT 1 FROM role_assignment WHERE workspace_id=$1::uuid AND role_id=$2::uuid AND user_id=$3::uuid`,
 				ws, roleID, userID).Scan(&holdsAdmin)
 			userHoldsAdmin := holdsErr == nil
@@ -301,38 +290,24 @@ func HandleRevokeRole(db *sql.DB) http.HandlerFunc {
 			}
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			httpserver.WriteInternal(w)
-			return
-		}
-		defer tx.Rollback() //nolint:errcheck // rolled back unless Commit succeeds; rollback error is moot
-
-		if _, err := tx.ExecContext(r.Context(), `SELECT set_config('app.workspace_id',$1,true)`, ws); err != nil {
-			httpserver.WriteInternal(w)
-			return
-		}
-
-		var assignmentID string
-		err = tx.QueryRowContext(r.Context(), `
-			DELETE FROM role_assignment
-			WHERE workspace_id=$1::uuid AND role_id=$2::uuid AND user_id=$3::uuid
-			RETURNING id`, ws, roleID, userID).Scan(&assignmentID)
+		err = database.WithWorkspaceTx(ctx, db, ws, func(tx *sql.Tx) error {
+			var assignmentID string
+			e := tx.QueryRowContext(ctx, `
+				DELETE FROM role_assignment
+				WHERE workspace_id=$1::uuid AND role_id=$2::uuid AND user_id=$3::uuid
+				RETURNING id`, ws, roleID, userID).Scan(&assignmentID)
+			if e != nil {
+				return e
+			}
+			entry := crmaudit.EntryFromPrincipal(ctx, "archive", "role_assignment", &assignmentID, nil, nil)
+			_, e = crmaudit.WriteTx(ctx, tx, entry)
+			return e
+		})
 		if errors.Is(err, sql.ErrNoRows) {
 			httpserver.WriteProblem(w, http.StatusNotFound, httpserver.CodeNotFound)
 			return
 		}
 		if err != nil {
-			httpserver.WriteInternal(w)
-			return
-		}
-
-		e := crmaudit.EntryFromPrincipal(r.Context(), "archive", "role_assignment", &assignmentID, nil, nil)
-		if _, err := crmaudit.WriteTx(r.Context(), tx, e); err != nil {
-			httpserver.WriteInternal(w)
-			return
-		}
-		if err := tx.Commit(); err != nil {
 			httpserver.WriteInternal(w)
 			return
 		}

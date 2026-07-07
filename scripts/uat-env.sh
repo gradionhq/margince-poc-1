@@ -78,6 +78,15 @@ up)
     echo "FAIL: backend port :${port} already in use — is env '$slug' already running? (make uat_env_stop UAT_SLUG=$slug)" >&2
     exit 1
   fi
+  # The FE runs via `pnpm exec vite`, which needs node_modules. Fail fast here
+  # with an actionable pointer rather than spinning up infra/db/build and then
+  # letting the FE readiness poll hang the full 90s on a "vite not found" that
+  # only surfaces buried in the log. `make install` is the fresh-worktree setup
+  # (frontend deps + tools) that is expected to have run first.
+  if [[ ! -d node_modules ]]; then
+    echo "FAIL: node_modules missing — run 'make install' (fresh-worktree setup) before 'make uat_env'." >&2
+    exit 1
+  fi
   mkdir -p "$rundir"
   : > "$log"
   echo "uat_env '$slug' → db=$db backend=:$port fe=:$fe_port (logs: $log)"

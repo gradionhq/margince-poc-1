@@ -20,7 +20,7 @@ func (v *SessionVerifier) LookupSession(ctx context.Context, rawToken string) (c
 	if err != nil {
 		return crmctx.Principal{}, false
 	}
-	v.Sessions.Touch(ctx, rec.ID)
+	v.Sessions.Touch(ctx, rec.WorkspaceID, rec.ID)
 	return crmctx.Principal{UserID: rec.UserID, TenantID: rec.WorkspaceID}, true
 }
 

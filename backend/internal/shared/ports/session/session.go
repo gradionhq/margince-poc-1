@@ -45,15 +45,17 @@ type ActionRule struct {
 // RolePermissions is the validated permissions map for a role.
 type RolePermissions map[string]PermissionEntry // object -> entry
 
+// knownObjects is the V1 object set for permission validation.
 var knownObjects = map[string]bool{
 	"person": true, "organization": true, "deal": true, "pipeline": true,
 	"stage": true, "activity": true, "lead": true, "report": true,
 	"passport": true, "workspace": true, "product": true, "invoice": true,
 	"approval": true, "drafting_asset": true, "conversation_link": true,
-	"deal_room":    true,
-	"automation":   true,
+	"deal_room":    true, // B-E08.6: deal-room publish access gate
+	"automation":   true, // B-E15.4: automation CRUD endpoints
 	"partner":      true,
-	"relationship": true,
+	"relationship": true, // T08: generic employment/deal_stakeholder edge CRUD
+	"record_grant": true, // GH-209 WS-B: record_grant sharing/manage_sharing gate
 }
 
 var knownRowScopes = map[string]bool{

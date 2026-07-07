@@ -154,6 +154,7 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 	mux.Handle("GET /partners", instrument("/partners", k.domainWrap(httpserver.ObjPartner, partnerHandler)))
 	crud("/relationships", httpserver.ObjRelationship, relstransport.NewRelationshipHandler(relationships.NewRelationshipStore(k.db)))
 	crud("/activities", httpserver.ObjActivity, actstransport.NewActivityHandler(activities.NewActivityStore(k.db)))
+	crud("/record-grants", httpserver.ObjRecordGrant, relstransport.NewRecordGrantHandler(people.NewRecordGrantStore(k.db), k.db, k.verifier))
 
 	// GET /records/{entity_type}/{id}/history: object varies per-request
 	// (the entity_type path param), so it cannot use domainWrap's

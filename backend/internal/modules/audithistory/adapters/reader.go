@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/gradionhq/margince/backend/internal/modules/audithistory/domain"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 )
 
 // AuditHistoryReader queries audit_log for a given entity and renders history lines.
@@ -33,7 +34,7 @@ func (r *AuditHistoryReader) ReadHistory(ctx context.Context, entityType, entity
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.workspace_id', $1, true)`, workspaceID); err != nil {
+	if err := database.SetWorkspaceScope(ctx, tx, workspaceID); err != nil {
 		return nil, fmt.Errorf("audit history set guc: %w", err)
 	}
 

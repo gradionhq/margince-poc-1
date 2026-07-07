@@ -68,6 +68,7 @@ components:
   blobstore:    { in: internal/platform/blobstore }
   keyvault:     { in: internal/platform/keyvault }
   audit:        { in: internal/platform/audit }
+  database:     { in: internal/platform/database }
   httpserver:   { in: internal/platform/httpserver }
   toolgate:     { in: internal/platform/toolgate }
   workspacetx:  { in: internal/platform/workspacetx }
@@ -163,15 +164,17 @@ deps:
   identity:
     mayDependOn: [identityadapters, keyvault]
   identityadapters:
-    mayDependOn: [keyvault, session, crmctx]
+    mayDependOn: [keyvault, session, crmctx, database]
     canUse: [crypto]
   httpserver:
     mayDependOn: [crmctx, obs, session, contracts]
   identitytransport:
-    mayDependOn: [httpserver, identity, audit, crmctx, ids]
+    mayDependOn: [httpserver, identity, audit, crmctx, ids, database]
     canUse: [pq]
   audit:
-    mayDependOn: [crmctx, ids]
+    mayDependOn: [crmctx, ids, database]
+  database:
+    mayDependOn: [crmctx]
   # Split catalog modules (WS-E-b, Task 6)
   orgsdomain:
     mayDependOn: [prov, ids, dedupekern, strengthkern]
@@ -208,8 +211,12 @@ deps:
     mayDependOn: [relsports]
   relationships:
     mayDependOn: [relsdomain, relsadapters]
+  # relstransport also owns the record_grant HTTP handler (GH-209 WS-B, folded
+  # in via GH-81's merge): peopleadapters for the RecordGrantStore, database for
+  # its own resolveGrantorOwnAccess tx, toolgate/approvalsport/mcp for the 🟡
+  # share_record approval gate.
   relstransport:
-    mayDependOn: [relationships, relsadapters, relsdomain, crmctx, errs, prov]
+    mayDependOn: [relationships, relsadapters, relsdomain, crmctx, errs, prov, peopleadapters, database, toolgate, approvalsport, mcp]
   leadsdomain:
     mayDependOn: [prov, ids]
   leadsports:
@@ -235,7 +242,7 @@ deps:
   audithistoryports:
     mayDependOn: [audithistorydomain]
   audithistoryadapters:
-    mayDependOn: [audithistorydomain, errs, ids]
+    mayDependOn: [audithistorydomain, errs, ids, database]
     canUse: [pq]
   audithistoryapp:
     mayDependOn: [audithistorydomain, audithistoryports]
@@ -260,7 +267,7 @@ deps:
   dealsports:
     mayDependOn: [dealsdomain]
   dealsadapters:
-    mayDependOn: [dealsdomain, errs, ids, workspacetx, audit]
+    mayDependOn: [dealsdomain, errs, ids, workspacetx, audit, database]
     canUse: [pq]
   # dealstransport now owns pipeline/stage AND deal-entity handlers (WS-E-b).
   dealstransport:
@@ -272,7 +279,7 @@ deps:
   peopleports:
     mayDependOn: [peopledomain, strengthkern]
   peopleadapters:
-    mayDependOn: [peopledomain, errs, ids, prov, workspacetx, dedupekern, strengthkern, audit]
+    mayDependOn: [peopledomain, errs, ids, prov, workspacetx, dedupekern, strengthkern, audit, database]
     canUse: [pq]
   people:
     mayDependOn: [peopledomain, peopleadapters, prov]
@@ -286,7 +293,7 @@ deps:
   gdprports:
     mayDependOn: [gdprdomain]
   gdpradapters:
-    mayDependOn: [gdprdomain, gdprports, audit, errs, ids, crmctx]
+    mayDependOn: [gdprdomain, gdprports, audit, errs, ids, crmctx, database]
     canUse: [river]
   approvals:
     mayDependOn: [approvalsdomain, approvalsports, approvalsadapters, approvalsapp, mcp, datasource, audit, errs, ids, approvalsport]
@@ -294,10 +301,10 @@ deps:
   approvalsports:
     mayDependOn: [approvalsdomain]
   approvalsadapters:
-    mayDependOn: [approvalsdomain, approvalsports, errs, ids, approvalsport, audit]
+    mayDependOn: [approvalsdomain, approvalsports, errs, ids, approvalsport, audit, database]
     canUse: [river]
   approvalsapp:
-    mayDependOn: [approvalsdomain, approvalsports, datasource, audit, errs]
+    mayDependOn: [approvalsdomain, approvalsports, datasource, audit, errs, database]
   toolgate:
     mayDependOn: [mcp, approvalsport, crmctx, ids]
   contracts:
