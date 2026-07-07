@@ -6,10 +6,10 @@ import (
 	"context"
 	"testing"
 
-	adapters "github.com/gradionhq/margince/backend/internal/modules/people/adapters"
-	domain "github.com/gradionhq/margince/backend/internal/modules/people/domain"
 	organizations "github.com/gradionhq/margince/backend/internal/modules/organizations"
 	orgdomain "github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
+	adapters "github.com/gradionhq/margince/backend/internal/modules/people/adapters"
+	domain "github.com/gradionhq/margince/backend/internal/modules/people/domain"
 	reladapters "github.com/gradionhq/margince/backend/internal/modules/relationships/adapters"
 	reldomain "github.com/gradionhq/margince/backend/internal/modules/relationships/domain"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"

@@ -166,18 +166,6 @@ func mkDealForMergeTest(t *testing.T, db *sql.DB, ws string) string {
 	return dealID
 }
 
-// seedAppUser seeds an app_user row so that audit_log.on_behalf_of FK is
-// satisfied when agent-principal requests invoke crmaudit.Write.
-func seedAppUser(t *testing.T, db *sql.DB, id, wsID string) {
-	t.Helper()
-	_, err := db.ExecContext(context.Background(),
-		`INSERT INTO app_user(id,workspace_id,email,display_name,is_agent) VALUES($1::uuid,$2::uuid,$3,'Agent Test',true) ON CONFLICT DO NOTHING`,
-		id, wsID, "org-agent-"+id+"@example.com")
-	if err != nil {
-		t.Fatal("seed app_user:", err)
-	}
-}
-
 // fixedStrengthClock is the pinned test clock for PO-F-3 / PO-N-ORGSTRENGTH
 // tests — matches modules/directory/strength_test.go's TEST-DET-1 constant so
 // any activity "N days before" anchors consistently across both packages.

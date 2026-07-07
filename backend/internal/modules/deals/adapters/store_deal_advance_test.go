@@ -253,8 +253,8 @@ func TestDealStore_Advance_OpenToOpen_NoFXNoClosedAt(t *testing.T) {
 	store := adapters.NewDealStore(db)
 	ctx := context.Background()
 
-	openA, openB := pipe.pipeline_stageA, pipe.pipeline_stageB
-	d := domain.NewDeal("Deal o2o real", pipe.pipeline_id, openA, prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	openA, openB := pipe.pipelineStageA, pipe.pipelineStageB
+	d := domain.NewDeal("Deal o2o real", pipe.pipelineID, openA, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	d.WorkspaceID = advanceTestWorkspaceID
 	created, err := store.Create(ctx, d, "")
 	if err != nil {
@@ -327,7 +327,7 @@ func TestDealStore_Advance_Reopen_ClearsClosedAtLostReasonAndFX(t *testing.T) {
 }
 
 type twoOpenStagePipeline struct {
-	pipeline_id, pipeline_stageA, pipeline_stageB string
+	pipelineID, pipelineStageA, pipelineStageB string
 }
 
 func seedTwoOpenStagePipeline(t *testing.T, db *sql.DB, tag string) (twoOpenStagePipeline, error) {
@@ -342,17 +342,17 @@ func seedTwoOpenStagePipeline(t *testing.T, db *sql.DB, tag string) (twoOpenStag
 	}
 	var p twoOpenStagePipeline
 	if err := db.QueryRow(`INSERT INTO pipeline (id, workspace_id, name) VALUES (uuidv7(), $1, $2) RETURNING id`,
-		advanceTestWorkspaceID, "2open "+tag).Scan(&p.pipeline_id); err != nil {
+		advanceTestWorkspaceID, "2open "+tag).Scan(&p.pipelineID); err != nil {
 		return p, err
 	}
 	if err := db.QueryRow(`INSERT INTO stage (id, workspace_id, pipeline_id, name, position, semantic, win_probability)
 		VALUES (uuidv7(), $1, $2, 'A '||$3, 1, 'open', 10) RETURNING id`,
-		advanceTestWorkspaceID, p.pipeline_id, tag).Scan(&p.pipeline_stageA); err != nil {
+		advanceTestWorkspaceID, p.pipelineID, tag).Scan(&p.pipelineStageA); err != nil {
 		return p, err
 	}
 	if err := db.QueryRow(`INSERT INTO stage (id, workspace_id, pipeline_id, name, position, semantic, win_probability)
 		VALUES (uuidv7(), $1, $2, 'B '||$3, 2, 'open', 40) RETURNING id`,
-		advanceTestWorkspaceID, p.pipeline_id, tag).Scan(&p.pipeline_stageB); err != nil {
+		advanceTestWorkspaceID, p.pipelineID, tag).Scan(&p.pipelineStageB); err != nil {
 		return p, err
 	}
 	return p, nil

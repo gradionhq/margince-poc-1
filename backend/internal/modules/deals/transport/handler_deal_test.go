@@ -16,10 +16,10 @@ import (
 
 	_ "github.com/lib/pq"
 
+	activities "github.com/gradionhq/margince/backend/internal/modules/activities"
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	"github.com/gradionhq/margince/backend/internal/modules/deals/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
-	activities "github.com/gradionhq/margince/backend/internal/modules/activities"
 	relationships "github.com/gradionhq/margince/backend/internal/modules/relationships"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )

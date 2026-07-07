@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
+	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	"github.com/gradionhq/margince/backend/internal/modules/deals/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
-	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	orgadapters "github.com/gradionhq/margince/backend/internal/modules/organizations/adapters"
 	orgdomain "github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
