@@ -3,6 +3,7 @@ module github.com/gradionhq/margince/backend
 go 1.26
 
 require (
+	github.com/go-chi/chi/v5 v5.3.1
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
 	github.com/gradionhq/margince/crm-de v0.0.0
@@ -20,6 +21,7 @@ require (
 )
 
 require (
+	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect

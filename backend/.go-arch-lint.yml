@@ -17,6 +17,13 @@ excludeFiles:
   # scope as pre-merge, when it lived in the separate cmd/server module this file never
   # scanned (1c module merge, task-2-brief.md: "keep scope identical").
   - "/cmd/api/.*\\.go$"
+  # internal/contracts/server (AC-D3/D10) is the oapi-codegen ServerInterface
+  # adapter layer: one struct per crm.yaml tag, each embedding the real
+  # handler(s) from whichever module owns that tag, aggregated into
+  # AllOperations. Its whole purpose is to import across every transport
+  # module, same composition-root shape as cmd/api above — not a DAG-governed
+  # domain component.
+  - "/internal/contracts/server/.*\\.go$"
 allow:
   deepScan: false        # init()-based self-registration triggers false positives in deepScan
 # Vendor allow-list (replaces depOnAnyVendor). A component may import only the vendors named
@@ -28,6 +35,7 @@ vendors:
   redis:   { in: "github.com/redis/go-redis**" }
   migrate: { in: "github.com/golang-migrate/migrate**" }
   oapi:    { in: "github.com/oapi-codegen/runtime**" }
+  chi:     { in: "github.com/go-chi/chi/v5**" }
   minio:   { in: "github.com/minio/minio-go**" }
   uuid:    { in: "github.com/google/uuid" }
   yaml:    { in: "gopkg.in/yaml.v3" }
@@ -138,6 +146,9 @@ deps:
   approvals:
     mayDependOn: [mcp, datasource, audit, errs, ids]
     canUse: [river]
-  # contracts is generated and imports only the oapi-codegen runtime.
+  # contracts is generated and imports only the oapi-codegen runtime plus, now
+  # that oapi-types.cfg.yaml's chi-server generate option is on (AC-D3), the
+  # chi router package chi-server's RegisterHandlers/ServerInterfaceWrapper
+  # output references.
   contracts:
-    canUse: [oapi]
+    canUse: [oapi, chi]

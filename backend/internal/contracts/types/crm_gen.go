@@ -4,10 +4,15 @@
 package types
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -9499,4 +9504,7711 @@ func (a UpdatePersonRequest) MarshalJSON() ([]byte, error) {
 		}
 	}
 	return json.Marshal(object)
+}
+
+// ServerInterface represents all server handlers.
+type ServerInterface interface {
+	// List activities (the timeline; cursor-paginated, filterable by type/entity).
+	// (GET /activities)
+	ListActivities(w http.ResponseWriter, r *http.Request, params ListActivitiesParams)
+	// Log an activity (the `log_activity` MCP verb).
+	// (POST /activities)
+	LogActivity(w http.ResponseWriter, r *http.Request, params LogActivityParams)
+	// Archive (soft-delete) an activity.
+	// (DELETE /activities/{id})
+	ArchiveActivity(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Get an activity by id (includes its links and raw capture payload).
+	// (GET /activities/{id})
+	GetActivity(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Update an activity (e.g. complete a task).
+	// (PATCH /activities/{id})
+	UpdateActivity(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateActivityParams)
+	// Draft a reply/follow-up email for context (the `draft_email` MCP verb).
+	// (POST /activities/{id}/draft-email)
+	DraftEmail(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Send a (possibly edited) email draft — 🟡 confirm-first / gated.
+	// (POST /activities/{id}/send-email)
+	SendEmail(w http.ResponseWriter, r *http.Request, idParam IdParam, params SendEmailParams)
+	// The approval inbox — list staged 🟡 actions awaiting human decision.
+	// (GET /approvals)
+	ListApprovals(w http.ResponseWriter, r *http.Request, params ListApprovalsParams)
+	// Get a single approval item (full proposed diff + evidence).
+	// (GET /approvals/{id})
+	GetApproval(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Approve a staged action (commits it; mints the approval token).
+	// (POST /approvals/{id}/approve)
+	ApproveApproval(w http.ResponseWriter, r *http.Request, idParam IdParam, params ApproveApprovalParams)
+	// Reject a staged action (discards it; nothing commits).
+	// (POST /approvals/{id}/reject)
+	RejectApproval(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Email + password login; sets crm_session cookie.
+	// (POST /auth/login)
+	Login(w http.ResponseWriter, r *http.Request)
+	// Delete session + clear cookie.
+	// (POST /auth/logout)
+	Logout(w http.ResponseWriter, r *http.Request)
+	// List all live automations in the workspace.
+	// (GET /automations)
+	ListAutomations(w http.ResponseWriter, r *http.Request, params ListAutomationsParams)
+	// Create a catalog-backed automation. Trigger and action jsonb are validated against the closed catalog — 422 on any rejection.
+	// (POST /automations)
+	CreateAutomation(w http.ResponseWriter, r *http.Request)
+	// Soft-delete (archive) an automation. Subsequent GET returns 404.
+	// (DELETE /automations/{id})
+	DeleteAutomation(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Get one automation by id.
+	// (GET /automations/{id})
+	GetAutomation(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Parameterize (edit trigger/action) or pause (enabled=false) an automation.
+	// (PATCH /automations/{id})
+	PatchAutomation(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Website cold-start read-back — returns a staged proposal with evidence.
+	// (POST /coldstart)
+	ColdStartReadback(w http.ResponseWriter, r *http.Request)
+	// List the workspace's consent purposes (e.g. transactional, marketing_email, profiling).
+	// (GET /consent-purposes)
+	ListConsentPurposes(w http.ResponseWriter, r *http.Request, params ListConsentPurposesParams)
+	// Define a consent purpose. 🟢 admin write.
+	// (POST /consent-purposes)
+	CreateConsentPurpose(w http.ResponseWriter, r *http.Request)
+	// Link a CRM record to an external conversation. 🟡 — agent calls are queued behind the approval gate.
+	// (POST /conversation-links)
+	LinkConversation(w http.ResponseWriter, r *http.Request)
+	// Remove a conversation link by id. 🟡 — agent calls are queued behind the approval gate.
+	// (DELETE /conversation-links/{id})
+	UnlinkConversation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Resolve a published deal room by its access token (unauthenticated public accessor).
+	// (GET /deal-rooms/by-token)
+	ResolveDealRoomByToken(w http.ResponseWriter, r *http.Request, params ResolveDealRoomByTokenParams)
+	// Publish a deal room (internal — requires deal_room/publish grant). Refused when consent_state ∉ {granted}.
+	// (POST /deal-rooms/{id}/publish)
+	PublishDealRoom(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// List deals (live by default; cursor-paginated). Supports Kanban-by-stage reads.
+	// (GET /deals)
+	ListDeals(w http.ResponseWriter, r *http.Request, params ListDealsParams)
+	// Create a deal.
+	// (POST /deals)
+	CreateDeal(w http.ResponseWriter, r *http.Request, params CreateDealParams)
+	// Archive (soft-delete) a deal.
+	// (DELETE /deals/{id})
+	ArchiveDeal(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Get a deal's composite 360 read (record + stakeholders + timeline refs) by id.
+	// (GET /deals/{id})
+	GetDeal(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Update a deal (partial). Closing requires terminal status + lost_reason if lost.
+	// (PATCH /deals/{id})
+	UpdateDeal(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateDealParams)
+	// Advance a deal to a new stage (audit-logged with prior + next stage).
+	// (POST /deals/{id}/advance)
+	AdvanceDeal(w http.ResponseWriter, r *http.Request, idParam IdParam, params AdvanceDealParams)
+	// Inferred KPI signals for a deal (pure read; zero writes).
+	// (GET /deals/{id}/kpi-signals)
+	GetDealKPISignals(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Override an inferred KPI — persists one ai_feedback row (🟡 requires approval).
+	// (POST /deals/{id}/kpi-signals/{key}:override)
+	OverrideDealKPISignal(w http.ResponseWriter, r *http.Request, idParam IdParam, key string)
+	// One evidence-grounded inferred next step for the deal (pure read; zero writes).
+	// (GET /deals/{id}/next-step)
+	GetDealNextStep(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Accept an inferred next step into exactly one task (idempotent).
+	// (POST /deals/{id}/next-step:accept)
+	AcceptDealNextStep(w http.ResponseWriter, r *http.Request, idParam IdParam, params AcceptDealNextStepParams)
+	// Evidenced warm/neutral/blocking signals for a deal's stakeholders (pure read; zero writes).
+	// (GET /deals/{id}/people-signals)
+	GetDealPeopleSignals(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Correct a person's warm/neutral/blocking label — persists one ai_feedback row (🟡 requires approval).
+	// (POST /deals/{id}/people-signals/{personId}:correct)
+	CorrectPersonSignal(w http.ResponseWriter, r *http.Request, idParam IdParam, personId openapi_types.UUID)
+	// Restore (un-archive) a soft-deleted deal.
+	// (POST /deals/{id}/restore)
+	RestoreDeal(w http.ResponseWriter, r *http.Request, idParam IdParam, params RestoreDealParams)
+	// List a deal's stakeholders (deal↔person relationships).
+	// (GET /deals/{id}/stakeholders)
+	ListDealStakeholders(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// List drafting assets (cursor-paginated).
+	// (GET /drafting-assets)
+	ListDraftingAssets(w http.ResponseWriter, r *http.Request, params ListDraftingAssetsParams)
+	// Create a drafting asset.
+	// (POST /drafting-assets)
+	CreateDraftingAsset(w http.ResponseWriter, r *http.Request, params CreateDraftingAssetParams)
+	// Archive (soft-delete) a drafting asset.
+	// (DELETE /drafting-assets/{id})
+	ArchiveDraftingAsset(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Get a drafting asset by id.
+	// (GET /drafting-assets/{id})
+	GetDraftingAsset(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Partially update a drafting asset (only supplied fields change).
+	// (PUT /drafting-assets/{id})
+	UpdateDraftingAsset(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateDraftingAssetParams)
+	// Approve a drafting asset (transitions approval_state to approved).
+	// (POST /drafting-assets/{id}/approve)
+	ApproveDraftingAsset(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Expire a drafting asset (transitions approval_state to expired).
+	// (POST /drafting-assets/{id}/expire)
+	ExpireDraftingAsset(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Trigger a full self-serve workspace export bundle (async).
+	// (POST /exports)
+	CreateExport(w http.ResponseWriter, r *http.Request)
+	// Get the status (and, when complete, artifact refs) of an export run.
+	// (GET /exports/{id})
+	GetExport(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Start a mandatory dry-run over a seeded source (async, returns import_run with status validating/awaiting_approval).
+	// (POST /imports)
+	CreateImport(w http.ResponseWriter, r *http.Request)
+	// Get the status and (when complete) validation report ref of an import run.
+	// (GET /imports/{id})
+	GetImport(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Approve a dry-run result and enqueue the real import run (async, 202).
+	// (POST /imports/{id}/approve)
+	ApproveImport(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Read the workspace's HubSpot connection vault view (masked token, no plaintext/ciphertext ever).
+	// (GET /integrations/hubspot)
+	GetHubSpotConnection(w http.ResponseWriter, r *http.Request)
+	// OAuth authorization-code callback — exchanges code for tokens, seals + stores them.
+	// (GET /integrations/hubspot/callback)
+	HubspotOAuthCallback(w http.ResponseWriter, r *http.Request, params HubspotOAuthCallbackParams)
+	// Start the HubSpot OAuth authorize-code flow with least-privilege scopes.
+	// (POST /integrations/hubspot/connect)
+	ConnectHubSpot(w http.ResponseWriter, r *http.Request)
+	// One-action revoke — sets the connection to revoked; the next adapter call fails closed.
+	// (POST /integrations/hubspot/revoke)
+	RevokeHubSpotConnection(w http.ResponseWriter, r *http.Request)
+	// Rotate the stored HubSpot refresh token via a token-refresh call, reseal, and re-verify scopes.
+	// (POST /integrations/hubspot/rotate)
+	RotateHubSpotConnection(w http.ResponseWriter, r *http.Request)
+	// Re-verify the connection's scopes against HubSpot's live token-info endpoint (AC4).
+	// (POST /integrations/hubspot/verify-scopes)
+	VerifyHubSpotScopes(w http.ResponseWriter, r *http.Request)
+	// List invoices (cursor-paginated).
+	// (GET /invoices)
+	ListInvoices(w http.ResponseWriter, r *http.Request, params ListInvoicesParams)
+	// Generate an invoice from an accepted offer.
+	// (POST /invoices)
+	GenerateInvoice(w http.ResponseWriter, r *http.Request)
+	// Get an invoice by id.
+	// (GET /invoices/{id})
+	GetInvoice(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// List leads (their OWN list, distinct from contacts; cursor-paginated).
+	// (GET /leads)
+	ListLeads(w http.ResponseWriter, r *http.Request, params ListLeadsParams)
+	// Create a lead.
+	// (POST /leads)
+	CreateLead(w http.ResponseWriter, r *http.Request, params CreateLeadParams)
+	// Disqualify (soft-archive) a lead.
+	// (DELETE /leads/{id})
+	DisqualifyLead(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Get a lead by id.
+	// (GET /leads/{id})
+	GetLead(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Update a lead (partial).
+	// (PATCH /leads/{id})
+	UpdateLead(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateLeadParams)
+	// Promote a lead to a person on genuine engagement (non-lossy merge).
+	// (POST /leads/{id}/promote)
+	PromoteLead(w http.ResponseWriter, r *http.Request, idParam IdParam, params PromoteLeadParams)
+	// "Explain This Score" — the factor breakdown behind a lead's current score.
+	// (GET /leads/{id}/score)
+	GetLeadScore(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Human override of a lead's score — suppresses automatic recompute until cleared.
+	// (POST /leads/{id}/score:override)
+	OverrideLeadScore(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// List lists (static + dynamic segments).
+	// (GET /lists)
+	ListLists(w http.ResponseWriter, r *http.Request, params ListListsParams)
+	// Create a list (static set or dynamic segment).
+	// (POST /lists)
+	CreateList(w http.ResponseWriter, r *http.Request)
+	// Archive a list.
+	// (DELETE /lists/{id})
+	ArchiveList(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Get a list by id.
+	// (GET /lists/{id})
+	GetList(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// List a (static) list's members.
+	// (GET /lists/{id}/members)
+	ListListMembers(w http.ResponseWriter, r *http.Request, idParam IdParam, params ListListMembersParams)
+	// Add a member to a static list.
+	// (POST /lists/{id}/members)
+	AddListMember(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Get the current authenticated principal (user or agent).
+	// (GET /me)
+	GetCurrentPrincipal(w http.ResponseWriter, r *http.Request)
+	// List workspace members with their assigned role keys.
+	// (GET /members)
+	ListMembers(w http.ResponseWriter, r *http.Request)
+	// Assign a role to a workspace member (idempotent).
+	// (POST /members/{user_id}/roles)
+	AssignMemberRole(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID, params AssignMemberRoleParams)
+	// Revoke a role from a workspace member.
+	// (DELETE /members/{user_id}/roles/{role_key})
+	RevokeMemberRole(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID, roleKey string)
+	// List organizations (live by default; cursor-paginated).
+	// (GET /organizations)
+	ListOrganizations(w http.ResponseWriter, r *http.Request, params ListOrganizationsParams)
+	// Create an organization.
+	// (POST /organizations)
+	CreateOrganization(w http.ResponseWriter, r *http.Request, params CreateOrganizationParams)
+	// Archive (soft-delete) an organization.
+	// (DELETE /organizations/{id})
+	ArchiveOrganization(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Get an organization by id (the 360 record).
+	// (GET /organizations/{id})
+	GetOrganization(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Update an organization (partial).
+	// (PATCH /organizations/{id})
+	UpdateOrganization(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateOrganizationParams)
+	// Merge this organization into a target (non-lossy).
+	// (POST /organizations/{id}/merge)
+	MergeOrganization(w http.ResponseWriter, r *http.Request, idParam IdParam, params MergeOrganizationParams)
+	// Read the partner extension on an org (404 if the org is not a partner).
+	// (GET /organizations/{id}/partner)
+	GetPartner(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Create/update the partner extension on an org (sets classification='partner').
+	// (PUT /organizations/{id}/partner)
+	UpsertPartner(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Restore (un-archive) a soft-deleted organization.
+	// (POST /organizations/{id}/restore)
+	RestoreOrganization(w http.ResponseWriter, r *http.Request, idParam IdParam, params RestoreOrganizationParams)
+	// List partner organizations (orgs with a partner row), filterable by role/cert status.
+	// (GET /partners)
+	ListPartners(w http.ResponseWriter, r *http.Request, params ListPartnersParams)
+	// Create Agent Seat Passport (scopes bounded by granting human's RBAC).
+	// (POST /passports)
+	CreatePassport(w http.ResponseWriter, r *http.Request)
+	// Revoke a passport.
+	// (DELETE /passports/{id})
+	RevokePassport(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// List people (live by default; cursor-paginated).
+	// (GET /people)
+	ListPeople(w http.ResponseWriter, r *http.Request, params ListPeopleParams)
+	// Create a person.
+	// (POST /people)
+	CreatePerson(w http.ResponseWriter, r *http.Request, params CreatePersonParams)
+	// Archive (soft-delete) a person.
+	// (DELETE /people/{id})
+	ArchivePerson(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Get a person by id (the 360 record).
+	// (GET /people/{id})
+	GetPerson(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Update a person (partial).
+	// (PATCH /people/{id})
+	UpdatePerson(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdatePersonParams)
+	// Read a person's per-purpose consent state plus the append-only proof log.
+	// (GET /people/{id}/consent)
+	GetPersonConsent(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Grant or withdraw consent for one purpose — writes an append-only proof row.
+	// (POST /people/{id}/consent)
+	RecordConsent(w http.ResponseWriter, r *http.Request, idParam IdParam, params RecordConsentParams)
+	// Merge this person into a target (non-lossy).
+	// (POST /people/{id}/merge)
+	MergePerson(w http.ResponseWriter, r *http.Request, idParam IdParam, params MergePersonParams)
+	// Restore (un-archive) a soft-deleted person.
+	// (POST /people/{id}/restore)
+	RestorePerson(w http.ResponseWriter, r *http.Request, idParam IdParam, params RestorePersonParams)
+	// Get the evidence behind a person's relationship-strength score (PO-EXT-2).
+	// (GET /people/{id}/strength-breakdown)
+	GetPersonStrengthBreakdown(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// List pipelines.
+	// (GET /pipelines)
+	ListPipelines(w http.ResponseWriter, r *http.Request, params ListPipelinesParams)
+	// Create a pipeline.
+	// (POST /pipelines)
+	CreatePipeline(w http.ResponseWriter, r *http.Request, params CreatePipelineParams)
+	// Archive (soft-delete) a pipeline.
+	// (DELETE /pipelines/{id})
+	ArchivePipeline(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Get a pipeline (with its ordered stages).
+	// (GET /pipelines/{id})
+	GetPipeline(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Update a pipeline (rename / reorder / set default — bounded config).
+	// (PATCH /pipelines/{id})
+	UpdatePipeline(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdatePipelineParams)
+	// Weighted pipeline value for this pipeline (DEAL-FORM-2), server-computed.
+	// (GET /pipelines/{id}/rollup)
+	GetPipelineRollup(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// List products (active by default; cursor-paginated).
+	// (GET /products)
+	ListProducts(w http.ResponseWriter, r *http.Request, params ListProductsParams)
+	// Create a product (rate-card entry).
+	// (POST /products)
+	CreateProduct(w http.ResponseWriter, r *http.Request, params CreateProductParams)
+	// Archive (soft-delete) a product.
+	// (DELETE /products/{id})
+	ArchiveProduct(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Get a product by id.
+	// (GET /products/{id})
+	GetProduct(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Update a product (full replace — all writable fields replaced).
+	// (PUT /products/{id})
+	UpdateProduct(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateProductParams)
+	// List manual per-record grants, filtered by record or by subject (A52/ADR-0039).
+	// (GET /record-grants)
+	ListRecordGrants(w http.ResponseWriter, r *http.Request, params ListRecordGrantsParams)
+	// Share one record with a user or team. 🟡 — agent calls are queued behind the approval gate.
+	// (POST /record-grants)
+	CreateRecordGrant(w http.ResponseWriter, r *http.Request, params CreateRecordGrantParams)
+	// Revoke a manual record grant. 🟡 — agent calls are queued behind the approval gate.
+	// (DELETE /record-grants/{id})
+	RevokeRecordGrant(w http.ResponseWriter, r *http.Request, idParam IdParam, params RevokeRecordGrantParams)
+	// Return the per-record audit-log history as rendered plain-language lines.
+	// (GET /records/{entity_type}/{id}/history)
+	GetRecordHistory(w http.ResponseWriter, r *http.Request, entityType string, idParam IdParam)
+	// List relationships (employment, deal_stakeholder, or partner edges).
+	// (GET /relationships)
+	ListRelationships(w http.ResponseWriter, r *http.Request, params ListRelationshipsParams)
+	// Create a relationship edge (employment or deal stakeholder).
+	// (POST /relationships)
+	CreateRelationship(w http.ResponseWriter, r *http.Request)
+	// Archive (soft-delete) a relationship.
+	// (DELETE /relationships/{id})
+	ArchiveRelationship(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Update a relationship (role, primary flag, dates).
+	// (PATCH /relationships/{id})
+	UpdateRelationship(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Resolve a derivation_url to its plain-language definition and drill-through rows.
+	// (GET /reports/derivations/{handle})
+	ResolveDerivation(w http.ResponseWriter, r *http.Request, handle string)
+	// Run a report (the `run_report` MCP verb) and return aggregate rows.
+	// (POST /reports/{report})
+	RunReport(w http.ResponseWriter, r *http.Request, report string)
+	// List the workspace's assignable roles.
+	// (GET /roles)
+	ListRoles(w http.ResponseWriter, r *http.Request)
+	// Cross-object search (people, orgs, deals, activities, leads).
+	// (GET /search)
+	Search(w http.ResponseWriter, r *http.Request, params SearchParams)
+	// List stages (optionally filtered by pipeline).
+	// (GET /stages)
+	ListStages(w http.ResponseWriter, r *http.Request, params ListStagesParams)
+	// Create a stage in a pipeline.
+	// (POST /stages)
+	CreateStage(w http.ResponseWriter, r *http.Request, params CreateStageParams)
+	// Archive (soft-delete) a stage.
+	// (DELETE /stages/{id})
+	ArchiveStage(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Get a stage by id.
+	// (GET /stages/{id})
+	GetStage(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Update a stage (rename / reorder / probability).
+	// (PATCH /stages/{id})
+	UpdateStage(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateStageParams)
+	// List tags.
+	// (GET /tags)
+	ListTags(w http.ResponseWriter, r *http.Request, params ListTagsParams)
+	// Create a tag.
+	// (POST /tags)
+	CreateTag(w http.ResponseWriter, r *http.Request)
+	// Archive a tag.
+	// (DELETE /tags/{id})
+	ArchiveTag(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Apply a tag to an entity (person/org/deal/lead).
+	// (POST /tags/{id}/apply)
+	ApplyTag(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Bootstrap workspace + first admin user in one transaction.
+	// (POST /workspaces)
+	CreateWorkspace(w http.ResponseWriter, r *http.Request)
+}
+
+// Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
+
+type Unimplemented struct{}
+
+// List activities (the timeline; cursor-paginated, filterable by type/entity).
+// (GET /activities)
+func (_ Unimplemented) ListActivities(w http.ResponseWriter, r *http.Request, params ListActivitiesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Log an activity (the `log_activity` MCP verb).
+// (POST /activities)
+func (_ Unimplemented) LogActivity(w http.ResponseWriter, r *http.Request, params LogActivityParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Archive (soft-delete) an activity.
+// (DELETE /activities/{id})
+func (_ Unimplemented) ArchiveActivity(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get an activity by id (includes its links and raw capture payload).
+// (GET /activities/{id})
+func (_ Unimplemented) GetActivity(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update an activity (e.g. complete a task).
+// (PATCH /activities/{id})
+func (_ Unimplemented) UpdateActivity(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateActivityParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Draft a reply/follow-up email for context (the `draft_email` MCP verb).
+// (POST /activities/{id}/draft-email)
+func (_ Unimplemented) DraftEmail(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Send a (possibly edited) email draft — 🟡 confirm-first / gated.
+// (POST /activities/{id}/send-email)
+func (_ Unimplemented) SendEmail(w http.ResponseWriter, r *http.Request, idParam IdParam, params SendEmailParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// The approval inbox — list staged 🟡 actions awaiting human decision.
+// (GET /approvals)
+func (_ Unimplemented) ListApprovals(w http.ResponseWriter, r *http.Request, params ListApprovalsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a single approval item (full proposed diff + evidence).
+// (GET /approvals/{id})
+func (_ Unimplemented) GetApproval(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Approve a staged action (commits it; mints the approval token).
+// (POST /approvals/{id}/approve)
+func (_ Unimplemented) ApproveApproval(w http.ResponseWriter, r *http.Request, idParam IdParam, params ApproveApprovalParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Reject a staged action (discards it; nothing commits).
+// (POST /approvals/{id}/reject)
+func (_ Unimplemented) RejectApproval(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Email + password login; sets crm_session cookie.
+// (POST /auth/login)
+func (_ Unimplemented) Login(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Delete session + clear cookie.
+// (POST /auth/logout)
+func (_ Unimplemented) Logout(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List all live automations in the workspace.
+// (GET /automations)
+func (_ Unimplemented) ListAutomations(w http.ResponseWriter, r *http.Request, params ListAutomationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a catalog-backed automation. Trigger and action jsonb are validated against the closed catalog — 422 on any rejection.
+// (POST /automations)
+func (_ Unimplemented) CreateAutomation(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Soft-delete (archive) an automation. Subsequent GET returns 404.
+// (DELETE /automations/{id})
+func (_ Unimplemented) DeleteAutomation(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get one automation by id.
+// (GET /automations/{id})
+func (_ Unimplemented) GetAutomation(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Parameterize (edit trigger/action) or pause (enabled=false) an automation.
+// (PATCH /automations/{id})
+func (_ Unimplemented) PatchAutomation(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Website cold-start read-back — returns a staged proposal with evidence.
+// (POST /coldstart)
+func (_ Unimplemented) ColdStartReadback(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List the workspace's consent purposes (e.g. transactional, marketing_email, profiling).
+// (GET /consent-purposes)
+func (_ Unimplemented) ListConsentPurposes(w http.ResponseWriter, r *http.Request, params ListConsentPurposesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Define a consent purpose. 🟢 admin write.
+// (POST /consent-purposes)
+func (_ Unimplemented) CreateConsentPurpose(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Link a CRM record to an external conversation. 🟡 — agent calls are queued behind the approval gate.
+// (POST /conversation-links)
+func (_ Unimplemented) LinkConversation(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Remove a conversation link by id. 🟡 — agent calls are queued behind the approval gate.
+// (DELETE /conversation-links/{id})
+func (_ Unimplemented) UnlinkConversation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Resolve a published deal room by its access token (unauthenticated public accessor).
+// (GET /deal-rooms/by-token)
+func (_ Unimplemented) ResolveDealRoomByToken(w http.ResponseWriter, r *http.Request, params ResolveDealRoomByTokenParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Publish a deal room (internal — requires deal_room/publish grant). Refused when consent_state ∉ {granted}.
+// (POST /deal-rooms/{id}/publish)
+func (_ Unimplemented) PublishDealRoom(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List deals (live by default; cursor-paginated). Supports Kanban-by-stage reads.
+// (GET /deals)
+func (_ Unimplemented) ListDeals(w http.ResponseWriter, r *http.Request, params ListDealsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a deal.
+// (POST /deals)
+func (_ Unimplemented) CreateDeal(w http.ResponseWriter, r *http.Request, params CreateDealParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Archive (soft-delete) a deal.
+// (DELETE /deals/{id})
+func (_ Unimplemented) ArchiveDeal(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a deal's composite 360 read (record + stakeholders + timeline refs) by id.
+// (GET /deals/{id})
+func (_ Unimplemented) GetDeal(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update a deal (partial). Closing requires terminal status + lost_reason if lost.
+// (PATCH /deals/{id})
+func (_ Unimplemented) UpdateDeal(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateDealParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Advance a deal to a new stage (audit-logged with prior + next stage).
+// (POST /deals/{id}/advance)
+func (_ Unimplemented) AdvanceDeal(w http.ResponseWriter, r *http.Request, idParam IdParam, params AdvanceDealParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Inferred KPI signals for a deal (pure read; zero writes).
+// (GET /deals/{id}/kpi-signals)
+func (_ Unimplemented) GetDealKPISignals(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Override an inferred KPI — persists one ai_feedback row (🟡 requires approval).
+// (POST /deals/{id}/kpi-signals/{key}:override)
+func (_ Unimplemented) OverrideDealKPISignal(w http.ResponseWriter, r *http.Request, idParam IdParam, key string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// One evidence-grounded inferred next step for the deal (pure read; zero writes).
+// (GET /deals/{id}/next-step)
+func (_ Unimplemented) GetDealNextStep(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Accept an inferred next step into exactly one task (idempotent).
+// (POST /deals/{id}/next-step:accept)
+func (_ Unimplemented) AcceptDealNextStep(w http.ResponseWriter, r *http.Request, idParam IdParam, params AcceptDealNextStepParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Evidenced warm/neutral/blocking signals for a deal's stakeholders (pure read; zero writes).
+// (GET /deals/{id}/people-signals)
+func (_ Unimplemented) GetDealPeopleSignals(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Correct a person's warm/neutral/blocking label — persists one ai_feedback row (🟡 requires approval).
+// (POST /deals/{id}/people-signals/{personId}:correct)
+func (_ Unimplemented) CorrectPersonSignal(w http.ResponseWriter, r *http.Request, idParam IdParam, personId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Restore (un-archive) a soft-deleted deal.
+// (POST /deals/{id}/restore)
+func (_ Unimplemented) RestoreDeal(w http.ResponseWriter, r *http.Request, idParam IdParam, params RestoreDealParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List a deal's stakeholders (deal↔person relationships).
+// (GET /deals/{id}/stakeholders)
+func (_ Unimplemented) ListDealStakeholders(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List drafting assets (cursor-paginated).
+// (GET /drafting-assets)
+func (_ Unimplemented) ListDraftingAssets(w http.ResponseWriter, r *http.Request, params ListDraftingAssetsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a drafting asset.
+// (POST /drafting-assets)
+func (_ Unimplemented) CreateDraftingAsset(w http.ResponseWriter, r *http.Request, params CreateDraftingAssetParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Archive (soft-delete) a drafting asset.
+// (DELETE /drafting-assets/{id})
+func (_ Unimplemented) ArchiveDraftingAsset(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a drafting asset by id.
+// (GET /drafting-assets/{id})
+func (_ Unimplemented) GetDraftingAsset(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Partially update a drafting asset (only supplied fields change).
+// (PUT /drafting-assets/{id})
+func (_ Unimplemented) UpdateDraftingAsset(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateDraftingAssetParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Approve a drafting asset (transitions approval_state to approved).
+// (POST /drafting-assets/{id}/approve)
+func (_ Unimplemented) ApproveDraftingAsset(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Expire a drafting asset (transitions approval_state to expired).
+// (POST /drafting-assets/{id}/expire)
+func (_ Unimplemented) ExpireDraftingAsset(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Trigger a full self-serve workspace export bundle (async).
+// (POST /exports)
+func (_ Unimplemented) CreateExport(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get the status (and, when complete, artifact refs) of an export run.
+// (GET /exports/{id})
+func (_ Unimplemented) GetExport(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Start a mandatory dry-run over a seeded source (async, returns import_run with status validating/awaiting_approval).
+// (POST /imports)
+func (_ Unimplemented) CreateImport(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get the status and (when complete) validation report ref of an import run.
+// (GET /imports/{id})
+func (_ Unimplemented) GetImport(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Approve a dry-run result and enqueue the real import run (async, 202).
+// (POST /imports/{id}/approve)
+func (_ Unimplemented) ApproveImport(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Read the workspace's HubSpot connection vault view (masked token, no plaintext/ciphertext ever).
+// (GET /integrations/hubspot)
+func (_ Unimplemented) GetHubSpotConnection(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// OAuth authorization-code callback — exchanges code for tokens, seals + stores them.
+// (GET /integrations/hubspot/callback)
+func (_ Unimplemented) HubspotOAuthCallback(w http.ResponseWriter, r *http.Request, params HubspotOAuthCallbackParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Start the HubSpot OAuth authorize-code flow with least-privilege scopes.
+// (POST /integrations/hubspot/connect)
+func (_ Unimplemented) ConnectHubSpot(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// One-action revoke — sets the connection to revoked; the next adapter call fails closed.
+// (POST /integrations/hubspot/revoke)
+func (_ Unimplemented) RevokeHubSpotConnection(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Rotate the stored HubSpot refresh token via a token-refresh call, reseal, and re-verify scopes.
+// (POST /integrations/hubspot/rotate)
+func (_ Unimplemented) RotateHubSpotConnection(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Re-verify the connection's scopes against HubSpot's live token-info endpoint (AC4).
+// (POST /integrations/hubspot/verify-scopes)
+func (_ Unimplemented) VerifyHubSpotScopes(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List invoices (cursor-paginated).
+// (GET /invoices)
+func (_ Unimplemented) ListInvoices(w http.ResponseWriter, r *http.Request, params ListInvoicesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Generate an invoice from an accepted offer.
+// (POST /invoices)
+func (_ Unimplemented) GenerateInvoice(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get an invoice by id.
+// (GET /invoices/{id})
+func (_ Unimplemented) GetInvoice(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List leads (their OWN list, distinct from contacts; cursor-paginated).
+// (GET /leads)
+func (_ Unimplemented) ListLeads(w http.ResponseWriter, r *http.Request, params ListLeadsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a lead.
+// (POST /leads)
+func (_ Unimplemented) CreateLead(w http.ResponseWriter, r *http.Request, params CreateLeadParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Disqualify (soft-archive) a lead.
+// (DELETE /leads/{id})
+func (_ Unimplemented) DisqualifyLead(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a lead by id.
+// (GET /leads/{id})
+func (_ Unimplemented) GetLead(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update a lead (partial).
+// (PATCH /leads/{id})
+func (_ Unimplemented) UpdateLead(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateLeadParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Promote a lead to a person on genuine engagement (non-lossy merge).
+// (POST /leads/{id}/promote)
+func (_ Unimplemented) PromoteLead(w http.ResponseWriter, r *http.Request, idParam IdParam, params PromoteLeadParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// "Explain This Score" — the factor breakdown behind a lead's current score.
+// (GET /leads/{id}/score)
+func (_ Unimplemented) GetLeadScore(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Human override of a lead's score — suppresses automatic recompute until cleared.
+// (POST /leads/{id}/score:override)
+func (_ Unimplemented) OverrideLeadScore(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List lists (static + dynamic segments).
+// (GET /lists)
+func (_ Unimplemented) ListLists(w http.ResponseWriter, r *http.Request, params ListListsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a list (static set or dynamic segment).
+// (POST /lists)
+func (_ Unimplemented) CreateList(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Archive a list.
+// (DELETE /lists/{id})
+func (_ Unimplemented) ArchiveList(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a list by id.
+// (GET /lists/{id})
+func (_ Unimplemented) GetList(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List a (static) list's members.
+// (GET /lists/{id}/members)
+func (_ Unimplemented) ListListMembers(w http.ResponseWriter, r *http.Request, idParam IdParam, params ListListMembersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Add a member to a static list.
+// (POST /lists/{id}/members)
+func (_ Unimplemented) AddListMember(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get the current authenticated principal (user or agent).
+// (GET /me)
+func (_ Unimplemented) GetCurrentPrincipal(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List workspace members with their assigned role keys.
+// (GET /members)
+func (_ Unimplemented) ListMembers(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Assign a role to a workspace member (idempotent).
+// (POST /members/{user_id}/roles)
+func (_ Unimplemented) AssignMemberRole(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID, params AssignMemberRoleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Revoke a role from a workspace member.
+// (DELETE /members/{user_id}/roles/{role_key})
+func (_ Unimplemented) RevokeMemberRole(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID, roleKey string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List organizations (live by default; cursor-paginated).
+// (GET /organizations)
+func (_ Unimplemented) ListOrganizations(w http.ResponseWriter, r *http.Request, params ListOrganizationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create an organization.
+// (POST /organizations)
+func (_ Unimplemented) CreateOrganization(w http.ResponseWriter, r *http.Request, params CreateOrganizationParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Archive (soft-delete) an organization.
+// (DELETE /organizations/{id})
+func (_ Unimplemented) ArchiveOrganization(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get an organization by id (the 360 record).
+// (GET /organizations/{id})
+func (_ Unimplemented) GetOrganization(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update an organization (partial).
+// (PATCH /organizations/{id})
+func (_ Unimplemented) UpdateOrganization(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateOrganizationParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Merge this organization into a target (non-lossy).
+// (POST /organizations/{id}/merge)
+func (_ Unimplemented) MergeOrganization(w http.ResponseWriter, r *http.Request, idParam IdParam, params MergeOrganizationParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Read the partner extension on an org (404 if the org is not a partner).
+// (GET /organizations/{id}/partner)
+func (_ Unimplemented) GetPartner(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create/update the partner extension on an org (sets classification='partner').
+// (PUT /organizations/{id}/partner)
+func (_ Unimplemented) UpsertPartner(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Restore (un-archive) a soft-deleted organization.
+// (POST /organizations/{id}/restore)
+func (_ Unimplemented) RestoreOrganization(w http.ResponseWriter, r *http.Request, idParam IdParam, params RestoreOrganizationParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List partner organizations (orgs with a partner row), filterable by role/cert status.
+// (GET /partners)
+func (_ Unimplemented) ListPartners(w http.ResponseWriter, r *http.Request, params ListPartnersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create Agent Seat Passport (scopes bounded by granting human's RBAC).
+// (POST /passports)
+func (_ Unimplemented) CreatePassport(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Revoke a passport.
+// (DELETE /passports/{id})
+func (_ Unimplemented) RevokePassport(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List people (live by default; cursor-paginated).
+// (GET /people)
+func (_ Unimplemented) ListPeople(w http.ResponseWriter, r *http.Request, params ListPeopleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a person.
+// (POST /people)
+func (_ Unimplemented) CreatePerson(w http.ResponseWriter, r *http.Request, params CreatePersonParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Archive (soft-delete) a person.
+// (DELETE /people/{id})
+func (_ Unimplemented) ArchivePerson(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a person by id (the 360 record).
+// (GET /people/{id})
+func (_ Unimplemented) GetPerson(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update a person (partial).
+// (PATCH /people/{id})
+func (_ Unimplemented) UpdatePerson(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdatePersonParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Read a person's per-purpose consent state plus the append-only proof log.
+// (GET /people/{id}/consent)
+func (_ Unimplemented) GetPersonConsent(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Grant or withdraw consent for one purpose — writes an append-only proof row.
+// (POST /people/{id}/consent)
+func (_ Unimplemented) RecordConsent(w http.ResponseWriter, r *http.Request, idParam IdParam, params RecordConsentParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Merge this person into a target (non-lossy).
+// (POST /people/{id}/merge)
+func (_ Unimplemented) MergePerson(w http.ResponseWriter, r *http.Request, idParam IdParam, params MergePersonParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Restore (un-archive) a soft-deleted person.
+// (POST /people/{id}/restore)
+func (_ Unimplemented) RestorePerson(w http.ResponseWriter, r *http.Request, idParam IdParam, params RestorePersonParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get the evidence behind a person's relationship-strength score (PO-EXT-2).
+// (GET /people/{id}/strength-breakdown)
+func (_ Unimplemented) GetPersonStrengthBreakdown(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List pipelines.
+// (GET /pipelines)
+func (_ Unimplemented) ListPipelines(w http.ResponseWriter, r *http.Request, params ListPipelinesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a pipeline.
+// (POST /pipelines)
+func (_ Unimplemented) CreatePipeline(w http.ResponseWriter, r *http.Request, params CreatePipelineParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Archive (soft-delete) a pipeline.
+// (DELETE /pipelines/{id})
+func (_ Unimplemented) ArchivePipeline(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a pipeline (with its ordered stages).
+// (GET /pipelines/{id})
+func (_ Unimplemented) GetPipeline(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update a pipeline (rename / reorder / set default — bounded config).
+// (PATCH /pipelines/{id})
+func (_ Unimplemented) UpdatePipeline(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdatePipelineParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Weighted pipeline value for this pipeline (DEAL-FORM-2), server-computed.
+// (GET /pipelines/{id}/rollup)
+func (_ Unimplemented) GetPipelineRollup(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List products (active by default; cursor-paginated).
+// (GET /products)
+func (_ Unimplemented) ListProducts(w http.ResponseWriter, r *http.Request, params ListProductsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a product (rate-card entry).
+// (POST /products)
+func (_ Unimplemented) CreateProduct(w http.ResponseWriter, r *http.Request, params CreateProductParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Archive (soft-delete) a product.
+// (DELETE /products/{id})
+func (_ Unimplemented) ArchiveProduct(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a product by id.
+// (GET /products/{id})
+func (_ Unimplemented) GetProduct(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update a product (full replace — all writable fields replaced).
+// (PUT /products/{id})
+func (_ Unimplemented) UpdateProduct(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateProductParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List manual per-record grants, filtered by record or by subject (A52/ADR-0039).
+// (GET /record-grants)
+func (_ Unimplemented) ListRecordGrants(w http.ResponseWriter, r *http.Request, params ListRecordGrantsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Share one record with a user or team. 🟡 — agent calls are queued behind the approval gate.
+// (POST /record-grants)
+func (_ Unimplemented) CreateRecordGrant(w http.ResponseWriter, r *http.Request, params CreateRecordGrantParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Revoke a manual record grant. 🟡 — agent calls are queued behind the approval gate.
+// (DELETE /record-grants/{id})
+func (_ Unimplemented) RevokeRecordGrant(w http.ResponseWriter, r *http.Request, idParam IdParam, params RevokeRecordGrantParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Return the per-record audit-log history as rendered plain-language lines.
+// (GET /records/{entity_type}/{id}/history)
+func (_ Unimplemented) GetRecordHistory(w http.ResponseWriter, r *http.Request, entityType string, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List relationships (employment, deal_stakeholder, or partner edges).
+// (GET /relationships)
+func (_ Unimplemented) ListRelationships(w http.ResponseWriter, r *http.Request, params ListRelationshipsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a relationship edge (employment or deal stakeholder).
+// (POST /relationships)
+func (_ Unimplemented) CreateRelationship(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Archive (soft-delete) a relationship.
+// (DELETE /relationships/{id})
+func (_ Unimplemented) ArchiveRelationship(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update a relationship (role, primary flag, dates).
+// (PATCH /relationships/{id})
+func (_ Unimplemented) UpdateRelationship(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Resolve a derivation_url to its plain-language definition and drill-through rows.
+// (GET /reports/derivations/{handle})
+func (_ Unimplemented) ResolveDerivation(w http.ResponseWriter, r *http.Request, handle string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Run a report (the `run_report` MCP verb) and return aggregate rows.
+// (POST /reports/{report})
+func (_ Unimplemented) RunReport(w http.ResponseWriter, r *http.Request, report string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List the workspace's assignable roles.
+// (GET /roles)
+func (_ Unimplemented) ListRoles(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Cross-object search (people, orgs, deals, activities, leads).
+// (GET /search)
+func (_ Unimplemented) Search(w http.ResponseWriter, r *http.Request, params SearchParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List stages (optionally filtered by pipeline).
+// (GET /stages)
+func (_ Unimplemented) ListStages(w http.ResponseWriter, r *http.Request, params ListStagesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a stage in a pipeline.
+// (POST /stages)
+func (_ Unimplemented) CreateStage(w http.ResponseWriter, r *http.Request, params CreateStageParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Archive (soft-delete) a stage.
+// (DELETE /stages/{id})
+func (_ Unimplemented) ArchiveStage(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a stage by id.
+// (GET /stages/{id})
+func (_ Unimplemented) GetStage(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update a stage (rename / reorder / probability).
+// (PATCH /stages/{id})
+func (_ Unimplemented) UpdateStage(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateStageParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List tags.
+// (GET /tags)
+func (_ Unimplemented) ListTags(w http.ResponseWriter, r *http.Request, params ListTagsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a tag.
+// (POST /tags)
+func (_ Unimplemented) CreateTag(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Archive a tag.
+// (DELETE /tags/{id})
+func (_ Unimplemented) ArchiveTag(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Apply a tag to an entity (person/org/deal/lead).
+// (POST /tags/{id}/apply)
+func (_ Unimplemented) ApplyTag(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Bootstrap workspace + first admin user in one transaction.
+// (POST /workspaces)
+func (_ Unimplemented) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ServerInterfaceWrapper converts contexts to parameters.
+type ServerInterfaceWrapper struct {
+	Handler            ServerInterface
+	HandlerMiddlewares []MiddlewareFunc
+	ErrorHandlerFunc   func(w http.ResponseWriter, r *http.Request, err error)
+}
+
+type MiddlewareFunc func(http.Handler) http.Handler
+
+// ListActivities operation middleware
+func (siw *ServerInterfaceWrapper) ListActivities(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListActivitiesParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.SortParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "entity_type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "entity_type", r.URL.Query(), &params.EntityType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "entity_type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "entity_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "entity_id", r.URL.Query(), &params.EntityId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "entity_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "assignee_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "assignee_id", r.URL.Query(), &params.AssigneeId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "assignee_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "assignee_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListActivities(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// LogActivity operation middleware
+func (siw *ServerInterfaceWrapper) LogActivity(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params LogActivityParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LogActivity(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveActivity operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveActivity(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveActivity(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetActivity operation middleware
+func (siw *ServerInterfaceWrapper) GetActivity(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetActivity(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateActivity operation middleware
+func (siw *ServerInterfaceWrapper) UpdateActivity(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateActivityParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatchParam IfMatchParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatchParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatchParam = &IfMatchParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateActivity(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DraftEmail operation middleware
+func (siw *ServerInterfaceWrapper) DraftEmail(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DraftEmail(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SendEmail operation middleware
+func (siw *ServerInterfaceWrapper) SendEmail(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SendEmailParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "X-Approval-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Approval-Token")]; found {
+		var ApprovalTokenParam ApprovalTokenParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Approval-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Approval-Token", valueList[0], &ApprovalTokenParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Approval-Token", Err: err})
+			return
+		}
+
+		params.ApprovalTokenParam = &ApprovalTokenParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SendEmail(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListApprovals operation middleware
+func (siw *ServerInterfaceWrapper) ListApprovals(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListApprovalsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListApprovals(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetApproval operation middleware
+func (siw *ServerInterfaceWrapper) GetApproval(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetApproval(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApproveApproval operation middleware
+func (siw *ServerInterfaceWrapper) ApproveApproval(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ApproveApprovalParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveApproval(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RejectApproval operation middleware
+func (siw *ServerInterfaceWrapper) RejectApproval(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RejectApproval(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// Login operation middleware
+func (siw *ServerInterfaceWrapper) Login(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.Login(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// Logout operation middleware
+func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.Logout(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAutomations operation middleware
+func (siw *ServerInterfaceWrapper) ListAutomations(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAutomationsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAutomations(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAutomation operation middleware
+func (siw *ServerInterfaceWrapper) CreateAutomation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAutomation(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteAutomation operation middleware
+func (siw *ServerInterfaceWrapper) DeleteAutomation(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteAutomation(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAutomation operation middleware
+func (siw *ServerInterfaceWrapper) GetAutomation(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAutomation(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PatchAutomation operation middleware
+func (siw *ServerInterfaceWrapper) PatchAutomation(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PatchAutomation(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ColdStartReadback operation middleware
+func (siw *ServerInterfaceWrapper) ColdStartReadback(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ColdStartReadback(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListConsentPurposes operation middleware
+func (siw *ServerInterfaceWrapper) ListConsentPurposes(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListConsentPurposesParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListConsentPurposes(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateConsentPurpose operation middleware
+func (siw *ServerInterfaceWrapper) CreateConsentPurpose(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateConsentPurpose(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// LinkConversation operation middleware
+func (siw *ServerInterfaceWrapper) LinkConversation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LinkConversation(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UnlinkConversation operation middleware
+func (siw *ServerInterfaceWrapper) UnlinkConversation(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnlinkConversation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResolveDealRoomByToken operation middleware
+func (siw *ServerInterfaceWrapper) ResolveDealRoomByToken(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ResolveDealRoomByTokenParams
+
+	// ------------- Required query parameter "token" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "token", r.URL.Query(), &params.Token, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "token"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "token", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "workspace_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "workspace_id", r.URL.Query(), &params.WorkspaceId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "workspace_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workspace_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResolveDealRoomByToken(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PublishDealRoom operation middleware
+func (siw *ServerInterfaceWrapper) PublishDealRoom(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PublishDealRoom(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListDeals operation middleware
+func (siw *ServerInterfaceWrapper) ListDeals(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListDealsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.SortParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pipeline_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pipeline_id", r.URL.Query(), &params.PipelineId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pipeline_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pipeline_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "stage_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "stage_id", r.URL.Query(), &params.StageId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "stage_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "stage_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "owner_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "owner_id", r.URL.Query(), &params.OwnerId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "owner_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "owner_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "organization_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "organization_id", r.URL.Query(), &params.OrganizationId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "organization_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "organization_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "stalled" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "stalled", r.URL.Query(), &params.Stalled, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "stalled"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "stalled", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "person_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "person_id", r.URL.Query(), &params.PersonId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "person_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "person_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDeals(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateDeal operation middleware
+func (siw *ServerInterfaceWrapper) CreateDeal(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateDealParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateDeal(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveDeal operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveDeal(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveDeal(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDeal operation middleware
+func (siw *ServerInterfaceWrapper) GetDeal(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDeal(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateDeal operation middleware
+func (siw *ServerInterfaceWrapper) UpdateDeal(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateDealParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatchParam IfMatchParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatchParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatchParam = &IfMatchParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateDeal(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AdvanceDeal operation middleware
+func (siw *ServerInterfaceWrapper) AdvanceDeal(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AdvanceDealParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "X-Approval-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Approval-Token")]; found {
+		var ApprovalTokenParam ApprovalTokenParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Approval-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Approval-Token", valueList[0], &ApprovalTokenParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Approval-Token", Err: err})
+			return
+		}
+
+		params.ApprovalTokenParam = &ApprovalTokenParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AdvanceDeal(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDealKPISignals operation middleware
+func (siw *ServerInterfaceWrapper) GetDealKPISignals(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDealKPISignals(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// OverrideDealKPISignal operation middleware
+func (siw *ServerInterfaceWrapper) OverrideDealKPISignal(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "key" -------------
+	var key string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "key", chi.URLParam(r, "key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.OverrideDealKPISignal(w, r, idParam, key)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDealNextStep operation middleware
+func (siw *ServerInterfaceWrapper) GetDealNextStep(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDealNextStep(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AcceptDealNextStep operation middleware
+func (siw *ServerInterfaceWrapper) AcceptDealNextStep(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AcceptDealNextStepParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AcceptDealNextStep(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDealPeopleSignals operation middleware
+func (siw *ServerInterfaceWrapper) GetDealPeopleSignals(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDealPeopleSignals(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CorrectPersonSignal operation middleware
+func (siw *ServerInterfaceWrapper) CorrectPersonSignal(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "personId" -------------
+	var personId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "personId", chi.URLParam(r, "personId"), &personId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "personId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CorrectPersonSignal(w, r, idParam, personId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RestoreDeal operation middleware
+func (siw *ServerInterfaceWrapper) RestoreDeal(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RestoreDealParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RestoreDeal(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListDealStakeholders operation middleware
+func (siw *ServerInterfaceWrapper) ListDealStakeholders(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDealStakeholders(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListDraftingAssets operation middleware
+func (siw *ServerInterfaceWrapper) ListDraftingAssets(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListDraftingAssetsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "available" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "available", r.URL.Query(), &params.Available, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "available"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "available", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDraftingAssets(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateDraftingAsset operation middleware
+func (siw *ServerInterfaceWrapper) CreateDraftingAsset(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateDraftingAssetParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateDraftingAsset(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveDraftingAsset operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveDraftingAsset(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveDraftingAsset(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDraftingAsset operation middleware
+func (siw *ServerInterfaceWrapper) GetDraftingAsset(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDraftingAsset(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateDraftingAsset operation middleware
+func (siw *ServerInterfaceWrapper) UpdateDraftingAsset(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateDraftingAssetParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatchParam IfMatchParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatchParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatchParam = &IfMatchParam
+
+	}
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateDraftingAsset(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApproveDraftingAsset operation middleware
+func (siw *ServerInterfaceWrapper) ApproveDraftingAsset(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveDraftingAsset(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ExpireDraftingAsset operation middleware
+func (siw *ServerInterfaceWrapper) ExpireDraftingAsset(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExpireDraftingAsset(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateExport operation middleware
+func (siw *ServerInterfaceWrapper) CreateExport(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateExport(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetExport operation middleware
+func (siw *ServerInterfaceWrapper) GetExport(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetExport(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateImport operation middleware
+func (siw *ServerInterfaceWrapper) CreateImport(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateImport(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetImport operation middleware
+func (siw *ServerInterfaceWrapper) GetImport(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetImport(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApproveImport operation middleware
+func (siw *ServerInterfaceWrapper) ApproveImport(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveImport(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetHubSpotConnection operation middleware
+func (siw *ServerInterfaceWrapper) GetHubSpotConnection(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetHubSpotConnection(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// HubspotOAuthCallback operation middleware
+func (siw *ServerInterfaceWrapper) HubspotOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params HubspotOAuthCallbackParams
+
+	// ------------- Optional query parameter "code" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "code", r.URL.Query(), &params.Code, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "code"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "code", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "state" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "state", r.URL.Query(), &params.State, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "state"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "error" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "error", r.URL.Query(), &params.Error, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "error"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "error", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.HubspotOAuthCallback(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ConnectHubSpot operation middleware
+func (siw *ServerInterfaceWrapper) ConnectHubSpot(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConnectHubSpot(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeHubSpotConnection operation middleware
+func (siw *ServerInterfaceWrapper) RevokeHubSpotConnection(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeHubSpotConnection(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RotateHubSpotConnection operation middleware
+func (siw *ServerInterfaceWrapper) RotateHubSpotConnection(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RotateHubSpotConnection(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// VerifyHubSpotScopes operation middleware
+func (siw *ServerInterfaceWrapper) VerifyHubSpotScopes(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.VerifyHubSpotScopes(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListInvoices operation middleware
+func (siw *ServerInterfaceWrapper) ListInvoices(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListInvoicesParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListInvoices(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GenerateInvoice operation middleware
+func (siw *ServerInterfaceWrapper) GenerateInvoice(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GenerateInvoice(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetInvoice operation middleware
+func (siw *ServerInterfaceWrapper) GetInvoice(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetInvoice(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListLeads operation middleware
+func (siw *ServerInterfaceWrapper) ListLeads(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListLeadsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.SortParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "owner_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "owner_id", r.URL.Query(), &params.OwnerId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "owner_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "owner_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "min_score" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "min_score", r.URL.Query(), &params.MinScore, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "min_score"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "min_score", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListLeads(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateLead operation middleware
+func (siw *ServerInterfaceWrapper) CreateLead(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateLeadParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateLead(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DisqualifyLead operation middleware
+func (siw *ServerInterfaceWrapper) DisqualifyLead(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DisqualifyLead(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetLead operation middleware
+func (siw *ServerInterfaceWrapper) GetLead(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetLead(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateLead operation middleware
+func (siw *ServerInterfaceWrapper) UpdateLead(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateLeadParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatchParam IfMatchParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatchParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatchParam = &IfMatchParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateLead(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PromoteLead operation middleware
+func (siw *ServerInterfaceWrapper) PromoteLead(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PromoteLeadParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "X-Approval-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Approval-Token")]; found {
+		var ApprovalTokenParam ApprovalTokenParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Approval-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Approval-Token", valueList[0], &ApprovalTokenParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Approval-Token", Err: err})
+			return
+		}
+
+		params.ApprovalTokenParam = &ApprovalTokenParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PromoteLead(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetLeadScore operation middleware
+func (siw *ServerInterfaceWrapper) GetLeadScore(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetLeadScore(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// OverrideLeadScore operation middleware
+func (siw *ServerInterfaceWrapper) OverrideLeadScore(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.OverrideLeadScore(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListLists operation middleware
+func (siw *ServerInterfaceWrapper) ListLists(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListListsParams
+
+	// ------------- Optional query parameter "entity_type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "entity_type", r.URL.Query(), &params.EntityType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "entity_type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListLists(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateList operation middleware
+func (siw *ServerInterfaceWrapper) CreateList(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateList(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveList operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveList(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveList(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetList operation middleware
+func (siw *ServerInterfaceWrapper) GetList(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetList(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListListMembers operation middleware
+func (siw *ServerInterfaceWrapper) ListListMembers(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListListMembersParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListListMembers(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddListMember operation middleware
+func (siw *ServerInterfaceWrapper) AddListMember(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddListMember(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCurrentPrincipal operation middleware
+func (siw *ServerInterfaceWrapper) GetCurrentPrincipal(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCurrentPrincipal(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListMembers operation middleware
+func (siw *ServerInterfaceWrapper) ListMembers(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListMembers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AssignMemberRole operation middleware
+func (siw *ServerInterfaceWrapper) AssignMemberRole(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "user_id" -------------
+	var userId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "user_id", chi.URLParam(r, "user_id"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user_id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AssignMemberRoleParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AssignMemberRole(w, r, userId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeMemberRole operation middleware
+func (siw *ServerInterfaceWrapper) RevokeMemberRole(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "user_id" -------------
+	var userId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "user_id", chi.URLParam(r, "user_id"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "role_key" -------------
+	var roleKey string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "role_key", chi.URLParam(r, "role_key"), &roleKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "role_key", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeMemberRole(w, r, userId, roleKey)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListOrganizations operation middleware
+func (siw *ServerInterfaceWrapper) ListOrganizations(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListOrganizationsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.SortParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "owner_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "owner_id", r.URL.Query(), &params.OwnerId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "owner_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "owner_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "domain" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "domain", r.URL.Query(), &params.Domain, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "domain"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "domain", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "classification" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "classification", r.URL.Query(), &params.Classification, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "classification"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "classification", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "relevance_gte" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "relevance_gte", r.URL.Query(), &params.RelevanceGte, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "relevance_gte"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "relevance_gte", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListOrganizations(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateOrganization operation middleware
+func (siw *ServerInterfaceWrapper) CreateOrganization(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateOrganizationParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateOrganization(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveOrganization operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveOrganization(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveOrganization(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOrganization operation middleware
+func (siw *ServerInterfaceWrapper) GetOrganization(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOrganization(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateOrganization operation middleware
+func (siw *ServerInterfaceWrapper) UpdateOrganization(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateOrganizationParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatchParam IfMatchParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatchParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatchParam = &IfMatchParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateOrganization(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MergeOrganization operation middleware
+func (siw *ServerInterfaceWrapper) MergeOrganization(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params MergeOrganizationParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "X-Approval-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Approval-Token")]; found {
+		var ApprovalTokenParam ApprovalTokenParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Approval-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Approval-Token", valueList[0], &ApprovalTokenParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Approval-Token", Err: err})
+			return
+		}
+
+		params.ApprovalTokenParam = &ApprovalTokenParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MergeOrganization(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPartner operation middleware
+func (siw *ServerInterfaceWrapper) GetPartner(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPartner(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpsertPartner operation middleware
+func (siw *ServerInterfaceWrapper) UpsertPartner(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpsertPartner(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RestoreOrganization operation middleware
+func (siw *ServerInterfaceWrapper) RestoreOrganization(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RestoreOrganizationParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RestoreOrganization(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPartners operation middleware
+func (siw *ServerInterfaceWrapper) ListPartners(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPartnersParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.SortParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "partner_role" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "partner_role", r.URL.Query(), &params.PartnerRole, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "partner_role"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "partner_role", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cert_status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cert_status", r.URL.Query(), &params.CertStatus, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cert_status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cert_status", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPartners(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePassport operation middleware
+func (siw *ServerInterfaceWrapper) CreatePassport(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePassport(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokePassport operation middleware
+func (siw *ServerInterfaceWrapper) RevokePassport(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokePassport(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPeople operation middleware
+func (siw *ServerInterfaceWrapper) ListPeople(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPeopleParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.SortParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "owner_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "owner_id", r.URL.Query(), &params.OwnerId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "owner_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "owner_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "tag" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "tag", r.URL.Query(), &params.Tag, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "tag"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tag", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPeople(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePerson operation middleware
+func (siw *ServerInterfaceWrapper) CreatePerson(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreatePersonParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePerson(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchivePerson operation middleware
+func (siw *ServerInterfaceWrapper) ArchivePerson(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchivePerson(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPerson operation middleware
+func (siw *ServerInterfaceWrapper) GetPerson(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPerson(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdatePerson operation middleware
+func (siw *ServerInterfaceWrapper) UpdatePerson(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdatePersonParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatchParam IfMatchParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatchParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatchParam = &IfMatchParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdatePerson(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPersonConsent operation middleware
+func (siw *ServerInterfaceWrapper) GetPersonConsent(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPersonConsent(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RecordConsent operation middleware
+func (siw *ServerInterfaceWrapper) RecordConsent(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RecordConsentParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RecordConsent(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MergePerson operation middleware
+func (siw *ServerInterfaceWrapper) MergePerson(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params MergePersonParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "X-Approval-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Approval-Token")]; found {
+		var ApprovalTokenParam ApprovalTokenParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Approval-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Approval-Token", valueList[0], &ApprovalTokenParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Approval-Token", Err: err})
+			return
+		}
+
+		params.ApprovalTokenParam = &ApprovalTokenParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MergePerson(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RestorePerson operation middleware
+func (siw *ServerInterfaceWrapper) RestorePerson(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RestorePersonParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RestorePerson(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPersonStrengthBreakdown operation middleware
+func (siw *ServerInterfaceWrapper) GetPersonStrengthBreakdown(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPersonStrengthBreakdown(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPipelines operation middleware
+func (siw *ServerInterfaceWrapper) ListPipelines(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPipelinesParams
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPipelines(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePipeline operation middleware
+func (siw *ServerInterfaceWrapper) CreatePipeline(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreatePipelineParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePipeline(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchivePipeline operation middleware
+func (siw *ServerInterfaceWrapper) ArchivePipeline(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchivePipeline(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPipeline operation middleware
+func (siw *ServerInterfaceWrapper) GetPipeline(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPipeline(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdatePipeline operation middleware
+func (siw *ServerInterfaceWrapper) UpdatePipeline(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdatePipelineParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatchParam IfMatchParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatchParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatchParam = &IfMatchParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdatePipeline(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPipelineRollup operation middleware
+func (siw *ServerInterfaceWrapper) GetPipelineRollup(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPipelineRollup(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListProducts operation middleware
+func (siw *ServerInterfaceWrapper) ListProducts(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListProductsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListProducts(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateProduct operation middleware
+func (siw *ServerInterfaceWrapper) CreateProduct(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateProductParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateProduct(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveProduct operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveProduct(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveProduct(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProduct operation middleware
+func (siw *ServerInterfaceWrapper) GetProduct(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProduct(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateProduct operation middleware
+func (siw *ServerInterfaceWrapper) UpdateProduct(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateProductParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatchParam IfMatchParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatchParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatchParam = &IfMatchParam
+
+	}
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateProduct(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListRecordGrants operation middleware
+func (siw *ServerInterfaceWrapper) ListRecordGrants(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRecordGrantsParams
+
+	// ------------- Optional query parameter "record_type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "record_type", r.URL.Query(), &params.RecordType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "record_type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "record_type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "record_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "record_id", r.URL.Query(), &params.RecordId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "record_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "record_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "subject_type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "subject_type", r.URL.Query(), &params.SubjectType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "subject_type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "subject_type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "subject_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "subject_id", r.URL.Query(), &params.SubjectId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "subject_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "subject_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRecordGrants(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateRecordGrant operation middleware
+func (siw *ServerInterfaceWrapper) CreateRecordGrant(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateRecordGrantParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "X-Approval-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Approval-Token")]; found {
+		var ApprovalTokenParam ApprovalTokenParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Approval-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Approval-Token", valueList[0], &ApprovalTokenParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Approval-Token", Err: err})
+			return
+		}
+
+		params.ApprovalTokenParam = &ApprovalTokenParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateRecordGrant(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeRecordGrant operation middleware
+func (siw *ServerInterfaceWrapper) RevokeRecordGrant(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RevokeRecordGrantParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Approval-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Approval-Token")]; found {
+		var ApprovalTokenParam ApprovalTokenParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Approval-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Approval-Token", valueList[0], &ApprovalTokenParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Approval-Token", Err: err})
+			return
+		}
+
+		params.ApprovalTokenParam = &ApprovalTokenParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeRecordGrant(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRecordHistory operation middleware
+func (siw *ServerInterfaceWrapper) GetRecordHistory(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "entity_type" -------------
+	var entityType string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "entity_type", chi.URLParam(r, "entity_type"), &entityType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_type", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRecordHistory(w, r, entityType, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListRelationships operation middleware
+func (siw *ServerInterfaceWrapper) ListRelationships(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRelationshipsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "person_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "person_id", r.URL.Query(), &params.PersonId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "person_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "person_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "organization_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "organization_id", r.URL.Query(), &params.OrganizationId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "organization_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "organization_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "deal_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "deal_id", r.URL.Query(), &params.DealId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "deal_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "deal_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRelationships(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateRelationship operation middleware
+func (siw *ServerInterfaceWrapper) CreateRelationship(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateRelationship(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveRelationship operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveRelationship(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveRelationship(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateRelationship operation middleware
+func (siw *ServerInterfaceWrapper) UpdateRelationship(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateRelationship(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResolveDerivation operation middleware
+func (siw *ServerInterfaceWrapper) ResolveDerivation(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "handle" -------------
+	var handle string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "handle", chi.URLParam(r, "handle"), &handle, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "handle", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResolveDerivation(w, r, handle)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RunReport operation middleware
+func (siw *ServerInterfaceWrapper) RunReport(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "report" -------------
+	var report string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "report", chi.URLParam(r, "report"), &report, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "report", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RunReport(w, r, report)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListRoles operation middleware
+func (siw *ServerInterfaceWrapper) ListRoles(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRoles(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// Search operation middleware
+func (siw *ServerInterfaceWrapper) Search(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SearchParams
+
+	// ------------- Required query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "types" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", false, false, "types", r.URL.Query(), &params.Types, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "types"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "types", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.Search(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListStages operation middleware
+func (siw *ServerInterfaceWrapper) ListStages(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListStagesParams
+
+	// ------------- Optional query parameter "pipeline_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pipeline_id", r.URL.Query(), &params.PipelineId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pipeline_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pipeline_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListStages(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateStage operation middleware
+func (siw *ServerInterfaceWrapper) CreateStage(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateStageParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateStage(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveStage operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveStage(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveStage(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetStage operation middleware
+func (siw *ServerInterfaceWrapper) GetStage(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStage(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateStage operation middleware
+func (siw *ServerInterfaceWrapper) UpdateStage(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateStageParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatchParam IfMatchParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatchParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatchParam = &IfMatchParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateStage(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListTags operation middleware
+func (siw *ServerInterfaceWrapper) ListTags(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListTagsParams
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTags(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateTag operation middleware
+func (siw *ServerInterfaceWrapper) CreateTag(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateTag(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveTag operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveTag(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveTag(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApplyTag operation middleware
+func (siw *ServerInterfaceWrapper) ApplyTag(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApplyTag(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateWorkspace operation middleware
+func (siw *ServerInterfaceWrapper) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateWorkspace(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+type UnescapedCookieParamError struct {
+	ParamName string
+	Err       error
+}
+
+func (e *UnescapedCookieParamError) Error() string {
+	return fmt.Sprintf("error unescaping cookie parameter '%s'", e.ParamName)
+}
+
+func (e *UnescapedCookieParamError) Unwrap() error {
+	return e.Err
+}
+
+type UnmarshalingParamError struct {
+	ParamName string
+	Err       error
+}
+
+func (e *UnmarshalingParamError) Error() string {
+	return fmt.Sprintf("Error unmarshaling parameter %s as JSON: %s", e.ParamName, e.Err.Error())
+}
+
+func (e *UnmarshalingParamError) Unwrap() error {
+	return e.Err
+}
+
+type RequiredParamError struct {
+	ParamName string
+}
+
+func (e *RequiredParamError) Error() string {
+	return fmt.Sprintf("Query argument %s is required, but not found", e.ParamName)
+}
+
+type RequiredHeaderError struct {
+	ParamName string
+	Err       error
+}
+
+func (e *RequiredHeaderError) Error() string {
+	return fmt.Sprintf("Header parameter %s is required, but not found", e.ParamName)
+}
+
+func (e *RequiredHeaderError) Unwrap() error {
+	return e.Err
+}
+
+type InvalidParamFormatError struct {
+	ParamName string
+	Err       error
+}
+
+func (e *InvalidParamFormatError) Error() string {
+	return fmt.Sprintf("Invalid format for parameter %s: %s", e.ParamName, e.Err.Error())
+}
+
+func (e *InvalidParamFormatError) Unwrap() error {
+	return e.Err
+}
+
+type TooManyValuesForParamError struct {
+	ParamName string
+	Count     int
+}
+
+func (e *TooManyValuesForParamError) Error() string {
+	return fmt.Sprintf("Expected one value for %s, got %d", e.ParamName, e.Count)
+}
+
+// Handler creates http.Handler with routing matching OpenAPI spec.
+func Handler(si ServerInterface) http.Handler {
+	return HandlerWithOptions(si, ChiServerOptions{})
+}
+
+type ChiServerOptions struct {
+	BaseURL          string
+	BaseRouter       chi.Router
+	Middlewares      []MiddlewareFunc
+	ErrorHandlerFunc func(w http.ResponseWriter, r *http.Request, err error)
+}
+
+// HandlerFromMux creates http.Handler with routing matching OpenAPI spec based on the provided mux.
+func HandlerFromMux(si ServerInterface, r chi.Router) http.Handler {
+	return HandlerWithOptions(si, ChiServerOptions{
+		BaseRouter: r,
+	})
+}
+
+func HandlerFromMuxWithBaseURL(si ServerInterface, r chi.Router, baseURL string) http.Handler {
+	return HandlerWithOptions(si, ChiServerOptions{
+		BaseURL:    baseURL,
+		BaseRouter: r,
+	})
+}
+
+// HandlerWithOptions creates http.Handler with additional options
+func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handler {
+	r := options.BaseRouter
+
+	if r == nil {
+		r = chi.NewRouter()
+	}
+	if options.ErrorHandlerFunc == nil {
+		options.ErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+	}
+	wrapper := ServerInterfaceWrapper{
+		Handler:            si,
+		HandlerMiddlewares: options.Middlewares,
+		ErrorHandlerFunc:   options.ErrorHandlerFunc,
+	}
+
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/activities", wrapper.ListActivities)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/activities", wrapper.LogActivity)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/activities/{id}", wrapper.ArchiveActivity)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/activities/{id}", wrapper.GetActivity)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/activities/{id}", wrapper.UpdateActivity)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/activities/{id}/draft-email", wrapper.DraftEmail)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/activities/{id}/send-email", wrapper.SendEmail)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/approvals", wrapper.ListApprovals)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/approvals/{id}", wrapper.GetApproval)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/approvals/{id}/approve", wrapper.ApproveApproval)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/approvals/{id}/reject", wrapper.RejectApproval)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/login", wrapper.Login)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/logout", wrapper.Logout)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/automations", wrapper.ListAutomations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/automations", wrapper.CreateAutomation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/automations/{id}", wrapper.DeleteAutomation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/automations/{id}", wrapper.GetAutomation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/automations/{id}", wrapper.PatchAutomation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/coldstart", wrapper.ColdStartReadback)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/consent-purposes", wrapper.ListConsentPurposes)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/consent-purposes", wrapper.CreateConsentPurpose)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/conversation-links", wrapper.LinkConversation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/conversation-links/{id}", wrapper.UnlinkConversation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/deal-rooms/by-token", wrapper.ResolveDealRoomByToken)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/deal-rooms/{id}/publish", wrapper.PublishDealRoom)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/deals", wrapper.ListDeals)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/deals", wrapper.CreateDeal)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/deals/{id}", wrapper.ArchiveDeal)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/deals/{id}", wrapper.GetDeal)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/deals/{id}", wrapper.UpdateDeal)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/deals/{id}/advance", wrapper.AdvanceDeal)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/deals/{id}/kpi-signals", wrapper.GetDealKPISignals)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/deals/{id}/kpi-signals/{key}:override", wrapper.OverrideDealKPISignal)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/deals/{id}/next-step", wrapper.GetDealNextStep)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/deals/{id}/next-step:accept", wrapper.AcceptDealNextStep)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/deals/{id}/people-signals", wrapper.GetDealPeopleSignals)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/deals/{id}/people-signals/{personId}:correct", wrapper.CorrectPersonSignal)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/deals/{id}/restore", wrapper.RestoreDeal)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/deals/{id}/stakeholders", wrapper.ListDealStakeholders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/drafting-assets", wrapper.ListDraftingAssets)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/drafting-assets", wrapper.CreateDraftingAsset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/drafting-assets/{id}", wrapper.ArchiveDraftingAsset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/drafting-assets/{id}", wrapper.GetDraftingAsset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/drafting-assets/{id}", wrapper.UpdateDraftingAsset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/drafting-assets/{id}/approve", wrapper.ApproveDraftingAsset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/drafting-assets/{id}/expire", wrapper.ExpireDraftingAsset)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/exports", wrapper.CreateExport)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/exports/{id}", wrapper.GetExport)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/imports", wrapper.CreateImport)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/imports/{id}", wrapper.GetImport)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/imports/{id}/approve", wrapper.ApproveImport)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/integrations/hubspot", wrapper.GetHubSpotConnection)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/integrations/hubspot/callback", wrapper.HubspotOAuthCallback)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/integrations/hubspot/connect", wrapper.ConnectHubSpot)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/integrations/hubspot/revoke", wrapper.RevokeHubSpotConnection)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/integrations/hubspot/rotate", wrapper.RotateHubSpotConnection)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/integrations/hubspot/verify-scopes", wrapper.VerifyHubSpotScopes)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/invoices", wrapper.ListInvoices)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/invoices", wrapper.GenerateInvoice)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/invoices/{id}", wrapper.GetInvoice)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/leads", wrapper.ListLeads)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/leads", wrapper.CreateLead)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/leads/{id}", wrapper.DisqualifyLead)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/leads/{id}", wrapper.GetLead)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/leads/{id}", wrapper.UpdateLead)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/leads/{id}/promote", wrapper.PromoteLead)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/leads/{id}/score", wrapper.GetLeadScore)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/leads/{id}/score:override", wrapper.OverrideLeadScore)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/lists", wrapper.ListLists)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/lists", wrapper.CreateList)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/lists/{id}", wrapper.ArchiveList)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/lists/{id}", wrapper.GetList)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/lists/{id}/members", wrapper.ListListMembers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/lists/{id}/members", wrapper.AddListMember)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me", wrapper.GetCurrentPrincipal)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/members", wrapper.ListMembers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/members/{user_id}/roles", wrapper.AssignMemberRole)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/members/{user_id}/roles/{role_key}", wrapper.RevokeMemberRole)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/organizations", wrapper.ListOrganizations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/organizations", wrapper.CreateOrganization)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/organizations/{id}", wrapper.ArchiveOrganization)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/organizations/{id}", wrapper.GetOrganization)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/organizations/{id}", wrapper.UpdateOrganization)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/organizations/{id}/merge", wrapper.MergeOrganization)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/organizations/{id}/partner", wrapper.GetPartner)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/organizations/{id}/partner", wrapper.UpsertPartner)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/organizations/{id}/restore", wrapper.RestoreOrganization)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/partners", wrapper.ListPartners)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/passports", wrapper.CreatePassport)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/passports/{id}", wrapper.RevokePassport)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/people", wrapper.ListPeople)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/people", wrapper.CreatePerson)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/people/{id}", wrapper.ArchivePerson)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/people/{id}", wrapper.GetPerson)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/people/{id}", wrapper.UpdatePerson)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/people/{id}/consent", wrapper.GetPersonConsent)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/people/{id}/consent", wrapper.RecordConsent)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/people/{id}/merge", wrapper.MergePerson)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/people/{id}/restore", wrapper.RestorePerson)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/people/{id}/strength-breakdown", wrapper.GetPersonStrengthBreakdown)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/pipelines", wrapper.ListPipelines)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/pipelines", wrapper.CreatePipeline)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/pipelines/{id}", wrapper.ArchivePipeline)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/pipelines/{id}", wrapper.GetPipeline)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/pipelines/{id}", wrapper.UpdatePipeline)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/pipelines/{id}/rollup", wrapper.GetPipelineRollup)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/products", wrapper.ListProducts)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/products", wrapper.CreateProduct)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/products/{id}", wrapper.ArchiveProduct)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/products/{id}", wrapper.GetProduct)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/products/{id}", wrapper.UpdateProduct)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/record-grants", wrapper.ListRecordGrants)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/record-grants", wrapper.CreateRecordGrant)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/record-grants/{id}", wrapper.RevokeRecordGrant)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/records/{entity_type}/{id}/history", wrapper.GetRecordHistory)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/relationships", wrapper.ListRelationships)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/relationships", wrapper.CreateRelationship)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/relationships/{id}", wrapper.ArchiveRelationship)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/relationships/{id}", wrapper.UpdateRelationship)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/reports/derivations/{handle}", wrapper.ResolveDerivation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/reports/{report}", wrapper.RunReport)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/roles", wrapper.ListRoles)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/search", wrapper.Search)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/stages", wrapper.ListStages)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/stages", wrapper.CreateStage)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/stages/{id}", wrapper.ArchiveStage)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/stages/{id}", wrapper.GetStage)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/stages/{id}", wrapper.UpdateStage)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tags", wrapper.ListTags)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/tags", wrapper.CreateTag)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/tags/{id}", wrapper.ArchiveTag)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/tags/{id}/apply", wrapper.ApplyTag)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/workspaces", wrapper.CreateWorkspace)
+	})
+
+	return r
 }
