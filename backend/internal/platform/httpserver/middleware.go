@@ -79,7 +79,7 @@ func SessionMiddleware(sessions *crmauth.SessionStore, passports *crmauth.Passpo
 						UserID:   rec.UserID,
 						TenantID: rec.WorkspaceID,
 					})
-					sessions.Touch(ctx, rec.ID)
+					sessions.Touch(ctx, rec.WorkspaceID, rec.ID)
 				}
 			}
 			// Also check Authorization: Bearer <passport_token> for agent calls.

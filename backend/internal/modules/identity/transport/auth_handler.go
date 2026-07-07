@@ -195,7 +195,7 @@ func HandleLogout(sessions *crmauth.SessionStore) http.HandlerFunc {
 		cookie, err := r.Cookie(crmauth.CookieName)
 		if err == nil {
 			if rec, err := sessions.Lookup(r.Context(), cookie.Value); err == nil {
-				_ = sessions.Delete(r.Context(), rec.ID)
+				_ = sessions.Delete(r.Context(), rec.WorkspaceID, rec.ID)
 			}
 		}
 		// Mirror the login cookie's attributes on the clearing cookie so browsers

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 )
 
 // AuditHistoryEntry is one rendered history line for a record mutation.
@@ -141,7 +143,7 @@ func (r *AuditHistoryReader) ReadHistory(ctx context.Context, entityType, entity
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.workspace_id', $1, true)`, workspaceID); err != nil {
+	if err := database.SetWorkspaceScope(ctx, tx, workspaceID); err != nil {
 		return nil, fmt.Errorf("audit history set guc: %w", err)
 	}
 

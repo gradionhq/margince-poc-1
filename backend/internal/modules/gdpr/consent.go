@@ -169,22 +169,23 @@ func NewConsentRepository(db *sql.DB) ConsentRepository {
 type pgConsentRepository struct{ db *sql.DB }
 
 // FindForPurpose returns Granted/Withdrawn/Unknown. Default-deny: no row or wrong
-// purpose → Unknown. Caller is responsible for setting the RLS GUC if needed.
+// purpose → Unknown.
 func (r *pgConsentRepository) FindForPurpose(ctx context.Context, workspaceID, personID, purpose string) (ConsentState, error) {
 	if r.db == nil {
 		return Unknown, fmt.Errorf("crmgdpr.FindForPurpose: db is nil")
 	}
 	var state string
-	err := r.db.QueryRowContext(
-		ctx, `
-		SELECT pc.state
-		FROM person_consent pc
-		JOIN consent_purpose cp ON cp.id = pc.purpose_id
-		WHERE pc.person_id    = $1::uuid
-		  AND cp.name         = $2
-		  AND pc.workspace_id = $3::uuid`,
-		personID, purpose, workspaceID,
-	).Scan(&state)
+	err := database.WithWorkspaceTx(ctx, r.db, workspaceID, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `
+			SELECT pc.state
+			FROM person_consent pc
+			JOIN consent_purpose cp ON cp.id = pc.purpose_id
+			WHERE pc.person_id    = $1::uuid
+			  AND cp.name         = $2
+			  AND pc.workspace_id = $3::uuid`,
+			personID, purpose, workspaceID,
+		).Scan(&state)
+	})
 	if err == sql.ErrNoRows {
 		return Unknown, nil
 	}

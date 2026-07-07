@@ -7,6 +7,7 @@ import (
 	"time"
 
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	"github.com/gradionhq/margince/backend/internal/shared/apperrors"
 )
 
@@ -36,8 +37,7 @@ func Stage(ctx context.Context, tx DBExec, repo Repository, in StageInput) (stri
 	if in.WorkspaceID == "" {
 		return "", fmt.Errorf("crmapprovals stage: empty workspace_id")
 	}
-	if _, err := tx.ExecContext(ctx,
-		`SELECT set_config('app.workspace_id', $1, true)`, in.WorkspaceID); err != nil {
+	if err := database.SetWorkspaceScope(ctx, tx, in.WorkspaceID); err != nil {
 		return "", fmt.Errorf("crmapprovals stage guc: %w", err)
 	}
 

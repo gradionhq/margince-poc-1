@@ -4,8 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
+
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 )
 
 // IncumbentConnectionRecord is one loaded incumbent_connection row.
@@ -49,6 +52,10 @@ func NewIncumbentConnectionStore(db DBExec) *IncumbentConnectionStore {
 func (s *IncumbentConnectionStore) Create(ctx context.Context, workspaceID, connector string, scopes []string) (IncumbentConnectionRecord, error) {
 	var rec IncumbentConnectionRecord
 	scopeArr := "{" + strings.Join(scopes, ",") + "}"
+	if err := database.SetWorkspaceScope(ctx, s.db, workspaceID); err != nil {
+		return rec, fmt.Errorf("incumbent connection: guc: %w", err)
+	}
+	// rls-exempt: SetWorkspaceScope already called above on the caller-supplied DBExec (D1 shape — caller owns tx lifecycle).
 	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO incumbent_connection (workspace_id, connector, scopes)
 		VALUES ($1::uuid, $2, $3::text[])
@@ -68,6 +75,10 @@ func (s *IncumbentConnectionStore) Create(ctx context.Context, workspaceID, conn
 func (s *IncumbentConnectionStore) Get(ctx context.Context, workspaceID, connector string) (IncumbentConnectionRecord, error) {
 	var rec IncumbentConnectionRecord
 	var scopesRaw []byte
+	if err := database.SetWorkspaceScope(ctx, s.db, workspaceID); err != nil {
+		return rec, fmt.Errorf("incumbent connection: guc: %w", err)
+	}
+	// rls-exempt: SetWorkspaceScope already called above on the caller-supplied DBExec (D1 shape — caller owns tx lifecycle).
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, workspace_id, connector, status, scopes, connected_at, revoked_at
 		FROM incumbent_connection
@@ -88,6 +99,10 @@ func (s *IncumbentConnectionStore) Get(ctx context.Context, workspaceID, connect
 // returns ErrNotFound rather than silently no-oping, mirroring
 // PassportStore.Revoke's revoked_at IS NULL fail-closed idiom.
 func (s *IncumbentConnectionStore) Revoke(ctx context.Context, id, workspaceID string) error {
+	if err := database.SetWorkspaceScope(ctx, s.db, workspaceID); err != nil {
+		return fmt.Errorf("incumbent connection: guc: %w", err)
+	}
+	// rls-exempt: SetWorkspaceScope already called above on the caller-supplied DBExec (D1 shape — caller owns tx lifecycle).
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE incumbent_connection SET status='revoked', revoked_at=now()
 		WHERE id=$1::uuid AND workspace_id=$2::uuid AND status='active'`,
