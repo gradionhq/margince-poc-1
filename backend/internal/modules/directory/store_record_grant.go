@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
@@ -138,52 +137,34 @@ type RecordGrantListFilter struct {
 	Cursor      string
 }
 
-// buildRecordGrantListWhere builds the dynamic filter fragment of List's WHERE
-// clause from filter's optional predicates. $1 and $2 are reserved by the
-// caller for workspace_id and cursor, so numbering starts at 3.
-func buildRecordGrantListWhere(filter RecordGrantListFilter) (whereClause string, args []any, nextArgIdx int) {
-	n := 2
-	if filter.RecordType != "" {
-		n++
-		whereClause += fmt.Sprintf(` AND record_type=$%d`, n)
-		args = append(args, filter.RecordType)
-	}
-	if filter.RecordID != "" {
-		n++
-		whereClause += fmt.Sprintf(` AND record_id=$%d::uuid`, n)
-		args = append(args, filter.RecordID)
-	}
-	if filter.SubjectType != "" {
-		n++
-		whereClause += fmt.Sprintf(` AND subject_type=$%d`, n)
-		args = append(args, filter.SubjectType)
-	}
-	if filter.SubjectID != "" {
-		n++
-		whereClause += fmt.Sprintf(` AND subject_id=$%d::uuid`, n)
-		args = append(args, filter.SubjectID)
-	}
-	return whereClause, args, n
-}
-
 // List returns grants matching the given filter (all optional — the
 // contract's listRecordGrants supports filtering by record OR by subject).
+// The query is a single static string; every optional filter is applied via
+// an always-bound empty-string-or-match guard on the parameter, mirroring the
+// pre-existing cursor guard (id::text > cursor when cursor is non-empty)
+// rather than building WHERE text at runtime.
 func (s *RecordGrantStore) List(ctx context.Context, workspaceID string, filter RecordGrantListFilter, limit int) ([]RecordGrant, string, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	extraWhere, extraArgs, n := buildRecordGrantListWhere(filter)
 	out := []RecordGrant{}
 	var nextCursor string
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		where := `workspace_id=$1::uuid AND ($2 = '' OR id::text > $2)` + extraWhere
-		args := append([]any{workspaceID, filter.Cursor}, extraArgs...)
-		n++
-		args = append(args, limit+1)
-		//nolint:gosec // G202: `where` injects only bound-param indices ($N), never user input; all filter values are passed via args
-		query := `SELECT id, workspace_id, record_type, record_id, subject_type, subject_id, access, granted_by, reason, expires_at, created_at, version
-			FROM record_grant WHERE ` + where + ` ORDER BY id LIMIT $` + strconv.Itoa(n) // NOSONAR S2077 -- `where`/`n` are built exclusively from fixed column-name literals and $N placeholder indices (never user input or table/column names); every actual filter VALUE is passed positionally via `args`, the same reviewed-safe shape as store_deal_list.go/store_org_list.go's identical pattern elsewhere in this package (pre-existing, outside this PR's New-Code analysis window).
-		rows, err := tx.QueryContext(ctx, query, args...)
+		args := []any{
+			workspaceID, filter.Cursor, filter.RecordType, filter.RecordID,
+			filter.SubjectType, filter.SubjectID, limit + 1,
+		}
+		rows, err := tx.QueryContext(ctx, `
+			SELECT id, workspace_id, record_type, record_id, subject_type, subject_id, access, granted_by, reason, expires_at, created_at, version
+			FROM record_grant
+			WHERE workspace_id=$1::uuid
+			  AND ($2 = '' OR id::text > $2)
+			  AND ($3 = '' OR record_type=$3)
+			  AND ($4 = '' OR record_id::text=$4)
+			  AND ($5 = '' OR subject_type=$5)
+			  AND ($6 = '' OR subject_id::text=$6)
+			ORDER BY id LIMIT $7`,
+			args...)
 		if err != nil {
 			return err
 		}
