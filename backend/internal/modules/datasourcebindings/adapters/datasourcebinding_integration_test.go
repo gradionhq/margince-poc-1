@@ -146,7 +146,8 @@ func (s *intDealStore) Get(ctx context.Context, id, workspaceID string) (domain.
 func (s *intDealStore) Update(ctx context.Context, id, workspaceID string, updates map[string]any, _ int64) (domain.Deal, error) {
 	if status, ok := updates["status"].(string); ok {
 		_, err := s.db.ExecContext(ctx,
-			`UPDATE deal SET status=$1 WHERE id=$2::uuid AND workspace_id=$3::uuid`,
+			`UPDATE deal SET status=$1, closed_at = CASE WHEN $1 IN ('won','lost') THEN now() ELSE closed_at END
+			 WHERE id=$2::uuid AND workspace_id=$3::uuid`,
 			status, id, workspaceID)
 		if err != nil {
 			return domain.Deal{}, err

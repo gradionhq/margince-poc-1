@@ -14,10 +14,24 @@ import (
 	_ "github.com/lib/pq"
 
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
+	"github.com/gradionhq/margince/backend/internal/modules/deals"
 	"github.com/gradionhq/margince/backend/internal/modules/deals/adapters"
-	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
+	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
 )
+
+// init registers the "target_stage_semantic" dynamic-tier resolver that, in
+// the running server, is only wired up at cmd/api composition
+// (routes.go: toolgate.RegisterResolver("target_stage_semantic",
+// deals.ResolveDynamicTier)). This test package never goes through that
+// composition, so without this the resolver registry has no entry for
+// advanceDealTool's Resolver and toolgate's effectiveTier floors every
+// transition to 🟡 (never escaping to 🟢 by omission) — breaking UAT1's
+// open->open expectation of no approval being required.
+func init() {
+	toolgate.RegisterResolver("target_stage_semantic", deals.ResolveDynamicTier)
+}
 
 const advHandlerTestWorkspaceID = "00000000-0000-0000-0000-000000000a99"
 
@@ -175,7 +189,13 @@ func TestAdvanceDeal_UAT3_AgentWithValidToken_SucceedsThenReplayRejected(t *test
 	dealID := created["id"].(string)
 	version := int64(created["version"].(float64))
 
-	diffFields := map[string]any{"deal_id": dealID, "to_stage_id": won, "status": "won"}
+	// diffFields must match checkApprovalGate's shape exactly (deal_id,
+	// to_stage_id, status, from_semantic, to_semantic) since HashDiff hashes
+	// the whole map — openA->won: from_semantic="open", to_semantic="won".
+	diffFields := map[string]any{
+		"deal_id": dealID, "to_stage_id": won, "status": "won",
+		"from_semantic": "open", "to_semantic": "won",
+	}
 	diffHash := approvalsport.HashDiff(diffFields)
 	tok, err := crmapprovals.SignToken(crmapprovals.TokenClaims{
 		JTI: "uat3-jti-" + dealID, ApprovalID: "appr-uat3", WorkspaceID: advHandlerTestWorkspaceID,
@@ -248,7 +268,13 @@ func TestAdvanceDeal_UAT5_Reopen_AgentGatedThenClearsOnSuccess(t *testing.T) {
 		t.Fatalf("expected 403 on agent reopen without token, got %d: %s", wNoToken.Code, wNoToken.Body.String())
 	}
 
-	diffFields := map[string]any{"deal_id": dealID, "to_stage_id": openA, "status": "open"}
+	// Reopen from the "lost" stage back to openA: from_semantic="lost",
+	// to_semantic="open" — must match checkApprovalGate's diffFields shape
+	// exactly since HashDiff hashes the whole map.
+	diffFields := map[string]any{
+		"deal_id": dealID, "to_stage_id": openA, "status": "open",
+		"from_semantic": "lost", "to_semantic": "open",
+	}
 	diffHash := approvalsport.HashDiff(diffFields)
 	tok, err := crmapprovals.SignToken(crmapprovals.TokenClaims{
 		JTI: "uat5-jti-" + dealID, WorkspaceID: advHandlerTestWorkspaceID,
