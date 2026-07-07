@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
+	platformconfig "github.com/gradionhq/margince/backend/internal/platform/config"
 )
 
 // servedResources is the set of top-level contract resources this pruned
@@ -171,7 +173,7 @@ func concretePath(p string) string {
 func buildTestMux(t *testing.T) *http.ServeMux {
 	t.Helper()
 	var db *sql.DB
-	return buildMux(context.Background(), db, Config{}, nil)
+	return buildMux(context.Background(), db, platformconfig.Config{}, nil)
 }
 
 // loadContractOps returns every (method, path, operationId) from crm.yaml.

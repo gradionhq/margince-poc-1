@@ -1,6 +1,7 @@
-package workflow
+package events
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -53,4 +54,13 @@ func TestEventEnvelopeTopicFormat(t *testing.T) {
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		t.Errorf("Topic should be <entity>.<verb>, got %q", env.Topic)
 	}
+}
+
+type h struct{}
+
+func (h) Match(string) bool                       { return true }
+func (h) Plan(context.Context, string, any) error { return nil }
+
+func TestHandler(t *testing.T) {
+	var _ Handler = h{}
 }

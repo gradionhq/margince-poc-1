@@ -43,7 +43,6 @@ vendors:
   text:    { in: "golang.org/x/text**" }
 components:
   # Tier-0 shared kernel (dependency-free leaf layer)
-  obs:          { in: internal/shared/kernel/obs }
   crmctx:       { in: internal/shared/kernel/crmctx }
   ids:          { in: internal/shared/kernel/ids }
   errs:         { in: internal/shared/apperrors }
@@ -57,7 +56,6 @@ components:
   datasource:   { in: internal/shared/ports/datasource }
   mcp:          { in: internal/shared/ports/mcp }
   connector:    { in: internal/shared/ports/connector }
-  workflow:     { in: internal/shared/ports/workflow }
   model:        { in: internal/shared/ports/model }
   retrieval:    { in: internal/shared/ports/retrieval }
   jurisdiction: { in: pkg/shared/ports/jurisdiction }
@@ -65,6 +63,11 @@ components:
   approvalsport: { in: internal/shared/ports/approvals }
   session:       { in: internal/shared/ports/session }
   # Tier-1 platform (seams WITH impls, cross-cutting)
+  # WS-E-d (Task 8, AC-E4): config/events/auth/logger relocated from cmd/api + kernel/obs.
+  logger:       { in: internal/platform/logger }
+  config:       { in: internal/platform/config }
+  events:       { in: internal/platform/events }
+  auth:         { in: internal/platform/auth }
   blobstore:    { in: internal/platform/blobstore }
   keyvault:     { in: internal/platform/keyvault }
   audit:        { in: internal/platform/audit }
@@ -158,15 +161,23 @@ deps:
   dedupekern:
     canUse: [text]
   # Tier-1 platform
+  # WS-E-d (Task 8, AC-E4) new platform components:
+  config:
+    mayDependOn: [blobstore, keyvault]
+  events:
+    mayDependOn: [logger]
+    canUse: [river, redis]
+  auth:
+    mayDependOn: [crmctx, logger, session, httpserver]
   identity:
     mayDependOn: [identityadapters, keyvault]
   identityadapters:
     mayDependOn: [keyvault, session, crmctx, database]
     canUse: [crypto]
   httpserver:
-    mayDependOn: [crmctx, obs, session, contracts]
+    mayDependOn: [contracts]
   identitytransport:
-    mayDependOn: [httpserver, identity, audit, crmctx, ids, database]
+    mayDependOn: [httpserver, auth, identity, audit, crmctx, ids, database]
     canUse: [pq]
   audit:
     mayDependOn: [crmctx, ids, database]

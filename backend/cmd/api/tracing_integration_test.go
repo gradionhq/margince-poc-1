@@ -13,8 +13,9 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/gradionhq/margince/backend/internal/platform/events"
+	"github.com/gradionhq/margince/backend/internal/platform/logger"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
-	"github.com/gradionhq/margince/backend/internal/shared/kernel/obs"
 )
 
 func testDBURL() string {
@@ -40,8 +41,9 @@ func testRedisClient(t *testing.T) *redis.Client {
 }
 
 // TestTraceparentRecoverableAcrossRelay seeds an outbox row carrying a known
-// traceparent, runs the REAL relayBatch (outbox -> Redis), then uses the REAL
-// consumerCtxFromStream to prove the downstream ctx carries the same trace id.
+// traceparent, runs the REAL events.RelayBatch (outbox -> Redis), then uses
+// events.ConsumerCtxFromStream to prove the downstream ctx carries the same
+// trace id.
 func TestTraceparentRecoverableAcrossRelay(t *testing.T) {
 	db, err := sql.Open("postgres", testDBURL())
 	if err != nil {
@@ -60,32 +62,28 @@ func TestTraceparentRecoverableAcrossRelay(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `SELECT set_config('app.workspace_id',$1,false)`, wsID); err != nil {
 		t.Fatal(err)
 	}
-	// Isolate from sibling tests' un-relayed outbox rows: relayBatch reads only the
-	// oldest 100 unpublished rows (LIMIT 100), so accumulated noise from other tests
-	// could crowd out the row we insert below. Mark existing unpublished rows published
-	// so ours is the sole relay candidate. (relayBatch reads as table owner across all
-	// workspaces, so this UPDATE is not RLS-scoped.)
+	// Isolate from sibling tests' un-relayed outbox rows.
 	if _, err := db.ExecContext(ctx, `UPDATE event_outbox SET published_at = now() WHERE published_at IS NULL`); err != nil {
 		t.Fatal(err)
 	}
 
 	tid := "0af7651916cd43dd8448eb211c80319c"
-	payload, _ := json.Marshal(map[string]any{"_traceparent": obs.FormatTraceparent(tid, "b7ad6b7169203331")})
+	payload, _ := json.Marshal(map[string]any{"_traceparent": logger.FormatTraceparent(tid, "b7ad6b7169203331")})
 	if _, err := db.ExecContext(ctx, `INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1::uuid,'audit.appended',$2::uuid,$3)`, wsID, ids.New(), payload); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := relayBatch(ctx, db, rdb); err != nil {
-		t.Fatalf("relayBatch: %v", err)
+	if err := events.RelayBatch(ctx, db, rdb); err != nil {
+		t.Fatalf("RelayBatch: %v", err)
 	}
 	// entityTypeFromTopic("audit.appended") == "audit"
-	stream := streamKey(wsID, "audit")
+	stream := events.StreamKey(wsID, "audit")
 	res, err := rdb.XRange(ctx, stream, "-", "+").Result()
 	if err != nil || len(res) == 0 {
 		t.Fatalf("xrange %s: %v len=%d", stream, err, len(res))
 	}
-	cctx := consumerCtxFromStream(res[len(res)-1].Values)
-	if obs.TraceID(cctx) != tid {
-		t.Fatalf("downstream trace id = %q, want %q", obs.TraceID(cctx), tid)
+	cctx := events.ConsumerCtxFromStream(res[len(res)-1].Values)
+	if logger.TraceID(cctx) != tid {
+		t.Fatalf("downstream trace id = %q, want %q", logger.TraceID(cctx), tid)
 	}
 }
