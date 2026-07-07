@@ -14,11 +14,20 @@ import (
 
 	_ "github.com/lib/pq"
 
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	crmcore "github.com/gradionhq/margince/backend/internal/modules/directory"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
 
 const rgHandlerTestWorkspaceID = "00000000-0000-0000-0000-000000000e01"
+
+// rgHandlerTestAgentID is a fixed, valid-UUID agent caller ID for the 🟡
+// approval-gating tests below — a real app_user row is seeded for it (via
+// seedRGHandlerAgentUser) since record_grant.granted_by and
+// audit_log.on_behalf_of both FK to app_user.id (mirrors
+// handler_deal_advance_integration_test.go's seedAdvHandlerFixtures agent
+// app_user pattern).
+const rgHandlerTestAgentID = "00000000-0000-0000-0000-0000000e0002"
 
 func openRGHandlerTestDB(t *testing.T) *sql.DB {
 	t.Helper()
@@ -37,6 +46,28 @@ func openRGHandlerTestDB(t *testing.T) *sql.DB {
 func withRGWorkspace(r *http.Request, userID string) *http.Request {
 	ctx := crmctx.With(r.Context(), crmctx.Principal{TenantID: rgHandlerTestWorkspaceID, UserID: userID})
 	return r.WithContext(ctx)
+}
+
+// withRGWorkspaceAgent mirrors withRGWorkspace but marks the principal as an
+// agent (IsAgent: true, UserID: rgHandlerTestAgentID) so the handler's 🟡
+// approval gate ("if p.IsAgent") engages.
+func withRGWorkspaceAgent(r *http.Request) *http.Request {
+	ctx := crmctx.With(r.Context(), crmctx.Principal{TenantID: rgHandlerTestWorkspaceID, UserID: rgHandlerTestAgentID, IsAgent: true})
+	return r.WithContext(ctx)
+}
+
+// seedRGHandlerAgentUser seeds an is_agent=true app_user row for the fixed
+// rgHandlerTestAgentID — required for an agent principal to be a valid
+// record_grant.granted_by / audit_log.on_behalf_of FK target. Must be called
+// after seedRGHandlerFixtures (which creates the workspace row this FKs to).
+func seedRGHandlerAgentUser(t *testing.T, db *sql.DB) {
+	t.Helper()
+	if _, err := db.Exec(`INSERT INTO app_user (id, workspace_id, email, display_name, is_agent)
+		VALUES ($1, $2, 'rg-agent@test.example', 'RG Agent', true)
+		ON CONFLICT (id) DO NOTHING`,
+		rgHandlerTestAgentID, rgHandlerTestWorkspaceID); err != nil {
+		t.Fatalf("seed agent app_user: %v", err)
+	}
 }
 
 // seedRGHandlerFixtures seeds a workspace, an owner app_user (the granter — it
@@ -112,6 +143,26 @@ func TestRecordGrantHandler_Create_ReturnsSnakeCaseJSON(t *testing.T) {
 		t.Fatalf("granted_by = %v, want %q", got, granterID)
 	}
 
+	// crm.yaml's RecordGrant schema requires 8 fields
+	// (id, record_type, record_id, subject_type, subject_id, access,
+	// granted_by, created_at) — assert every one is present and non-null, not
+	// just the 3 checked above.
+	if got := raw["record_id"]; got != personID {
+		t.Fatalf("record_id = %v, want %q", got, personID)
+	}
+	if got := raw["subject_type"]; got != "user" {
+		t.Fatalf("subject_type = %v, want %q", got, "user")
+	}
+	if got := raw["subject_id"]; got != subjectID {
+		t.Fatalf("subject_id = %v, want %q", got, subjectID)
+	}
+	if got := raw["access"]; got != "read" {
+		t.Fatalf("access = %v, want %q", got, "read")
+	}
+	if got, ok := raw["created_at"]; !ok || got == nil {
+		t.Fatalf("expected non-null %q key, got %+v", "created_at", raw)
+	}
+
 	for _, pascal := range []string{"ID", "WorkspaceID", "RecordType", "GrantedBy"} {
 		if _, ok := raw[pascal]; ok {
 			t.Fatalf("response must not contain PascalCase key %q (untagged struct leak): %+v", pascal, raw)
@@ -165,5 +216,216 @@ func TestRecordGrantHandler_List_ReturnsDataAndPageWithHasMore(t *testing.T) {
 	}
 	if hasMore {
 		t.Fatalf("has_more = true, want false for a single-row result under the default limit")
+	}
+}
+
+// TestRecordGrantHandler_Create_AgentWithoutToken_403ApprovalRequired proves
+// the 🟡 (x-mcp-tool share_record) gate on POST /record-grants actually
+// engages for an agent principal: FINAL-UAT found zero test drove the agent
+// path at all, so a regression silently deleting the `if p.IsAgent {...}`
+// check in create() would ship green without this.
+func TestRecordGrantHandler_Create_AgentWithoutToken_403ApprovalRequired(t *testing.T) {
+	db := openRGHandlerTestDB(t)
+	_, subjectID, personID := seedRGHandlerFixtures(t, db, "create-agent-no-token")
+	seedRGHandlerAgentUser(t, db)
+	h := NewRecordGrantHandler(crmcore.NewRecordGrantStore(db), db)
+
+	body := map[string]any{
+		"record_type": "person", "record_id": personID,
+		"subject_type": "user", "subject_id": subjectID,
+		"access": "read",
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/record-grants", bytes.NewReader(b))
+	req = withRGWorkspaceAgent(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403, body=%s", w.Code, w.Body.String())
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if raw["code"] != "approval_required" {
+		t.Fatalf("code = %v, want %q", raw["code"], "approval_required")
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT count(*) FROM record_grant WHERE record_type='person' AND record_id=$1::uuid AND subject_id=$2::uuid`,
+		personID, subjectID).Scan(&count); err != nil {
+		t.Fatalf("count record_grant: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected no record_grant row inserted without an approval token, got count=%d", count)
+	}
+}
+
+// TestRecordGrantHandler_Create_AgentWithValidToken_Succeeds proves the
+// counterpart of the 403 above: an agent principal presenting a token whose
+// diff_hash binds the exact create fields the handler itself hashes
+// (record_type/record_id/subject_type/subject_id/access) is let through.
+func TestRecordGrantHandler_Create_AgentWithValidToken_Succeeds(t *testing.T) {
+	t.Setenv("APPROVAL_TOKEN_SIGNING_SECRET", "rg-handler-it-secret")
+	db := openRGHandlerTestDB(t)
+	_, subjectID, personID := seedRGHandlerFixtures(t, db, "create-agent-token")
+	seedRGHandlerAgentUser(t, db)
+	h := NewRecordGrantHandler(crmcore.NewRecordGrantStore(db), db)
+
+	body := map[string]any{
+		"record_type": "person", "record_id": personID,
+		"subject_type": "user", "subject_id": subjectID,
+		"access": "read",
+	}
+	diffHash := crmapprovals.HashDiff(map[string]any{
+		"record_type": "person", "record_id": personID,
+		"subject_type": "user", "subject_id": subjectID, "access": "read",
+	})
+	tok, err := crmapprovals.SignToken(crmapprovals.TokenClaims{
+		JTI: "rg-create-jti-" + personID, ApprovalID: "appr-rg-create", WorkspaceID: rgHandlerTestWorkspaceID,
+		Tool: "share_record", DiffHash: diffHash,
+		Exp: time.Now().Add(5 * time.Minute), SingleUse: true,
+	})
+	if err != nil {
+		t.Fatalf("SignToken: %v", err)
+	}
+
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/record-grants", bytes.NewReader(b))
+	req = withRGWorkspaceAgent(req)
+	req.Header.Set("X-Approval-Token", tok)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201, body=%s", w.Code, w.Body.String())
+	}
+
+	var created map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode created grant: %v", err)
+	}
+	grantID, _ := created["id"].(string)
+	if grantID == "" {
+		t.Fatalf("expected non-empty id in response: %+v", created)
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT count(*) FROM record_grant WHERE id=$1::uuid`, grantID).Scan(&count); err != nil {
+		t.Fatalf("count record_grant: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected the record_grant row to exist after a valid-token create, got count=%d", count)
+	}
+}
+
+// TestRecordGrantHandler_Revoke_AgentWithoutToken_403ApprovalRequired proves
+// the same 🟡 gate on DELETE /record-grants/{id} engages for an agent
+// principal with no X-Approval-Token, and that the underlying row survives.
+func TestRecordGrantHandler_Revoke_AgentWithoutToken_403ApprovalRequired(t *testing.T) {
+	db := openRGHandlerTestDB(t)
+	granterID, subjectID, personID := seedRGHandlerFixtures(t, db, "revoke-agent-no-token")
+	seedRGHandlerAgentUser(t, db)
+	h := NewRecordGrantHandler(crmcore.NewRecordGrantStore(db), db)
+
+	createBody, _ := json.Marshal(map[string]any{
+		"record_type": "person", "record_id": personID,
+		"subject_type": "user", "subject_id": subjectID,
+		"access": "read",
+	})
+	createReq := withRGWorkspace(httptest.NewRequest(http.MethodPost, "/record-grants", bytes.NewReader(createBody)), granterID)
+	createW := httptest.NewRecorder()
+	h.ServeHTTP(createW, createReq)
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("seed create status = %d, body=%s", createW.Code, createW.Body.String())
+	}
+	var created map[string]any
+	if err := json.Unmarshal(createW.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode seed create response: %v", err)
+	}
+	grantID, _ := created["id"].(string)
+
+	delReq := httptest.NewRequest(http.MethodDelete, "/record-grants/"+grantID, nil)
+	delReq.SetPathValue("id", grantID)
+	delReq = withRGWorkspaceAgent(delReq)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, delReq)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403, body=%s", w.Code, w.Body.String())
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if raw["code"] != "approval_required" {
+		t.Fatalf("code = %v, want %q", raw["code"], "approval_required")
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT count(*) FROM record_grant WHERE id=$1::uuid`, grantID).Scan(&count); err != nil {
+		t.Fatalf("count record_grant: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected the record_grant row NOT to be deleted without an approval token, got count=%d", count)
+	}
+}
+
+// TestRecordGrantHandler_Revoke_AgentWithValidToken_Succeeds proves the
+// counterpart: an agent principal presenting a token whose diff_hash binds
+// {"id": <grant id>} (the exact map revoke() itself hashes) is let through
+// and the row is actually deleted.
+func TestRecordGrantHandler_Revoke_AgentWithValidToken_Succeeds(t *testing.T) {
+	t.Setenv("APPROVAL_TOKEN_SIGNING_SECRET", "rg-handler-it-secret")
+	db := openRGHandlerTestDB(t)
+	granterID, subjectID, personID := seedRGHandlerFixtures(t, db, "revoke-agent-token")
+	seedRGHandlerAgentUser(t, db)
+	h := NewRecordGrantHandler(crmcore.NewRecordGrantStore(db), db)
+
+	createBody, _ := json.Marshal(map[string]any{
+		"record_type": "person", "record_id": personID,
+		"subject_type": "user", "subject_id": subjectID,
+		"access": "read",
+	})
+	createReq := withRGWorkspace(httptest.NewRequest(http.MethodPost, "/record-grants", bytes.NewReader(createBody)), granterID)
+	createW := httptest.NewRecorder()
+	h.ServeHTTP(createW, createReq)
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("seed create status = %d, body=%s", createW.Code, createW.Body.String())
+	}
+	var created map[string]any
+	if err := json.Unmarshal(createW.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode seed create response: %v", err)
+	}
+	grantID, _ := created["id"].(string)
+
+	diffHash := crmapprovals.HashDiff(map[string]any{"id": grantID})
+	tok, err := crmapprovals.SignToken(crmapprovals.TokenClaims{
+		JTI: "rg-revoke-jti-" + grantID, ApprovalID: "appr-rg-revoke", WorkspaceID: rgHandlerTestWorkspaceID,
+		Tool: "share_record", DiffHash: diffHash,
+		Exp: time.Now().Add(5 * time.Minute), SingleUse: true,
+	})
+	if err != nil {
+		t.Fatalf("SignToken: %v", err)
+	}
+
+	delReq := httptest.NewRequest(http.MethodDelete, "/record-grants/"+grantID, nil)
+	delReq.SetPathValue("id", grantID)
+	delReq = withRGWorkspaceAgent(delReq)
+	delReq.Header.Set("X-Approval-Token", tok)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, delReq)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204, body=%s", w.Code, w.Body.String())
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT count(*) FROM record_grant WHERE id=$1::uuid`, grantID).Scan(&count); err != nil {
+		t.Fatalf("count record_grant: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected the record_grant row to be deleted after a valid-token revoke, got count=%d", count)
 	}
 }
