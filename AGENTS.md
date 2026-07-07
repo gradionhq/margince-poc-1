@@ -38,6 +38,25 @@ and follow it exactly: prose explains, and below the single `## Appendix` marker
 facts are pinned in tables/blocks with stable IDs. A fact promised in prose but left unpinned is
 a gate blocker — these conventions are enforced by `make check`, not optional.
 
+## Commands — the ones you'll run most
+
+`make help` lists every target; [docs/getting-started.md](docs/getting-started.md) covers the run loop
+and [docs/quality/testing.md](docs/quality/testing.md) explains the test lanes. The high-traffic ones:
+
+| Command | What it does |
+|---|---|
+| `make check-q` | **The gate to run.** The full merge suite (`check-backend`: format → lint → invariants → Go unit tests; then `check-fe`: static + tests), quiet: full log to `.tmp/check.log`, only a failure excerpt to stdout. Token-cheap — use this, not `make check`. Green before any PR. |
+| `make check` | The same gate but streams **all** output — a log flood. The human/verbose form; agents should prefer `check-q`. |
+| `make check-backend` / `make check-fe` | Run one half on its own (CI runs these as the parallel `backend-gates` / `fe-gates` jobs). |
+| `make test` | Go **unit** lane only — no real DB/Redis (enforced by `test-lanes`). |
+| `make test-integration` | Full Go **integration** lane — needs `make infra-up`; parallel, fully provisioned, zero-skip. |
+| `make test-it DIR=<pkg> [RUN=<TestName>]` | One integration package/test on a throwaway DB clone — fast iteration. |
+| `make uat_env UAT_SLUG=<slug>` | Spin an **isolated live UAT stack** (own db `crm_uat_<slug>` + slug-derived ports) on the shared infra; logs + stop handle under `.tmp/uat/<slug>/`. |
+| `make uat_env_stop UAT_SLUG=<slug> [DROP=1]` | Stop that env (frees the ports); `DROP=1` also drops its db. |
+| `make fe-uat` | **fe-only UAT**: render + screenshot the *changed* component's stories, no live stack; artifact `.tmp/fe-uat/manifest.json`. |
+| `make infra-up` · `migrate-up` · `seed-dev` · `run` · `fe-dev` | Boot the dev stack by hand (see getting-started). |
+| `make gen-types` / `gen-types-check` | Regenerate / verify contract types after a `crm.yaml` change. |
+
 ## Craftsmanship
 
 The **beauty bar** — the code-quality analogue of P8's UI rubric, applied to the source. `make check`
