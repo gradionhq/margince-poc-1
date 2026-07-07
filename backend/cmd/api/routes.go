@@ -79,6 +79,13 @@ func buildMux(ctx context.Context, db *sql.DB, cfg Config, riverClient *river.Cl
 		domainWrap:    domainWrap,
 	}
 
+	// AllOperations is built here for AC-D3/D10 compile-time interface
+	// conformance only (every crm.yaml operationId has a concrete adapter
+	// method). It is not registered on the mux below — the manual
+	// registration in registerObservabilityAndAuth/registerCoreCRUD remains
+	// the sole live route source; see docs/architecture/contract-pipeline.md.
+	_ = buildAllOperations(k)
+
 	mux := http.NewServeMux()
 	k.registerObservabilityAndAuth(mux)
 	k.registerCoreCRUD(mux)
