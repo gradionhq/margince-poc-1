@@ -196,13 +196,21 @@ craft: ## Build the craftsmanship gate CLI (review / annotate / residue / eval /
 # --- Tooling bootstrap ---
 tools: tools-go ## Install codegen + lint binaries + Playwright browser (full machine bootstrap)
 	@cd frontend && pnpm exec playwright install chromium && echo "Playwright Chromium installed"
-tools-go: ## Install Go lint/codegen binaries (oapi-codegen, go-arch-lint, golangci-lint, gofumpt, oasdiff, migrate) — machine-wide ($(HOME)/go/bin), skips each binary already on PATH
-	@command -v oapi-codegen >/dev/null 2>&1 || go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
-	@command -v go-arch-lint >/dev/null 2>&1 || go install github.com/fe3dback/go-arch-lint@latest
-	@command -v golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-	@command -v gofumpt >/dev/null 2>&1 || go install mvdan.cc/gofumpt@latest
-	@command -v oasdiff >/dev/null 2>&1 || go install github.com/oasdiff/oasdiff@latest
-	@command -v migrate >/dev/null 2>&1 || go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+tools-go: ## Install Go lint/codegen binaries at PINNED versions — machine-wide ($(HOME)/go/bin)
+	# Versions are pinned, not @latest: a floating generator silently drifts committed
+	# artifacts (crm_gen.go), turning gen-types-check red on unchanged inputs — exactly
+	# what an unpinned oapi-codegen v2.7.1->v2.7.2 bump did on 2026-07-07 (ADR-0015 §3:
+	# "trustworthy only because every generator is version-pinned"). Install is
+	# UNCONDITIONAL (no `command -v` skip): a cached tool bin holding a different
+	# version must be overwritten with the pin, or the pin doesn't bind. `go install`
+	# is fast when the version is already in the module cache. oapi-codegen tracks the
+	# oapi-codegen/runtime library in backend/go.mod; bump both together, deliberately.
+	go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1
+	go install github.com/fe3dback/go-arch-lint@v1.15.0
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+	go install mvdan.cc/gofumpt@v0.10.0
+	go install github.com/oasdiff/oasdiff@v1.22.0
+	go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1
 	@echo "Go lint/codegen tools ready in $(HOME)/go/bin"
 
 # --- Frontend (skip cleanly if deps not installed) ---
