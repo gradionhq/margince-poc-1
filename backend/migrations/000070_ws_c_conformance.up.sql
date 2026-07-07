@@ -53,7 +53,7 @@ ALTER TABLE passport
 ALTER TABLE passport
   ADD COLUMN on_behalf_of uuid NULL REFERENCES app_user(id) ON DELETE CASCADE,
   ADD COLUMN label        text NULL;
-UPDATE passport SET on_behalf_of = granted_by;
+UPDATE passport SET on_behalf_of = granted_by; -- NOSONAR: intentional full-table backfill of every existing row from the historical sole grantor, not an accidentally-missing WHERE
 ALTER TABLE passport ALTER COLUMN on_behalf_of SET NOT NULL;
 -- Standalone FK-column index (every FK child column needs its own — see 000010);
 -- the partial composite below does not satisfy that on its own (its leading
