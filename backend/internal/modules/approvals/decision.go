@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	"github.com/gradionhq/margince/backend/internal/shared/ports/datasource"
 )
 
@@ -72,8 +73,7 @@ func (d Decider) Approve(ctx context.Context, tx DBExec, id, approverID string) 
 		return fmt.Errorf("decider approve: item %s is not pending (status=%s)", id, item.Status)
 	}
 
-	if _, err := tx.ExecContext(ctx,
-		`SELECT set_config('app.workspace_id', $1, true)`, item.WorkspaceID); err != nil {
+	if err := database.SetWorkspaceScope(ctx, tx, item.WorkspaceID); err != nil {
 		return fmt.Errorf("decider approve guc: %w", err)
 	}
 
@@ -122,8 +122,7 @@ func (d Decider) Reject(ctx context.Context, tx DBExec, id, approverID, reason s
 		return fmt.Errorf("decider reject: item %s is not pending (status=%s)", id, item.Status)
 	}
 
-	if _, err := tx.ExecContext(ctx,
-		`SELECT set_config('app.workspace_id', $1, true)`, item.WorkspaceID); err != nil {
+	if err := database.SetWorkspaceScope(ctx, tx, item.WorkspaceID); err != nil {
 		return fmt.Errorf("decider reject guc: %w", err)
 	}
 
@@ -173,8 +172,7 @@ func (d Decider) Modify(ctx context.Context, tx DBExec, id, approverID string, e
 		return fmt.Errorf("decider modify gate: %w", err)
 	}
 
-	if _, err := tx.ExecContext(ctx,
-		`SELECT set_config('app.workspace_id', $1, true)`, item.WorkspaceID); err != nil {
+	if err := database.SetWorkspaceScope(ctx, tx, item.WorkspaceID); err != nil {
 		return fmt.Errorf("decider modify guc: %w", err)
 	}
 

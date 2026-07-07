@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
 
@@ -84,36 +85,23 @@ func Record(ctx context.Context, db *sql.DB, w ConsentRequest) error {
 		return fmt.Errorf("crmgdpr.Record: workspace_id is empty")
 	}
 
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("crmgdpr.Record begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	return database.WithWorkspaceTx(ctx, db, wsID, func(tx *sql.Tx) error {
+		// 1-3. Persist the consent state + proof row, returning the consent id.
+		consentID, err := persistConsent(ctx, tx, wsID, w)
+		if err != nil {
+			return err
+		}
 
-	// Set RLS GUC so tenant isolation policies pass.
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.workspace_id', $1, true)`, wsID); err != nil {
-		return fmt.Errorf("crmgdpr.Record set guc: %w", err)
-	}
-
-	// 1-3. Persist the consent state + proof row, returning the consent id.
-	consentID, err := persistConsent(ctx, tx, wsID, w)
-	if err != nil {
-		return err
-	}
-
-	// 4. Audit the consent change.
-	authRule := "gdpr.consent"
-	entry := crmaudit.EntryFromPrincipal(ctx, "update", "person_consent", &consentID, nil, nil)
-	entry.WorkspaceID = wsID
-	entry.AuthorizationRule = &authRule
-	if _, err := crmaudit.WriteTx(ctx, tx, entry); err != nil {
-		return fmt.Errorf("crmgdpr.Record audit: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("crmgdpr.Record commit: %w", err)
-	}
-	return nil
+		// 4. Audit the consent change.
+		authRule := "gdpr.consent"
+		entry := crmaudit.EntryFromPrincipal(ctx, "update", "person_consent", &consentID, nil, nil)
+		entry.WorkspaceID = wsID
+		entry.AuthorizationRule = &authRule
+		if _, err := crmaudit.WriteTx(ctx, tx, entry); err != nil {
+			return fmt.Errorf("crmgdpr.Record audit: %w", err)
+		}
+		return nil
+	})
 }
 
 // persistConsent resolves the purpose, upserts person_consent, and writes the
