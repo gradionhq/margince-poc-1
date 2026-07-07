@@ -55,6 +55,7 @@ components:
   blobstore:  { in: internal/platform/blobstore }
   keyvault:   { in: internal/platform/keyvault }
   audit:      { in: internal/platform/audit }
+  database:   { in: internal/platform/database }
   httpserver: { in: internal/platform/httpserver }
   # Tier-1 / Tier-2 domain modules
   identity:          { in: internal/modules/identity }
@@ -94,20 +95,22 @@ deps:
   # cmd/api's own blank `_ "github.com/lib/pq"` driver-registration import,
   # carried over unchanged from auth_handler.go's original poc file.
   identitytransport:
-    mayDependOn: [httpserver, identity, audit, crmctx, ids]
+    mayDependOn: [httpserver, identity, audit, crmctx, ids, database]
     canUse: [pq]
   audit:
-    mayDependOn: [crmctx, ids]
+    mayDependOn: [crmctx, ids, database]
+  database:
+    mayDependOn: [crmctx]
   # directory is core's successor for the un-mounted spine (org/deal/pipeline/
   # stage/activity/lead) plus the Person entity/store (see task-3-report.md's
   # mapping-deviations: Person could not cleanly split out into modules/people
   # without forcing unexported same-package access in Lead.Promote and
   # DatasourceProvider to become exported, which this task does not authorize).
   directory:
-    mayDependOn: [crmctx, datasource, ids, errs, prov, audit]
+    mayDependOn: [crmctx, datasource, ids, errs, prov, audit, database]
     canUse: [pq, text] # text: golang.org/x/text/unicode/norm for NFKD unaccent in dedupe.go (T07)
   deals:
-    mayDependOn: [crmctx, errs, ids]
+    mayDependOn: [crmctx, errs, ids, database]
     canUse: [pq]
   # people is the person-specific HTTP transport layer only (handler_person.go);
   # it depends on directory for the Person type/store (see directory's note
@@ -133,10 +136,10 @@ deps:
   dealstransport:
     mayDependOn: [deals, crmctx, errs, prov]
   gdpr:
-    mayDependOn: [crmctx, audit, ids]
+    mayDependOn: [crmctx, audit, ids, database]
     canUse: [river]
   approvals:
-    mayDependOn: [mcp, datasource, audit, errs, ids]
+    mayDependOn: [mcp, datasource, audit, errs, ids, database]
     canUse: [river]
   # contracts is generated and imports only the oapi-codegen runtime.
   contracts:
