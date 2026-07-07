@@ -155,6 +155,10 @@ const ObjRelationship = "relationship"
 // the /activities route wiring and the seeded role_permission rows.
 const ObjActivity = "activity"
 
+// ObjRecordGrant is the canonical RBAC object name for record grants, shared
+// by the /record-grants route wiring and approval-gating.
+const ObjRecordGrant = "record_grant"
+
 // MethodToAction maps an HTTP method to the canonical RBAC action name.
 func MethodToAction(method string) string {
 	switch strings.ToUpper(method) {

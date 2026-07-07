@@ -30,6 +30,7 @@ var knownObjects = map[string]bool{
 	"automation":   true, // B-E15.4: automation CRUD endpoints
 	"partner":      true,
 	"relationship": true, // T08: generic employment/deal_stakeholder edge CRUD
+	"record_grant": true,
 }
 
 // knownRowScopes is the valid row_scope token set.
