@@ -2,7 +2,13 @@
   "_comment": "Desired branch protection for main. The craftsmanship check is a REQUIRED status with no override path (ADR-0045: no human override). enforce_admins=true closes the bypass. Applied by scripts/apply-branch-protection.sh in Phase 4, AFTER the golden set calibrates BLOCK precision (B-EP11.6) — until then the craftsmanship job is advisory (continue-on-error) so it cannot wedge the PRs that build it.",
   "required_status_checks": {
     "strict": true,
-    "contexts": ["backend-gates", "fe-gates", "craftsmanship", "craft-residue", "dco"]
+    "contexts": [
+      "backend-gates",
+      "fe-gates",
+      "craftsmanship",
+      "craft-residue",
+      "dco"
+    ]
   },
   "enforce_admins": true,
   "required_pull_request_reviews": null,
