@@ -94,7 +94,7 @@ up)
     echo "=== infra + db ==="
     make infra-up
     make db-wait
-    psql "$admin_url" -c "CREATE DATABASE ${db}" 2>&1 || true
+    psql "$admin_url" -c "CREATE DATABASE \"${db}\"" 2>&1 || true
     "$migrate_bin" -path backend/migrations -database "$uat_url" up
     psql "$uat_url" -v ON_ERROR_STOP=1 -f backend/seed/reset.sql
     psql "$uat_url" -v ON_ERROR_STOP=1 -f backend/seed/dev.sql
@@ -150,7 +150,7 @@ stop)
     echo "no recorded env for '$slug' (freed derived ports :$port :$fe_port if bound)"
   fi
   if [[ "$drop" == "1" ]]; then
-    psql "$admin_url" -c "DROP DATABASE IF EXISTS ${db}" >/dev/null 2>&1 || true
+    psql "$admin_url" -c "DROP DATABASE IF EXISTS \"${db}\"" >/dev/null 2>&1 || true
     echo "dropped ${db}"
   fi
   ;;
