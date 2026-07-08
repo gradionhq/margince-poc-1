@@ -4,9 +4,10 @@ Migration-only ticket — no handler/business logic ships in this branch (spec O
 every step exercises the schema directly against a live Postgres rather than an HTTP round-trip.
 All steps are `[auto]` or `[live]` (need a real database).
 
-1. **[auto]** Run `ls backend/migrations/000071_custom_field_catalog.*.sql`.
-   Expected: both `.up.sql` and `.down.sql` present (substitute the actual migration number if
-   `000071` was already taken at build time — see the plan's Task 1 Step 1).
+1. **[auto]** Run `ls backend/migrations/000072_custom_field_catalog.*.sql`.
+   Expected: both `.up.sql` and `.down.sql` present. (Originally `000071`; renumbered to `000072`
+   during `main` integration after a sibling PR, OP-T03, merged `000071_offers_and_products`
+   first — see the plan's Report › Escalations.)
 
 2. **[live]** Run `make infra-up` then `make migrate-up`.
    Expected: exits 0 — the migration applies cleanly against a clean database.

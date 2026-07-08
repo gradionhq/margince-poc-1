@@ -1,4 +1,4 @@
--- 000071 — custom_field catalog (CUSTOM-FIELDS-SCHEMA-1): system-of-record for every
+-- 000072 — custom_field catalog (CUSTOM-FIELDS-SCHEMA-1): system-of-record for every
 -- runtime-added column. Base columns (DM-CONV-3) + version (DM-CONV-4) + RLS (DM-CONV-5-8),
 -- mirroring 000069_record_grant's tenant_isolation shape (that migration itself has no
 -- updated_at/archived_at/version-trigger, so the trigger here instead mirrors
