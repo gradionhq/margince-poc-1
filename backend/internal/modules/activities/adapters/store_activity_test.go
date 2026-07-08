@@ -509,6 +509,103 @@ func TestActivityStore_ListFiltered_CombinedFilters(t *testing.T) {
 	}
 }
 
+func TestActivityStore_ListFiltered_CursorPagination_OverMultiplePages(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "lf-cursor")
+	s := NewActivityStore(db)
+	now := time.Now().UTC()
+	var ids []string
+	for i := 0; i < 5; i++ {
+		ids = append(ids, seedActivityRow(t, db, wsID, "note", nil, nil, fmt.Sprintf("row-%d", i), now.Add(time.Duration(i)*time.Minute)))
+	}
+	seen := map[string]bool{}
+	cursor := ""
+	for {
+		page, next, err := s.ListFiltered(context.Background(), wsID, cursor, 2, domain.ActivityListFilter{})
+		if err != nil {
+			t.Fatalf("ListFiltered: %v", err)
+		}
+		for _, a := range page {
+			if seen[a.ID] {
+				t.Fatalf("row %s returned on more than one page — cursor pagination is broken", a.ID)
+			}
+			seen[a.ID] = true
+		}
+		if next == "" {
+			break
+		}
+		cursor = next
+	}
+	if len(seen) != len(ids) {
+		t.Fatalf("expected all %d rows across pages, saw %d", len(ids), len(seen))
+	}
+}
+
+func TestActivityStore_ListFiltered_SortByDueAt_NullsDoNotBreakPagination(t *testing.T) {
+	// due_at is nullable; Constraint 5's COALESCE-to-'infinity' must keep every row reachable.
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "lf-dueat")
+	s := NewActivityStore(db)
+	now := time.Now().UTC()
+	seedActivityRow(t, db, wsID, "note", nil, nil, "no-due-at", now) // due_at stays NULL
+	out, _, err := s.ListFiltered(context.Background(), wsID, "", 20, domain.ActivityListFilter{Sort: "due_at"})
+	if err != nil {
+		t.Fatalf("ListFiltered sort=due_at: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("expected the NULL-due_at row to still be returned, got %+v", out)
+	}
+}
+
+func TestActivityStore_ListFiltered_DirectionFilter_UsesNewIndex(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "lf-direction")
+	s := NewActivityStore(db)
+	now := time.Now().UTC()
+	inbound := "inbound"
+	outbound := "outbound"
+	inID := seedActivityRow(t, db, wsID, "call", &inbound, nil, "in", now)
+	seedActivityRow(t, db, wsID, "call", &outbound, nil, "out", now)
+
+	out, _, err := s.ListFiltered(context.Background(), wsID, "", 20, domain.ActivityListFilter{Direction: "inbound"})
+	if err != nil {
+		t.Fatalf("ListFiltered: %v", err)
+	}
+	if len(out) != 1 || out[0].ID != inID {
+		t.Fatalf("expected only the inbound row, got %+v", out)
+	}
+
+	// Prove idx_activity_direction (000077) is actually the index Postgres picks for this predicate.
+	// SET LOCAL enable_seqscan=off forces the planner off a sequential scan so this holds
+	// deterministically regardless of how few rows the shared integration DB's activity table
+	// happens to have accumulated (a real-world planner would naturally prefer the index once the
+	// table is large; this test doesn't depend on reaching that volume).
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`SET LOCAL enable_seqscan = off`); err != nil {
+		t.Fatalf("set local enable_seqscan: %v", err)
+	}
+	rows, err := tx.Query(`EXPLAIN SELECT id FROM activity WHERE workspace_id=$1::uuid AND direction=$2 AND archived_at IS NULL ORDER BY occurred_at DESC`, wsID, "inbound")
+	if err != nil {
+		t.Fatalf("explain: %v", err)
+	}
+	defer rows.Close()
+	var plan strings.Builder
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			t.Fatalf("scan explain line: %v", err)
+		}
+		plan.WriteString(line + "\n")
+	}
+	if !strings.Contains(plan.String(), "idx_activity_direction") {
+		t.Fatalf("expected idx_activity_direction in the query plan, got:\n%s", plan.String())
+	}
+}
+
 func TestActivityStore_Update_TaskFieldOnNonTaskKind_Rejected(t *testing.T) {
 	db := openActivityStoreTestDB(t)
 	wsID, _, _ := seedActivityStoreFixtures(t, db, "updtaskfield")
