@@ -334,7 +334,7 @@ deps:
     mayDependOn: [deals, dealsdomain, errs, database, auth, session, recordsadapters]
     canUse: [pq]
   recordsadapters:
-    mayDependOn: [errs, database, audit, sqlutil]
+    mayDependOn: [deals, errs, database, audit, sqlutil]
     canUse: [pq]
   # people domain uses strengthkern for PersonStrengthFrom; peopledomain composes
   # ActivityRef/deal/relationship refs (intentional cross-module composite-reference sharing).

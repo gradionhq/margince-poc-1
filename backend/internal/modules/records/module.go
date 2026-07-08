@@ -52,8 +52,7 @@ type treeNode struct {
 	ownerID  sql.NullString
 }
 
-// currentQuarterBounds returns the [start, end) calendar-quarter window containing now, expressed
-// in loc (DM-TZ-4 calendar-aligned reporting periods). start is inclusive, end exclusive.
+// currentQuarterBounds returns the [start, end) calendar-quarter window for now in loc (DM-TZ-4).
 func currentQuarterBounds(now time.Time, loc *time.Location) (start, end time.Time) {
 	n := now.In(loc)
 	qStartMonth := ((int(n.Month())-1)/3)*3 + 1
@@ -62,9 +61,8 @@ func currentQuarterBounds(now time.Time, loc *time.Location) (start, end time.Ti
 	return start, end
 }
 
-// nodeReadable applies the RD-T04 row_scope readability table: "all" always passes; "own"
-// requires ownerIsViewer or hasGrant (NULL owner is not auto-included); "team" also passes
-// if ownerIsTeammate. Any other scope returns false.
+// nodeReadable applies the RD-T04 row_scope table: "all" passes; "own" requires ownerIsViewer or
+// hasGrant (NULL owner excluded); "team" also passes for ownerIsTeammate; other scope → false.
 func nodeReadable(rowScope string, ownerID, viewerID sql.NullString, teammates map[string]bool, hasGrant bool) bool {
 	switch rowScope {
 	case "all":
@@ -86,8 +84,7 @@ func ownerIsTeammate(ownerID sql.NullString, teammates map[string]bool) bool {
 	return ownerID.Valid && teammates[ownerID.String]
 }
 
-// sumMinor totals a slice of minor-unit contributions. An empty/nil slice yields a real 0
-// (RD-FORM-1: a node with no contributing rows contributes 0, never an omitted field).
+// sumMinor totals minor-unit contributions; empty/nil returns 0 (RD-FORM-1).
 func sumMinor(vals []int64) int64 {
 	var total int64
 	for _, v := range vals {
@@ -224,10 +221,8 @@ func (s *RollupStore) loadTree(ctx context.Context, tx *sql.Tx, rootID, workspac
 	return nodes, rows.Err()
 }
 
-// resolveReadable applies the row_scope readability rules top-down: it BFS-walks from the root
-// over the parent→children adjacency, including readable nodes and, at the first unreadable node
-// on a branch, recording it in restrictedExcluded and NOT descending into its subtree
-// (RD-AC-8's decomposition boundary). Returns errs.ErrNotFound when the root itself is unreadable.
+// resolveReadable BFS-walks from the root applying row_scope rules; records the first unreadable
+// branch node in restrictedExcluded (RD-AC-8) and returns errs.ErrNotFound if root is unreadable.
 func (s *RollupStore) resolveReadable(ctx context.Context, tx *sql.Tx, rootID, workspaceID, userID, rowScope string, nodes []treeNode) ([]string, []RestrictedNode, error) {
 	byID := make(map[string]treeNode, len(nodes))
 	children := make(map[string][]string, len(nodes))
@@ -435,9 +430,8 @@ func (s *RollupStore) weightedPipeline(ctx context.Context, tx *sql.Tx, workspac
 	return sumMinor(weighted), nil
 }
 
-// closedWon sums deal.amount_minor_base (the frozen-rate GENERATED column, migration 000075) over
-// won deals whose closed_at falls inside the [start, end) current-quarter window, for every
-// included node. No AsOfFXRate call is needed and no 422 can arise from this measure.
+// closedWon sums deal.amount_minor_base (frozen-rate GENERATED column, m000075) over won deals in
+// the [start, end) quarter window for each included node; no FX conversion needed.
 func (s *RollupStore) closedWon(ctx context.Context, tx *sql.Tx, workspaceID string, includedIDs []string, start, end time.Time) (int64, error) {
 	if len(includedIDs) == 0 {
 		return 0, nil
@@ -458,9 +452,7 @@ func (s *RollupStore) closedWon(ctx context.Context, tx *sql.Tx, workspaceID str
 	return total, nil
 }
 
-// activityCount30d counts the distinct activities linked to any included node
-// (activity_link.entity_type='organization', DM-CONV-17) with occurred_at within the last 30 days
-// and not archived.
+// activityCount30d counts distinct not-archived activities for included nodes (DM-CONV-17, 30-day window).
 func (s *RollupStore) activityCount30d(ctx context.Context, tx *sql.Tx, workspaceID string, includedIDs []string, asOf time.Time) (int, error) {
 	if len(includedIDs) == 0 {
 		return 0, nil
@@ -484,17 +476,25 @@ func (s *RollupStore) activityCount30d(ctx context.Context, tx *sql.Tx, workspac
 	return count, nil
 }
 
-// Quota is a per-owner or per-team revenue target for one period (RD-DDL-2).
-type Quota = adapters.Quota
+type (
+	// Quota is a per-owner or per-team revenue target for one period (RD-DDL-2).
+	Quota = adapters.Quota
+	// QuotaListFilter narrows a List call to a specific owner or team.
+	QuotaListFilter = adapters.QuotaListFilter
+	// QuotaStore executes parameterized SQL against the quota table.
+	QuotaStore = adapters.QuotaStore
+	// Attainment is the computed attainment for one quota (RD-FORM-2).
+	Attainment = adapters.Attainment
+	// AttainmentDeal is one closed-won deal contributing to a quota's attainment.
+	AttainmentDeal = adapters.AttainmentDeal
+)
 
-// QuotaListFilter narrows a List call to a specific owner or team.
-type QuotaListFilter = adapters.QuotaListFilter
-
-// QuotaStore executes parameterized SQL against the quota table.
-type QuotaStore = adapters.QuotaStore
-
-// ErrOwnerXorTeamRequired fires when owner_id XOR team_id is not satisfied (RD-DDL-2).
-var ErrOwnerXorTeamRequired = adapters.ErrOwnerXorTeamRequired
+var (
+	// ErrOwnerXorTeamRequired fires when owner_id XOR team_id is not satisfied (RD-DDL-2).
+	ErrOwnerXorTeamRequired = adapters.ErrOwnerXorTeamRequired
+	// ErrAttainmentTargetZero is returned when a quota's target_minor is zero.
+	ErrAttainmentTargetZero = adapters.ErrAttainmentTargetZero
+)
 
 // NewQuotaStore returns a QuotaStore backed by db.
 func NewQuotaStore(db *sql.DB) *QuotaStore { return adapters.NewQuotaStore(db) }
