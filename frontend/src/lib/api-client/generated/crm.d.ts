@@ -2116,6 +2116,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/custom-fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List custom fields for an object (admin read; includes retired by default).
+         * @description CUSTOM-FIELDS-WIRE-1. Unlike a normal resource list, this admin view returns both
+         *     active and retired fields by default — `status` narrows to one lifecycle state.
+         *     Backs the custom-fields admin field table (custom-fields.md).
+         */
+        get: operations["listCustomFields"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4664,6 +4686,63 @@ export interface components {
             created_at?: string;
             /** Format: date-time */
             updated_at?: string;
+        };
+        /**
+         * @description A workspace-defined runtime field on an existing core object (custom-fields.md).
+         *     Mirrors the `custom_field` catalog table — the system-of-record for every
+         *     runtime-added column (CUSTOM-FIELDS-SCHEMA-1). `column_name` is the physical
+         *     `cf_`-prefixed identifier, stable across rename; `status=retired` hides the field
+         *     from the API and filtering while the column and its values are preserved (soft
+         *     retire, never a column drop — CUSTOM-FIELDS-AC-13). Deliberately carries no
+         *     `source`/`captured_by` — the catalog row itself has no such columns; provenance on
+         *     create is captured for audit attribution only (see `CreateCustomFieldRequest`).
+         */
+        CustomField: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            workspace_id: string;
+            /**
+             * @description The existing core object this field is added to (CUSTOM-FIELDS-PARAM-2).
+             * @enum {string}
+             */
+            object: "person" | "organization" | "deal" | "lead" | "activity";
+            /** @description Display label; the only thing a rename updates. */
+            label: string;
+            /** @description Admin-facing key the column_name derives from. */
+            slug: string;
+            /**
+             * @description The closed set of six scalar types (CUSTOM-FIELDS-PARAM-1). Immutable once created.
+             * @enum {string}
+             */
+            type: "text" | "number" | "date" | "currency" | "picklist" | "boolean";
+            /**
+             * @description retired = soft: hidden from the API and filtering, column and values preserved (CUSTOM-FIELDS-AC-13).
+             * @enum {string}
+             */
+            status: "active" | "retired";
+            /** @description Server-derived, `cf_`-prefixed, slug-derived physical column identifier (CUSTOM-FIELDS-PARAM-3) — never client-supplied, immutable once live, stable across rename. */
+            readonly column_name: string;
+            /** @description ISO-4217 currency code; present when `type=currency`, null otherwise. */
+            currency?: string | null;
+            /** @description Allowed picklist values; present (non-empty) when `type=picklist` (CUSTOM-FIELDS-PARAM-5), null otherwise. */
+            options?: string[] | null;
+            /** Format: uuid */
+            created_by: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /**
+             * Format: date-time
+             * @description Base envelope field (DM-CONV-3); stays null even when `status=retired` — retire is a status flip, not an archive.
+             */
+            archived_at?: string | null;
+            version?: components["schemas"]["RowVersion"];
+        };
+        CustomFieldListResponse: {
+            data: components["schemas"]["CustomField"][];
+            page: components["schemas"]["PageInfo"];
         };
     };
     responses: {
@@ -9342,6 +9421,52 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    listCustomFields: {
+        parameters: {
+            query: {
+                /**
+                 * @description Opaque keyset cursor from a prior response's `page.next_cursor`. The cursor encodes the
+                 *     effective `sort` and `filter` of the originating request plus the last row's keyset
+                 *     (sort-key tuple + `id` tie-breaker). **Stability:** results are stable under concurrent
+                 *     inserts/updates (keyset pagination, not offset). Supplying `cursor` together with a `sort`
+                 *     or filter that differs from the one the cursor was minted under returns
+                 *     `422 code: cursor_param_mismatch` — re-issue the query without the cursor.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Max items in the page. */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Sort spec: comma-separated fields, `-` prefix = descending (e.g. `-updated_at,full_name`).
+                 *     `id` is always appended as the final tie-breaker so ordering is total and the keyset cursor
+                 *     is deterministic. **Allowed sort fields per resource** are the indexed columns enumerated in
+                 *     data-model.md §13 (Sort/filter vocabulary); the default sort when omitted is `-created_at,id`.
+                 *     An out-of-vocabulary field returns `422 code: sort_field_not_allowed`.
+                 */
+                sort?: components["parameters"]["Sort"];
+                /** @description Target core object (CUSTOM-FIELDS-PARAM-2). */
+                object: "person" | "organization" | "deal" | "lead" | "activity";
+                /** @description Filter to one lifecycle state. Omitted returns both active and retired — this admin list intentionally does not default-exclude retired rows. */
+                status?: "active" | "retired";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of custom fields for the given object. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldListResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
 }

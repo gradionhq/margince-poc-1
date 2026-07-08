@@ -1145,6 +1145,81 @@ func (e CreateStageRequestSemantic) Valid() bool {
 	}
 }
 
+// Defines values for CustomFieldObject.
+const (
+	CustomFieldObjectActivity     CustomFieldObject = "activity"
+	CustomFieldObjectDeal         CustomFieldObject = "deal"
+	CustomFieldObjectLead         CustomFieldObject = "lead"
+	CustomFieldObjectOrganization CustomFieldObject = "organization"
+	CustomFieldObjectPerson       CustomFieldObject = "person"
+)
+
+// Valid indicates whether the value is a known member of the CustomFieldObject enum.
+func (e CustomFieldObject) Valid() bool {
+	switch e {
+	case CustomFieldObjectActivity:
+		return true
+	case CustomFieldObjectDeal:
+		return true
+	case CustomFieldObjectLead:
+		return true
+	case CustomFieldObjectOrganization:
+		return true
+	case CustomFieldObjectPerson:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CustomFieldStatus.
+const (
+	CustomFieldStatusActive  CustomFieldStatus = "active"
+	CustomFieldStatusRetired CustomFieldStatus = "retired"
+)
+
+// Valid indicates whether the value is a known member of the CustomFieldStatus enum.
+func (e CustomFieldStatus) Valid() bool {
+	switch e {
+	case CustomFieldStatusActive:
+		return true
+	case CustomFieldStatusRetired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CustomFieldType.
+const (
+	Boolean  CustomFieldType = "boolean"
+	Currency CustomFieldType = "currency"
+	Date     CustomFieldType = "date"
+	Number   CustomFieldType = "number"
+	Picklist CustomFieldType = "picklist"
+	Text     CustomFieldType = "text"
+)
+
+// Valid indicates whether the value is a known member of the CustomFieldType enum.
+func (e CustomFieldType) Valid() bool {
+	switch e {
+	case Boolean:
+		return true
+	case Currency:
+		return true
+	case Date:
+		return true
+	case Number:
+		return true
+	case Picklist:
+		return true
+	case Text:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DealForecastCategory.
 const (
 	DealForecastCategoryBestCase    DealForecastCategory = "best_case"
@@ -2393,6 +2468,51 @@ func (e ListApprovalsParamsStatus) Valid() bool {
 	}
 }
 
+// Defines values for ListCustomFieldsParamsObject.
+const (
+	ListCustomFieldsParamsObjectActivity     ListCustomFieldsParamsObject = "activity"
+	ListCustomFieldsParamsObjectDeal         ListCustomFieldsParamsObject = "deal"
+	ListCustomFieldsParamsObjectLead         ListCustomFieldsParamsObject = "lead"
+	ListCustomFieldsParamsObjectOrganization ListCustomFieldsParamsObject = "organization"
+	ListCustomFieldsParamsObjectPerson       ListCustomFieldsParamsObject = "person"
+)
+
+// Valid indicates whether the value is a known member of the ListCustomFieldsParamsObject enum.
+func (e ListCustomFieldsParamsObject) Valid() bool {
+	switch e {
+	case ListCustomFieldsParamsObjectActivity:
+		return true
+	case ListCustomFieldsParamsObjectDeal:
+		return true
+	case ListCustomFieldsParamsObjectLead:
+		return true
+	case ListCustomFieldsParamsObjectOrganization:
+		return true
+	case ListCustomFieldsParamsObjectPerson:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListCustomFieldsParamsStatus.
+const (
+	Active  ListCustomFieldsParamsStatus = "active"
+	Retired ListCustomFieldsParamsStatus = "retired"
+)
+
+// Valid indicates whether the value is a known member of the ListCustomFieldsParamsStatus enum.
+func (e ListCustomFieldsParamsStatus) Valid() bool {
+	switch e {
+	case Active:
+		return true
+	case Retired:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListDealsParamsStatus.
 const (
 	ListDealsParamsStatusLost ListDealsParamsStatus = "lost"
@@ -3421,6 +3541,70 @@ type CreateStageRequestSemantic string
 type CreateTagRequest struct {
 	Color *string `json:"color,omitempty"`
 	Name  string  `json:"name"`
+}
+
+// CustomField A workspace-defined runtime field on an existing core object (custom-fields.md).
+// Mirrors the `custom_field` catalog table — the system-of-record for every
+// runtime-added column (CUSTOM-FIELDS-SCHEMA-1). `column_name` is the physical
+// `cf_`-prefixed identifier, stable across rename; `status=retired` hides the field
+// from the API and filtering while the column and its values are preserved (soft
+// retire, never a column drop — CUSTOM-FIELDS-AC-13). Deliberately carries no
+// `source`/`captured_by` — the catalog row itself has no such columns; provenance on
+// create is captured for audit attribution only (see `CreateCustomFieldRequest`).
+type CustomField struct {
+	// ArchivedAt Base envelope field (DM-CONV-3); stays null even when `status=retired` — retire is a status flip, not an archive.
+	ArchivedAt *time.Time `json:"archived_at,omitempty"`
+
+	// ColumnName Server-derived, `cf_`-prefixed, slug-derived physical column identifier (CUSTOM-FIELDS-PARAM-3) — never client-supplied, immutable once live, stable across rename.
+	ColumnName *string            `json:"column_name,omitempty"`
+	CreatedAt  time.Time          `json:"created_at"`
+	CreatedBy  openapi_types.UUID `json:"created_by"`
+
+	// Currency ISO-4217 currency code; present when `type=currency`, null otherwise.
+	Currency *string            `json:"currency,omitempty"`
+	Id       openapi_types.UUID `json:"id"`
+
+	// Label Display label; the only thing a rename updates.
+	Label string `json:"label"`
+
+	// Object The existing core object this field is added to (CUSTOM-FIELDS-PARAM-2).
+	Object CustomFieldObject `json:"object"`
+
+	// Options Allowed picklist values; present (non-empty) when `type=picklist` (CUSTOM-FIELDS-PARAM-5), null otherwise.
+	Options *[]string `json:"options,omitempty"`
+
+	// Slug Admin-facing key the column_name derives from.
+	Slug string `json:"slug"`
+
+	// Status retired = soft: hidden from the API and filtering, column and values preserved (CUSTOM-FIELDS-AC-13).
+	Status CustomFieldStatus `json:"status"`
+
+	// Type The closed set of six scalar types (CUSTOM-FIELDS-PARAM-1). Immutable once created.
+	Type      CustomFieldType `json:"type"`
+	UpdatedAt time.Time       `json:"updated_at"`
+
+	// Version Monotonic row version, incremented by the server on every mutation (data-model §1.7).
+	// Echoed back as the `version` field on every mutable entity. To make a write conditional,
+	// send the last-seen value in `If-Match`; a mismatch returns `409 code: version_skew`
+	// (ErrVersionSkew) so the client re-reads before retrying. Applies to the native path,
+	// not only overlay mode.
+	Version     *RowVersion        `json:"version,omitempty"`
+	WorkspaceId openapi_types.UUID `json:"workspace_id"`
+}
+
+// CustomFieldObject The existing core object this field is added to (CUSTOM-FIELDS-PARAM-2).
+type CustomFieldObject string
+
+// CustomFieldStatus retired = soft: hidden from the API and filtering, column and values preserved (CUSTOM-FIELDS-AC-13).
+type CustomFieldStatus string
+
+// CustomFieldType The closed set of six scalar types (CUSTOM-FIELDS-PARAM-1). Immutable once created.
+type CustomFieldType string
+
+// CustomFieldListResponse defines model for CustomFieldListResponse.
+type CustomFieldListResponse struct {
+	Data []CustomField `json:"data"`
+	Page PageInfo      `json:"page"`
 }
 
 // Deal A deal. Mirrors the `deal` table.
@@ -5337,6 +5521,39 @@ type ListConsentPurposesParams struct {
 	// LimitParam Max items in the page.
 	LimitParam *LimitParam `form:"limit,omitempty" json:"limit,omitempty"`
 }
+
+// ListCustomFieldsParams defines parameters for ListCustomFields.
+type ListCustomFieldsParams struct {
+	// CursorParam Opaque keyset cursor from a prior response's `page.next_cursor`. The cursor encodes the
+	// effective `sort` and `filter` of the originating request plus the last row's keyset
+	// (sort-key tuple + `id` tie-breaker). **Stability:** results are stable under concurrent
+	// inserts/updates (keyset pagination, not offset). Supplying `cursor` together with a `sort`
+	// or filter that differs from the one the cursor was minted under returns
+	// `422 code: cursor_param_mismatch` — re-issue the query without the cursor.
+	CursorParam *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// LimitParam Max items in the page.
+	LimitParam *LimitParam `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// SortParam Sort spec: comma-separated fields, `-` prefix = descending (e.g. `-updated_at,full_name`).
+	// `id` is always appended as the final tie-breaker so ordering is total and the keyset cursor
+	// is deterministic. **Allowed sort fields per resource** are the indexed columns enumerated in
+	// data-model.md §13 (Sort/filter vocabulary); the default sort when omitted is `-created_at,id`.
+	// An out-of-vocabulary field returns `422 code: sort_field_not_allowed`.
+	SortParam *SortParam `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Object Target core object (CUSTOM-FIELDS-PARAM-2).
+	Object ListCustomFieldsParamsObject `form:"object" json:"object"`
+
+	// Status Filter to one lifecycle state. Omitted returns both active and retired — this admin list intentionally does not default-exclude retired rows.
+	Status *ListCustomFieldsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// ListCustomFieldsParamsObject defines parameters for ListCustomFields.
+type ListCustomFieldsParamsObject string
+
+// ListCustomFieldsParamsStatus defines parameters for ListCustomFields.
+type ListCustomFieldsParamsStatus string
 
 // ResolveDealRoomByTokenParams defines parameters for ResolveDealRoomByToken.
 type ResolveDealRoomByTokenParams struct {
@@ -9577,6 +9794,9 @@ type ServerInterface interface {
 	// Remove a conversation link by id. 🟡 — agent calls are queued behind the approval gate.
 	// (DELETE /conversation-links/{id})
 	UnlinkConversation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// List custom fields for an object (admin read; includes retired by default).
+	// (GET /custom-fields)
+	ListCustomFields(w http.ResponseWriter, r *http.Request, params ListCustomFieldsParams)
 	// Resolve a published deal room by its access token (unauthenticated public accessor).
 	// (GET /deal-rooms/by-token)
 	ResolveDealRoomByToken(w http.ResponseWriter, r *http.Request, params ResolveDealRoomByTokenParams)
@@ -10048,6 +10268,12 @@ func (_ Unimplemented) LinkConversation(w http.ResponseWriter, r *http.Request) 
 // Remove a conversation link by id. 🟡 — agent calls are queued behind the approval gate.
 // (DELETE /conversation-links/{id})
 func (_ Unimplemented) UnlinkConversation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List custom fields for an object (admin read; includes retired by default).
+// (GET /custom-fields)
+func (_ Unimplemented) ListCustomFields(w http.ResponseWriter, r *http.Request, params ListCustomFieldsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -11674,6 +11900,96 @@ func (siw *ServerInterfaceWrapper) UnlinkConversation(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UnlinkConversation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListCustomFields operation middleware
+func (siw *ServerInterfaceWrapper) ListCustomFields(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListCustomFieldsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.SortParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "object" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "object", r.URL.Query(), &params.Object, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "object"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "object", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCustomFields(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -16878,6 +17194,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/conversation-links/{id}", wrapper.UnlinkConversation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/custom-fields", wrapper.ListCustomFields)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/deal-rooms/by-token", wrapper.ResolveDealRoomByToken)

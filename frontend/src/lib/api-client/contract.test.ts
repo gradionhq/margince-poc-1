@@ -328,3 +328,35 @@ describe("PipelineRollup contract compliance (DEAL-EXT-1)", () => {
     expect(problem.details?.as_of).toBe("2026-06-04");
   });
 });
+
+describe("CustomField / CustomFieldListResponse contract compliance (CUSTOM-FIELDS-WIRE-1)", () => {
+  it("CustomField carries the catalog shape; column_name is server-derived", () => {
+    const field: components["schemas"]["CustomField"] = {
+      id: "00000000-0000-0000-0000-000000000060",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      object: "deal",
+      label: "Renewal date",
+      slug: "renewal-date",
+      type: "date",
+      status: "active",
+      column_name: "cf_renewal_date",
+      currency: null,
+      options: null,
+      created_by: "00000000-0000-0000-0000-000000000001",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      archived_at: null,
+    };
+    expect(field.column_name).toBe("cf_renewal_date");
+    expect(field.status).toBe("active");
+    expect(field.archived_at).toBeNull();
+  });
+
+  it("CustomFieldListResponse envelope wraps CustomField[]", () => {
+    const resp: components["schemas"]["CustomFieldListResponse"] = {
+      data: [],
+      page: { has_more: false },
+    };
+    expect(Array.isArray(resp.data)).toBe(true);
+  });
+});
