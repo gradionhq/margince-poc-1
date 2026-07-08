@@ -30,7 +30,7 @@ not a metadata row.
 
 ```bash
 psql "$DATABASE_URL" -c "SELECT object, slug, label, type, status, column_name FROM custom_field WHERE column_name='cf_contract_end_date';"
-psql "$DATABASE_URL" -c "SELECT actor_type, action, entity_type FROM audit_log WHERE entity_type='custom_field' ORDER BY created_at DESC LIMIT 1;"
+psql "$DATABASE_URL" -c "SELECT actor_type, action, entity_type FROM audit_log WHERE entity_type='custom_field' ORDER BY occurred_at DESC LIMIT 1;"
 ```
 Expected: exactly one `custom_field` row (`status=active`) and exactly one `audit_log` row
 (`actor_type=human`, `action=create`, `entity_type=custom_field`) — the add is in the audit trail.
@@ -47,9 +47,21 @@ Expected: `422` with `"code":"structural_change_refused"` and `"details":{"route
 
 ## 5. [live] Agent without an approval token is refused
 
+Raw `X-User-ID`/`X-Workspace-ID` dev-proxy headers (`backend/cmd/api/routes.go`'s `workspaceWrap`)
+are a pre-auth dev-bypass convenience for a human session, not a way to impersonate an agent — they
+can never set `IsAgent:true` (see `crmctx.Principal` construction in `workspaceWrap`). To genuinely
+exercise the agent path, mint a Passport as the admin first: `LookupPassport`
+(`internal/modules/identity/adapters/session_verifier.go`) always resolves a Bearer passport token
+to `IsAgent:true`, regardless of who granted it.
+
 ```bash
+# Mint a passport as the human admin (reuses step 1's cookies.txt session).
+AGENT_TOKEN=$(curl -s -X POST http://localhost:8080/passports \
+  -H "Content-Type: application/json" -b cookies.txt \
+  -d '{"scopes":[],"expires_in_seconds":3600}' | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+
 curl -s -X POST http://localhost:8080/custom-fields \
-  -H "Content-Type: application/json" -H "X-User-ID: <agent-user-id>" -H "X-Workspace-ID: <ws-id>" \
+  -H "Content-Type: application/json" -H "Authorization: Bearer ${AGENT_TOKEN}" \
   -d '{"object":"deal","label":"Agent-proposed field","type":"text","source":"agent","captured_by":"agent:<agent-user-id>"}'
 ```
 Expected: `403` with `"code":"approval_required"`. `psql` confirms no new `custom_field` row and no new
