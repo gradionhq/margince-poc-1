@@ -587,3 +587,148 @@ describe("CustomField retire shape (CUSTOM-FIELDS-WIRE-4)", () => {
     expect(retired.archived_at).toBeNull();
   });
 });
+
+describe("QuotaAttainment contract compliance (RD-WIRE-3)", () => {
+  it("decomposes to contributing_deals that sum to closed_won_minor, and carries a display band", () => {
+    const attainment: components["schemas"]["QuotaAttainment"] = {
+      quota_id: "00000000-0000-0000-0000-000000000070",
+      closed_won_minor: 31387200,
+      target_minor: 28000000,
+      currency: "EUR",
+      attainment_pct: 113,
+      gap_minor: 3387200,
+      pace_pct: 95,
+      band: "met",
+      as_of_date: "2026-03-31",
+      contributing_deals: [
+        {
+          deal_id: "00000000-0000-0000-0000-000000000080",
+          base_value_minor: 15000000,
+        },
+        {
+          deal_id: "00000000-0000-0000-0000-000000000081",
+          base_value_minor: 16387200,
+        },
+      ],
+    };
+    const sum = attainment.contributing_deals.reduce(
+      (acc, d) => acc + d.base_value_minor,
+      0,
+    );
+    expect(sum).toBe(attainment.closed_won_minor);
+    expect(attainment.band).toBe("met");
+    expect(attainment.attainment_pct).toBeGreaterThan(100); // uncapped raw value (RD-PARAM-4)
+    // gap_minor = closed_won_minor - target_minor (RD-FORM-2 worked example: positive surplus once attainment > 100%)
+    expect(attainment.gap_minor).toBe(
+      attainment.closed_won_minor - attainment.target_minor,
+    );
+  });
+
+  it("Problem carries a distinct code for a zero-target refusal vs. a failed computation", () => {
+    const targetZero: components["schemas"]["Problem"] = {
+      status: 422,
+      code: "attainment_target_zero",
+    };
+    const computationFailed: components["schemas"]["Problem"] = {
+      status: 422,
+      code: "attainment_computation_failed",
+    };
+    expect(targetZero.code).not.toBe(computationFailed.code);
+  });
+});
+
+describe("Quota archive shape (RD-WIRE-2)", () => {
+  it("200 + full archived entity — not the /automations/{id} 204 shape", () => {
+    const archived: components["schemas"]["Quota"] = {
+      id: "00000000-0000-0000-0000-000000000070",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      owner_id: "00000000-0000-0000-0000-000000000001",
+      team_id: null,
+      period_start: "2026-01-01",
+      period_end: "2026-03-31",
+      target_minor: 28000000,
+      currency: "EUR",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-02T00:00:00Z",
+      archived_at: "2025-01-02T00:00:00Z",
+    };
+    expect(archived.archived_at).not.toBeNull();
+  });
+});
+
+describe("UpdateQuotaRequest contract compliance (RD-WIRE-2)", () => {
+  it("is a partial merge-PATCH — every field optional", () => {
+    const req: components["schemas"]["UpdateQuotaRequest"] = {
+      target_minor: 30000000,
+    };
+    expect(req.target_minor).toBe(30000000);
+    expect(Object.keys(req)).toEqual(["target_minor"]);
+  });
+});
+
+describe("CreateQuotaRequest + owner-XOR-team 422 shape contract compliance (RD-WIRE-2)", () => {
+  it("accepts an owner-scoped quota with no team_id", () => {
+    const req: components["schemas"]["CreateQuotaRequest"] = {
+      owner_id: "00000000-0000-0000-0000-000000000001",
+      period_start: "2026-01-01",
+      period_end: "2026-03-31",
+      target_minor: 28000000,
+      currency: "EUR",
+    };
+    expect(req.owner_id).not.toBeNull();
+  });
+
+  it("accepts a team-scoped quota with no owner_id", () => {
+    const req: components["schemas"]["CreateQuotaRequest"] = {
+      team_id: "00000000-0000-0000-0000-000000000030",
+      period_start: "2026-01-01",
+      period_end: "2026-03-31",
+      target_minor: 100000000,
+      currency: "EUR",
+    };
+    expect(req.team_id).not.toBeNull();
+  });
+
+  it("Problem carries a machine-branchable owner_xor_team_required details.errors[].code", () => {
+    const refusal: components["schemas"]["Problem"] = {
+      status: 422,
+      code: "validation_error",
+      details: {
+        errors: [{ field: "owner_id", code: "owner_xor_team_required" }],
+      },
+    };
+    expect(refusal.code).toBe("validation_error");
+    expect(refusal.details?.errors[0].code).toBe("owner_xor_team_required");
+  });
+});
+
+describe("Quota / QuotaListResponse contract compliance (RD-WIRE-2)", () => {
+  it("Quota carries owner XOR team, a human-set target, and no provenance fields", () => {
+    const quota: components["schemas"]["Quota"] = {
+      id: "00000000-0000-0000-0000-000000000070",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      owner_id: "00000000-0000-0000-0000-000000000001",
+      team_id: null,
+      period_start: "2026-01-01",
+      period_end: "2026-03-31",
+      target_minor: 28000000,
+      currency: "EUR",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      archived_at: null,
+    };
+    expect(quota.owner_id).not.toBeNull();
+    expect(quota.team_id).toBeNull();
+    expect(quota.target_minor).toBe(28000000);
+    expect("source" in quota).toBe(false);
+    expect("captured_by" in quota).toBe(false);
+  });
+
+  it("QuotaListResponse envelope wraps Quota[]", () => {
+    const resp: components["schemas"]["QuotaListResponse"] = {
+      data: [],
+      page: { has_more: false },
+    };
+    expect(Array.isArray(resp.data)).toBe(true);
+  });
+});
