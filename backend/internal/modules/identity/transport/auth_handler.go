@@ -88,6 +88,7 @@ var adminPermissionsJSON = func() string {
 		"lead":                        all(crua...),
 		platformauth.ObjProduct:       all(crua...),
 		platformauth.ObjOfferTemplate: all(crua...),
+		platformauth.ObjQuota:         all(crua...),
 		platformauth.ObjAttachment:    all(platformauth.ActionRead, platformauth.ActionCreate, platformauth.ActionArchive),
 		"report":                      all(platformauth.ActionRead),
 		"passport":                    all(platformauth.ActionRead, platformauth.ActionCreate, platformauth.ActionArchive),
