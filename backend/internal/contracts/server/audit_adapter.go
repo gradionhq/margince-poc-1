@@ -20,3 +20,10 @@ type AuditAdapter struct {
 func (a *AuditAdapter) GetRecordHistory(w http.ResponseWriter, r *http.Request, entityType string, idParam types.IdParam) {
 	a.H.ServeHTTP(w, r)
 }
+
+// GetFieldHistory is unimplemented (RD-T02/RD-WIRE-5 mints the contract only;
+// the audit_log per-field projection query is out of scope) — returns 501,
+// the same shape oapi-codegen's own types.Unimplemented stub uses.
+func (a *AuditAdapter) GetFieldHistory(w http.ResponseWriter, r *http.Request, params types.GetFieldHistoryParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}

@@ -281,6 +281,54 @@ func (e ApprovalStatus) Valid() bool {
 	}
 }
 
+// Defines values for AttachmentEntityType.
+const (
+	AttachmentEntityTypeActivity     AttachmentEntityType = "activity"
+	AttachmentEntityTypeDeal         AttachmentEntityType = "deal"
+	AttachmentEntityTypeLead         AttachmentEntityType = "lead"
+	AttachmentEntityTypeOrganization AttachmentEntityType = "organization"
+	AttachmentEntityTypePerson       AttachmentEntityType = "person"
+)
+
+// Valid indicates whether the value is a known member of the AttachmentEntityType enum.
+func (e AttachmentEntityType) Valid() bool {
+	switch e {
+	case AttachmentEntityTypeActivity:
+		return true
+	case AttachmentEntityTypeDeal:
+		return true
+	case AttachmentEntityTypeLead:
+		return true
+	case AttachmentEntityTypeOrganization:
+		return true
+	case AttachmentEntityTypePerson:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AttachmentScanStatus.
+const (
+	Blocked  AttachmentScanStatus = "blocked"
+	Clean    AttachmentScanStatus = "clean"
+	Scanning AttachmentScanStatus = "scanning"
+)
+
+// Valid indicates whether the value is a known member of the AttachmentScanStatus enum.
+func (e AttachmentScanStatus) Valid() bool {
+	switch e {
+	case Blocked:
+		return true
+	case Clean:
+		return true
+	case Scanning:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AuditHistoryEntryActorType.
 const (
 	AuditHistoryEntryActorTypeAgent     AuditHistoryEntryActorType = "agent"
@@ -532,22 +580,22 @@ func (e ColdStartProposalStatus) Valid() bool {
 
 // Defines values for ConsentEventActorType.
 const (
-	Agent     ConsentEventActorType = "agent"
-	Connector ConsentEventActorType = "connector"
-	Human     ConsentEventActorType = "human"
-	System    ConsentEventActorType = "system"
+	ConsentEventActorTypeAgent     ConsentEventActorType = "agent"
+	ConsentEventActorTypeConnector ConsentEventActorType = "connector"
+	ConsentEventActorTypeHuman     ConsentEventActorType = "human"
+	ConsentEventActorTypeSystem    ConsentEventActorType = "system"
 )
 
 // Valid indicates whether the value is a known member of the ConsentEventActorType enum.
 func (e ConsentEventActorType) Valid() bool {
 	switch e {
-	case Agent:
+	case ConsentEventActorTypeAgent:
 		return true
-	case Connector:
+	case ConsentEventActorTypeConnector:
 		return true
-	case Human:
+	case ConsentEventActorTypeHuman:
 		return true
-	case System:
+	case ConsentEventActorTypeSystem:
 		return true
 	default:
 		return false
@@ -737,6 +785,33 @@ func (e CreateActivityRequestMeetingStatus) Valid() bool {
 	case CreateActivityRequestMeetingStatusLessThannil:
 		return true
 	case CreateActivityRequestMeetingStatusNoShow:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateAttachmentRequestEntityType.
+const (
+	CreateAttachmentRequestEntityTypeActivity     CreateAttachmentRequestEntityType = "activity"
+	CreateAttachmentRequestEntityTypeDeal         CreateAttachmentRequestEntityType = "deal"
+	CreateAttachmentRequestEntityTypeLead         CreateAttachmentRequestEntityType = "lead"
+	CreateAttachmentRequestEntityTypeOrganization CreateAttachmentRequestEntityType = "organization"
+	CreateAttachmentRequestEntityTypePerson       CreateAttachmentRequestEntityType = "person"
+)
+
+// Valid indicates whether the value is a known member of the CreateAttachmentRequestEntityType enum.
+func (e CreateAttachmentRequestEntityType) Valid() bool {
+	switch e {
+	case CreateAttachmentRequestEntityTypeActivity:
+		return true
+	case CreateAttachmentRequestEntityTypeDeal:
+		return true
+	case CreateAttachmentRequestEntityTypeLead:
+		return true
+	case CreateAttachmentRequestEntityTypeOrganization:
+		return true
+	case CreateAttachmentRequestEntityTypePerson:
 		return true
 	default:
 		return false
@@ -1340,6 +1415,57 @@ func (e ExportRunStatus) Valid() bool {
 	}
 }
 
+// Defines values for FieldHistoryEntryActorType.
+const (
+	FieldHistoryEntryActorTypeAgent     FieldHistoryEntryActorType = "agent"
+	FieldHistoryEntryActorTypeConnector FieldHistoryEntryActorType = "connector"
+	FieldHistoryEntryActorTypeHuman     FieldHistoryEntryActorType = "human"
+	FieldHistoryEntryActorTypeSystem    FieldHistoryEntryActorType = "system"
+)
+
+// Valid indicates whether the value is a known member of the FieldHistoryEntryActorType enum.
+func (e FieldHistoryEntryActorType) Valid() bool {
+	switch e {
+	case FieldHistoryEntryActorTypeAgent:
+		return true
+	case FieldHistoryEntryActorTypeConnector:
+		return true
+	case FieldHistoryEntryActorTypeHuman:
+		return true
+	case FieldHistoryEntryActorTypeSystem:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FieldHistoryEntryEntityType.
+const (
+	FieldHistoryEntryEntityTypeActivity     FieldHistoryEntryEntityType = "activity"
+	FieldHistoryEntryEntityTypeDeal         FieldHistoryEntryEntityType = "deal"
+	FieldHistoryEntryEntityTypeLead         FieldHistoryEntryEntityType = "lead"
+	FieldHistoryEntryEntityTypeOrganization FieldHistoryEntryEntityType = "organization"
+	FieldHistoryEntryEntityTypePerson       FieldHistoryEntryEntityType = "person"
+)
+
+// Valid indicates whether the value is a known member of the FieldHistoryEntryEntityType enum.
+func (e FieldHistoryEntryEntityType) Valid() bool {
+	switch e {
+	case FieldHistoryEntryEntityTypeActivity:
+		return true
+	case FieldHistoryEntryEntityTypeDeal:
+		return true
+	case FieldHistoryEntryEntityTypeLead:
+		return true
+	case FieldHistoryEntryEntityTypeOrganization:
+		return true
+	case FieldHistoryEntryEntityTypePerson:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HubSpotConnectionViewStatus.
 const (
 	HubSpotConnectionViewStatusActive  HubSpotConnectionViewStatus = "active"
@@ -1658,6 +1784,24 @@ func (e OrganizationSizeBand) Valid() bool {
 	case OrganizationSizeBandN5011000:
 		return true
 	case OrganizationSizeBandN51200:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OrganizationHierarchyRollupScope.
+const (
+	OrganizationHierarchyRollupScopeSelf OrganizationHierarchyRollupScope = "self"
+	OrganizationHierarchyRollupScopeTree OrganizationHierarchyRollupScope = "tree"
+)
+
+// Valid indicates whether the value is a known member of the OrganizationHierarchyRollupScope enum.
+func (e OrganizationHierarchyRollupScope) Valid() bool {
+	switch e {
+	case OrganizationHierarchyRollupScopeSelf:
+		return true
+	case OrganizationHierarchyRollupScopeTree:
 		return true
 	default:
 		return false
@@ -2393,6 +2537,33 @@ func (e ListApprovalsParamsStatus) Valid() bool {
 	}
 }
 
+// Defines values for ListAttachmentsParamsEntityType.
+const (
+	ListAttachmentsParamsEntityTypeActivity     ListAttachmentsParamsEntityType = "activity"
+	ListAttachmentsParamsEntityTypeDeal         ListAttachmentsParamsEntityType = "deal"
+	ListAttachmentsParamsEntityTypeLead         ListAttachmentsParamsEntityType = "lead"
+	ListAttachmentsParamsEntityTypeOrganization ListAttachmentsParamsEntityType = "organization"
+	ListAttachmentsParamsEntityTypePerson       ListAttachmentsParamsEntityType = "person"
+)
+
+// Valid indicates whether the value is a known member of the ListAttachmentsParamsEntityType enum.
+func (e ListAttachmentsParamsEntityType) Valid() bool {
+	switch e {
+	case ListAttachmentsParamsEntityTypeActivity:
+		return true
+	case ListAttachmentsParamsEntityTypeDeal:
+		return true
+	case ListAttachmentsParamsEntityTypeLead:
+		return true
+	case ListAttachmentsParamsEntityTypeOrganization:
+		return true
+	case ListAttachmentsParamsEntityTypePerson:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListDealsParamsStatus.
 const (
 	ListDealsParamsStatusLost ListDealsParamsStatus = "lost"
@@ -2408,6 +2579,57 @@ func (e ListDealsParamsStatus) Valid() bool {
 	case ListDealsParamsStatusOpen:
 		return true
 	case ListDealsParamsStatusWon:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetFieldHistoryParamsEntityType.
+const (
+	GetFieldHistoryParamsEntityTypeActivity     GetFieldHistoryParamsEntityType = "activity"
+	GetFieldHistoryParamsEntityTypeDeal         GetFieldHistoryParamsEntityType = "deal"
+	GetFieldHistoryParamsEntityTypeLead         GetFieldHistoryParamsEntityType = "lead"
+	GetFieldHistoryParamsEntityTypeOrganization GetFieldHistoryParamsEntityType = "organization"
+	GetFieldHistoryParamsEntityTypePerson       GetFieldHistoryParamsEntityType = "person"
+)
+
+// Valid indicates whether the value is a known member of the GetFieldHistoryParamsEntityType enum.
+func (e GetFieldHistoryParamsEntityType) Valid() bool {
+	switch e {
+	case GetFieldHistoryParamsEntityTypeActivity:
+		return true
+	case GetFieldHistoryParamsEntityTypeDeal:
+		return true
+	case GetFieldHistoryParamsEntityTypeLead:
+		return true
+	case GetFieldHistoryParamsEntityTypeOrganization:
+		return true
+	case GetFieldHistoryParamsEntityTypePerson:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetFieldHistoryParamsActorType.
+const (
+	Agent     GetFieldHistoryParamsActorType = "agent"
+	Connector GetFieldHistoryParamsActorType = "connector"
+	Human     GetFieldHistoryParamsActorType = "human"
+	System    GetFieldHistoryParamsActorType = "system"
+)
+
+// Valid indicates whether the value is a known member of the GetFieldHistoryParamsActorType enum.
+func (e GetFieldHistoryParamsActorType) Valid() bool {
+	switch e {
+	case Agent:
+		return true
+	case Connector:
+		return true
+	case Human:
+		return true
+	case System:
 		return true
 	default:
 		return false
@@ -2498,6 +2720,24 @@ func (e ListOrganizationsParamsClassification) Valid() bool {
 	case ListOrganizationsParamsClassificationTechVendor:
 		return true
 	case ListOrganizationsParamsClassificationVendor:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetOrganizationHierarchyRollupParamsScope.
+const (
+	GetOrganizationHierarchyRollupParamsScopeSelf GetOrganizationHierarchyRollupParamsScope = "self"
+	GetOrganizationHierarchyRollupParamsScopeTree GetOrganizationHierarchyRollupParamsScope = "tree"
+)
+
+// Valid indicates whether the value is a known member of the GetOrganizationHierarchyRollupParamsScope enum.
+func (e GetOrganizationHierarchyRollupParamsScope) Valid() bool {
+	switch e {
+	case GetOrganizationHierarchyRollupParamsScopeSelf:
+		return true
+	case GetOrganizationHierarchyRollupParamsScopeTree:
 		return true
 	default:
 		return false
@@ -2922,6 +3162,64 @@ type AssignRoleRequest struct {
 	RoleKey *string `json:"role_key,omitempty"`
 }
 
+// Attachment A file attachment — a blob-store object reference bound to a record. Mirrors the
+// existing `attachment` table (migration 000009_lists_tags_attachments.up.sql; RD-DDL-1
+// pins the same shape). Bytes never ride the JSON API — the row holds metadata + the
+// object-store key only; content moves through presigned blob-seam URLs (ADR-0051). No
+// `version` column: an attachment is immutable except for archive, so there is no
+// `updated_at` either — only `created_at`/`archived_at`.
+type Attachment struct {
+	ArchivedAt *time.Time `json:"archived_at,omitempty"`
+
+	// ByteSize DB NOT NULL — client declares the expected size at registration time.
+	ByteSize   int64  `json:"byte_size"`
+	CapturedBy string `json:"captured_by"`
+
+	// Checksum sha256
+	Checksum *string `json:"checksum,omitempty"`
+
+	// ContentType MIME type; DB NOT NULL — client declares it at registration time.
+	ContentType string    `json:"content_type"`
+	CreatedAt   time.Time `json:"created_at"`
+
+	// DownloadUrl Presigned GET URL for downloading bytes directly from the blob-storage seam. Present
+	// once `scan_status: clean`; null/absent while `scanning` or `blocked` (RD-PARAM-5).
+	// Every download is audited as a file access (RD-AC-2) at the handler layer.
+	DownloadUrl *string              `json:"download_url,omitempty"`
+	EntityId    openapi_types.UUID   `json:"entity_id"`
+	EntityType  AttachmentEntityType `json:"entity_type"`
+	Filename    string               `json:"filename"`
+	Id          openapi_types.UUID   `json:"id"`
+
+	// ScanStatus RD-PARAM-5 virus-scan state. `blocked` = quarantined, not downloadable. Contract-only
+	// for now — not yet a DB column on `attachment`; the handler ticket decides whether it
+	// lands on the row itself or is computed/joined (either is acceptable at this layer).
+	ScanStatus AttachmentScanStatus `json:"scan_status"`
+	Source     string               `json:"source"`
+
+	// StorageKey Object-store key (S3/MinIO). Internal reference: clients fetch bytes via `download_url`, never this key directly.
+	StorageKey string `json:"storage_key"`
+
+	// UploadUrl Presigned PUT URL for the client to upload bytes directly to the blob-storage seam
+	// (ADR-0051). Populated only in the `createAttachment` response; null everywhere else.
+	UploadUrl   *string            `json:"upload_url,omitempty"`
+	WorkspaceId openapi_types.UUID `json:"workspace_id"`
+}
+
+// AttachmentEntityType defines model for Attachment.EntityType.
+type AttachmentEntityType string
+
+// AttachmentScanStatus RD-PARAM-5 virus-scan state. `blocked` = quarantined, not downloadable. Contract-only
+// for now — not yet a DB column on `attachment`; the handler ticket decides whether it
+// lands on the row itself or is computed/joined (either is acceptable at this layer).
+type AttachmentScanStatus string
+
+// AttachmentListResponse defines model for AttachmentListResponse.
+type AttachmentListResponse struct {
+	Data []Attachment `json:"data"`
+	Page PageInfo     `json:"page"`
+}
+
 // AuditHistoryEntry One rendered history line for a record mutation. `before` and `after` are
 // field-masked to the viewer's readable fields — absent keys were hidden, not null.
 type AuditHistoryEntry struct {
@@ -3162,6 +3460,21 @@ type CreateActivityRequestLinksEntityType string
 
 // CreateActivityRequestMeetingStatus defines model for CreateActivityRequest.MeetingStatus.
 type CreateActivityRequestMeetingStatus string
+
+// CreateAttachmentRequest defines model for CreateAttachmentRequest.
+type CreateAttachmentRequest struct {
+	ByteSize    int64                             `json:"byte_size"`
+	CapturedBy  string                            `json:"captured_by"`
+	Checksum    *string                           `json:"checksum,omitempty"`
+	ContentType string                            `json:"content_type"`
+	EntityId    openapi_types.UUID                `json:"entity_id"`
+	EntityType  CreateAttachmentRequestEntityType `json:"entity_type"`
+	Filename    string                            `json:"filename"`
+	Source      string                            `json:"source"`
+}
+
+// CreateAttachmentRequestEntityType defines model for CreateAttachmentRequest.EntityType.
+type CreateAttachmentRequestEntityType string
 
 // CreateAutomationRequest Create a new automation. `trigger` and `action` are validated against the closed catalog — a missing/mistyped bounded param returns 422. `tier` is derived from the catalog; any client-supplied value is ignored.
 type CreateAutomationRequest struct {
@@ -3728,6 +4041,43 @@ type ExportRun struct {
 // ExportRunStatus defines model for ExportRun.Status.
 type ExportRunStatus string
 
+// FieldHistoryEntry One per-field change, projected read-only from a single `audit_log` row's before/after
+// diff (RD-AC-5) — not a stored history row (RD-PARAM-6: no records-depth copy). `id` is
+// the source `audit_log` row's id. `old_value`/`new_value` are the field's display-form
+// values (server-rendered strings, matching how the field-history screen renders a
+// struck-through-from / highlighted-to diff token — not the raw typed column value).
+type FieldHistoryEntry struct {
+	ActorId    string                      `json:"actor_id"`
+	ActorType  FieldHistoryEntryActorType  `json:"actor_type"`
+	ChangedAt  time.Time                   `json:"changed_at"`
+	EntityId   openapi_types.UUID          `json:"entity_id"`
+	EntityType FieldHistoryEntryEntityType `json:"entity_type"`
+
+	// Evidence Grounding evidence for an agent-authored change; present for agent actors (RD-AC-5).
+	Evidence *map[string]interface{} `json:"evidence,omitempty"`
+	Field    string                  `json:"field"`
+	Id       openapi_types.UUID      `json:"id"`
+	NewValue *string                 `json:"new_value,omitempty"`
+
+	// OldValue "— empty —" cases are represented as null; the client renders the empty-origin label.
+	OldValue *string `json:"old_value,omitempty"`
+
+	// PassportId Agent Seat Passport that authorized the change; present for agent actors (RD-AC-5).
+	PassportId *openapi_types.UUID `json:"passport_id,omitempty"`
+}
+
+// FieldHistoryEntryActorType defines model for FieldHistoryEntry.ActorType.
+type FieldHistoryEntryActorType string
+
+// FieldHistoryEntryEntityType defines model for FieldHistoryEntry.EntityType.
+type FieldHistoryEntryEntityType string
+
+// FieldHistoryListResponse defines model for FieldHistoryListResponse.
+type FieldHistoryListResponse struct {
+	Data []FieldHistoryEntry `json:"data"`
+	Page PageInfo            `json:"page"`
+}
+
 // GenerateInvoiceRequest Request to generate an invoice from an accepted offer.
 // net/tax/gross totals are derived from the offer — do NOT pass money fields here.
 type GenerateInvoiceRequest struct {
@@ -4165,6 +4515,39 @@ type OrganizationDomain struct {
 	Source         string              `json:"source"`
 	UpdatedAt      *time.Time          `json:"updated_at,omitempty"`
 }
+
+// OrganizationHierarchyRollup RD-FORM-1's tree roll-up over the organization hierarchy (`parent_org_id` self-FK,
+// owned by the people-and-organizations chapter). A server read only, never client-summed
+// (mirrors `PipelineRollup`'s totals-reconcile-to-parts discipline). Money is base-currency
+// converted (DM-FX-4) — never a raw cross-currency sum.
+type OrganizationHierarchyRollup struct {
+	// ActivityCount30d 30-day activity count
+	ActivityCount30d int `json:"activity_count_30d"`
+
+	// AggregatedAccountCount Count of accounts (nodes) included in the roll-up.
+	AggregatedAccountCount int `json:"aggregated_account_count"`
+
+	// ClosedWon Money as integer minor-units + ISO-4217 currency. Never a float.
+	ClosedWon Money `json:"closed_won"`
+
+	// ComputedAt When this roll-up was computed (server read-time).
+	ComputedAt time.Time `json:"computed_at"`
+
+	// RestrictedExcluded Nodes excluded from the roll-up because the viewer cannot read them (RD-AC-1) —
+	// disclosed, never a silent drop. Empty when nothing was excluded.
+	RestrictedExcluded []struct {
+		DisplayName string             `json:"display_name"`
+		Id          openapi_types.UUID `json:"id"`
+	} `json:"restricted_excluded"`
+	RootId openapi_types.UUID               `json:"root_id"`
+	Scope  OrganizationHierarchyRollupScope `json:"scope"`
+
+	// WeightedPipeline Money as integer minor-units + ISO-4217 currency. Never a float.
+	WeightedPipeline Money `json:"weighted_pipeline"`
+}
+
+// OrganizationHierarchyRollupScope defines model for OrganizationHierarchyRollup.Scope.
+type OrganizationHierarchyRollupScope string
 
 // OrganizationListResponse defines model for OrganizationListResponse.
 type OrganizationListResponse struct {
@@ -5310,6 +5693,49 @@ type RejectApprovalJSONBody struct {
 	Reason *string `json:"reason,omitempty"`
 }
 
+// ListAttachmentsParams defines parameters for ListAttachments.
+type ListAttachmentsParams struct {
+	// CursorParam Opaque keyset cursor from a prior response's `page.next_cursor`. The cursor encodes the
+	// effective `sort` and `filter` of the originating request plus the last row's keyset
+	// (sort-key tuple + `id` tie-breaker). **Stability:** results are stable under concurrent
+	// inserts/updates (keyset pagination, not offset). Supplying `cursor` together with a `sort`
+	// or filter that differs from the one the cursor was minted under returns
+	// `422 code: cursor_param_mismatch` — re-issue the query without the cursor.
+	CursorParam *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// LimitParam Max items in the page.
+	LimitParam *LimitParam `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// SortParam Sort spec: comma-separated fields, `-` prefix = descending (e.g. `-updated_at,full_name`).
+	// `id` is always appended as the final tie-breaker so ordering is total and the keyset cursor
+	// is deterministic. **Allowed sort fields per resource** are the indexed columns enumerated in
+	// data-model.md §13 (Sort/filter vocabulary); the default sort when omitted is `-created_at,id`.
+	// An out-of-vocabulary field returns `422 code: sort_field_not_allowed`.
+	SortParam *SortParam `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// IncludeArchivedParam Include soft-deleted (archived) rows. Default false.
+	IncludeArchivedParam *IncludeArchivedParam `form:"include_archived,omitempty" json:"include_archived,omitempty"`
+
+	// EntityType Filter to attachments bound to an entity type (with entity_id).
+	EntityType *ListAttachmentsParamsEntityType `form:"entity_type,omitempty" json:"entity_type,omitempty"`
+	EntityId   *openapi_types.UUID              `form:"entity_id,omitempty" json:"entity_id,omitempty"`
+}
+
+// ListAttachmentsParamsEntityType defines parameters for ListAttachments.
+type ListAttachmentsParamsEntityType string
+
+// CreateAttachmentParams defines parameters for CreateAttachment.
+type CreateAttachmentParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+}
+
 // ListAutomationsParams defines parameters for ListAutomations.
 type ListAutomationsParams struct {
 	// CursorParam Opaque keyset cursor from a prior response's `page.next_cursor`. The cursor encodes the
@@ -5514,6 +5940,34 @@ type UpdateDraftingAssetParams struct {
 	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
 	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
 }
+
+// GetFieldHistoryParams defines parameters for GetFieldHistory.
+type GetFieldHistoryParams struct {
+	// CursorParam Opaque keyset cursor from a prior response's `page.next_cursor`. The cursor encodes the
+	// effective `sort` and `filter` of the originating request plus the last row's keyset
+	// (sort-key tuple + `id` tie-breaker). **Stability:** results are stable under concurrent
+	// inserts/updates (keyset pagination, not offset). Supplying `cursor` together with a `sort`
+	// or filter that differs from the one the cursor was minted under returns
+	// `422 code: cursor_param_mismatch` — re-issue the query without the cursor.
+	CursorParam *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// LimitParam Max items in the page.
+	LimitParam *LimitParam                     `form:"limit,omitempty" json:"limit,omitempty"`
+	EntityType GetFieldHistoryParamsEntityType `form:"entity_type" json:"entity_type"`
+	EntityId   openapi_types.UUID              `form:"entity_id" json:"entity_id"`
+
+	// Field Filter to one field name (AC-field-history-4).
+	Field *string `form:"field,omitempty" json:"field,omitempty"`
+
+	// ActorType Filter by actor category (AC-field-history-3).
+	ActorType *GetFieldHistoryParamsActorType `form:"actor_type,omitempty" json:"actor_type,omitempty"`
+}
+
+// GetFieldHistoryParamsEntityType defines parameters for GetFieldHistory.
+type GetFieldHistoryParamsEntityType string
+
+// GetFieldHistoryParamsActorType defines parameters for GetFieldHistory.
+type GetFieldHistoryParamsActorType string
 
 // HubspotOAuthCallbackParams defines parameters for HubspotOAuthCallback.
 type HubspotOAuthCallbackParams struct {
@@ -5726,6 +6180,15 @@ type UpdateOrganizationParams struct {
 	// Accepted on every native-mode mutating endpoint that returns a versioned entity.
 	IfMatchParam *IfMatchParam `json:"If-Match,omitempty"`
 }
+
+// GetOrganizationHierarchyRollupParams defines parameters for GetOrganizationHierarchyRollup.
+type GetOrganizationHierarchyRollupParams struct {
+	// Scope tree (default): aggregate the whole subtree. self: return self(root) alone.
+	Scope *GetOrganizationHierarchyRollupParamsScope `form:"scope,omitempty" json:"scope,omitempty"`
+}
+
+// GetOrganizationHierarchyRollupParamsScope defines parameters for GetOrganizationHierarchyRollup.
+type GetOrganizationHierarchyRollupParamsScope string
 
 // MergeOrganizationJSONBody defines parameters for MergeOrganization.
 type MergeOrganizationJSONBody struct {
@@ -6162,6 +6625,9 @@ type ApproveApprovalJSONRequestBody = ApproveRequest
 
 // RejectApprovalJSONRequestBody defines body for RejectApproval for application/json ContentType.
 type RejectApprovalJSONRequestBody RejectApprovalJSONBody
+
+// CreateAttachmentJSONRequestBody defines body for CreateAttachment for application/json ContentType.
+type CreateAttachmentJSONRequestBody = CreateAttachmentRequest
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
@@ -9541,6 +10007,18 @@ type ServerInterface interface {
 	// Reject a staged action (discards it; nothing commits).
 	// (POST /approvals/{id}/reject)
 	RejectApproval(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// List attachments (object-store references; cursor-paginated, filterable by entity).
+	// (GET /attachments)
+	ListAttachments(w http.ResponseWriter, r *http.Request, params ListAttachmentsParams)
+	// Register attachment metadata and mint a presigned upload URL.
+	// (POST /attachments)
+	CreateAttachment(w http.ResponseWriter, r *http.Request, params CreateAttachmentParams)
+	// Archive (soft-delete) an attachment.
+	// (DELETE /attachments/{id})
+	ArchiveAttachment(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Get an attachment by id.
+	// (GET /attachments/{id})
+	GetAttachment(w http.ResponseWriter, r *http.Request, idParam IdParam)
 	// Email + password login; sets crm_session cookie.
 	// (POST /auth/login)
 	Login(w http.ResponseWriter, r *http.Request)
@@ -9652,6 +10130,9 @@ type ServerInterface interface {
 	// Get the status (and, when complete, artifact refs) of an export run.
 	// (GET /exports/{id})
 	GetExport(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Per-field change history for a record, reconstructed from audit_log before/after diffs.
+	// (GET /field-history)
+	GetFieldHistory(w http.ResponseWriter, r *http.Request, params GetFieldHistoryParams)
 	// Start a mandatory dry-run over a seeded source (async, returns import_run with status validating/awaiting_approval).
 	// (POST /imports)
 	CreateImport(w http.ResponseWriter, r *http.Request)
@@ -9757,6 +10238,9 @@ type ServerInterface interface {
 	// Update an organization (partial).
 	// (PATCH /organizations/{id})
 	UpdateOrganization(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateOrganizationParams)
+	// Roll up an organization's account tree (RD-FORM-1) — weighted pipeline, closed-won, 30-day activity count.
+	// (GET /organizations/{id}/hierarchy-rollup)
+	GetOrganizationHierarchyRollup(w http.ResponseWriter, r *http.Request, idParam IdParam, params GetOrganizationHierarchyRollupParams)
 	// Merge this organization into a target (non-lossy).
 	// (POST /organizations/{id}/merge)
 	MergeOrganization(w http.ResponseWriter, r *http.Request, idParam IdParam, params MergeOrganizationParams)
@@ -9976,6 +10460,30 @@ func (_ Unimplemented) ApproveApproval(w http.ResponseWriter, r *http.Request, i
 // Reject a staged action (discards it; nothing commits).
 // (POST /approvals/{id}/reject)
 func (_ Unimplemented) RejectApproval(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List attachments (object-store references; cursor-paginated, filterable by entity).
+// (GET /attachments)
+func (_ Unimplemented) ListAttachments(w http.ResponseWriter, r *http.Request, params ListAttachmentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Register attachment metadata and mint a presigned upload URL.
+// (POST /attachments)
+func (_ Unimplemented) CreateAttachment(w http.ResponseWriter, r *http.Request, params CreateAttachmentParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Archive (soft-delete) an attachment.
+// (DELETE /attachments/{id})
+func (_ Unimplemented) ArchiveAttachment(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get an attachment by id.
+// (GET /attachments/{id})
+func (_ Unimplemented) GetAttachment(w http.ResponseWriter, r *http.Request, idParam IdParam) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -10201,6 +10709,12 @@ func (_ Unimplemented) GetExport(w http.ResponseWriter, r *http.Request, id open
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Per-field change history for a record, reconstructed from audit_log before/after diffs.
+// (GET /field-history)
+func (_ Unimplemented) GetFieldHistory(w http.ResponseWriter, r *http.Request, params GetFieldHistoryParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Start a mandatory dry-run over a seeded source (async, returns import_run with status validating/awaiting_approval).
 // (POST /imports)
 func (_ Unimplemented) CreateImport(w http.ResponseWriter, r *http.Request) {
@@ -10408,6 +10922,12 @@ func (_ Unimplemented) GetOrganization(w http.ResponseWriter, r *http.Request, i
 // Update an organization (partial).
 // (PATCH /organizations/{id})
 func (_ Unimplemented) UpdateOrganization(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateOrganizationParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Roll up an organization's account tree (RD-FORM-1) — weighted pipeline, closed-won, 30-day activity count.
+// (GET /organizations/{id}/hierarchy-rollup)
+func (_ Unimplemented) GetOrganizationHierarchyRollup(w http.ResponseWriter, r *http.Request, idParam IdParam, params GetOrganizationHierarchyRollupParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -11334,6 +11854,217 @@ func (siw *ServerInterfaceWrapper) RejectApproval(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RejectApproval(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAttachments operation middleware
+func (siw *ServerInterfaceWrapper) ListAttachments(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAttachmentsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.SortParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "entity_type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "entity_type", r.URL.Query(), &params.EntityType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "entity_type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "entity_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "entity_id", r.URL.Query(), &params.EntityId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "entity_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAttachments(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAttachment operation middleware
+func (siw *ServerInterfaceWrapper) CreateAttachment(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateAttachmentParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAttachment(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveAttachment operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveAttachment(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveAttachment(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAttachment operation middleware
+func (siw *ServerInterfaceWrapper) GetAttachment(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAttachment(w, r, idParam)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -12868,6 +13599,109 @@ func (siw *ServerInterfaceWrapper) GetExport(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// GetFieldHistory operation middleware
+func (siw *ServerInterfaceWrapper) GetFieldHistory(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetFieldHistoryParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "entity_type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "entity_type", r.URL.Query(), &params.EntityType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "entity_type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_type", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "entity_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "entity_id", r.URL.Query(), &params.EntityId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "entity_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "field" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "field", r.URL.Query(), &params.Field, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "field"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "field", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "actor_type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "actor_type", r.URL.Query(), &params.ActorType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "actor_type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "actor_type", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFieldHistory(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CreateImport operation middleware
 func (siw *ServerInterfaceWrapper) CreateImport(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -14327,6 +15161,53 @@ func (siw *ServerInterfaceWrapper) UpdateOrganization(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateOrganization(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOrganizationHierarchyRollup operation middleware
+func (siw *ServerInterfaceWrapper) GetOrganizationHierarchyRollup(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetOrganizationHierarchyRollupParams
+
+	// ------------- Optional query parameter "scope" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "scope", r.URL.Query(), &params.Scope, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "scope"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "scope", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOrganizationHierarchyRollup(w, r, idParam, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -16844,6 +17725,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/approvals/{id}/reject", wrapper.RejectApproval)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/attachments", wrapper.ListAttachments)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/attachments", wrapper.CreateAttachment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/attachments/{id}", wrapper.ArchiveAttachment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/attachments/{id}", wrapper.GetAttachment)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/login", wrapper.Login)
 	})
 	r.Group(func(r chi.Router) {
@@ -16955,6 +17848,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/exports/{id}", wrapper.GetExport)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/field-history", wrapper.GetFieldHistory)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/imports", wrapper.CreateImport)
 	})
 	r.Group(func(r chi.Router) {
@@ -17058,6 +17954,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/organizations/{id}", wrapper.UpdateOrganization)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/organizations/{id}/hierarchy-rollup", wrapper.GetOrganizationHierarchyRollup)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/organizations/{id}/merge", wrapper.MergeOrganization)
