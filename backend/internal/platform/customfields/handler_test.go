@@ -35,10 +35,18 @@ func newCreateReq(body map[string]any, isAgent bool, token string) *http.Request
 	return req
 }
 
-func TestCreateCustomField_AgentWithoutToken_403ApprovalRequired_NeverTouchesDB(t *testing.T) {
-	// db is nil: the test only passes if Create() is never reached.
-	h := NewHandler(nil, fakeVerifier{})
-	req := newCreateReq(map[string]any{"object": "deal", "label": "Renewal date", "type": "date", "source": "ui", "captured_by": "human:u1"}, true, "")
+// assertAgentCreateForbidden drives the shared shape behind both
+// "agent tried to create a custom field but the approval gate rejected it"
+// tests below: db stays nil, so the assertion also proves Create() is never
+// reached once the verifier says no.
+func assertAgentCreateForbidden(t *testing.T, verifierErr error, wantCode string) {
+	t.Helper()
+	h := NewHandler(nil, fakeVerifier{err: verifierErr})
+	token := ""
+	if verifierErr != nil {
+		token = "bad-token"
+	}
+	req := newCreateReq(map[string]any{"object": "deal", "label": "Renewal date", "type": "date", "source": "ui", "captured_by": "human:u1"}, true, token)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusForbidden {
@@ -46,24 +54,17 @@ func TestCreateCustomField_AgentWithoutToken_403ApprovalRequired_NeverTouchesDB(
 	}
 	var body map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &body)
-	if body["code"] != "approval_required" {
-		t.Fatalf("expected code=approval_required, got %v", body["code"])
+	if body["code"] != wantCode {
+		t.Fatalf("expected code=%s, got %v", wantCode, body["code"])
 	}
 }
 
+func TestCreateCustomField_AgentWithoutToken_403ApprovalRequired_NeverTouchesDB(t *testing.T) {
+	assertAgentCreateForbidden(t, nil, "approval_required")
+}
+
 func TestCreateCustomField_AgentWithInvalidToken_403ApprovalTokenInvalid_NeverTouchesDB(t *testing.T) {
-	h := NewHandler(nil, fakeVerifier{err: errTokenInvalidStub})
-	req := newCreateReq(map[string]any{"object": "deal", "label": "Renewal date", "type": "date", "source": "ui", "captured_by": "human:u1"}, true, "bad-token")
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
-	}
-	var body map[string]any
-	_ = json.Unmarshal(w.Body.Bytes(), &body)
-	if body["code"] != "approval_token_invalid" {
-		t.Fatalf("expected code=approval_token_invalid, got %v", body["code"])
-	}
+	assertAgentCreateForbidden(t, errTokenInvalidStub, "approval_token_invalid")
 }
 
 func TestCreateCustomField_MalformedBody_400_NeverTouchesDB(t *testing.T) {

@@ -10,24 +10,32 @@ import (
 	_ "github.com/lib/pq" // registers the "postgres" database/sql driver
 )
 
+// defaultTestDatabaseDSN is the fallback connection string used when
+// TEST_DATABASE_URL isn't set in the environment running these tests.
+const defaultTestDatabaseDSN = "postgres://margince:margince@localhost:5432/margince_test?sslmode=disable"
+
+func testDatabaseDSN() string {
+	if dsn, ok := os.LookupEnv("TEST_DATABASE_URL"); ok && dsn != "" {
+		return dsn
+	}
+	return defaultTestDatabaseDSN
+}
+
 func testDB(t *testing.T) *sql.DB {
 	t.Helper()
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		url = "postgres://margince:margince@localhost:5432/margince_test?sslmode=disable"
-	}
-	db, err := sql.Open("postgres", url)
-	if err != nil {
-		t.Fatalf("open: %v", err)
+	db, openErr := sql.Open("postgres", testDatabaseDSN())
+	if openErr != nil {
+		t.Fatalf("open postgres connection: %v", openErr)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 
-func mustExec(t *testing.T, db *sql.DB, q string, args ...any) {
+func mustExec(t *testing.T, db *sql.DB, query string, args ...any) {
 	t.Helper()
-	if _, err := db.Exec(q, args...); err != nil {
-		t.Fatalf("exec %q: %v", q, err)
+	_, execErr := db.Exec(query, args...)
+	if execErr != nil {
+		t.Fatalf("exec failed for %q: %v", query, execErr)
 	}
 }
 
