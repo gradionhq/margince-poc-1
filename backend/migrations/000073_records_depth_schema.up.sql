@@ -6,39 +6,26 @@
 --
 -- No inter-table FK ordering constraint among the three — none references another.
 --
--- Note: attachment table exists from 000009 with different schema (content_type/byte_size NOT NULL,
--- no updated_at). This migration drops and recreates it to match RD-DDL-1 spec.
+-- Schema-drift note (RD-DDL-1 vs. 000009): attachment already exists from
+-- 000009_lists_tags_attachments.up.sql with content_type/byte_size NOT NULL and no updated_at
+-- column. RD-DDL-1 in the current docs pins a superset of that shape (content_type/byte_size
+-- nullable, plus updated_at) — this migration reconciles the live table to that pin via ALTER,
+-- not drop+recreate: attachment already has generated contract routes wired to it
+-- (ListAttachments/CreateAttachment/ArchiveAttachment/GetAttachment) and may hold real rows, so
+-- a drop+recreate would be needlessly destructive and not correctly reversible back to the
+-- 000009 shape. The contract's crm_gen.go Attachment type comments (which assert those two
+-- columns NOT NULL and no updated_at) go stale here — expected, since RD-T03 doesn't touch
+-- crm.yaml/handlers; that's deferred to the separate attachments-wire ticket.
 
 -- RD-DDL-1 — attachment (object-store references; never a bytea/blob column). No `version`
 -- column — the schema note gives no "+ version" suffix for it, unlike quota/bulk_operation.
--- Drop existing attachment table first to recreate with correct spec schema.
-DROP TABLE IF EXISTS attachment CASCADE;
-
-CREATE TABLE attachment (
-  id           uuid PRIMARY KEY DEFAULT uuidv7(),
-  workspace_id uuid NOT NULL REFERENCES workspace(id) ON DELETE RESTRICT,
-  entity_type  text NOT NULL CHECK (entity_type IN ('person','organization','deal','activity','lead')),
-  entity_id    uuid NOT NULL,
-  filename     text NOT NULL,
-  content_type text NULL,
-  byte_size    bigint NULL,
-  storage_key  text NOT NULL,      -- S3/MinIO object key
-  checksum     text NULL,          -- sha256 for dedupe/integrity
-  source       text NOT NULL,
-  captured_by  text NOT NULL,
-  created_at   timestamptz NOT NULL DEFAULT now(),
-  updated_at   timestamptz NOT NULL DEFAULT now(),
-  archived_at  timestamptz NULL
-);
-CREATE INDEX idx_attachment_entity ON attachment (workspace_id, entity_type, entity_id) WHERE archived_at IS NULL;
+-- Reconcile the pre-existing (000009) table in place: relax content_type/byte_size to
+-- nullable and add updated_at + its set_updated_at() trigger. Its index (idx_attachment_entity)
+-- and RLS (enable/force/policy) already exist from 000009 and are untouched here.
+ALTER TABLE attachment ALTER COLUMN content_type DROP NOT NULL;
+ALTER TABLE attachment ALTER COLUMN byte_size DROP NOT NULL;
+ALTER TABLE attachment ADD COLUMN updated_at timestamptz NOT NULL DEFAULT now();
 CREATE TRIGGER trg_attachment_updated BEFORE UPDATE ON attachment FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
-ALTER TABLE attachment ENABLE ROW LEVEL SECURITY;
-ALTER TABLE attachment FORCE ROW LEVEL SECURITY;
-CREATE POLICY attachment_tenant_isolation ON attachment
-  USING      (workspace_id = nullif(current_setting('app.workspace_id', true), '')::uuid)
-  WITH CHECK (workspace_id = nullif(current_setting('app.workspace_id', true), '')::uuid);
-GRANT SELECT, INSERT, UPDATE, DELETE ON attachment TO margince_app;
 
 -- RD-DDL-2 — quota (per-owner/team revenue target per period, E09 forecast attainment)
 CREATE TABLE quota (
@@ -98,8 +85,9 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON bulk_operation TO margince_app;
 -- Dedicated single-column FK indexes (DM-CONV-14 / TestFKColumnsAreIndexed): the pinned
 -- composite/partial indexes above don't satisfy the repo-wide invariant's exact
 -- indexdef LIKE '%(col)%' check for these FK columns (a leading-composite-column doesn't
--- match). attachment.entity_id is polymorphic (no REFERENCES) so it's exempt.
-CREATE INDEX idx_attachment_ws               ON attachment (workspace_id);
+-- match). attachment.entity_id is polymorphic (no REFERENCES) so it's exempt. attachment's own
+-- workspace_id FK index (idx_attachment_ws) already exists from 000010_fk_indexes.up.sql — not
+-- recreated here.
 CREATE INDEX idx_quota_ws                    ON quota (workspace_id);
 CREATE INDEX idx_quota_owner_fk              ON quota (owner_id) WHERE owner_id IS NOT NULL;
 CREATE INDEX idx_quota_team_fk               ON quota (team_id) WHERE team_id IS NOT NULL;
