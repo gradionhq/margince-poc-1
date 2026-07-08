@@ -74,7 +74,7 @@ func seedActivity(t *testing.T, db *sql.DB, ws, orgID string, occurredAt time.Ti
 
 // seedFXRate inserts one fx_rate row (from->to on rateDate) backing the weighted-pipeline
 // AsOfFXRate lookup.
-func seedFXRate(t *testing.T, db *sql.DB, ws, from, to, rate string, rateDate time.Time) { //nolint:unparam // from is "USD" across current test suite; kept general for future pairs
+func seedFXRate(t *testing.T, db *sql.DB, ws, from, to, rate string, rateDate time.Time) {
 	t.Helper()
 	if _, err := db.Exec(
 		`INSERT INTO fx_rate (workspace_id, from_currency, to_currency, rate, rate_date)
@@ -145,6 +145,47 @@ func quarterStartUTC(now time.Time) time.Time {
 	return time.Date(n.Year(), time.Month(m), 1, 0, 0, 0, 0, time.UTC)
 }
 
+// rollupFixture bundles the standard per-test database + workspace + pipeline/stage + FX + viewer
+// setup shared by TestHierarchyRollup_FormulaAndScopes and TestHierarchyRollup_PO_AC_28_Bound.
+type rollupFixture struct {
+	db         *sql.DB
+	ws         string
+	ctx        context.Context
+	pipelineID string
+	stageID    string
+	today      time.Time
+	viewer     string
+	store      *records.RollupStore
+}
+
+// newRollupFixture opens a fresh test DB/workspace, seeds a pipeline+stage at winProbability, an
+// fxFrom->fxTo fx_rate row dated today, and a viewer with the given row_scope.
+func newRollupFixture(t *testing.T, winProbability int, fxFrom, fxTo, fxRate string, rowScope string) rollupFixture {
+	t.Helper()
+	db := pgtest.OpenTestDB(t)
+	ws := pgtest.NewWorkspaceSQL(t, db)
+	pgtest.SetRLS(t, db, ws)
+	ctx := context.Background()
+
+	pipelineID, stageID := seedPipelineStage(t, db, ws)
+	setStageProbability(t, db, stageID, winProbability)
+	today := time.Now().UTC()
+	seedFXRate(t, db, ws, fxFrom, fxTo, fxRate, today)
+	viewer := seedUserWithRowScope(t, db, ws, rowScope)
+	store := records.NewRollupStore(db)
+
+	return rollupFixture{
+		db:         db,
+		ws:         ws,
+		ctx:        ctx,
+		pipelineID: pipelineID,
+		stageID:    stageID,
+		today:      today,
+		viewer:     viewer,
+		store:      store,
+	}
+}
+
 // -- tests --------------------------------------------------------------------------------------
 
 // TestHierarchyRollup_FormulaAndScopes proves RD-FORM-1: the tree-scope total equals the sum of
@@ -152,17 +193,8 @@ func quarterStartUTC(now time.Time) time.Time {
 // root's own figures; and a node with no contributing rows (child B) contributes a real 0 while
 // still counting toward aggregated_account_count.
 func TestHierarchyRollup_FormulaAndScopes(t *testing.T) {
-	db := pgtest.OpenTestDB(t)
-	ws := pgtest.NewWorkspaceSQL(t, db)
-	pgtest.SetRLS(t, db, ws)
-	ctx := context.Background()
-
-	pipelineID, stageID := seedPipelineStage(t, db, ws)
-	setStageProbability(t, db, stageID, 50)
-	today := time.Now().UTC()
-	seedFXRate(t, db, ws, "USD", "EUR", "2.0000000000", today) // base_currency is EUR
-	viewer := seedUserWithRowScope(t, db, ws, "all")
-	store := records.NewRollupStore(db)
+	rf := newRollupFixture(t, 50, "USD", "EUR", "2.0000000000", "all") // base_currency is EUR
+	db, ws, ctx, pipelineID, stageID, today, viewer, store := rf.db, rf.ws, rf.ctx, rf.pipelineID, rf.stageID, rf.today, rf.viewer, rf.store
 
 	// 3-level tree: root -> childA -> grandchild, plus sibling childB (no data at all).
 	root := seedOrgWithParent(t, db, ws, "root", nil, nil)
@@ -398,17 +430,8 @@ func TestHierarchyRollup_NotFound(t *testing.T) {
 // with p95 wall-clock < 200ms against the existing idx_org_parent index. A normal TestXxx (not a
 // testing.B) so a regression actually fails CI.
 func TestHierarchyRollup_PO_AC_28_Bound(t *testing.T) {
-	db := pgtest.OpenTestDB(t)
-	ws := pgtest.NewWorkspaceSQL(t, db)
-	pgtest.SetRLS(t, db, ws)
-	ctx := context.Background()
-
-	pipelineID, stageID := seedPipelineStage(t, db, ws)
-	setStageProbability(t, db, stageID, 50)
-	today := time.Now().UTC()
-	seedFXRate(t, db, ws, "USD", "EUR", "1.2500000000", today)
-	viewer := seedUserWithRowScope(t, db, ws, "all")
-	store := records.NewRollupStore(db)
+	rf := newRollupFixture(t, 50, "USD", "EUR", "1.2500000000", "all")
+	db, ws, ctx, pipelineID, stageID, today, viewer, store := rf.db, rf.ws, rf.ctx, rf.pipelineID, rf.stageID, rf.today, rf.viewer, rf.store
 
 	// 200-node tree: BFS build, branching factor 5 (root + ~4 levels, well under the CTE depth cap).
 	const wantNodes = 200

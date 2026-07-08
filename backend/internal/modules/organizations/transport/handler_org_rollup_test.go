@@ -33,6 +33,24 @@ func withRollupWorkspace(r *http.Request) *http.Request {
 	return r.WithContext(ctx)
 }
 
+// doRollupRequest issues path through h.hierarchyRollup and decodes the JSON body, failing the
+// test if the status doesn't match wantStatus or the body doesn't decode.
+func doRollupRequest(t *testing.T, h *OrganizationHandler, path, id string, wantStatus int) map[string]any {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req = withRollupWorkspace(req)
+	w := httptest.NewRecorder()
+	h.hierarchyRollup(w, req, id)
+	if w.Code != wantStatus {
+		t.Fatalf("status=%d want %d, body=%s", w.Code, wantStatus, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	return body
+}
+
 func TestHierarchyRollup_200_TreeScope(t *testing.T) {
 	currency := "EUR"
 	weighted := int64(5000)
@@ -50,18 +68,7 @@ func TestHierarchyRollup_200_TreeScope(t *testing.T) {
 	}
 	h := rollupHandlerForTest(&fakeRollupStore{result: result})
 
-	req := httptest.NewRequest(http.MethodGet, "/organizations/root-id/hierarchy-rollup", nil)
-	req = withRollupWorkspace(req)
-	w := httptest.NewRecorder()
-	h.hierarchyRollup(w, req, "root-id")
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status=%d want 200, body=%s", w.Code, w.Body.String())
-	}
-	var body map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	body := doRollupRequest(t, h, "/organizations/root-id/hierarchy-rollup", "root-id", http.StatusOK)
 	if body["root_id"] != "root-id" {
 		t.Errorf("root_id=%v want root-id", body["root_id"])
 	}
@@ -102,18 +109,7 @@ func TestHierarchyRollup_200_SelfScope(t *testing.T) {
 	}
 	h := rollupHandlerForTest(&fakeRollupStore{result: result})
 
-	req := httptest.NewRequest(http.MethodGet, "/organizations/root-id/hierarchy-rollup?scope=self", nil)
-	req = withRollupWorkspace(req)
-	w := httptest.NewRecorder()
-	h.hierarchyRollup(w, req, "root-id")
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status=%d want 200, body=%s", w.Code, w.Body.String())
-	}
-	var body map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	body := doRollupRequest(t, h, "/organizations/root-id/hierarchy-rollup?scope=self", "root-id", http.StatusOK)
 	if body["scope"] != "self" {
 		t.Errorf("scope=%v want self", body["scope"])
 	}
@@ -125,18 +121,7 @@ func TestHierarchyRollup_200_SelfScope(t *testing.T) {
 func TestHierarchyRollup_404_NotFound(t *testing.T) {
 	h := rollupHandlerForTest(&fakeRollupStore{err: errs.ErrNotFound})
 
-	req := httptest.NewRequest(http.MethodGet, "/organizations/missing/hierarchy-rollup", nil)
-	req = withRollupWorkspace(req)
-	w := httptest.NewRecorder()
-	h.hierarchyRollup(w, req, "missing")
-
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("status=%d want 404, body=%s", w.Code, w.Body.String())
-	}
-	var body map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	body := doRollupRequest(t, h, "/organizations/missing/hierarchy-rollup", "missing", http.StatusNotFound)
 	if body["code"] != "not_found" {
 		t.Errorf("code=%v want not_found", body["code"])
 	}
@@ -149,18 +134,7 @@ func TestHierarchyRollup_422_FXRateUnavailable(t *testing.T) {
 	}
 	h := rollupHandlerForTest(&fakeRollupStore{err: fxErr})
 
-	req := httptest.NewRequest(http.MethodGet, "/organizations/id/hierarchy-rollup", nil)
-	req = withRollupWorkspace(req)
-	w := httptest.NewRecorder()
-	h.hierarchyRollup(w, req, "id")
-
-	if w.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status=%d want 422, body=%s", w.Code, w.Body.String())
-	}
-	var body map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	body := doRollupRequest(t, h, "/organizations/id/hierarchy-rollup", "id", http.StatusUnprocessableEntity)
 	if body["code"] != "fx_rate_unavailable" {
 		t.Errorf("code=%v want fx_rate_unavailable", body["code"])
 	}
@@ -179,18 +153,7 @@ func TestHierarchyRollup_422_FXRateUnavailable(t *testing.T) {
 func TestHierarchyRollup_400_InvalidScope(t *testing.T) {
 	h := rollupHandlerForTest(&fakeRollupStore{})
 
-	req := httptest.NewRequest(http.MethodGet, "/organizations/id/hierarchy-rollup?scope=bogus", nil)
-	req = withRollupWorkspace(req)
-	w := httptest.NewRecorder()
-	h.hierarchyRollup(w, req, "id")
-
-	if w.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status=%d want 422, body=%s", w.Code, w.Body.String())
-	}
-	var body map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	body := doRollupRequest(t, h, "/organizations/id/hierarchy-rollup?scope=bogus", "id", http.StatusUnprocessableEntity)
 	if body["code"] != "validation_error" {
 		t.Errorf("code=%v want validation_error", body["code"])
 	}
