@@ -2134,6 +2134,43 @@ export interface paths {
         patch: operations["patchAutomation"];
         trace?: never;
     };
+    "/quotas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List quotas (cursor-paginated). */
+        get: operations["listQuotas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/quotas/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        /** Get a quota by id. */
+        get: operations["getQuota"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/offer-templates": {
         parameters: {
             query?: never;
@@ -5498,6 +5535,53 @@ export interface components {
         /** @description Merge-PATCH; `label` only — `column_name`, `object`, and `type` are absent from this request schema entirely (immutable, not just ignored if sent). */
         RenameCustomFieldRequest: {
             label?: string;
+        };
+        /**
+         * @description A per-owner or per-team revenue target for one period (RD-DDL-2, quota.html scope
+         *     note). Exactly one of owner_id/team_id is non-null (CHECK constraint) — never both,
+         *     never neither; createQuota/updateQuota document and enforce this (422
+         *     owner_xor_team_required). target_minor is always human-set: no AI-guessed quota, no
+         *     default, no server-computed fallback (RD-PARAM-3). Deliberately carries no
+         *     source/captured_by/created_by — RD-DDL-2's column list has no provenance columns at
+         *     all, unlike custom_field's created_by (CF-T01). Attainment is a separate read
+         *     (getQuotaAttainment, RD-WIRE-3) — this schema never carries attainment fields itself.
+         */
+        Quota: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            workspace_id: string;
+            /**
+             * Format: uuid
+             * @description Exactly one of owner_id/team_id is non-null (RD-DDL-2 CHECK).
+             */
+            owner_id?: string | null;
+            /**
+             * Format: uuid
+             * @description Exactly one of owner_id/team_id is non-null (RD-DDL-2 CHECK).
+             */
+            team_id?: string | null;
+            /** Format: date */
+            period_start: string;
+            /** Format: date */
+            period_end: string;
+            /**
+             * Format: int64
+             * @description Human-set revenue target, integer minor units (RD-PARAM-3) — never an AI-guessed or server-computed field.
+             */
+            target_minor: number;
+            currency: string;
+            version?: components["schemas"]["RowVersion"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            archived_at?: string | null;
+        };
+        QuotaListResponse: {
+            data: components["schemas"]["Quota"][];
+            page: components["schemas"]["PageInfo"];
         };
     };
     responses: {
@@ -10381,6 +10465,78 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    listQuotas: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Opaque keyset cursor from a prior response's `page.next_cursor`. The cursor encodes the
+                 *     effective `sort` and `filter` of the originating request plus the last row's keyset
+                 *     (sort-key tuple + `id` tie-breaker). **Stability:** results are stable under concurrent
+                 *     inserts/updates (keyset pagination, not offset). Supplying `cursor` together with a `sort`
+                 *     or filter that differs from the one the cursor was minted under returns
+                 *     `422 code: cursor_param_mismatch` — re-issue the query without the cursor.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Max items in the page. */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Sort spec: comma-separated fields, `-` prefix = descending (e.g. `-updated_at,full_name`).
+                 *     `id` is always appended as the final tie-breaker so ordering is total and the keyset cursor
+                 *     is deterministic. **Allowed sort fields per resource** are the indexed columns enumerated in
+                 *     data-model.md §13 (Sort/filter vocabulary); the default sort when omitted is `-created_at,id`.
+                 *     An out-of-vocabulary field returns `422 code: sort_field_not_allowed`.
+                 */
+                sort?: components["parameters"]["Sort"];
+                /** @description Include soft-deleted (archived) rows. Default false. */
+                include_archived?: components["parameters"]["IncludeArchived"];
+                owner_id?: string;
+                team_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of quotas. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuotaListResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getQuota: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The quota. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Quota"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listOfferTemplates: {

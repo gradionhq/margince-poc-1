@@ -43,3 +43,5 @@ export type CustomField              = C["schemas"]["CustomField"];
 export type CustomFieldListResponse  = C["schemas"]["CustomFieldListResponse"];
 export type CreateCustomFieldRequest = C["schemas"]["CreateCustomFieldRequest"];
 export type RenameCustomFieldRequest = C["schemas"]["RenameCustomFieldRequest"];
+export type Quota              = C["schemas"]["Quota"];
+export type QuotaListResponse  = C["schemas"]["QuotaListResponse"];

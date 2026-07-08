@@ -587,3 +587,34 @@ describe("CustomField retire shape (CUSTOM-FIELDS-WIRE-4)", () => {
     expect(retired.archived_at).toBeNull();
   });
 });
+
+describe("Quota / QuotaListResponse contract compliance (RD-WIRE-2)", () => {
+  it("Quota carries owner XOR team, a human-set target, and no provenance fields", () => {
+    const quota: components["schemas"]["Quota"] = {
+      id: "00000000-0000-0000-0000-000000000070",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      owner_id: "00000000-0000-0000-0000-000000000001",
+      team_id: null,
+      period_start: "2026-01-01",
+      period_end: "2026-03-31",
+      target_minor: 28000000,
+      currency: "EUR",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      archived_at: null,
+    };
+    expect(quota.owner_id).not.toBeNull();
+    expect(quota.team_id).toBeNull();
+    expect(quota.target_minor).toBe(28000000);
+    expect("source" in quota).toBe(false);
+    expect("captured_by" in quota).toBe(false);
+  });
+
+  it("QuotaListResponse envelope wraps Quota[]", () => {
+    const resp: components["schemas"]["QuotaListResponse"] = {
+      data: [],
+      page: { has_more: false },
+    };
+    expect(Array.isArray(resp.data)).toBe(true);
+  });
+});

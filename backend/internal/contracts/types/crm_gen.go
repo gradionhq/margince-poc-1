@@ -5516,6 +5516,47 @@ type Provenance struct {
 	Source string `json:"source"`
 }
 
+// Quota A per-owner or per-team revenue target for one period (RD-DDL-2, quota.html scope
+// note). Exactly one of owner_id/team_id is non-null (CHECK constraint) — never both,
+// never neither; createQuota/updateQuota document and enforce this (422
+// owner_xor_team_required). target_minor is always human-set: no AI-guessed quota, no
+// default, no server-computed fallback (RD-PARAM-3). Deliberately carries no
+// source/captured_by/created_by — RD-DDL-2's column list has no provenance columns at
+// all, unlike custom_field's created_by (CF-T01). Attainment is a separate read
+// (getQuotaAttainment, RD-WIRE-3) — this schema never carries attainment fields itself.
+type Quota struct {
+	ArchivedAt *time.Time         `json:"archived_at,omitempty"`
+	CreatedAt  time.Time          `json:"created_at"`
+	Currency   string             `json:"currency"`
+	Id         openapi_types.UUID `json:"id"`
+
+	// OwnerId Exactly one of owner_id/team_id is non-null (RD-DDL-2 CHECK).
+	OwnerId     *openapi_types.UUID `json:"owner_id,omitempty"`
+	PeriodEnd   openapi_types.Date  `json:"period_end"`
+	PeriodStart openapi_types.Date  `json:"period_start"`
+
+	// TargetMinor Human-set revenue target, integer minor units (RD-PARAM-3) — never an AI-guessed or server-computed field.
+	TargetMinor int64 `json:"target_minor"`
+
+	// TeamId Exactly one of owner_id/team_id is non-null (RD-DDL-2 CHECK).
+	TeamId    *openapi_types.UUID `json:"team_id,omitempty"`
+	UpdatedAt time.Time           `json:"updated_at"`
+
+	// Version Monotonic row version, incremented by the server on every mutation (data-model §1.7).
+	// Echoed back as the `version` field on every mutable entity. To make a write conditional,
+	// send the last-seen value in `If-Match`; a mismatch returns `409 code: version_skew`
+	// (ErrVersionSkew) so the client re-reads before retrying. Applies to the native path,
+	// not only overlay mode.
+	Version     *RowVersion        `json:"version,omitempty"`
+	WorkspaceId openapi_types.UUID `json:"workspace_id"`
+}
+
+// QuotaListResponse defines model for QuotaListResponse.
+type QuotaListResponse struct {
+	Data []Quota  `json:"data"`
+	Page PageInfo `json:"page"`
+}
+
 // RecordConsentRequest defines model for RecordConsentRequest.
 type RecordConsentRequest struct {
 	Basis *string `json:"basis,omitempty"`
@@ -7187,6 +7228,32 @@ type UpdateProductParams struct {
 	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
 	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
 	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+}
+
+// ListQuotasParams defines parameters for ListQuotas.
+type ListQuotasParams struct {
+	// CursorParam Opaque keyset cursor from a prior response's `page.next_cursor`. The cursor encodes the
+	// effective `sort` and `filter` of the originating request plus the last row's keyset
+	// (sort-key tuple + `id` tie-breaker). **Stability:** results are stable under concurrent
+	// inserts/updates (keyset pagination, not offset). Supplying `cursor` together with a `sort`
+	// or filter that differs from the one the cursor was minted under returns
+	// `422 code: cursor_param_mismatch` — re-issue the query without the cursor.
+	CursorParam *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// LimitParam Max items in the page.
+	LimitParam *LimitParam `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// SortParam Sort spec: comma-separated fields, `-` prefix = descending (e.g. `-updated_at,full_name`).
+	// `id` is always appended as the final tie-breaker so ordering is total and the keyset cursor
+	// is deterministic. **Allowed sort fields per resource** are the indexed columns enumerated in
+	// data-model.md §13 (Sort/filter vocabulary); the default sort when omitted is `-created_at,id`.
+	// An out-of-vocabulary field returns `422 code: sort_field_not_allowed`.
+	SortParam *SortParam `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// IncludeArchivedParam Include soft-deleted (archived) rows. Default false.
+	IncludeArchivedParam *IncludeArchivedParam `form:"include_archived,omitempty" json:"include_archived,omitempty"`
+	OwnerId              *openapi_types.UUID   `form:"owner_id,omitempty" json:"owner_id,omitempty"`
+	TeamId               *openapi_types.UUID   `form:"team_id,omitempty" json:"team_id,omitempty"`
 }
 
 // ListRecordGrantsParams defines parameters for ListRecordGrants.
@@ -12659,6 +12726,12 @@ type ServerInterface interface {
 	// Update a product (full replace — all writable fields replaced).
 	// (PUT /products/{id})
 	UpdateProduct(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateProductParams)
+	// List quotas (cursor-paginated).
+	// (GET /quotas)
+	ListQuotas(w http.ResponseWriter, r *http.Request, params ListQuotasParams)
+	// Get a quota by id.
+	// (GET /quotas/{id})
+	GetQuota(w http.ResponseWriter, r *http.Request, idParam IdParam)
 	// List manual per-record grants, filtered by record or by subject (A52/ADR-0039).
 	// (GET /record-grants)
 	ListRecordGrants(w http.ResponseWriter, r *http.Request, params ListRecordGrantsParams)
@@ -13532,6 +13605,18 @@ func (_ Unimplemented) GetProduct(w http.ResponseWriter, r *http.Request, idPara
 // Update a product (full replace — all writable fields replaced).
 // (PUT /products/{id})
 func (_ Unimplemented) UpdateProduct(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateProductParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List quotas (cursor-paginated).
+// (GET /quotas)
+func (_ Unimplemented) ListQuotas(w http.ResponseWriter, r *http.Request, params ListQuotasParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a quota by id.
+// (GET /quotas/{id})
+func (_ Unimplemented) GetQuota(w http.ResponseWriter, r *http.Request, idParam IdParam) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -19997,6 +20082,140 @@ func (siw *ServerInterfaceWrapper) UpdateProduct(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// ListQuotas operation middleware
+func (siw *ServerInterfaceWrapper) ListQuotas(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListQuotasParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.SortParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "owner_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "owner_id", r.URL.Query(), &params.OwnerId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "owner_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "owner_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "team_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "team_id", r.URL.Query(), &params.TeamId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "team_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "team_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListQuotas(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetQuota operation middleware
+func (siw *ServerInterfaceWrapper) GetQuota(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetQuota(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListRecordGrants operation middleware
 func (siw *ServerInterfaceWrapper) ListRecordGrants(w http.ResponseWriter, r *http.Request) {
 	var err error
@@ -21500,6 +21719,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/products/{id}", wrapper.UpdateProduct)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/quotas", wrapper.ListQuotas)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/quotas/{id}", wrapper.GetQuota)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/record-grants", wrapper.ListRecordGrants)

@@ -104,6 +104,8 @@ tags:
     description: File attachments — blob-store object references bound to a record (RD-DDL-1); bytes flow through presigned blob-seam URLs, never the JSON API (ADR-0051).
   - name: CustomFields
     description: Runtime, admin-defined scalar fields on existing core objects (custom-fields.md, A46/ADR-0002 Amendment 2) — list/create/rename/retire only; no hard delete.
+  - name: Quotas
+    description: Per-owner/team revenue targets per period (RD-DDL-2; E09 forecast attainment) — owner XOR team, human-set target, server-computed attainment read.
 
 # =============================================================================
 paths:
@@ -3713,7 +3715,52 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
   #   /saved-views        (E15; V1 enforces shared_scope=private)
-  #   /quotas             (E09; owner XOR team)
+
+  # ------------------------------ /quotas -------------------------------------
+  /quotas:
+    get:
+      tags: [Quotas]
+      operationId: listQuotas
+      summary: List quotas (cursor-paginated).
+      x-mcp-tool: { verb: search_records, record_type: quota, tier: green }
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Sort'
+        - $ref: '#/components/parameters/IncludeArchived'
+        - name: owner_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: team_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: A page of quotas.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QuotaListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /quotas/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Quotas]
+      operationId: getQuota
+      summary: Get a quota by id.
+      x-mcp-tool: { verb: search_records, record_type: quota, tier: green }
+      responses:
+        '200':
+          description: The quota.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Quota' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # field_mask, deal_channel, gtm_module_install are config/
   # join tables surfaced through admin/parent endpoints, not standalone CRUD.
   # conversation_link has its own polymorphic endpoint: POST /conversation-links +
@@ -7251,3 +7298,48 @@ components:
         request schema entirely (immutable, not just ignored if sent).
       properties:
         label: { type: string }
+
+    # ---- Quota + attainment (RD-WIRE-2/3, RD-DDL-2, RD-FORM-2) ----
+    Quota:
+      type: object
+      description: |
+        A per-owner or per-team revenue target for one period (RD-DDL-2, quota.html scope
+        note). Exactly one of owner_id/team_id is non-null (CHECK constraint) — never both,
+        never neither; createQuota/updateQuota document and enforce this (422
+        owner_xor_team_required). target_minor is always human-set: no AI-guessed quota, no
+        default, no server-computed fallback (RD-PARAM-3). Deliberately carries no
+        source/captured_by/created_by — RD-DDL-2's column list has no provenance columns at
+        all, unlike custom_field's created_by (CF-T01). Attainment is a separate read
+        (getQuotaAttainment, RD-WIRE-3) — this schema never carries attainment fields itself.
+      required: [id, workspace_id, period_start, period_end, target_minor, currency, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        workspace_id: { type: string, format: uuid }
+        owner_id:
+          type: [string, 'null']
+          format: uuid
+          description: Exactly one of owner_id/team_id is non-null (RD-DDL-2 CHECK).
+        team_id:
+          type: [string, 'null']
+          format: uuid
+          description: Exactly one of owner_id/team_id is non-null (RD-DDL-2 CHECK).
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        target_minor:
+          type: integer
+          format: int64
+          description: >-
+            Human-set revenue target, integer minor units (RD-PARAM-3) — never an AI-guessed
+            or server-computed field.
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        version: { $ref: '#/components/schemas/RowVersion' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        archived_at: { type: [string, 'null'], format: date-time }
+
+    QuotaListResponse:
+      type: object
+      required: [data, page]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/Quota' } }
+        page: { $ref: '#/components/schemas/PageInfo' }
