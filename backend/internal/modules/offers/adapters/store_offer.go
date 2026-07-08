@@ -195,22 +195,19 @@ const offerGetQuery = `SELECT
 	created_at, updated_at, archived_at
 	FROM offer WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`
 
-const offerListQueryAll = `SELECT
+// offerListQuery pushes the archived-filter into SQL itself via $5
+// (includeArchived) rather than branching the query text in Go: $5=false
+// yields "(false OR archived_at IS NULL)" (live rows only, same as before),
+// $5=true short-circuits the OR to true (all rows, same as before) — one
+// query instead of two near-identical literals.
+const offerListQuery = `SELECT
 	id, workspace_id, deal_id, offer_number, revision, status, currency, buyer_org_id,
 	buyer_snapshot, issuer_snapshot, valid_until, intro_text, terms_text,
 	net_minor, tax_minor, gross_minor, fx_rate_to_base, fx_rate_date,
 	template_id, pdf_asset_ref, accepted_at, version, source, captured_by,
 	created_at, updated_at, archived_at
 	FROM offer WHERE workspace_id=$1::uuid AND deal_id=$2::uuid AND ($3 = '' OR id::text < $3)
-	ORDER BY id DESC LIMIT $4`
-
-const offerListQueryLive = `SELECT
-	id, workspace_id, deal_id, offer_number, revision, status, currency, buyer_org_id,
-	buyer_snapshot, issuer_snapshot, valid_until, intro_text, terms_text,
-	net_minor, tax_minor, gross_minor, fx_rate_to_base, fx_rate_date,
-	template_id, pdf_asset_ref, accepted_at, version, source, captured_by,
-	created_at, updated_at, archived_at
-	FROM offer WHERE workspace_id=$1::uuid AND deal_id=$2::uuid AND ($3 = '' OR id::text < $3) AND archived_at IS NULL
+	AND ($5 OR archived_at IS NULL)
 	ORDER BY id DESC LIMIT $4`
 
 func scanOffer(row interface{ Scan(dest ...any) error }) (domain.Offer, error) {
@@ -257,11 +254,7 @@ func (s *OfferStore) List(ctx context.Context, workspaceID, dealID, cursor strin
 	}
 	out := []domain.Offer{}
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		query := offerListQueryAll
-		if !includeArchived {
-			query = offerListQueryLive
-		}
-		rows, err := tx.QueryContext(ctx, query, workspaceID, dealID, cursor, limit+1)
+		rows, err := tx.QueryContext(ctx, offerListQuery, workspaceID, dealID, cursor, limit+1, includeArchived)
 		if err != nil {
 			return err
 		}
