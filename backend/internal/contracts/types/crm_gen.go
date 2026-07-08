@@ -355,6 +355,7 @@ func (e AuditHistoryEntryActorType) Valid() bool {
 
 // Defines values for AuditLogEntryAction.
 const (
+	AuditLogEntryActionActivityRelink  AuditLogEntryAction = "activity_relink"
 	AuditLogEntryActionAdvanceStage    AuditLogEntryAction = "advance_stage"
 	AuditLogEntryActionAnonymize       AuditLogEntryAction = "anonymize"
 	AuditLogEntryActionApprove         AuditLogEntryAction = "approve"
@@ -392,6 +393,8 @@ const (
 // Valid indicates whether the value is a known member of the AuditLogEntryAction enum.
 func (e AuditLogEntryAction) Valid() bool {
 	switch e {
+	case AuditLogEntryActionActivityRelink:
+		return true
 	case AuditLogEntryActionAdvanceStage:
 		return true
 	case AuditLogEntryActionAnonymize:
@@ -2318,6 +2321,27 @@ func (e RelationshipKind) Valid() bool {
 	case RelationshipKindPartnerOf:
 		return true
 	case RelationshipKindReferredBy:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RelinkActivityRequestEntityType.
+const (
+	RelinkActivityRequestEntityTypeDeal         RelinkActivityRequestEntityType = "deal"
+	RelinkActivityRequestEntityTypeOrganization RelinkActivityRequestEntityType = "organization"
+	RelinkActivityRequestEntityTypePerson       RelinkActivityRequestEntityType = "person"
+)
+
+// Valid indicates whether the value is a known member of the RelinkActivityRequestEntityType enum.
+func (e RelinkActivityRequestEntityType) Valid() bool {
+	switch e {
+	case RelinkActivityRequestEntityTypeDeal:
+		return true
+	case RelinkActivityRequestEntityTypeOrganization:
+		return true
+	case RelinkActivityRequestEntityTypePerson:
 		return true
 	default:
 		return false
@@ -5608,6 +5632,15 @@ type RelationshipListResponse struct {
 	Page PageInfo       `json:"page"`
 }
 
+// RelinkActivityRequest defines model for RelinkActivityRequest.
+type RelinkActivityRequest struct {
+	EntityId   openapi_types.UUID              `json:"entity_id"`
+	EntityType RelinkActivityRequestEntityType `json:"entity_type"`
+}
+
+// RelinkActivityRequestEntityType defines model for RelinkActivityRequest.EntityType.
+type RelinkActivityRequestEntityType string
+
 // RenameCustomFieldRequest Merge-PATCH; `label` only — `column_name`, `object`, and `type` are absent from this request schema entirely (immutable, not just ignored if sent).
 type RenameCustomFieldRequest struct {
 	Label *string `json:"label,omitempty"`
@@ -6149,6 +6182,18 @@ type UpdateActivityParams struct {
 type DraftEmailJSONBody struct {
 	// Intent Optional steering, e.g. "polite follow-up referencing Friday".
 	Intent *string `json:"intent,omitempty"`
+}
+
+// RelinkActivityParams defines parameters for RelinkActivity.
+type RelinkActivityParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
 }
 
 // SendEmailParams defines parameters for SendEmail.
@@ -7347,6 +7392,9 @@ type UpdateActivityJSONRequestBody = UpdateActivityRequest
 
 // DraftEmailJSONRequestBody defines body for DraftEmail for application/json ContentType.
 type DraftEmailJSONRequestBody DraftEmailJSONBody
+
+// RelinkActivityJSONRequestBody defines body for RelinkActivity for application/json ContentType.
+type RelinkActivityJSONRequestBody = RelinkActivityRequest
 
 // SendEmailJSONRequestBody defines body for SendEmail for application/json ContentType.
 type SendEmailJSONRequestBody = SendEmailRequest
@@ -12275,6 +12323,9 @@ type ServerInterface interface {
 	// Draft a reply/follow-up email for context (the `draft_email` MCP verb).
 	// (POST /activities/{id}/draft-email)
 	DraftEmail(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Relink an activity — add or move one typed link (idempotent).
+	// (POST /activities/{id}/relink)
+	RelinkActivity(w http.ResponseWriter, r *http.Request, idParam IdParam, params RelinkActivityParams)
 	// Send a (possibly edited) email draft — 🟡 confirm-first / gated.
 	// (POST /activities/{id}/send-email)
 	SendEmail(w http.ResponseWriter, r *http.Request, idParam IdParam, params SendEmailParams)
@@ -12764,6 +12815,12 @@ func (_ Unimplemented) UpdateActivity(w http.ResponseWriter, r *http.Request, id
 // Draft a reply/follow-up email for context (the `draft_email` MCP verb).
 // (POST /activities/{id}/draft-email)
 func (_ Unimplemented) DraftEmail(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Relink an activity — add or move one typed link (idempotent).
+// (POST /activities/{id}/relink)
+func (_ Unimplemented) RelinkActivity(w http.ResponseWriter, r *http.Request, idParam IdParam, params RelinkActivityParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -14022,6 +14079,61 @@ func (siw *ServerInterfaceWrapper) DraftEmail(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DraftEmail(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RelinkActivity operation middleware
+func (siw *ServerInterfaceWrapper) RelinkActivity(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RelinkActivityParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RelinkActivity(w, r, idParam, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -21116,6 +21228,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/activities/{id}/draft-email", wrapper.DraftEmail)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/activities/{id}/relink", wrapper.RelinkActivity)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/activities/{id}/send-email", wrapper.SendEmail)

@@ -1751,6 +1751,41 @@ paths:
               schema: { $ref: '#/components/schemas/Activity' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /activities/{id}/relink:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Activities]
+      operationId: relinkActivity
+      summary: Relink an activity — add or move one typed link (idempotent).
+      description: |
+        Adds or moves one typed link on the activity in a single idempotent action: replaying the
+        same (activity, entity_type, entity_id) creates no duplicate link (`uq_activity_link`,
+        ACT-DDL-2) and the response carries the unchanged link set. The activity's original
+        `source`/`captured_by` provenance is preserved byte-for-byte — the relink records who
+        associated it, never who captured it — and writes exactly one audit row
+        (action=activity_relink). `entity_type` is constrained to `person`/`organization`/`deal`;
+        the `activity_link_shape` CHECK (ACT-DDL-2) has no `lead` arm, so a `lead` target is
+        rejected (422), not silently coerced. 🟢 (internal association, not outbound).
+      x-mcp-tool: { verb: update_record, record_type: activity, tier: green }
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RelinkActivityRequest' }
+      responses:
+        '200':
+          description: The relinked activity (full entity, including its updated link set).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Activity' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   /activities/{id}/draft-email:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -5574,6 +5609,13 @@ components:
         remind_at: { type: [string, 'null'], format: date-time }
         is_done: { type: boolean, description: Completing a task writes one audit row + task.completed event. }
 
+    RelinkActivityRequest:
+      type: object
+      required: [entity_type, entity_id]
+      properties:
+        entity_type: { type: string, enum: [person, organization, deal] }
+        entity_id: { type: string, format: uuid }
+
     ActivityListResponse:
       type: object
       required: [data, page]
@@ -6292,7 +6334,7 @@ components:
           # Every mutation is attributable (P12). connector captures audit as actor_type=connector.
           # Kept in lockstep with the audit_log_action_check DDL CHECK (migration 000048);
           # gated by scripts/check-audit-action-coherence.sh in `make check`.
-          enum: [create, update, archive, merge, promote, disqualify, restore, export, erase, anonymize, login, assign, advance_stage, send_email, consent_grant, consent_withdraw, approve, reject, record_share, record_unshare, capture, modify, expired, generate, import, publish, parameterize, pause, bulk_set_field, bulk_archive, bulk_reassign, score_override]
+          enum: [create, update, archive, merge, promote, disqualify, restore, export, erase, anonymize, login, assign, advance_stage, send_email, consent_grant, consent_withdraw, approve, reject, record_share, record_unshare, capture, modify, expired, generate, import, publish, parameterize, pause, bulk_set_field, bulk_archive, bulk_reassign, score_override, activity_relink]
         entity_type: { type: string }
         entity_id: { type: [string, 'null'], format: uuid }
         before: { type: [object, 'null'], additionalProperties: true }
