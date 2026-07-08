@@ -14,8 +14,9 @@ every step is contract/gate inspection rather than a live HTTP round-trip agains
    Expected: all four operationIds present, on `GET /custom-fields`, `POST /custom-fields`,
    `PATCH /custom-fields/{id}`, `POST /custom-fields/{id}/retire` respectively.
 
-3. **[auto]** Run `grep -n -A3 "^  /custom-fields:" backend/api/crm.yaml | grep "required: true"`.
-   Expected: the `object` query parameter on `listCustomFields` is `required: true` (enum
+3. **[auto]** Run `grep -n -A2 'name: object' backend/api/crm.yaml | grep -B2 "required: true"`.
+   Expected: prints `- name: object`, `in: query`, `required: true` — the `object` query
+   parameter on `listCustomFields` is `required: true` (enum
    `person|organization|deal|lead|activity`, CUSTOM-FIELDS-PARAM-2).
 
 4. **[auto]** Run `grep -n -B2 -A3 "name: status" backend/api/crm.yaml | grep -A3 "in: query"`
