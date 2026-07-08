@@ -2283,6 +2283,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List attachments (object-store references; cursor-paginated, filterable by entity). */
+        get: operations["listAttachments"];
+        put?: never;
+        /**
+         * Register attachment metadata and mint a presigned upload URL.
+         * @description Two-phase upload (ADR-0051): this call registers the file's metadata against a
+         *     record and returns `upload_url`, a presigned URL the client PUTs the bytes to
+         *     directly against the blob-storage seam — bytes never ride this JSON call. The row
+         *     starts `scan_status: scanning`; `download_url` on a later `getAttachment`/
+         *     `listAttachments` read is populated once the virus scan completes clean
+         *     (RD-PARAM-5).
+         */
+        post: operations["createAttachment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/attachments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        /** Get an attachment by id. */
+        get: operations["getAttachment"];
+        put?: never;
+        post?: never;
+        /** Archive (soft-delete) an attachment. */
+        delete: operations["archiveAttachment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organizations/{id}/hierarchy-rollup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Roll up an organization's account tree (RD-FORM-1) — weighted pipeline, closed-won, 30-day activity count.
+         * @description `roll-up(node) = self(node) + Σ roll-up(child)` over readable children, traversed via
+         *     a bounded indexed recursive query (RD-PARAM-1, p95 < 200ms for ≤200-org trees). A
+         *     child the caller cannot read contributes nothing and is named in
+         *     `restricted_excluded` — never silently summed (RD-AC-1). All money is base-currency
+         *     converted (DM-FX-4); a missing stored FX rate fails the whole read with
+         *     `422 fx_rate_unavailable` rather than substituting a rate of 1 (mirrors
+         *     `getPipelineRollup`, DEAL-WIRE-8).
+         */
+        get: operations["getOrganizationHierarchyRollup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/field-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-field change history for a record, reconstructed from audit_log before/after diffs.
+         * @description Returns one entry per field change, newest first, for the given `entity_type` +
+         *     `entity_id`. A field masked by RBAC/PII rules is withheld identically to how its
+         *     live value would be withheld — this read inherits the same field-masking the
+         *     record's own GET applies (no separate masking mechanism). Agent-authored changes
+         *     additionally carry `passport_id`/`evidence` when present (RD-AC-5). Returns
+         *     `200 {data:[]}` for a record with no matching history (including a nonexistent or
+         *     out-of-RBAC-scope id), mirroring `getRecordHistory`'s honest-empty behavior.
+         */
+        get: operations["getFieldHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/custom-fields": {
         parameters: {
             query?: never;
@@ -4463,6 +4565,146 @@ export interface components {
         };
         AuditHistoryResponse: {
             data: components["schemas"]["AuditHistoryEntry"][];
+        };
+        /**
+         * @description A file attachment — a blob-store object reference bound to a record. Mirrors the
+         *     existing `attachment` table (migration 000009_lists_tags_attachments.up.sql; RD-DDL-1
+         *     pins the same shape). Bytes never ride the JSON API — the row holds metadata + the
+         *     object-store key only; content moves through presigned blob-seam URLs (ADR-0051). No
+         *     `version` column: an attachment is immutable except for archive, so there is no
+         *     `updated_at` either — only `created_at`/`archived_at`.
+         */
+        Attachment: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            workspace_id: string;
+            /** @enum {string} */
+            entity_type: "person" | "organization" | "deal" | "lead" | "activity";
+            /** Format: uuid */
+            entity_id: string;
+            filename: string;
+            /** @description MIME type; DB NOT NULL — client declares it at registration time. */
+            content_type: string;
+            /**
+             * Format: int64
+             * @description DB NOT NULL — client declares the expected size at registration time.
+             */
+            byte_size: number;
+            /** @description Object-store key (S3/MinIO). Internal reference: clients fetch bytes via `download_url`, never this key directly. */
+            storage_key: string;
+            /** @description sha256 */
+            checksum?: string | null;
+            /**
+             * @description RD-PARAM-5 virus-scan state. `blocked` = quarantined, not downloadable. Contract-only
+             *     for now — not yet a DB column on `attachment`; the handler ticket decides whether it
+             *     lands on the row itself or is computed/joined (either is acceptable at this layer).
+             * @enum {string}
+             */
+            scan_status: "scanning" | "clean" | "blocked";
+            source: string;
+            captured_by: string;
+            /**
+             * @description Presigned PUT URL for the client to upload bytes directly to the blob-storage seam
+             *     (ADR-0051). Populated only in the `createAttachment` response; null everywhere else.
+             */
+            readonly upload_url?: string | null;
+            /**
+             * @description Presigned GET URL for downloading bytes directly from the blob-storage seam. Present
+             *     once `scan_status: clean`; null/absent while `scanning` or `blocked` (RD-PARAM-5).
+             *     Every download is audited as a file access (RD-AC-2) at the handler layer.
+             */
+            readonly download_url?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            archived_at?: string | null;
+        };
+        CreateAttachmentRequest: {
+            /** @enum {string} */
+            entity_type: "person" | "organization" | "deal" | "lead" | "activity";
+            /** Format: uuid */
+            entity_id: string;
+            filename: string;
+            content_type: string;
+            /** Format: int64 */
+            byte_size: number;
+            checksum?: string | null;
+            source: string;
+            captured_by: string;
+        };
+        AttachmentListResponse: {
+            data: components["schemas"]["Attachment"][];
+            page: components["schemas"]["PageInfo"];
+        };
+        /**
+         * @description RD-FORM-1's tree roll-up over the organization hierarchy (`parent_org_id` self-FK,
+         *     owned by the people-and-organizations chapter). A server read only, never client-summed
+         *     (mirrors `PipelineRollup`'s totals-reconcile-to-parts discipline). Money is base-currency
+         *     converted (DM-FX-4) — never a raw cross-currency sum.
+         */
+        OrganizationHierarchyRollup: {
+            /** Format: uuid */
+            root_id: string;
+            /** @enum {string} */
+            scope: "tree" | "self";
+            weighted_pipeline: components["schemas"]["Money"];
+            closed_won: components["schemas"]["Money"];
+            /** @description 30-day activity count */
+            activity_count_30d: number;
+            /** @description Count of accounts (nodes) included in the roll-up. */
+            aggregated_account_count: number;
+            /**
+             * @description Nodes excluded from the roll-up because the viewer cannot read them (RD-AC-1) —
+             *     disclosed, never a silent drop. Empty when nothing was excluded.
+             */
+            restricted_excluded: {
+                /** Format: uuid */
+                id: string;
+                display_name: string;
+            }[];
+            /**
+             * Format: date-time
+             * @description When this roll-up was computed (server read-time).
+             */
+            computed_at: string;
+        };
+        /**
+         * @description One per-field change, projected read-only from a single `audit_log` row's before/after
+         *     diff (RD-AC-5) — not a stored history row (RD-PARAM-6: no records-depth copy). `id` is
+         *     the source `audit_log` row's id. `old_value`/`new_value` are the field's display-form
+         *     values (server-rendered strings, matching how the field-history screen renders a
+         *     struck-through-from / highlighted-to diff token — not the raw typed column value).
+         */
+        FieldHistoryEntry: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            entity_type: "person" | "organization" | "deal" | "lead" | "activity";
+            /** Format: uuid */
+            entity_id: string;
+            field: string;
+            /** @description "— empty —" cases are represented as null; the client renders the empty-origin label. */
+            old_value?: string | null;
+            new_value?: string | null;
+            /** Format: date-time */
+            changed_at: string;
+            /** @enum {string} */
+            actor_type: "human" | "agent" | "system" | "connector";
+            actor_id: string;
+            /**
+             * Format: uuid
+             * @description Agent Seat Passport that authorized the change; present for agent actors (RD-AC-5).
+             */
+            passport_id?: string | null;
+            /** @description Grounding evidence for an agent-authored change; present for agent actors (RD-AC-5). */
+            evidence?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        FieldHistoryListResponse: {
+            data: components["schemas"]["FieldHistoryEntry"][];
+            page: components["schemas"]["PageInfo"];
         };
         /**
          * @description A typed, validated query plan (not free-form SQL). For prebuilt reports, filters
@@ -10470,6 +10712,217 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    listAttachments: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Opaque keyset cursor from a prior response's `page.next_cursor`. The cursor encodes the
+                 *     effective `sort` and `filter` of the originating request plus the last row's keyset
+                 *     (sort-key tuple + `id` tie-breaker). **Stability:** results are stable under concurrent
+                 *     inserts/updates (keyset pagination, not offset). Supplying `cursor` together with a `sort`
+                 *     or filter that differs from the one the cursor was minted under returns
+                 *     `422 code: cursor_param_mismatch` — re-issue the query without the cursor.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Max items in the page. */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Sort spec: comma-separated fields, `-` prefix = descending (e.g. `-updated_at,full_name`).
+                 *     `id` is always appended as the final tie-breaker so ordering is total and the keyset cursor
+                 *     is deterministic. **Allowed sort fields per resource** are the indexed columns enumerated in
+                 *     data-model.md §13 (Sort/filter vocabulary); the default sort when omitted is `-created_at,id`.
+                 *     An out-of-vocabulary field returns `422 code: sort_field_not_allowed`.
+                 */
+                sort?: components["parameters"]["Sort"];
+                /** @description Include soft-deleted (archived) rows. Default false. */
+                include_archived?: components["parameters"]["IncludeArchived"];
+                /** @description Filter to attachments bound to an entity type (with entity_id). */
+                entity_type?: "person" | "organization" | "deal" | "lead" | "activity";
+                entity_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of attachments. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentListResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createAttachment: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+                 *     `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+                 *     returns the original status + body. Reusing the same key with a *different* request body
+                 *     returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+                 *     **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+                 *     retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+                 *     (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAttachmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Created attachment (metadata registered; upload_url set). */
+            201: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Attachment"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    getAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The attachment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Attachment"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    archiveAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Archived attachment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Attachment"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getOrganizationHierarchyRollup: {
+        parameters: {
+            query?: {
+                /** @description tree (default): aggregate the whole subtree. self: return self(root) alone. */
+                scope?: "tree" | "self";
+            };
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organization's hierarchy roll-up. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationHierarchyRollup"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description A stored FX rate is unavailable for a node's currency. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getFieldHistory: {
+        parameters: {
+            query: {
+                /**
+                 * @description Opaque keyset cursor from a prior response's `page.next_cursor`. The cursor encodes the
+                 *     effective `sort` and `filter` of the originating request plus the last row's keyset
+                 *     (sort-key tuple + `id` tie-breaker). **Stability:** results are stable under concurrent
+                 *     inserts/updates (keyset pagination, not offset). Supplying `cursor` together with a `sort`
+                 *     or filter that differs from the one the cursor was minted under returns
+                 *     `422 code: cursor_param_mismatch` — re-issue the query without the cursor.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Max items in the page. */
+                limit?: components["parameters"]["Limit"];
+                entity_type: "person" | "organization" | "deal" | "lead" | "activity";
+                entity_id: string;
+                /** @description Filter to one field name (AC-field-history-4). */
+                field?: string;
+                /** @description Filter by actor category (AC-field-history-3). */
+                actor_type?: "human" | "agent" | "system" | "connector";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of per-field change entries (empty when none). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FieldHistoryListResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
         };
     };
     listCustomFields: {

@@ -100,6 +100,8 @@ tags:
     description: Current user / principal.
   - name: DealRooms
     description: Deal rooms — published shared spaces with disclosed-consent access control (B-E08.5/B-E08.6).
+  - name: Attachments
+    description: File attachments — blob-store object references bound to a record (RD-DDL-1); bytes flow through presigned blob-seam URLs, never the JSON API (ADR-0051).
   - name: CustomFields
     description: Runtime, admin-defined scalar fields on existing core objects (custom-fields.md, A46/ADR-0002 Amendment 2) — list/create/rename/retire only; no hard delete.
 
@@ -3989,6 +3991,197 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
 
+  # ---------------------------- /attachments ---------------------------------
+  # RD-WIRE-1 — object-store reference metadata; bytes via presigned blob-seam
+  # URLs (ADR-0051), never the JSON API. Mirrors the existing `attachment`
+  # table (migration 000009_lists_tags_attachments.up.sql).
+  /attachments:
+    get:
+      tags: [Attachments]
+      operationId: listAttachments
+      summary: List attachments (object-store references; cursor-paginated, filterable by entity).
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Sort'
+        - $ref: '#/components/parameters/IncludeArchived'
+        - name: entity_type
+          in: query
+          schema: { type: string, enum: [person, organization, deal, lead, activity] }
+          description: Filter to attachments bound to an entity type (with entity_id).
+        - name: entity_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: A page of attachments.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttachmentListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Attachments]
+      operationId: createAttachment
+      summary: Register attachment metadata and mint a presigned upload URL.
+      description: |
+        Two-phase upload (ADR-0051): this call registers the file's metadata against a
+        record and returns `upload_url`, a presigned URL the client PUTs the bytes to
+        directly against the blob-storage seam — bytes never ride this JSON call. The row
+        starts `scan_status: scanning`; `download_url` on a later `getAttachment`/
+        `listAttachments` read is populated once the virus scan completes clean
+        (RD-PARAM-5).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAttachmentRequest' }
+            examples:
+              minimal:
+                value:
+                  entity_type: deal
+                  entity_id: 018f3a1b-0000-7000-8000-0000000000c9
+                  filename: contract.pdf
+                  content_type: application/pdf
+                  byte_size: 245678
+                  source: ui
+                  captured_by: 'human:018f3a1b-0000-7000-8000-000000000001'
+      responses:
+        '201':
+          description: Created attachment (metadata registered; upload_url set).
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Attachment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /attachments/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Attachments]
+      operationId: getAttachment
+      summary: Get an attachment by id.
+      responses:
+        '200':
+          description: The attachment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Attachment' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Attachments]
+      operationId: archiveAttachment
+      summary: Archive (soft-delete) an attachment.
+      responses:
+        '200':
+          description: Archived attachment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Attachment' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # -------------------- /organizations/{id}/hierarchy-rollup -----------------
+  # RD-WIRE-4 — RD-FORM-1 tree roll-up read over the existing `parent_org_id`
+  # self-FK (people-and-organizations chapter owns the column + cycle guard;
+  # this operation owns the read of what rolls up over it). No backing table —
+  # a computed/projected read.
+  /organizations/{id}/hierarchy-rollup:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Organizations]
+      operationId: getOrganizationHierarchyRollup
+      summary: Roll up an organization's account tree (RD-FORM-1) — weighted pipeline, closed-won, 30-day activity count.
+      description: |
+        `roll-up(node) = self(node) + Σ roll-up(child)` over readable children, traversed via
+        a bounded indexed recursive query (RD-PARAM-1, p95 < 200ms for ≤200-org trees). A
+        child the caller cannot read contributes nothing and is named in
+        `restricted_excluded` — never silently summed (RD-AC-1). All money is base-currency
+        converted (DM-FX-4); a missing stored FX rate fails the whole read with
+        `422 fx_rate_unavailable` rather than substituting a rate of 1 (mirrors
+        `getPipelineRollup`, DEAL-WIRE-8).
+      parameters:
+        - name: scope
+          in: query
+          schema: { type: string, enum: [tree, self], default: tree }
+          description: 'tree (default): aggregate the whole subtree. self: return self(root) alone.'
+      responses:
+        '200':
+          description: The organization's hierarchy roll-up.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrganizationHierarchyRollup' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: A stored FX rate is unavailable for a node's currency.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                fxUnavailable:
+                  value:
+                    type: 'https://errors.margince.com/fx_rate_unavailable'
+                    title: FX rate unavailable
+                    status: 422
+                    code: fx_rate_unavailable
+                    detail: No stored FX rate for USD as of 2026-06-04.
+
+  # ------------------------------- /field-history -----------------------------
+  # RD-WIRE-5 — per-field diff projection over audit_log.before/after
+  # (RD-AC-5). Distinct from the existing whole-mutation `getRecordHistory`
+  # (/records/{entity_type}/{id}/history): that reads back one rendered
+  # plain-language summary line per audit_log row; this groups by *field* with
+  # actor/field filters and cursor pagination, matching the field-history
+  # screen's per-field diff-timeline shape (AC-field-history-1..8). No backing
+  # table — a computed/projected read over the same append-only spine.
+  /field-history:
+    get:
+      tags: [Audit]
+      operationId: getFieldHistory
+      summary: Per-field change history for a record, reconstructed from audit_log before/after diffs.
+      description: |
+        Returns one entry per field change, newest first, for the given `entity_type` +
+        `entity_id`. A field masked by RBAC/PII rules is withheld identically to how its
+        live value would be withheld — this read inherits the same field-masking the
+        record's own GET applies (no separate masking mechanism). Agent-authored changes
+        additionally carry `passport_id`/`evidence` when present (RD-AC-5). Returns
+        `200 {data:[]}` for a record with no matching history (including a nonexistent or
+        out-of-RBAC-scope id), mirroring `getRecordHistory`'s honest-empty behavior.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: entity_type
+          in: query
+          required: true
+          schema: { type: string, enum: [person, organization, deal, lead, activity] }
+        - name: entity_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: field
+          in: query
+          schema: { type: string }
+          description: Filter to one field name (AC-field-history-4).
+        - name: actor_type
+          in: query
+          schema: { type: string, enum: [human, agent, system, connector] }
+          description: Filter by actor category (AC-field-history-3).
+      responses:
+        '200':
+          description: A page of per-field change entries (empty when none).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FieldHistoryListResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   # ------------------------------ /custom-fields -----------------------------
   /custom-fields:
     get:
@@ -4199,9 +4392,9 @@ paths:
   #   /calls, /telephony/*                               (telephony / click-to-call)
   #   /embeddings, /context-graph/*                      (pgvector retrieval store)
   #   /workflow-runs                                     (workflow registry run records)
-  #   /attachments                                       (S3/MinIO refs — schema exists; endpoints fast-follow)
   #   /audit-log                                         (read API for AuditLogEntry — admin/compliance; fast-follow)
   #   /users, /teams, /roles                             (admin identity mgmt — schema below; CRUD fast-follow)
+  # NOTE: /attachments minted (RD-T02/RD-WIRE-1) — see the Attachments section above.
   # =========================================================================
 
 # =============================================================================
@@ -6134,6 +6327,131 @@ components:
         data:
           type: array
           items: { $ref: '#/components/schemas/AuditHistoryEntry' }
+
+    # ---- Attachments (RD-DDL-1 / RD-WIRE-1) ----
+    Attachment:
+      type: object
+      description: |
+        A file attachment — a blob-store object reference bound to a record. Mirrors the
+        existing `attachment` table (migration 000009_lists_tags_attachments.up.sql; RD-DDL-1
+        pins the same shape). Bytes never ride the JSON API — the row holds metadata + the
+        object-store key only; content moves through presigned blob-seam URLs (ADR-0051). No
+        `version` column: an attachment is immutable except for archive, so there is no
+        `updated_at` either — only `created_at`/`archived_at`.
+      required: [id, workspace_id, entity_type, entity_id, filename, content_type, byte_size, storage_key, scan_status, source, captured_by, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        workspace_id: { type: string, format: uuid }
+        entity_type: { type: string, enum: [person, organization, deal, lead, activity] }
+        entity_id: { type: string, format: uuid }
+        filename: { type: string }
+        content_type: { type: string, description: MIME type; DB NOT NULL — client declares it at registration time. }
+        byte_size: { type: integer, format: int64, description: DB NOT NULL — client declares the expected size at registration time. }
+        storage_key: { type: string, description: 'Object-store key (S3/MinIO). Internal reference: clients fetch bytes via `download_url`, never this key directly.' }
+        checksum: { type: [string, 'null'], description: sha256, for dedupe/integrity. }
+        scan_status:
+          type: string
+          enum: [scanning, clean, blocked]
+          description: |
+            RD-PARAM-5 virus-scan state. `blocked` = quarantined, not downloadable. Contract-only
+            for now — not yet a DB column on `attachment`; the handler ticket decides whether it
+            lands on the row itself or is computed/joined (either is acceptable at this layer).
+        source: { type: string }
+        captured_by: { type: string }
+        upload_url:
+          type: [string, 'null']
+          readOnly: true
+          description: |
+            Presigned PUT URL for the client to upload bytes directly to the blob-storage seam
+            (ADR-0051). Populated only in the `createAttachment` response; null everywhere else.
+        download_url:
+          type: [string, 'null']
+          readOnly: true
+          description: |
+            Presigned GET URL for downloading bytes directly from the blob-storage seam. Present
+            once `scan_status: clean`; null/absent while `scanning` or `blocked` (RD-PARAM-5).
+            Every download is audited as a file access (RD-AC-2) at the handler layer.
+        created_at: { type: string, format: date-time }
+        archived_at: { type: [string, 'null'], format: date-time }
+
+    CreateAttachmentRequest:
+      type: object
+      required: [entity_type, entity_id, filename, content_type, byte_size, source, captured_by]
+      properties:
+        entity_type: { type: string, enum: [person, organization, deal, lead, activity] }
+        entity_id: { type: string, format: uuid }
+        filename: { type: string }
+        content_type: { type: string }
+        byte_size: { type: integer, format: int64 }
+        checksum: { type: [string, 'null'] }
+        source: { type: string }
+        captured_by: { type: string }
+
+    AttachmentListResponse:
+      type: object
+      required: [data, page]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/Attachment' } }
+        page: { $ref: '#/components/schemas/PageInfo' }
+
+    # ---- Hierarchy roll-up (RD-FORM-1 / RD-WIRE-4) ----
+    OrganizationHierarchyRollup:
+      type: object
+      description: |
+        RD-FORM-1's tree roll-up over the organization hierarchy (`parent_org_id` self-FK,
+        owned by the people-and-organizations chapter). A server read only, never client-summed
+        (mirrors `PipelineRollup`'s totals-reconcile-to-parts discipline). Money is base-currency
+        converted (DM-FX-4) — never a raw cross-currency sum.
+      required: [root_id, scope, weighted_pipeline, closed_won, activity_count_30d, aggregated_account_count, restricted_excluded, computed_at]
+      properties:
+        root_id: { type: string, format: uuid }
+        scope: { type: string, enum: [tree, self] }
+        weighted_pipeline: { $ref: '#/components/schemas/Money' }
+        closed_won: { $ref: '#/components/schemas/Money' }
+        activity_count_30d: { type: integer, description: 30-day activity count, tree-aggregated (or self-only under scope=self). }
+        aggregated_account_count: { type: integer, description: Count of accounts (nodes) included in the roll-up. }
+        restricted_excluded:
+          type: array
+          description: |
+            Nodes excluded from the roll-up because the viewer cannot read them (RD-AC-1) —
+            disclosed, never a silent drop. Empty when nothing was excluded.
+          items:
+            type: object
+            required: [id, display_name]
+            properties:
+              id: { type: string, format: uuid }
+              display_name: { type: string }
+        computed_at: { type: string, format: date-time, description: When this roll-up was computed (server read-time). }
+
+    # ---- Field history (RD-WIRE-5) ----
+    FieldHistoryEntry:
+      type: object
+      description: |
+        One per-field change, projected read-only from a single `audit_log` row's before/after
+        diff (RD-AC-5) — not a stored history row (RD-PARAM-6: no records-depth copy). `id` is
+        the source `audit_log` row's id. `old_value`/`new_value` are the field's display-form
+        values (server-rendered strings, matching how the field-history screen renders a
+        struck-through-from / highlighted-to diff token — not the raw typed column value).
+      required: [id, entity_type, entity_id, field, changed_at, actor_type, actor_id]
+      properties:
+        id: { type: string, format: uuid }
+        entity_type: { type: string, enum: [person, organization, deal, lead, activity] }
+        entity_id: { type: string, format: uuid }
+        field: { type: string }
+        old_value: { type: [string, 'null'], description: '"— empty —" cases are represented as null; the client renders the empty-origin label.' }
+        new_value: { type: [string, 'null'] }
+        changed_at: { type: string, format: date-time }
+        actor_type: { type: string, enum: [human, agent, system, connector] }
+        actor_id: { type: string }
+        passport_id: { type: [string, 'null'], format: uuid, description: Agent Seat Passport that authorized the change; present for agent actors (RD-AC-5). }
+        evidence: { type: [object, 'null'], additionalProperties: true, description: Grounding evidence for an agent-authored change; present for agent actors (RD-AC-5). }
+
+    FieldHistoryListResponse:
+      type: object
+      required: [data, page]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/FieldHistoryEntry' } }
+        page: { $ref: '#/components/schemas/PageInfo' }
 
     # ---- Reports ----
     RunReportRequest:
