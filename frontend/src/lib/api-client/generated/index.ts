@@ -42,3 +42,4 @@ export type AssignRoleRequest  = C["schemas"]["AssignRoleRequest"];
 export type CustomField              = C["schemas"]["CustomField"];
 export type CustomFieldListResponse  = C["schemas"]["CustomFieldListResponse"];
 export type CreateCustomFieldRequest = C["schemas"]["CreateCustomFieldRequest"];
+export type RenameCustomFieldRequest = C["schemas"]["RenameCustomFieldRequest"];

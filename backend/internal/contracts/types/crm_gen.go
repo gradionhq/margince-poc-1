@@ -5016,6 +5016,11 @@ type RelationshipListResponse struct {
 	Page PageInfo       `json:"page"`
 }
 
+// RenameCustomFieldRequest Merge-PATCH; `label` only — `column_name`, `object`, and `type` are absent from this request schema entirely (immutable, not just ignored if sent).
+type RenameCustomFieldRequest struct {
+	Label *string `json:"label,omitempty"`
+}
+
 // ReportResult defines model for ReportResult.
 type ReportResult struct {
 	Columns []string `json:"columns"`
@@ -5654,6 +5659,25 @@ type CreateCustomFieldParams struct {
 	// match the operation being executed (`403 code: approval_token_invalid`). Required when an
 	// AGENT principal invokes a 🟡 operation; a human's direct call is itself the approval.
 	ApprovalTokenParam *ApprovalTokenParam `json:"X-Approval-Token,omitempty"`
+}
+
+// RenameCustomFieldParams defines parameters for RenameCustomField.
+type RenameCustomFieldParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+
+	// IfMatchParam Optional optimistic-concurrency precondition for a mutating request (PATCH/advance/merge):
+	// the last-seen entity `version`. If the row's current `version` differs, the write is
+	// rejected with `409 code: version_skew` (ErrVersionSkew) and no change is made — re-read,
+	// re-apply, retry. Omitting it is last-write-wins (discouraged for agent/automated writers).
+	// Accepted on every native-mode mutating endpoint that returns a versioned entity.
+	IfMatchParam *IfMatchParam `json:"If-Match,omitempty"`
 }
 
 // ResolveDealRoomByTokenParams defines parameters for ResolveDealRoomByToken.
@@ -6501,6 +6525,9 @@ type LinkConversationJSONRequestBody = CreateConversationLinkRequest
 
 // CreateCustomFieldJSONRequestBody defines body for CreateCustomField for application/json ContentType.
 type CreateCustomFieldJSONRequestBody = CreateCustomFieldRequest
+
+// RenameCustomFieldJSONRequestBody defines body for RenameCustomField for application/json ContentType.
+type RenameCustomFieldJSONRequestBody = RenameCustomFieldRequest
 
 // CreateDealJSONRequestBody defines body for CreateDeal for application/json ContentType.
 type CreateDealJSONRequestBody = CreateDealRequest
@@ -10052,6 +10079,9 @@ type ServerInterface interface {
 	// Define a new custom field on an existing core object (🟡 — a schema change).
 	// (POST /custom-fields)
 	CreateCustomField(w http.ResponseWriter, r *http.Request, params CreateCustomFieldParams)
+	// Rename a custom field's display label (🟢 — not a schema change).
+	// (PATCH /custom-fields/{id})
+	RenameCustomField(w http.ResponseWriter, r *http.Request, idParam IdParam, params RenameCustomFieldParams)
 	// Resolve a published deal room by its access token (unauthenticated public accessor).
 	// (GET /deal-rooms/by-token)
 	ResolveDealRoomByToken(w http.ResponseWriter, r *http.Request, params ResolveDealRoomByTokenParams)
@@ -10535,6 +10565,12 @@ func (_ Unimplemented) ListCustomFields(w http.ResponseWriter, r *http.Request, 
 // Define a new custom field on an existing core object (🟡 — a schema change).
 // (POST /custom-fields)
 func (_ Unimplemented) CreateCustomField(w http.ResponseWriter, r *http.Request, params CreateCustomFieldParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Rename a custom field's display label (🟢 — not a schema change).
+// (PATCH /custom-fields/{id})
+func (_ Unimplemented) RenameCustomField(w http.ResponseWriter, r *http.Request, idParam IdParam, params RenameCustomFieldParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -12316,6 +12352,80 @@ func (siw *ServerInterfaceWrapper) CreateCustomField(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateCustomField(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RenameCustomField operation middleware
+func (siw *ServerInterfaceWrapper) RenameCustomField(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RenameCustomFieldParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatchParam IfMatchParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatchParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatchParam = &IfMatchParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RenameCustomField(w, r, idParam, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -17526,6 +17636,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/custom-fields", wrapper.CreateCustomField)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/custom-fields/{id}", wrapper.RenameCustomField)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/deal-rooms/by-token", wrapper.ResolveDealRoomByToken)

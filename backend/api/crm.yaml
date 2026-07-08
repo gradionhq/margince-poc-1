@@ -3729,6 +3729,38 @@ paths:
                     details:
                       route: source_development_path
 
+  /custom-fields/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    patch:
+      tags: [CustomFields]
+      operationId: renameCustomField
+      summary: Rename a custom field's display label (🟢 — not a schema change).
+      description: |
+        CUSTOM-FIELDS-WIRE-3. Audited catalog `label` update only; `column_name` never
+        moves (custom-fields.md — "the physical column identity never moves"). Merge-PATCH:
+        `column_name`, `object`, and `type` are absent from the request schema entirely.
+      x-mcp-tool: { verb: update_record, record_type: custom_field, tier: green }
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RenameCustomFieldRequest' }
+      responses:
+        '200':
+          description: The renamed custom field.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomField' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   # DEFERRED — stubs only (data-model.md §12). Intentionally NOT specified:
   #   /sequences, /sequences/{id}/steps, /enrollments   (outbound cadences; sends gated)
   #   /overlay/*                                         (overlay-on-incumbents read model)
@@ -6268,3 +6300,11 @@ components:
         source: { type: string }
         captured_by: { type: string }
       additionalProperties: true
+
+    RenameCustomFieldRequest:
+      type: object
+      description: >-
+        Merge-PATCH; `label` only — `column_name`, `object`, and `type` are absent from this
+        request schema entirely (immutable, not just ignored if sent).
+      properties:
+        label: { type: string }

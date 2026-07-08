@@ -396,3 +396,13 @@ describe("CreateCustomFieldRequest + structural-refusal shape contract complianc
     expect(refusal.details?.route).toBe("source_development_path");
   });
 });
+
+describe("RenameCustomFieldRequest contract compliance (CUSTOM-FIELDS-WIRE-3)", () => {
+  it("carries label only — no column_name/object/type keys", () => {
+    const req: components["schemas"]["RenameCustomFieldRequest"] = {
+      label: "Contract end date",
+    };
+    expect(req.label).toBe("Contract end date");
+    expect(Object.keys(req)).toEqual(["label"]);
+  });
+});
