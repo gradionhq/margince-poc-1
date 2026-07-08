@@ -233,7 +233,7 @@ deps:
   organizations:
     mayDependOn: [orgsdomain, orgsadapters]
   orgstransport:
-    mayDependOn: [orgsadapters, orgsdomain, relationships, relsadapters, relsdomain, deals, dealsadapters, dealsdomain, activities, activitiesadapters, activitiesdomain, approvalsport, toolgate, mcp, crmctx, errs, httpkit]
+    mayDependOn: [orgsadapters, orgsdomain, relationships, relsadapters, relsdomain, deals, dealsadapters, dealsdomain, activities, activitiesadapters, activitiesdomain, records, approvalsport, toolgate, mcp, crmctx, errs, httpkit]
   activitiesdomain:
     mayDependOn: [prov, ids]
   activitiesports:
@@ -265,8 +265,13 @@ deps:
   recordsadapters:
     mayDependOn: [recordsdomain, recordsports, errs, ids, database, audit, sqlutil, activities, activitiesdomain, crmctx, session]
     canUse: [pq]
+  # records is the records domain module: it covers attachment metadata/presigned blob-store
+  # access (RD-DDL-1) AND the records-depth read side, the hierarchy roll-up (RD-T04's
+  # RollupStore), which reuses deals' FX/weighting funcs, database.WithWorkspaceTx, and
+  # auth.LoadRolePermissions + session types for the row_scope RBAC lookup.
   records:
-    mayDependOn: [recordsdomain, recordsadapters, recordstransport, blobstore]
+    mayDependOn: [recordsdomain, recordsadapters, recordstransport, blobstore, deals, dealsdomain, errs, database, auth, session]
+    canUse: [pq]
   recordstransport:
     mayDependOn: [records, recordsadapters, recordsdomain, recordsports, crmctx, errs, httpkit, prov, blobstore, auth]
   relsdomain:

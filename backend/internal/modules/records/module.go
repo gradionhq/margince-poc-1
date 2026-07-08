@@ -1,6 +1,9 @@
-// Package records is the records domain module: attachment metadata and
-// presigned blob-store access (RD-DDL-1, ADR-0051). The module exposes an
-// AttachmentStore adapter and an AttachmentHandler for HTTP routing.
+// Package records is the records domain module. It covers attachment
+// metadata and presigned blob-store access (RD-DDL-1, ADR-0051), exposing an
+// AttachmentStore adapter and an AttachmentHandler for HTTP routing, as well
+// as the records-depth read side: the organization hierarchy roll-up
+// (RD-FORM-1, see rollup.go) that aggregates three RD-PARAM-2 measures over
+// an organization's parent tree.
 package records
 
 import (

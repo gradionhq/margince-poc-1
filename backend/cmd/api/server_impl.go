@@ -45,7 +45,7 @@ func buildAllOperations(k *routeKit) *server.AllOperations {
 
 	ops := server.NewAllOperations(
 		server.PeopleAdapter{H: peopletransport.NewPersonHandler(people.NewPersonStore(k.db), relationships.NewRelationshipStore(k.db), deals.NewDealStore(k.db), activities.NewActivityStore(k.db), k.verifier)},
-		server.OrganizationsAdapter{H: orgstransport.NewOrganizationHandler(organizations.NewOrgStore(k.db), relationships.NewRelationshipStore(k.db), deals.NewDealStore(k.db), activities.NewActivityStore(k.db), k.verifier)},
+		server.OrganizationsAdapter{H: orgstransport.NewOrganizationHandler(organizations.NewOrgStore(k.db), relationships.NewRelationshipStore(k.db), deals.NewDealStore(k.db), activities.NewActivityStore(k.db), records.NewRollupStore(k.db), k.verifier)},
 		server.DealsAdapter{H: dealstransport.NewDealHandler(deals.NewDealStore(k.db), relationships.NewRelationshipStore(k.db), activities.NewActivityStore(k.db), k.verifier)},
 		server.PipelinesAdapter{
 			P: dealstransport.NewPipelineHandler(deals.NewPipelineStore(k.db), deals.NewStageStore(k.db), deals.NewRollupStore(k.db)),

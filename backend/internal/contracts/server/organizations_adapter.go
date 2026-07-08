@@ -52,9 +52,7 @@ func (a *OrganizationsAdapter) RestoreOrganization(w http.ResponseWriter, r *htt
 	a.H.ServeHTTP(w, r)
 }
 
-// GetOrganizationHierarchyRollup is unimplemented (RD-T02/RD-WIRE-4 mints the
-// contract only; the recursive-CTE roll-up query is out of scope) — returns
-// 501, the same shape oapi-codegen's own types.Unimplemented stub uses.
+// GetOrganizationHierarchyRollup delegates to the wired handler; see the struct doc comment above.
 func (a *OrganizationsAdapter) GetOrganizationHierarchyRollup(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.GetOrganizationHierarchyRollupParams) {
-	w.WriteHeader(http.StatusNotImplemented)
+	a.H.ServeHTTP(w, r)
 }

@@ -17,6 +17,7 @@ import (
 	dealdomain "github.com/gradionhq/margince/backend/internal/modules/deals/domain"
 	"github.com/gradionhq/margince/backend/internal/modules/organizations/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
+	"github.com/gradionhq/margince/backend/internal/modules/records"
 	reldomain "github.com/gradionhq/margince/backend/internal/modules/relationships/domain"
 	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
@@ -52,6 +53,12 @@ type actStoreSeam interface {
 	List(ctx context.Context, workspaceID, entityType, entityID, cursor string, limit int) ([]actdomain.Activity, string, error)
 }
 
+// rollupStoreSeam is the subset of a roll-up store this handler needs for the
+// GET .../hierarchy-rollup read. Satisfied by *records.RollupStore.
+type rollupStoreSeam interface {
+	Compute(ctx context.Context, rootID, workspaceID, userID, scope string) (records.RollupResult, error)
+}
+
 // OrganizationHandler routes /organizations and /organizations/{id} requests
 // to the OrgStore.
 type OrganizationHandler struct {
@@ -59,12 +66,13 @@ type OrganizationHandler struct {
 	relStore      relStoreSeam
 	dealStore     dealStoreSeam
 	activityStore actStoreSeam
+	rollupStore   rollupStoreSeam
 	verifier      approvalsport.Verifier // used only by the merge endpoint's toolgate.Enforce call (🟡 gate)
 }
 
 // NewOrganizationHandler returns an OrganizationHandler.
-func NewOrganizationHandler(store *adapters.OrgStore, relStore relStoreSeam, dealStore dealStoreSeam, activityStore actStoreSeam, verifier approvalsport.Verifier) *OrganizationHandler {
-	return &OrganizationHandler{store: store, relStore: relStore, dealStore: dealStore, activityStore: activityStore, verifier: verifier}
+func NewOrganizationHandler(store *adapters.OrgStore, relStore relStoreSeam, dealStore dealStoreSeam, activityStore actStoreSeam, rollupStore rollupStoreSeam, verifier approvalsport.Verifier) *OrganizationHandler {
+	return &OrganizationHandler{store: store, relStore: relStore, dealStore: dealStore, activityStore: activityStore, rollupStore: rollupStore, verifier: verifier}
 }
 
 func (h *OrganizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -88,8 +96,8 @@ func (h *OrganizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// serveSuffixRoutes dispatches the /restore and /merge suffix routes, keeping
-// ServeHTTP's cyclomatic complexity within the T1 lint budget (mirrors
+// serveSuffixRoutes dispatches the /restore, /merge, and /hierarchy-rollup suffix routes,
+// keeping ServeHTTP's cyclomatic complexity within the T1 lint budget (mirrors
 // people/transport's handler_person.go serveSuffixRoutes).
 func (h *OrganizationHandler) serveSuffixRoutes(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/restore") {
@@ -100,6 +108,11 @@ func (h *OrganizationHandler) serveSuffixRoutes(w http.ResponseWriter, r *http.R
 	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/merge") {
 		id := httpkit.PathID(strings.TrimSuffix(r.URL.Path, "/merge"), "/organizations")
 		h.merge(w, r, id)
+		return true
+	}
+	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/hierarchy-rollup") {
+		id := httpkit.PathID(strings.TrimSuffix(r.URL.Path, "/hierarchy-rollup"), "/organizations")
+		h.hierarchyRollup(w, r, id)
 		return true
 	}
 	return false

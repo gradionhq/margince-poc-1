@@ -119,7 +119,7 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 		mux.Handle(path+"/", wrapped)
 	}
 	crud("/people", platformauth.ObjPerson, peopletransport.NewPersonHandler(people.NewPersonStore(k.db), relationships.NewRelationshipStore(k.db), deals.NewDealStore(k.db), activities.NewActivityStore(k.db), k.verifier))
-	crud("/organizations", platformauth.ObjOrganization, orgstransport.NewOrganizationHandler(organizations.NewOrgStore(k.db), relationships.NewRelationshipStore(k.db), deals.NewDealStore(k.db), activities.NewActivityStore(k.db), k.verifier))
+	crud("/organizations", platformauth.ObjOrganization, orgstransport.NewOrganizationHandler(organizations.NewOrgStore(k.db), relationships.NewRelationshipStore(k.db), deals.NewDealStore(k.db), activities.NewActivityStore(k.db), records.NewRollupStore(k.db), k.verifier))
 	dealHandler := dealstransport.NewDealHandler(deals.NewDealStore(k.db), relationships.NewRelationshipStore(k.db), activities.NewActivityStore(k.db), k.verifier)
 	crud("/deals", platformauth.ObjDeal, dealHandler)
 	mux.Handle("POST /deals/{id}/advance", instrument("/deals/advance", k.domainWrap(platformauth.ObjDeal, dealHandler)))

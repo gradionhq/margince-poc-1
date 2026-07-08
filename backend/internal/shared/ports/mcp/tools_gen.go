@@ -3,6 +3,7 @@ package mcp
 
 var GeneratedTools = []GeneratedTool{
 	{OperationID: "acceptDealNextStep", Verb: "accept_next_step", RecordType: "activity", Tier: TierGreen, Resolver: ""},
+	{OperationID: "acceptOffer", Verb: "accept_offer", RecordType: "offer", Tier: TierYellow, Resolver: ""},
 	{OperationID: "advanceDeal", Verb: "advance_deal", RecordType: "deal", Tier: TierDynamic, Resolver: "target_stage_semantic"},
 	{OperationID: "approveDraftingAsset", Verb: "approve_asset", RecordType: "drafting_asset", Tier: TierYellow, Resolver: ""},
 	{OperationID: "archiveDeal", Verb: "update_record", RecordType: "deal", Tier: TierYellow, Resolver: ""},
@@ -63,8 +64,10 @@ var GeneratedTools = []GeneratedTool{
 	{OperationID: "mergeOrganization", Verb: "merge_records", RecordType: "organization", Tier: TierYellow, Resolver: ""},
 	{OperationID: "mergePerson", Verb: "merge_records", RecordType: "person", Tier: TierYellow, Resolver: ""},
 	{OperationID: "overrideDealKPISignal", Verb: "override_deal_kpi_signal", RecordType: "ai_feedback", Tier: TierYellow, Resolver: ""},
+	{OperationID: "regenerateOffer", Verb: "draft_offer", RecordType: "offer", Tier: TierGreen, Resolver: ""},
 	{OperationID: "relinkActivity", Verb: "update_record", RecordType: "activity", Tier: TierGreen, Resolver: ""},
 	{OperationID: "renameCustomField", Verb: "update_record", RecordType: "custom_field", Tier: TierGreen, Resolver: ""},
+	{OperationID: "renderOffer", Verb: "render_offer", RecordType: "offer", Tier: TierGreen, Resolver: ""},
 	{OperationID: "resolveDerivation", Verb: "explain_number", RecordType: "", Tier: TierGreen, Resolver: ""},
 	{OperationID: "restoreDeal", Verb: "update_record", RecordType: "deal", Tier: TierGreen, Resolver: ""},
 	{OperationID: "restoreOrganization", Verb: "update_record", RecordType: "organization", Tier: TierGreen, Resolver: ""},
@@ -74,6 +77,7 @@ var GeneratedTools = []GeneratedTool{
 	{OperationID: "runReport", Verb: "run_report", RecordType: "", Tier: TierGreen, Resolver: ""},
 	{OperationID: "search", Verb: "search_records", RecordType: "", Tier: TierGreen, Resolver: ""},
 	{OperationID: "sendEmail", Verb: "send_email", RecordType: "activity", Tier: TierYellow, Resolver: ""},
+	{OperationID: "sendOffer", Verb: "send_offer", RecordType: "offer", Tier: TierYellow, Resolver: ""},
 	{OperationID: "unlinkConversation", Verb: "unlink_conversation", RecordType: "", Tier: TierYellow, Resolver: ""},
 	{OperationID: "updateActivity", Verb: "update_record", RecordType: "activity", Tier: TierGreen, Resolver: ""},
 	{OperationID: "updateDeal", Verb: "update_record", RecordType: "deal", Tier: TierGreen, Resolver: ""},
