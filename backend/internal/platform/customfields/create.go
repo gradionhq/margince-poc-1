@@ -124,7 +124,7 @@ func Create(ctx context.Context, db *sql.DB, spec FieldSpec) (Created, error) {
 
 	entID := out.ID
 	if _, err := crmaudit.WriteTx(ctx, tx, crmaudit.EntryFromPrincipal(ctx, "create", "custom_field", &entID, nil,
-		map[string]any{"object": spec.Object, "label": spec.Label, "type": spec.Type, "column_name": columnName, "source": spec.Source, "captured_by": spec.CapturedBy})); err != nil {
+		map[string]any{fieldObject: spec.Object, fieldLabel: spec.Label, fieldType: spec.Type, "column_name": columnName, "source": spec.Source, "captured_by": spec.CapturedBy})); err != nil {
 		return Created{}, fmt.Errorf("customfields: audit write: %w", err)
 	}
 

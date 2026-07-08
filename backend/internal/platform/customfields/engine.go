@@ -63,6 +63,22 @@ type FieldError struct {
 	Code  string `json:"code"`
 }
 
+// FieldError.Field / audit-entry map keys shared across Validate, Create's
+// audit entry (create.go), and the handler's diff map (handler.go) —
+// extracted to a package-level const so the repeated literal satisfies
+// golangci-lint's goconst rule (each string repeats 3+ times across this
+// package's production code).
+const (
+	fieldObject = "object"
+	fieldType   = "type"
+	fieldLabel  = "label"
+)
+
+// codeRequired is the FieldError.Code value for a missing-required-field
+// violation, reused by label/source/captured_by's presence checks below —
+// extracted for the same goconst reason as the fieldXxx consts above.
+const codeRequired = "required"
+
 // Validate checks spec against the closed type/object sets and the
 // conditional-required rules (CreateCustomFieldRequest doc: currency
 // required iff type=currency, options required non-empty iff
@@ -70,13 +86,13 @@ type FieldError struct {
 func Validate(spec FieldSpec) []FieldError {
 	var errs []FieldError
 	if !allowedObjects[spec.Object] {
-		errs = append(errs, FieldError{Field: "object", Code: "unsupported_object"})
+		errs = append(errs, FieldError{Field: fieldObject, Code: "unsupported_object"})
 	}
 	if !allowedTypes[spec.Type] {
-		errs = append(errs, FieldError{Field: "type", Code: "unsupported_type"})
+		errs = append(errs, FieldError{Field: fieldType, Code: "unsupported_type"})
 	}
 	if strings.TrimSpace(spec.Label) == "" {
-		errs = append(errs, FieldError{Field: "label", Code: "required"})
+		errs = append(errs, FieldError{Field: fieldLabel, Code: codeRequired})
 	}
 	if spec.Type == TypeCurrency && !currencyCodeRe.MatchString(spec.Currency) {
 		errs = append(errs, FieldError{Field: "currency", Code: "required_for_type_currency"})
@@ -85,10 +101,10 @@ func Validate(spec FieldSpec) []FieldError {
 		errs = append(errs, FieldError{Field: "options", Code: "required_for_type_picklist"})
 	}
 	if strings.TrimSpace(spec.Source) == "" {
-		errs = append(errs, FieldError{Field: "source", Code: "required"})
+		errs = append(errs, FieldError{Field: "source", Code: codeRequired})
 	}
 	if strings.TrimSpace(spec.CapturedBy) == "" {
-		errs = append(errs, FieldError{Field: "captured_by", Code: "required"})
+		errs = append(errs, FieldError{Field: "captured_by", Code: codeRequired})
 	}
 	return errs
 }

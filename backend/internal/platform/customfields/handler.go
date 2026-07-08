@@ -65,7 +65,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 
 	p, _ := crmctx.From(r.Context())
 	wsID := p.TenantID
-	diffFields := map[string]any{"object": body.Object, "label": body.Label, "type": body.Type}
+	diffFields := map[string]any{fieldObject: body.Object, fieldLabel: body.Label, fieldType: body.Type}
 	if err := toolgate.Enforce(r.Context(), p, h.verifier, createCustomFieldTool, wsID, diffFields, nil, r.Header.Get("X-Approval-Token")); err != nil {
 		if errors.Is(err, toolgate.ErrApprovalRequired) {
 			jsonProblem(w, http.StatusForbidden, "approval_required", "Adding a custom field is a schema change and is confirm-first; supply an approval token.")
@@ -99,6 +99,17 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// jsonKeyStatus / jsonKeyCode / jsonKeyDetail are the JSON response body's
+// "status"/"code"/"detail" keys, shared by the three response writers below
+// — extracted to satisfy golangci-lint's goconst rule (each literal repeats
+// 3+ times). Named jsonKeyStatus (not status) to avoid shadowing the status
+// int parameter these functions already take.
+const (
+	jsonKeyStatus = "status"
+	jsonKeyCode   = "code"
+	jsonKeyDetail = "detail"
+)
+
 func jsonCreated(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -108,20 +119,20 @@ func jsonCreated(w http.ResponseWriter, v any) {
 func jsonProblem(w http.ResponseWriter, status int, code, detail string) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]any{"status": status, "code": code, "detail": detail}) //nolint:errcheck,gosec
+	json.NewEncoder(w).Encode(map[string]any{jsonKeyStatus: status, jsonKeyCode: code, jsonKeyDetail: detail}) //nolint:errcheck,gosec
 }
 
 func jsonProblemDetails(w http.ResponseWriter, status int, code, detail string, details map[string]any) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]any{"status": status, "code": code, "detail": detail, "details": details}) //nolint:errcheck,gosec
+	json.NewEncoder(w).Encode(map[string]any{jsonKeyStatus: status, jsonKeyCode: code, jsonKeyDetail: detail, "details": details}) //nolint:errcheck,gosec
 }
 
 func jsonValidationError(w http.ResponseWriter, detail string, errs []FieldError) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(http.StatusUnprocessableEntity)
 	json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
-		"status": http.StatusUnprocessableEntity, "code": "validation_error",
-		"detail": detail, "details": map[string]any{"errors": errs},
+		jsonKeyStatus: http.StatusUnprocessableEntity, jsonKeyCode: "validation_error",
+		jsonKeyDetail: detail, "details": map[string]any{"errors": errs},
 	})
 }
