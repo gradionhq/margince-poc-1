@@ -29,30 +29,64 @@ func buyerBlockString(buyerBlock map[string]any, key string) string {
 	return v
 }
 
+// pdfLabels holds the locale-specific label strings used in the rendered PDF.
+type pdfLabels struct {
+	title     string
+	buyer     string
+	lineItems string
+	net       string
+	tax       string
+	gross     string
+}
+
+// resolvePDFLabels maps a locale to its label set. de-DE (and the empty
+// string, matching OfferTemplate's own default) get German labels;
+// everything else gets English labels.
+func resolvePDFLabels(locale string) pdfLabels {
+	if locale == "de-DE" || locale == "" {
+		return pdfLabels{
+			title:     "Angebot",
+			buyer:     "Kunde",
+			lineItems: "Positionen",
+			net:       "Nettobetrag",
+			tax:       "MwSt",
+			gross:     "Gesamtbetrag",
+		}
+	}
+	return pdfLabels{
+		title:     "Offer",
+		buyer:     "Buyer",
+		lineItems: "Line items",
+		net:       "Net",
+		tax:       "Tax",
+		gross:     "Total",
+	}
+}
+
 // RenderOfferPDF builds the branded offer PDF from persisted offer data.
 func RenderOfferPDF(o domain.Offer, lineItems []domain.OfferLineItem, buyerBlock map[string]any, issuerName, locale string) ([]byte, error) {
+	labels := resolvePDFLabels(locale)
+
 	pdf := fpdf.New("P", "mm", "A4", "")
 	pdf.SetCompression(false)
 	pdf.SetMargins(16, 16, 16)
 	pdf.SetAutoPageBreak(true, 16)
-	pdf.SetTitle("Offer "+o.OfferNumber, false)
+	pdf.SetTitle(labels.title+" "+o.OfferNumber, false)
 	pdf.SetCreator("margince", false)
 	pdf.SetAuthor(issuerName, false)
-	pdf.SetSubject("Offer PDF", false)
+	pdf.SetSubject(labels.title+" PDF", false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "B", 18)
-	pdf.Cell(0, 8, "Offer "+o.OfferNumber)
+	pdf.Cell(0, 8, labels.title+" "+o.OfferNumber)
 	pdf.Ln(10)
 	pdf.SetFont("Helvetica", "", 11)
 	pdf.Cell(0, 6, "Revision "+strconv.FormatInt(o.Revision, 10))
 	pdf.Ln(7)
 	pdf.Cell(0, 6, "Issuer: "+issuerName)
-	pdf.Ln(7)
-	pdf.Cell(0, 6, "Locale: "+locale)
 	pdf.Ln(10)
 
 	pdf.SetFont("Helvetica", "B", 12)
-	pdf.Cell(0, 6, "Buyer")
+	pdf.Cell(0, 6, labels.buyer)
 	pdf.Ln(7)
 	pdf.SetFont("Helvetica", "", 11)
 	if id := buyerBlockString(buyerBlock, "organization_id"); id != "" {
@@ -69,7 +103,7 @@ func RenderOfferPDF(o domain.Offer, lineItems []domain.OfferLineItem, buyerBlock
 	pdf.Ln(4)
 
 	pdf.SetFont("Helvetica", "B", 12)
-	pdf.Cell(0, 6, "Line items")
+	pdf.Cell(0, 6, labels.lineItems)
 	pdf.Ln(7)
 	pdf.SetFont("Helvetica", "", 10)
 	for _, li := range lineItems {
@@ -84,11 +118,11 @@ func RenderOfferPDF(o domain.Offer, lineItems []domain.OfferLineItem, buyerBlock
 	pdf.Cell(0, 6, "Totals")
 	pdf.Ln(7)
 	pdf.SetFont("Helvetica", "", 11)
-	pdf.Cell(0, 6, "Net: "+formatMinor(o.NetMinor, o.Currency))
+	pdf.Cell(0, 6, labels.net+": "+formatMinor(o.NetMinor, o.Currency))
 	pdf.Ln(6)
-	pdf.Cell(0, 6, "Tax: "+formatMinor(o.TaxMinor, o.Currency))
+	pdf.Cell(0, 6, labels.tax+": "+formatMinor(o.TaxMinor, o.Currency))
 	pdf.Ln(6)
-	pdf.Cell(0, 6, "Gross: "+formatMinor(o.GrossMinor, o.Currency))
+	pdf.Cell(0, 6, labels.gross+": "+formatMinor(o.GrossMinor, o.Currency))
 	pdf.Ln(6)
 
 	var buf bytes.Buffer

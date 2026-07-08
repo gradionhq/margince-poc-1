@@ -87,3 +87,52 @@ func TestRenderOfferPDF_IncludesOfferDataAndTotals(t *testing.T) {
 	}
 }
 
+func TestRenderOfferPDF_LocaleDrivesLabels(t *testing.T) {
+	o := testOfferForPDF()
+	lineItems := []domain.OfferLineItem{
+		{
+			ID:             "li-1",
+			OfferID:        o.ID,
+			Position:       1,
+			Description:    "Consulting Day",
+			Unit:           "day",
+			Quantity:       2,
+			UnitPriceMinor: 50000,
+			TaxRate:        19,
+		},
+	}
+	buyerBlock := map[string]any{
+		"organization_id": "org-1",
+		"display_name":    "Acme GmbH",
+		"address":         "Main St 1, Berlin",
+	}
+
+	dePDF, err := RenderOfferPDF(o, lineItems, buyerBlock, "Margince GmbH", "de-DE")
+	if err != nil {
+		t.Fatalf("RenderOfferPDF(de-DE) error = %v", err)
+	}
+	enPDF, err := RenderOfferPDF(o, lineItems, buyerBlock, "Margince GmbH", "en")
+	if err != nil {
+		t.Fatalf("RenderOfferPDF(en) error = %v", err)
+	}
+
+	if !bytes.Contains(dePDF, []byte("Angebot")) {
+		t.Fatalf("de-DE PDF missing %q\n%s", "Angebot", dePDF)
+	}
+	if !bytes.Contains(dePDF, []byte("Nettobetrag")) {
+		t.Fatalf("de-DE PDF missing %q\n%s", "Nettobetrag", dePDF)
+	}
+	if bytes.Contains(dePDF, []byte("Offer ")) {
+		t.Fatalf("de-DE PDF unexpectedly contains English label %q\n%s", "Offer ", dePDF)
+	}
+
+	if !bytes.Contains(enPDF, []byte("Offer ")) {
+		t.Fatalf("en PDF missing %q\n%s", "Offer ", enPDF)
+	}
+	if !bytes.Contains(enPDF, []byte("Net: ")) {
+		t.Fatalf("en PDF missing %q\n%s", "Net: ", enPDF)
+	}
+	if bytes.Contains(enPDF, []byte("Angebot")) {
+		t.Fatalf("en PDF unexpectedly contains German label %q\n%s", "Angebot", enPDF)
+	}
+}
