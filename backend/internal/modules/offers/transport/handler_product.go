@@ -29,7 +29,7 @@ func NewProductHandler(store productStoreSeam) *ProductHandler {
 }
 
 func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	dispatchCRUD(w, r, "/products", h.list, h.create, h.get, h.update, h.archive)
+	dispatchCRUD(w, r, "/products", crudHandlers{list: h.list, create: h.create, get: h.get, update: h.update, archive: h.archive})
 }
 
 type createProductBody struct {

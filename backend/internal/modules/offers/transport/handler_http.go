@@ -20,23 +20,28 @@ const (
 	fieldField      = "field"
 )
 
+// crudHandlers is dispatchCRUD's callback set — one function per HTTP verb
+// this module's list/create/get/update/archive shape supports.
+type crudHandlers struct {
+	list, create         func(http.ResponseWriter, *http.Request)
+	get, update, archive func(http.ResponseWriter, *http.Request, string)
+}
+
 // dispatchCRUD implements the standard /resource + /resource/{id} routing
 // shared by every offers HTTP handler.
-func dispatchCRUD(w http.ResponseWriter, r *http.Request, pathPrefix string,
-	list, create func(http.ResponseWriter, *http.Request),
-	get, update, archive func(http.ResponseWriter, *http.Request, string)) {
+func dispatchCRUD(w http.ResponseWriter, r *http.Request, pathPrefix string, h crudHandlers) {
 	id := httpkit.PathID(r.URL.Path, pathPrefix)
 	switch {
 	case r.Method == http.MethodGet && id == "":
-		list(w, r)
+		h.list(w, r)
 	case r.Method == http.MethodPost && id == "":
-		create(w, r)
+		h.create(w, r)
 	case r.Method == http.MethodGet && id != "":
-		get(w, r, id)
+		h.get(w, r, id)
 	case r.Method == http.MethodPut && id != "":
-		update(w, r, id)
+		h.update(w, r, id)
 	case r.Method == http.MethodDelete && id != "":
-		archive(w, r, id)
+		h.archive(w, r, id)
 	default:
 		http.NotFound(w, r)
 	}

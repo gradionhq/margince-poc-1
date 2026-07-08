@@ -29,7 +29,7 @@ func NewOfferTemplateHandler(store offerTemplateStoreSeam) *OfferTemplateHandler
 }
 
 func (h *OfferTemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	dispatchCRUD(w, r, "/offer-templates", h.list, h.create, h.get, h.update, h.archive)
+	dispatchCRUD(w, r, "/offer-templates", crudHandlers{list: h.list, create: h.create, get: h.get, update: h.update, archive: h.archive})
 }
 
 type createOfferTemplateBody struct {
