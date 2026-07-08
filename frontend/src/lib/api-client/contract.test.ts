@@ -287,6 +287,164 @@ describe("DealDetail contract compliance (DEAL-EXT-3)", () => {
   });
 });
 
+describe("Product.description contract compliance (OFFER-WIRE-1 completion)", () => {
+  it("carries an optional nullable description", () => {
+    const withDescription: components["schemas"]["Product"] = {
+      id: "00000000-0000-0000-0000-000000000001",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      name: "Consulting Day",
+      description: "One day of on-site consulting.",
+      unit_price_minor: 150000,
+      currency: "EUR",
+      active: true,
+      source: "test",
+      captured_by: "human:test",
+      version: 1,
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+    };
+    expect(withDescription.description).toBe("One day of on-site consulting.");
+
+    const withoutDescription: components["schemas"]["Product"] = {
+      ...withDescription,
+      description: undefined,
+    };
+    expect(withoutDescription.description).toBeUndefined();
+  });
+});
+
+describe("OfferTemplate contract compliance (OFFER-WIRE-2)", () => {
+  it("carries name/locale/is_default/layout, locale defaults de-DE", () => {
+    const template: components["schemas"]["OfferTemplate"] = {
+      id: "00000000-0000-0000-0000-000000000060",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      name: "Standard DE",
+      locale: "de-DE",
+      is_default: true,
+      layout: { logo_ref: null },
+      source: "test",
+      captured_by: "human:test",
+      version: 1,
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+    };
+    expect(template.locale).toBe("de-DE");
+    expect(template.is_default).toBe(true);
+  });
+});
+
+describe("OfferTemplateListResponse contract compliance (OFFER-WIRE-2)", () => {
+  it("data is an array of OfferTemplate", () => {
+    const resp: components["schemas"]["OfferTemplateListResponse"] = {
+      data: [],
+      page: { has_more: false },
+    };
+    expect(Array.isArray(resp.data)).toBe(true);
+  });
+});
+
+describe("Offer contract compliance (OFFER-WIRE-3/4)", () => {
+  it("carries deal_id/offer_number/revision/status/currency; net/tax/gross are readonly-shaped", () => {
+    const offer: components["schemas"]["Offer"] = {
+      id: "00000000-0000-0000-0000-000000000070",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      deal_id: "00000000-0000-0000-0000-000000000080",
+      offer_number: "ANG-2026-0001",
+      revision: 1,
+      status: "draft",
+      currency: "EUR",
+      net_minor: 0,
+      tax_minor: 0,
+      gross_minor: 0,
+      source: "test",
+      captured_by: "human:test",
+      version: 1,
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+    };
+    expect(offer.status).toBe("draft");
+    expect(offer.revision).toBe(1);
+    expect(offer.gross_minor).toBe(0);
+  });
+
+  it("CreateOfferRequest never carries deal_id, status, revision, or money totals", () => {
+    const createBody: components["schemas"]["CreateOfferRequest"] = {
+      offer_number: "ANG-2026-0002",
+      currency: "EUR",
+      source: "ui",
+      captured_by: "human:test",
+    };
+    expect("deal_id" in createBody).toBe(false);
+    expect("status" in createBody).toBe(false);
+    expect("net_minor" in createBody).toBe(false);
+  });
+});
+
+describe("UpdateOfferRequest contract compliance (OFFER-WIRE-4)", () => {
+  it("never carries status, revision, or money totals — draft-only editable fields", () => {
+    const updateBody: components["schemas"]["UpdateOfferRequest"] = {
+      valid_until: "2026-08-01",
+      intro_text: "Updated intro.",
+    };
+    expect("status" in updateBody).toBe(false);
+    expect("revision" in updateBody).toBe(false);
+    expect("net_minor" in updateBody).toBe(false);
+    expect("gross_minor" in updateBody).toBe(false);
+  });
+});
+
+describe("OfferLineItem contract compliance (OFFER-WIRE-5)", () => {
+  it("carries offer_id/position/description/quantity/unit_price_minor; no line_net/line_tax/line_total field exists", () => {
+    const line: components["schemas"]["OfferLineItem"] = {
+      id: "00000000-0000-0000-0000-000000000090",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      offer_id: "00000000-0000-0000-0000-000000000070",
+      position: 1,
+      description: "Consulting — Platform expansion",
+      unit: "day",
+      quantity: 5,
+      unit_price_minor: 150000,
+      discount_pct: 0,
+      tax_rate: 19,
+      source: "test",
+      captured_by: "human:test",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+    };
+    expect(line.quantity).toBe(5);
+    expect("line_net" in line).toBe(false);
+    expect("line_tax" in line).toBe(false);
+    expect("line_total" in line).toBe(false);
+  });
+
+  it("CreateOfferLineItemRequest and UpdateOfferLineItemRequest never carry a line total field", () => {
+    const createBody: components["schemas"]["CreateOfferLineItemRequest"] = {
+      position: 1,
+      description: "Line",
+      quantity: 1,
+      unit_price_minor: 100,
+      source: "ui",
+      captured_by: "human:test",
+    };
+    const updateBody: components["schemas"]["UpdateOfferLineItemRequest"] = {
+      quantity: 2,
+    };
+    expect("line_total" in createBody).toBe(false);
+    expect("line_total" in updateBody).toBe(false);
+    expect("gross" in createBody).toBe(false);
+  });
+});
+
+describe("OfferLineItemListResponse contract compliance (OFFER-WIRE-5)", () => {
+  it("data is an array of OfferLineItem", () => {
+    const resp: components["schemas"]["OfferLineItemListResponse"] = {
+      data: [],
+      page: { has_more: false },
+    };
+    expect(Array.isArray(resp.data)).toBe(true);
+  });
+});
+
 describe("PipelineRollup contract compliance (DEAL-EXT-1)", () => {
   it("matches DEAL-FORM-2's shape plus per-stage and per-deal breakdowns", () => {
     const rollup: components["schemas"]["PipelineRollup"] = {

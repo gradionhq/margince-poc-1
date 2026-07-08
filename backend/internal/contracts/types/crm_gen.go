@@ -1694,6 +1694,36 @@ func (e MemberStatus) Valid() bool {
 	}
 }
 
+// Defines values for OfferStatus.
+const (
+	OfferStatusAccepted   OfferStatus = "accepted"
+	OfferStatusDraft      OfferStatus = "draft"
+	OfferStatusExpired    OfferStatus = "expired"
+	OfferStatusRejected   OfferStatus = "rejected"
+	OfferStatusSent       OfferStatus = "sent"
+	OfferStatusSuperseded OfferStatus = "superseded"
+)
+
+// Valid indicates whether the value is a known member of the OfferStatus enum.
+func (e OfferStatus) Valid() bool {
+	switch e {
+	case OfferStatusAccepted:
+		return true
+	case OfferStatusDraft:
+		return true
+	case OfferStatusExpired:
+		return true
+	case OfferStatusRejected:
+		return true
+	case OfferStatusSent:
+		return true
+	case OfferStatusSuperseded:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for OrganizationClassification.
 const (
 	OrganizationClassificationAgency      OrganizationClassification = "agency"
@@ -2506,19 +2536,19 @@ func (e ListActivitiesParamsEntityType) Valid() bool {
 
 // Defines values for ListApprovalsParamsStatus.
 const (
-	Approved ListApprovalsParamsStatus = "approved"
-	Pending  ListApprovalsParamsStatus = "pending"
-	Rejected ListApprovalsParamsStatus = "rejected"
+	ListApprovalsParamsStatusApproved ListApprovalsParamsStatus = "approved"
+	ListApprovalsParamsStatusPending  ListApprovalsParamsStatus = "pending"
+	ListApprovalsParamsStatusRejected ListApprovalsParamsStatus = "rejected"
 )
 
 // Valid indicates whether the value is a known member of the ListApprovalsParamsStatus enum.
 func (e ListApprovalsParamsStatus) Valid() bool {
 	switch e {
-	case Approved:
+	case ListApprovalsParamsStatusApproved:
 		return true
-	case Pending:
+	case ListApprovalsParamsStatusPending:
 		return true
-	case Rejected:
+	case ListApprovalsParamsStatusRejected:
 		return true
 	default:
 		return false
@@ -3487,6 +3517,45 @@ type CreateListRequestEntityType string
 // CreateListRequestListType defines model for CreateListRequest.ListType.
 type CreateListRequestListType string
 
+// CreateOfferLineItemRequest defines model for CreateOfferLineItemRequest.
+type CreateOfferLineItemRequest struct {
+	CapturedBy           string                 `json:"captured_by"`
+	Description          string                 `json:"description"`
+	DiscountPct          *float32               `json:"discount_pct,omitempty"`
+	Position             int                    `json:"position"`
+	ProductId            *openapi_types.UUID    `json:"product_id,omitempty"`
+	Quantity             float32                `json:"quantity"`
+	Source               string                 `json:"source"`
+	TaxRate              *float32               `json:"tax_rate,omitempty"`
+	Unit                 *string                `json:"unit,omitempty"`
+	UnitPriceMinor       int64                  `json:"unit_price_minor"`
+	AdditionalProperties map[string]interface{} `json:"-"`
+}
+
+// CreateOfferRequest defines model for CreateOfferRequest.
+type CreateOfferRequest struct {
+	BuyerOrgId           *openapi_types.UUID    `json:"buyer_org_id,omitempty"`
+	CapturedBy           string                 `json:"captured_by"`
+	Currency             string                 `json:"currency"`
+	IntroText            *string                `json:"intro_text,omitempty"`
+	OfferNumber          string                 `json:"offer_number"`
+	Source               string                 `json:"source"`
+	TemplateId           *openapi_types.UUID    `json:"template_id,omitempty"`
+	TermsText            *string                `json:"terms_text,omitempty"`
+	ValidUntil           *openapi_types.Date    `json:"valid_until,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
+}
+
+// CreateOfferTemplateRequest defines model for CreateOfferTemplateRequest.
+type CreateOfferTemplateRequest struct {
+	CapturedBy string                 `json:"captured_by"`
+	IsDefault  *bool                  `json:"is_default,omitempty"`
+	Layout     map[string]interface{} `json:"layout"`
+	Locale     *string                `json:"locale,omitempty"`
+	Name       string                 `json:"name"`
+	Source     string                 `json:"source"`
+}
+
 // CreateOrganizationRequest defines model for CreateOrganizationRequest.
 type CreateOrganizationRequest struct {
 	// Address Structured postal address.
@@ -3558,6 +3627,7 @@ type CreateProductRequest struct {
 	CapturedBy     string   `json:"captured_by"`
 	Currency       string   `json:"currency"`
 	DefaultTaxRate *float32 `json:"default_tax_rate,omitempty"`
+	Description    *string  `json:"description,omitempty"`
 	Name           string   `json:"name"`
 	Sku            *string  `json:"sku,omitempty"`
 	Source         string   `json:"source"`
@@ -4318,6 +4388,144 @@ type Money struct {
 	Currency *string `json:"currency,omitempty"`
 }
 
+// Offer A versioned Angebot (offer) bound to one deal. Money totals (net/tax/gross) are
+// DERIVED server-side from its line items (OFFER-PARAM-4) — never accepted on
+// request (API-ERR-15). Mirrors the offer table.
+type Offer struct {
+	AcceptedAt *time.Time          `json:"accepted_at,omitempty"`
+	ArchivedAt *time.Time          `json:"archived_at,omitempty"`
+	BuyerOrgId *openapi_types.UUID `json:"buyer_org_id,omitempty"`
+	CapturedBy string              `json:"captured_by"`
+	CreatedAt  time.Time           `json:"created_at"`
+	Currency   string              `json:"currency"`
+
+	// DealId The deal this offer is bound to.
+	DealId openapi_types.UUID `json:"deal_id"`
+
+	// GrossMinor Derived from line items; never accepted on request (API-ERR-15).
+	GrossMinor *int64             `json:"gross_minor,omitempty"`
+	Id         openapi_types.UUID `json:"id"`
+	IntroText  *string            `json:"intro_text,omitempty"`
+
+	// NetMinor Derived from line items (OFFER-PARAM-4); never accepted on request (API-ERR-15).
+	NetMinor *int64 `json:"net_minor,omitempty"`
+
+	// OfferNumber Human-facing "Angebot" number; unique per (workspace
+	OfferNumber string `json:"offer_number"`
+
+	// PdfAssetRef Rendered PDF ref — set by the render action (OFFER-WIRE-7
+	PdfAssetRef *string `json:"pdf_asset_ref,omitempty"`
+
+	// Revision Bumped when a sent offer is regenerated into a new draft (OFFER-PARAM-6); starts at 1.
+	Revision *int   `json:"revision,omitempty"`
+	Source   string `json:"source"`
+
+	// Status Editable only while draft (OFFER-WIRE-4); the transition verbs (regenerate/send/accept) are a later ticket (OFFER-WIRE-6..9).
+	Status *OfferStatus `json:"status,omitempty"`
+
+	// TaxMinor Derived from line items; never accepted on request (API-ERR-15).
+	TaxMinor   *int64              `json:"tax_minor,omitempty"`
+	TemplateId *openapi_types.UUID `json:"template_id,omitempty"`
+	TermsText  *string             `json:"terms_text,omitempty"`
+	UpdatedAt  time.Time           `json:"updated_at"`
+
+	// ValidUntil Drives the expired status (OFFER-PARAM-3).
+	ValidUntil *openapi_types.Date `json:"valid_until,omitempty"`
+
+	// Version Monotonic row version, incremented by the server on every mutation (data-model §1.7).
+	// Echoed back as the `version` field on every mutable entity. To make a write conditional,
+	// send the last-seen value in `If-Match`; a mismatch returns `409 code: version_skew`
+	// (ErrVersionSkew) so the client re-reads before retrying. Applies to the native path,
+	// not only overlay mode.
+	Version              *RowVersion            `json:"version,omitempty"`
+	WorkspaceId          openapi_types.UUID     `json:"workspace_id"`
+	AdditionalProperties map[string]interface{} `json:"-"`
+}
+
+// OfferStatus Editable only while draft (OFFER-WIRE-4); the transition verbs (regenerate/send/accept) are a later ticket (OFFER-WIRE-6..9).
+type OfferStatus string
+
+// OfferLineItem A typed line item on an offer; price is a snapshot copied from product (never
+// re-read after send). Mirrors the offer_line_item table. Line totals
+// (line_net/line_tax/line_total) are DERIVED — never wire fields (API-ERR-15).
+type OfferLineItem struct {
+	ArchivedAt *time.Time `json:"archived_at,omitempty"`
+	CapturedBy string     `json:"captured_by"`
+	CreatedAt  time.Time  `json:"created_at"`
+
+	// Description Snapshot — free-typed or copied from the referenced product.
+	Description string             `json:"description"`
+	DiscountPct float32            `json:"discount_pct"`
+	Id          openapi_types.UUID `json:"id"`
+	OfferId     openapi_types.UUID `json:"offer_id"`
+
+	// Position Display order; unique per offer.
+	Position int `json:"position"`
+
+	// ProductId Optional rate-card reference; price/description are copied onto the line as a snapshot on pick.
+	ProductId *openapi_types.UUID `json:"product_id,omitempty"`
+
+	// Quantity numeric(14,3); must be > 0 (handler-enforced).
+	Quantity float32 `json:"quantity"`
+	Source   string  `json:"source"`
+
+	// TaxRate Percent (e.g. 19.00 = DE USt.); defaults from the referenced product's default_tax_rate on pick, per-line override allowed.
+	TaxRate float32 `json:"tax_rate"`
+	Unit    string  `json:"unit"`
+
+	// UnitPriceMinor Snapshot — never re-read from product after send. Never a float.
+	UnitPriceMinor       int64                  `json:"unit_price_minor"`
+	UpdatedAt            time.Time              `json:"updated_at"`
+	WorkspaceId          openapi_types.UUID     `json:"workspace_id"`
+	AdditionalProperties map[string]interface{} `json:"-"`
+}
+
+// OfferLineItemListResponse defines model for OfferLineItemListResponse.
+type OfferLineItemListResponse struct {
+	Data []OfferLineItem `json:"data"`
+	Page PageInfo        `json:"page"`
+}
+
+// OfferListResponse defines model for OfferListResponse.
+type OfferListResponse struct {
+	Data []Offer  `json:"data"`
+	Page PageInfo `json:"page"`
+}
+
+// OfferTemplate A branded, governed PDF layout for offers (DE/EN). Mirrors the offer_template table.
+type OfferTemplate struct {
+	ArchivedAt *time.Time         `json:"archived_at,omitempty"`
+	CapturedBy string             `json:"captured_by"`
+	CreatedAt  time.Time          `json:"created_at"`
+	Id         openapi_types.UUID `json:"id"`
+
+	// IsDefault At most one default template per locale (OFFER-DDL-4).
+	IsDefault bool `json:"is_default"`
+
+	// Layout Logo/header/footer/terms-block refs — bounded params
+	Layout map[string]interface{} `json:"layout"`
+
+	// Locale DE/EN at launch (e.g. de-DE, en-US).
+	Locale    string    `json:"locale"`
+	Name      string    `json:"name"`
+	Source    string    `json:"source"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	// Version Monotonic row version, incremented by the server on every mutation (data-model §1.7).
+	// Echoed back as the `version` field on every mutable entity. To make a write conditional,
+	// send the last-seen value in `If-Match`; a mismatch returns `409 code: version_skew`
+	// (ErrVersionSkew) so the client re-reads before retrying. Applies to the native path,
+	// not only overlay mode.
+	Version     *RowVersion        `json:"version,omitempty"`
+	WorkspaceId openapi_types.UUID `json:"workspace_id"`
+}
+
+// OfferTemplateListResponse defines model for OfferTemplateListResponse.
+type OfferTemplateListResponse struct {
+	Data []OfferTemplate `json:"data"`
+	Page PageInfo        `json:"page"`
+}
+
 // Organization A company. Mirrors the `organization` table.
 type Organization struct {
 	// Activities PO-EXT-3 — timeline activity refs linked to this organization, most recent first. Populated on `getOrganization` only.
@@ -4859,6 +5067,7 @@ type Product struct {
 
 	// DefaultTaxRate Default VAT/tax rate as a decimal (e.g. 0.19 = 19%). Nullable — rate varies by customer/country.
 	DefaultTaxRate *float32           `json:"default_tax_rate,omitempty"`
+	Description    *string            `json:"description,omitempty"`
 	Id             openapi_types.UUID `json:"id"`
 	Name           string             `json:"name"`
 
@@ -5271,6 +5480,44 @@ type UpdateLeadRequest struct {
 // UpdateLeadRequestStatus defines model for UpdateLeadRequest.Status.
 type UpdateLeadRequestStatus string
 
+// UpdateOfferLineItemRequest Partial update via PATCH. Only fields present in the body are changed.
+type UpdateOfferLineItemRequest struct {
+	CapturedBy           *string                `json:"captured_by,omitempty"`
+	Description          *string                `json:"description,omitempty"`
+	DiscountPct          *float32               `json:"discount_pct,omitempty"`
+	Position             *int                   `json:"position,omitempty"`
+	ProductId            *openapi_types.UUID    `json:"product_id,omitempty"`
+	Quantity             *float32               `json:"quantity,omitempty"`
+	Source               *string                `json:"source,omitempty"`
+	TaxRate              *float32               `json:"tax_rate,omitempty"`
+	Unit                 *string                `json:"unit,omitempty"`
+	UnitPriceMinor       *int64                 `json:"unit_price_minor,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
+}
+
+// UpdateOfferRequest Partial update via PATCH. Only fields present in the body are changed. Allowed only while status=draft (handler concern, out of this contract-only ticket).
+type UpdateOfferRequest struct {
+	BuyerOrgId           *openapi_types.UUID    `json:"buyer_org_id,omitempty"`
+	CapturedBy           *string                `json:"captured_by,omitempty"`
+	Currency             *string                `json:"currency,omitempty"`
+	IntroText            *string                `json:"intro_text,omitempty"`
+	Source               *string                `json:"source,omitempty"`
+	TemplateId           *openapi_types.UUID    `json:"template_id,omitempty"`
+	TermsText            *string                `json:"terms_text,omitempty"`
+	ValidUntil           *openapi_types.Date    `json:"valid_until,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
+}
+
+// UpdateOfferTemplateRequest Full replace via PUT — mirrors UpdateProductRequest's rate-card versioning shape.
+type UpdateOfferTemplateRequest struct {
+	CapturedBy *string                 `json:"captured_by,omitempty"`
+	IsDefault  *bool                   `json:"is_default,omitempty"`
+	Layout     *map[string]interface{} `json:"layout,omitempty"`
+	Locale     *string                 `json:"locale,omitempty"`
+	Name       *string                 `json:"name,omitempty"`
+	Source     *string                 `json:"source,omitempty"`
+}
+
 // UpdateOrganizationRequest defines model for UpdateOrganizationRequest.
 type UpdateOrganizationRequest struct {
 	// Address Structured postal address.
@@ -5313,6 +5560,7 @@ type UpdateProductRequest struct {
 	CapturedBy     *string  `json:"captured_by,omitempty"`
 	Currency       *string  `json:"currency,omitempty"`
 	DefaultTaxRate *float32 `json:"default_tax_rate,omitempty"`
+	Description    *string  `json:"description,omitempty"`
 	Name           *string  `json:"name,omitempty"`
 	Sku            *string  `json:"sku,omitempty"`
 	Source         *string  `json:"source,omitempty"`
@@ -5815,6 +6063,35 @@ type AcceptDealNextStepParams struct {
 	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
 }
 
+// ListDealOffersParams defines parameters for ListDealOffers.
+type ListDealOffersParams struct {
+	// CursorParam Opaque keyset cursor from a prior response's `page.next_cursor`. The cursor encodes the
+	// effective `sort` and `filter` of the originating request plus the last row's keyset
+	// (sort-key tuple + `id` tie-breaker). **Stability:** results are stable under concurrent
+	// inserts/updates (keyset pagination, not offset). Supplying `cursor` together with a `sort`
+	// or filter that differs from the one the cursor was minted under returns
+	// `422 code: cursor_param_mismatch` — re-issue the query without the cursor.
+	CursorParam *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// LimitParam Max items in the page.
+	LimitParam *LimitParam `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// IncludeArchivedParam Include soft-deleted (archived) rows. Default false.
+	IncludeArchivedParam *IncludeArchivedParam `form:"include_archived,omitempty" json:"include_archived,omitempty"`
+}
+
+// CreateDealOfferParams defines parameters for CreateDealOffer.
+type CreateDealOfferParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+}
+
 // RestoreDealParams defines parameters for RestoreDeal.
 type RestoreDealParams struct {
 	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
@@ -6013,6 +6290,97 @@ type ListListMembersParams struct {
 
 // AssignMemberRoleParams defines parameters for AssignMemberRole.
 type AssignMemberRoleParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+}
+
+// ListOfferTemplatesParams defines parameters for ListOfferTemplates.
+type ListOfferTemplatesParams struct {
+	// CursorParam Opaque keyset cursor from a prior response's `page.next_cursor`. The cursor encodes the
+	// effective `sort` and `filter` of the originating request plus the last row's keyset
+	// (sort-key tuple + `id` tie-breaker). **Stability:** results are stable under concurrent
+	// inserts/updates (keyset pagination, not offset). Supplying `cursor` together with a `sort`
+	// or filter that differs from the one the cursor was minted under returns
+	// `422 code: cursor_param_mismatch` — re-issue the query without the cursor.
+	CursorParam *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// LimitParam Max items in the page.
+	LimitParam *LimitParam `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// IncludeArchivedParam Include soft-deleted (archived) rows. Default false.
+	IncludeArchivedParam *IncludeArchivedParam `form:"include_archived,omitempty" json:"include_archived,omitempty"`
+}
+
+// CreateOfferTemplateParams defines parameters for CreateOfferTemplate.
+type CreateOfferTemplateParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+}
+
+// UpdateOfferTemplateParams defines parameters for UpdateOfferTemplate.
+type UpdateOfferTemplateParams struct {
+	// IfMatchParam Optional optimistic-concurrency precondition for a mutating request (PATCH/advance/merge):
+	// the last-seen entity `version`. If the row's current `version` differs, the write is
+	// rejected with `409 code: version_skew` (ErrVersionSkew) and no change is made — re-read,
+	// re-apply, retry. Omitting it is last-write-wins (discouraged for agent/automated writers).
+	// Accepted on every native-mode mutating endpoint that returns a versioned entity.
+	IfMatchParam *IfMatchParam `json:"If-Match,omitempty"`
+
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+}
+
+// UpdateOfferParams defines parameters for UpdateOffer.
+type UpdateOfferParams struct {
+	// IfMatchParam Optional optimistic-concurrency precondition for a mutating request (PATCH/advance/merge):
+	// the last-seen entity `version`. If the row's current `version` differs, the write is
+	// rejected with `409 code: version_skew` (ErrVersionSkew) and no change is made — re-read,
+	// re-apply, retry. Omitting it is last-write-wins (discouraged for agent/automated writers).
+	// Accepted on every native-mode mutating endpoint that returns a versioned entity.
+	IfMatchParam *IfMatchParam `json:"If-Match,omitempty"`
+
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+}
+
+// CreateOfferLineItemParams defines parameters for CreateOfferLineItem.
+type CreateOfferLineItemParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+}
+
+// UpdateOfferLineItemParams defines parameters for UpdateOfferLineItem.
+type UpdateOfferLineItemParams struct {
 	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
 	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
 	// returns the original status + body. Reusing the same key with a *different* request body
@@ -6565,6 +6933,9 @@ type OverrideDealKPISignalJSONRequestBody = KPIOverrideRequest
 // AcceptDealNextStepJSONRequestBody defines body for AcceptDealNextStep for application/json ContentType.
 type AcceptDealNextStepJSONRequestBody = AcceptNextStepRequest
 
+// CreateDealOfferJSONRequestBody defines body for CreateDealOffer for application/json ContentType.
+type CreateDealOfferJSONRequestBody = CreateOfferRequest
+
 // CorrectPersonSignalJSONRequestBody defines body for CorrectPersonSignal for application/json ContentType.
 type CorrectPersonSignalJSONRequestBody = PersonSignalCorrectRequest
 
@@ -6600,6 +6971,21 @@ type AddListMemberJSONRequestBody = AddListMemberRequest
 
 // AssignMemberRoleJSONRequestBody defines body for AssignMemberRole for application/json ContentType.
 type AssignMemberRoleJSONRequestBody = AssignRoleRequest
+
+// CreateOfferTemplateJSONRequestBody defines body for CreateOfferTemplate for application/json ContentType.
+type CreateOfferTemplateJSONRequestBody = CreateOfferTemplateRequest
+
+// UpdateOfferTemplateJSONRequestBody defines body for UpdateOfferTemplate for application/json ContentType.
+type UpdateOfferTemplateJSONRequestBody = UpdateOfferTemplateRequest
+
+// UpdateOfferJSONRequestBody defines body for UpdateOffer for application/json ContentType.
+type UpdateOfferJSONRequestBody = UpdateOfferRequest
+
+// CreateOfferLineItemJSONRequestBody defines body for CreateOfferLineItem for application/json ContentType.
+type CreateOfferLineItemJSONRequestBody = CreateOfferLineItemRequest
+
+// UpdateOfferLineItemJSONRequestBody defines body for UpdateOfferLineItem for application/json ContentType.
+type UpdateOfferLineItemJSONRequestBody = UpdateOfferLineItemRequest
 
 // CreateOrganizationJSONRequestBody defines body for CreateOrganization for application/json ContentType.
 type CreateOrganizationJSONRequestBody = CreateOrganizationRequest
@@ -7140,6 +7526,377 @@ func (a CreateDealRequest) MarshalJSON() ([]byte, error) {
 	object["stage_id"], err = json.Marshal(a.StageId)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'stage_id': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for CreateOfferLineItemRequest. Returns the specified
+// element and whether it was found
+func (a CreateOfferLineItemRequest) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for CreateOfferLineItemRequest
+func (a *CreateOfferLineItemRequest) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for CreateOfferLineItemRequest to handle AdditionalProperties
+func (a *CreateOfferLineItemRequest) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["captured_by"]; found {
+		err = json.Unmarshal(raw, &a.CapturedBy)
+		if err != nil {
+			return fmt.Errorf("error reading 'captured_by': %w", err)
+		}
+		delete(object, "captured_by")
+	}
+
+	if raw, found := object["description"]; found {
+		err = json.Unmarshal(raw, &a.Description)
+		if err != nil {
+			return fmt.Errorf("error reading 'description': %w", err)
+		}
+		delete(object, "description")
+	}
+
+	if raw, found := object["discount_pct"]; found {
+		err = json.Unmarshal(raw, &a.DiscountPct)
+		if err != nil {
+			return fmt.Errorf("error reading 'discount_pct': %w", err)
+		}
+		delete(object, "discount_pct")
+	}
+
+	if raw, found := object["position"]; found {
+		err = json.Unmarshal(raw, &a.Position)
+		if err != nil {
+			return fmt.Errorf("error reading 'position': %w", err)
+		}
+		delete(object, "position")
+	}
+
+	if raw, found := object["product_id"]; found {
+		err = json.Unmarshal(raw, &a.ProductId)
+		if err != nil {
+			return fmt.Errorf("error reading 'product_id': %w", err)
+		}
+		delete(object, "product_id")
+	}
+
+	if raw, found := object["quantity"]; found {
+		err = json.Unmarshal(raw, &a.Quantity)
+		if err != nil {
+			return fmt.Errorf("error reading 'quantity': %w", err)
+		}
+		delete(object, "quantity")
+	}
+
+	if raw, found := object["source"]; found {
+		err = json.Unmarshal(raw, &a.Source)
+		if err != nil {
+			return fmt.Errorf("error reading 'source': %w", err)
+		}
+		delete(object, "source")
+	}
+
+	if raw, found := object["tax_rate"]; found {
+		err = json.Unmarshal(raw, &a.TaxRate)
+		if err != nil {
+			return fmt.Errorf("error reading 'tax_rate': %w", err)
+		}
+		delete(object, "tax_rate")
+	}
+
+	if raw, found := object["unit"]; found {
+		err = json.Unmarshal(raw, &a.Unit)
+		if err != nil {
+			return fmt.Errorf("error reading 'unit': %w", err)
+		}
+		delete(object, "unit")
+	}
+
+	if raw, found := object["unit_price_minor"]; found {
+		err = json.Unmarshal(raw, &a.UnitPriceMinor)
+		if err != nil {
+			return fmt.Errorf("error reading 'unit_price_minor': %w", err)
+		}
+		delete(object, "unit_price_minor")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for CreateOfferLineItemRequest to handle AdditionalProperties
+func (a CreateOfferLineItemRequest) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["captured_by"], err = json.Marshal(a.CapturedBy)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'captured_by': %w", err)
+	}
+
+	object["description"], err = json.Marshal(a.Description)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'description': %w", err)
+	}
+
+	if a.DiscountPct != nil {
+		object["discount_pct"], err = json.Marshal(a.DiscountPct)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'discount_pct': %w", err)
+		}
+	}
+
+	object["position"], err = json.Marshal(a.Position)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'position': %w", err)
+	}
+
+	if a.ProductId != nil {
+		object["product_id"], err = json.Marshal(a.ProductId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'product_id': %w", err)
+		}
+	}
+
+	object["quantity"], err = json.Marshal(a.Quantity)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'quantity': %w", err)
+	}
+
+	object["source"], err = json.Marshal(a.Source)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'source': %w", err)
+	}
+
+	if a.TaxRate != nil {
+		object["tax_rate"], err = json.Marshal(a.TaxRate)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'tax_rate': %w", err)
+		}
+	}
+
+	if a.Unit != nil {
+		object["unit"], err = json.Marshal(a.Unit)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'unit': %w", err)
+		}
+	}
+
+	object["unit_price_minor"], err = json.Marshal(a.UnitPriceMinor)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'unit_price_minor': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for CreateOfferRequest. Returns the specified
+// element and whether it was found
+func (a CreateOfferRequest) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for CreateOfferRequest
+func (a *CreateOfferRequest) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for CreateOfferRequest to handle AdditionalProperties
+func (a *CreateOfferRequest) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["buyer_org_id"]; found {
+		err = json.Unmarshal(raw, &a.BuyerOrgId)
+		if err != nil {
+			return fmt.Errorf("error reading 'buyer_org_id': %w", err)
+		}
+		delete(object, "buyer_org_id")
+	}
+
+	if raw, found := object["captured_by"]; found {
+		err = json.Unmarshal(raw, &a.CapturedBy)
+		if err != nil {
+			return fmt.Errorf("error reading 'captured_by': %w", err)
+		}
+		delete(object, "captured_by")
+	}
+
+	if raw, found := object["currency"]; found {
+		err = json.Unmarshal(raw, &a.Currency)
+		if err != nil {
+			return fmt.Errorf("error reading 'currency': %w", err)
+		}
+		delete(object, "currency")
+	}
+
+	if raw, found := object["intro_text"]; found {
+		err = json.Unmarshal(raw, &a.IntroText)
+		if err != nil {
+			return fmt.Errorf("error reading 'intro_text': %w", err)
+		}
+		delete(object, "intro_text")
+	}
+
+	if raw, found := object["offer_number"]; found {
+		err = json.Unmarshal(raw, &a.OfferNumber)
+		if err != nil {
+			return fmt.Errorf("error reading 'offer_number': %w", err)
+		}
+		delete(object, "offer_number")
+	}
+
+	if raw, found := object["source"]; found {
+		err = json.Unmarshal(raw, &a.Source)
+		if err != nil {
+			return fmt.Errorf("error reading 'source': %w", err)
+		}
+		delete(object, "source")
+	}
+
+	if raw, found := object["template_id"]; found {
+		err = json.Unmarshal(raw, &a.TemplateId)
+		if err != nil {
+			return fmt.Errorf("error reading 'template_id': %w", err)
+		}
+		delete(object, "template_id")
+	}
+
+	if raw, found := object["terms_text"]; found {
+		err = json.Unmarshal(raw, &a.TermsText)
+		if err != nil {
+			return fmt.Errorf("error reading 'terms_text': %w", err)
+		}
+		delete(object, "terms_text")
+	}
+
+	if raw, found := object["valid_until"]; found {
+		err = json.Unmarshal(raw, &a.ValidUntil)
+		if err != nil {
+			return fmt.Errorf("error reading 'valid_until': %w", err)
+		}
+		delete(object, "valid_until")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for CreateOfferRequest to handle AdditionalProperties
+func (a CreateOfferRequest) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.BuyerOrgId != nil {
+		object["buyer_org_id"], err = json.Marshal(a.BuyerOrgId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'buyer_org_id': %w", err)
+		}
+	}
+
+	object["captured_by"], err = json.Marshal(a.CapturedBy)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'captured_by': %w", err)
+	}
+
+	object["currency"], err = json.Marshal(a.Currency)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'currency': %w", err)
+	}
+
+	if a.IntroText != nil {
+		object["intro_text"], err = json.Marshal(a.IntroText)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'intro_text': %w", err)
+		}
+	}
+
+	object["offer_number"], err = json.Marshal(a.OfferNumber)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'offer_number': %w", err)
+	}
+
+	object["source"], err = json.Marshal(a.Source)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'source': %w", err)
+	}
+
+	if a.TemplateId != nil {
+		object["template_id"], err = json.Marshal(a.TemplateId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'template_id': %w", err)
+		}
+	}
+
+	if a.TermsText != nil {
+		object["terms_text"], err = json.Marshal(a.TermsText)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'terms_text': %w", err)
+		}
+	}
+
+	if a.ValidUntil != nil {
+		object["valid_until"], err = json.Marshal(a.ValidUntil)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'valid_until': %w", err)
+		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
@@ -8526,6 +9283,639 @@ func (a DealDetail) MarshalJSON() ([]byte, error) {
 	return json.Marshal(object)
 }
 
+// Getter for additional properties for Offer. Returns the specified
+// element and whether it was found
+func (a Offer) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for Offer
+func (a *Offer) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for Offer to handle AdditionalProperties
+func (a *Offer) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["accepted_at"]; found {
+		err = json.Unmarshal(raw, &a.AcceptedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'accepted_at': %w", err)
+		}
+		delete(object, "accepted_at")
+	}
+
+	if raw, found := object["archived_at"]; found {
+		err = json.Unmarshal(raw, &a.ArchivedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'archived_at': %w", err)
+		}
+		delete(object, "archived_at")
+	}
+
+	if raw, found := object["buyer_org_id"]; found {
+		err = json.Unmarshal(raw, &a.BuyerOrgId)
+		if err != nil {
+			return fmt.Errorf("error reading 'buyer_org_id': %w", err)
+		}
+		delete(object, "buyer_org_id")
+	}
+
+	if raw, found := object["captured_by"]; found {
+		err = json.Unmarshal(raw, &a.CapturedBy)
+		if err != nil {
+			return fmt.Errorf("error reading 'captured_by': %w", err)
+		}
+		delete(object, "captured_by")
+	}
+
+	if raw, found := object["created_at"]; found {
+		err = json.Unmarshal(raw, &a.CreatedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'created_at': %w", err)
+		}
+		delete(object, "created_at")
+	}
+
+	if raw, found := object["currency"]; found {
+		err = json.Unmarshal(raw, &a.Currency)
+		if err != nil {
+			return fmt.Errorf("error reading 'currency': %w", err)
+		}
+		delete(object, "currency")
+	}
+
+	if raw, found := object["deal_id"]; found {
+		err = json.Unmarshal(raw, &a.DealId)
+		if err != nil {
+			return fmt.Errorf("error reading 'deal_id': %w", err)
+		}
+		delete(object, "deal_id")
+	}
+
+	if raw, found := object["gross_minor"]; found {
+		err = json.Unmarshal(raw, &a.GrossMinor)
+		if err != nil {
+			return fmt.Errorf("error reading 'gross_minor': %w", err)
+		}
+		delete(object, "gross_minor")
+	}
+
+	if raw, found := object["id"]; found {
+		err = json.Unmarshal(raw, &a.Id)
+		if err != nil {
+			return fmt.Errorf("error reading 'id': %w", err)
+		}
+		delete(object, "id")
+	}
+
+	if raw, found := object["intro_text"]; found {
+		err = json.Unmarshal(raw, &a.IntroText)
+		if err != nil {
+			return fmt.Errorf("error reading 'intro_text': %w", err)
+		}
+		delete(object, "intro_text")
+	}
+
+	if raw, found := object["net_minor"]; found {
+		err = json.Unmarshal(raw, &a.NetMinor)
+		if err != nil {
+			return fmt.Errorf("error reading 'net_minor': %w", err)
+		}
+		delete(object, "net_minor")
+	}
+
+	if raw, found := object["offer_number"]; found {
+		err = json.Unmarshal(raw, &a.OfferNumber)
+		if err != nil {
+			return fmt.Errorf("error reading 'offer_number': %w", err)
+		}
+		delete(object, "offer_number")
+	}
+
+	if raw, found := object["pdf_asset_ref"]; found {
+		err = json.Unmarshal(raw, &a.PdfAssetRef)
+		if err != nil {
+			return fmt.Errorf("error reading 'pdf_asset_ref': %w", err)
+		}
+		delete(object, "pdf_asset_ref")
+	}
+
+	if raw, found := object["revision"]; found {
+		err = json.Unmarshal(raw, &a.Revision)
+		if err != nil {
+			return fmt.Errorf("error reading 'revision': %w", err)
+		}
+		delete(object, "revision")
+	}
+
+	if raw, found := object["source"]; found {
+		err = json.Unmarshal(raw, &a.Source)
+		if err != nil {
+			return fmt.Errorf("error reading 'source': %w", err)
+		}
+		delete(object, "source")
+	}
+
+	if raw, found := object["status"]; found {
+		err = json.Unmarshal(raw, &a.Status)
+		if err != nil {
+			return fmt.Errorf("error reading 'status': %w", err)
+		}
+		delete(object, "status")
+	}
+
+	if raw, found := object["tax_minor"]; found {
+		err = json.Unmarshal(raw, &a.TaxMinor)
+		if err != nil {
+			return fmt.Errorf("error reading 'tax_minor': %w", err)
+		}
+		delete(object, "tax_minor")
+	}
+
+	if raw, found := object["template_id"]; found {
+		err = json.Unmarshal(raw, &a.TemplateId)
+		if err != nil {
+			return fmt.Errorf("error reading 'template_id': %w", err)
+		}
+		delete(object, "template_id")
+	}
+
+	if raw, found := object["terms_text"]; found {
+		err = json.Unmarshal(raw, &a.TermsText)
+		if err != nil {
+			return fmt.Errorf("error reading 'terms_text': %w", err)
+		}
+		delete(object, "terms_text")
+	}
+
+	if raw, found := object["updated_at"]; found {
+		err = json.Unmarshal(raw, &a.UpdatedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'updated_at': %w", err)
+		}
+		delete(object, "updated_at")
+	}
+
+	if raw, found := object["valid_until"]; found {
+		err = json.Unmarshal(raw, &a.ValidUntil)
+		if err != nil {
+			return fmt.Errorf("error reading 'valid_until': %w", err)
+		}
+		delete(object, "valid_until")
+	}
+
+	if raw, found := object["version"]; found {
+		err = json.Unmarshal(raw, &a.Version)
+		if err != nil {
+			return fmt.Errorf("error reading 'version': %w", err)
+		}
+		delete(object, "version")
+	}
+
+	if raw, found := object["workspace_id"]; found {
+		err = json.Unmarshal(raw, &a.WorkspaceId)
+		if err != nil {
+			return fmt.Errorf("error reading 'workspace_id': %w", err)
+		}
+		delete(object, "workspace_id")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for Offer to handle AdditionalProperties
+func (a Offer) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.AcceptedAt != nil {
+		object["accepted_at"], err = json.Marshal(a.AcceptedAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'accepted_at': %w", err)
+		}
+	}
+
+	if a.ArchivedAt != nil {
+		object["archived_at"], err = json.Marshal(a.ArchivedAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'archived_at': %w", err)
+		}
+	}
+
+	if a.BuyerOrgId != nil {
+		object["buyer_org_id"], err = json.Marshal(a.BuyerOrgId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'buyer_org_id': %w", err)
+		}
+	}
+
+	object["captured_by"], err = json.Marshal(a.CapturedBy)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'captured_by': %w", err)
+	}
+
+	object["created_at"], err = json.Marshal(a.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'created_at': %w", err)
+	}
+
+	object["currency"], err = json.Marshal(a.Currency)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'currency': %w", err)
+	}
+
+	object["deal_id"], err = json.Marshal(a.DealId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'deal_id': %w", err)
+	}
+
+	object["gross_minor"], err = json.Marshal(a.GrossMinor)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'gross_minor': %w", err)
+	}
+
+	object["id"], err = json.Marshal(a.Id)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'id': %w", err)
+	}
+
+	if a.IntroText != nil {
+		object["intro_text"], err = json.Marshal(a.IntroText)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'intro_text': %w", err)
+		}
+	}
+
+	object["net_minor"], err = json.Marshal(a.NetMinor)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'net_minor': %w", err)
+	}
+
+	object["offer_number"], err = json.Marshal(a.OfferNumber)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'offer_number': %w", err)
+	}
+
+	if a.PdfAssetRef != nil {
+		object["pdf_asset_ref"], err = json.Marshal(a.PdfAssetRef)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'pdf_asset_ref': %w", err)
+		}
+	}
+
+	object["revision"], err = json.Marshal(a.Revision)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'revision': %w", err)
+	}
+
+	object["source"], err = json.Marshal(a.Source)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'source': %w", err)
+	}
+
+	object["status"], err = json.Marshal(a.Status)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'status': %w", err)
+	}
+
+	object["tax_minor"], err = json.Marshal(a.TaxMinor)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'tax_minor': %w", err)
+	}
+
+	if a.TemplateId != nil {
+		object["template_id"], err = json.Marshal(a.TemplateId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'template_id': %w", err)
+		}
+	}
+
+	if a.TermsText != nil {
+		object["terms_text"], err = json.Marshal(a.TermsText)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'terms_text': %w", err)
+		}
+	}
+
+	object["updated_at"], err = json.Marshal(a.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'updated_at': %w", err)
+	}
+
+	if a.ValidUntil != nil {
+		object["valid_until"], err = json.Marshal(a.ValidUntil)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'valid_until': %w", err)
+		}
+	}
+
+	object["version"], err = json.Marshal(a.Version)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'version': %w", err)
+	}
+
+	object["workspace_id"], err = json.Marshal(a.WorkspaceId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'workspace_id': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for OfferLineItem. Returns the specified
+// element and whether it was found
+func (a OfferLineItem) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for OfferLineItem
+func (a *OfferLineItem) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for OfferLineItem to handle AdditionalProperties
+func (a *OfferLineItem) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["archived_at"]; found {
+		err = json.Unmarshal(raw, &a.ArchivedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'archived_at': %w", err)
+		}
+		delete(object, "archived_at")
+	}
+
+	if raw, found := object["captured_by"]; found {
+		err = json.Unmarshal(raw, &a.CapturedBy)
+		if err != nil {
+			return fmt.Errorf("error reading 'captured_by': %w", err)
+		}
+		delete(object, "captured_by")
+	}
+
+	if raw, found := object["created_at"]; found {
+		err = json.Unmarshal(raw, &a.CreatedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'created_at': %w", err)
+		}
+		delete(object, "created_at")
+	}
+
+	if raw, found := object["description"]; found {
+		err = json.Unmarshal(raw, &a.Description)
+		if err != nil {
+			return fmt.Errorf("error reading 'description': %w", err)
+		}
+		delete(object, "description")
+	}
+
+	if raw, found := object["discount_pct"]; found {
+		err = json.Unmarshal(raw, &a.DiscountPct)
+		if err != nil {
+			return fmt.Errorf("error reading 'discount_pct': %w", err)
+		}
+		delete(object, "discount_pct")
+	}
+
+	if raw, found := object["id"]; found {
+		err = json.Unmarshal(raw, &a.Id)
+		if err != nil {
+			return fmt.Errorf("error reading 'id': %w", err)
+		}
+		delete(object, "id")
+	}
+
+	if raw, found := object["offer_id"]; found {
+		err = json.Unmarshal(raw, &a.OfferId)
+		if err != nil {
+			return fmt.Errorf("error reading 'offer_id': %w", err)
+		}
+		delete(object, "offer_id")
+	}
+
+	if raw, found := object["position"]; found {
+		err = json.Unmarshal(raw, &a.Position)
+		if err != nil {
+			return fmt.Errorf("error reading 'position': %w", err)
+		}
+		delete(object, "position")
+	}
+
+	if raw, found := object["product_id"]; found {
+		err = json.Unmarshal(raw, &a.ProductId)
+		if err != nil {
+			return fmt.Errorf("error reading 'product_id': %w", err)
+		}
+		delete(object, "product_id")
+	}
+
+	if raw, found := object["quantity"]; found {
+		err = json.Unmarshal(raw, &a.Quantity)
+		if err != nil {
+			return fmt.Errorf("error reading 'quantity': %w", err)
+		}
+		delete(object, "quantity")
+	}
+
+	if raw, found := object["source"]; found {
+		err = json.Unmarshal(raw, &a.Source)
+		if err != nil {
+			return fmt.Errorf("error reading 'source': %w", err)
+		}
+		delete(object, "source")
+	}
+
+	if raw, found := object["tax_rate"]; found {
+		err = json.Unmarshal(raw, &a.TaxRate)
+		if err != nil {
+			return fmt.Errorf("error reading 'tax_rate': %w", err)
+		}
+		delete(object, "tax_rate")
+	}
+
+	if raw, found := object["unit"]; found {
+		err = json.Unmarshal(raw, &a.Unit)
+		if err != nil {
+			return fmt.Errorf("error reading 'unit': %w", err)
+		}
+		delete(object, "unit")
+	}
+
+	if raw, found := object["unit_price_minor"]; found {
+		err = json.Unmarshal(raw, &a.UnitPriceMinor)
+		if err != nil {
+			return fmt.Errorf("error reading 'unit_price_minor': %w", err)
+		}
+		delete(object, "unit_price_minor")
+	}
+
+	if raw, found := object["updated_at"]; found {
+		err = json.Unmarshal(raw, &a.UpdatedAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'updated_at': %w", err)
+		}
+		delete(object, "updated_at")
+	}
+
+	if raw, found := object["workspace_id"]; found {
+		err = json.Unmarshal(raw, &a.WorkspaceId)
+		if err != nil {
+			return fmt.Errorf("error reading 'workspace_id': %w", err)
+		}
+		delete(object, "workspace_id")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for OfferLineItem to handle AdditionalProperties
+func (a OfferLineItem) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.ArchivedAt != nil {
+		object["archived_at"], err = json.Marshal(a.ArchivedAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'archived_at': %w", err)
+		}
+	}
+
+	object["captured_by"], err = json.Marshal(a.CapturedBy)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'captured_by': %w", err)
+	}
+
+	object["created_at"], err = json.Marshal(a.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'created_at': %w", err)
+	}
+
+	object["description"], err = json.Marshal(a.Description)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'description': %w", err)
+	}
+
+	object["discount_pct"], err = json.Marshal(a.DiscountPct)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'discount_pct': %w", err)
+	}
+
+	object["id"], err = json.Marshal(a.Id)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'id': %w", err)
+	}
+
+	object["offer_id"], err = json.Marshal(a.OfferId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'offer_id': %w", err)
+	}
+
+	object["position"], err = json.Marshal(a.Position)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'position': %w", err)
+	}
+
+	if a.ProductId != nil {
+		object["product_id"], err = json.Marshal(a.ProductId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'product_id': %w", err)
+		}
+	}
+
+	object["quantity"], err = json.Marshal(a.Quantity)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'quantity': %w", err)
+	}
+
+	object["source"], err = json.Marshal(a.Source)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'source': %w", err)
+	}
+
+	object["tax_rate"], err = json.Marshal(a.TaxRate)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'tax_rate': %w", err)
+	}
+
+	object["unit"], err = json.Marshal(a.Unit)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'unit': %w", err)
+	}
+
+	object["unit_price_minor"], err = json.Marshal(a.UnitPriceMinor)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'unit_price_minor': %w", err)
+	}
+
+	object["updated_at"], err = json.Marshal(a.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'updated_at': %w", err)
+	}
+
+	object["workspace_id"], err = json.Marshal(a.WorkspaceId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'workspace_id': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
 // Getter for additional properties for Organization. Returns the specified
 // element and whether it was found
 func (a Organization) Get(fieldName string) (value interface{}, found bool) {
@@ -9707,6 +11097,382 @@ func (a UpdateDealRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(object)
 }
 
+// Getter for additional properties for UpdateOfferLineItemRequest. Returns the specified
+// element and whether it was found
+func (a UpdateOfferLineItemRequest) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for UpdateOfferLineItemRequest
+func (a *UpdateOfferLineItemRequest) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for UpdateOfferLineItemRequest to handle AdditionalProperties
+func (a *UpdateOfferLineItemRequest) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["captured_by"]; found {
+		err = json.Unmarshal(raw, &a.CapturedBy)
+		if err != nil {
+			return fmt.Errorf("error reading 'captured_by': %w", err)
+		}
+		delete(object, "captured_by")
+	}
+
+	if raw, found := object["description"]; found {
+		err = json.Unmarshal(raw, &a.Description)
+		if err != nil {
+			return fmt.Errorf("error reading 'description': %w", err)
+		}
+		delete(object, "description")
+	}
+
+	if raw, found := object["discount_pct"]; found {
+		err = json.Unmarshal(raw, &a.DiscountPct)
+		if err != nil {
+			return fmt.Errorf("error reading 'discount_pct': %w", err)
+		}
+		delete(object, "discount_pct")
+	}
+
+	if raw, found := object["position"]; found {
+		err = json.Unmarshal(raw, &a.Position)
+		if err != nil {
+			return fmt.Errorf("error reading 'position': %w", err)
+		}
+		delete(object, "position")
+	}
+
+	if raw, found := object["product_id"]; found {
+		err = json.Unmarshal(raw, &a.ProductId)
+		if err != nil {
+			return fmt.Errorf("error reading 'product_id': %w", err)
+		}
+		delete(object, "product_id")
+	}
+
+	if raw, found := object["quantity"]; found {
+		err = json.Unmarshal(raw, &a.Quantity)
+		if err != nil {
+			return fmt.Errorf("error reading 'quantity': %w", err)
+		}
+		delete(object, "quantity")
+	}
+
+	if raw, found := object["source"]; found {
+		err = json.Unmarshal(raw, &a.Source)
+		if err != nil {
+			return fmt.Errorf("error reading 'source': %w", err)
+		}
+		delete(object, "source")
+	}
+
+	if raw, found := object["tax_rate"]; found {
+		err = json.Unmarshal(raw, &a.TaxRate)
+		if err != nil {
+			return fmt.Errorf("error reading 'tax_rate': %w", err)
+		}
+		delete(object, "tax_rate")
+	}
+
+	if raw, found := object["unit"]; found {
+		err = json.Unmarshal(raw, &a.Unit)
+		if err != nil {
+			return fmt.Errorf("error reading 'unit': %w", err)
+		}
+		delete(object, "unit")
+	}
+
+	if raw, found := object["unit_price_minor"]; found {
+		err = json.Unmarshal(raw, &a.UnitPriceMinor)
+		if err != nil {
+			return fmt.Errorf("error reading 'unit_price_minor': %w", err)
+		}
+		delete(object, "unit_price_minor")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for UpdateOfferLineItemRequest to handle AdditionalProperties
+func (a UpdateOfferLineItemRequest) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.CapturedBy != nil {
+		object["captured_by"], err = json.Marshal(a.CapturedBy)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'captured_by': %w", err)
+		}
+	}
+
+	if a.Description != nil {
+		object["description"], err = json.Marshal(a.Description)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'description': %w", err)
+		}
+	}
+
+	if a.DiscountPct != nil {
+		object["discount_pct"], err = json.Marshal(a.DiscountPct)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'discount_pct': %w", err)
+		}
+	}
+
+	if a.Position != nil {
+		object["position"], err = json.Marshal(a.Position)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'position': %w", err)
+		}
+	}
+
+	if a.ProductId != nil {
+		object["product_id"], err = json.Marshal(a.ProductId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'product_id': %w", err)
+		}
+	}
+
+	if a.Quantity != nil {
+		object["quantity"], err = json.Marshal(a.Quantity)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'quantity': %w", err)
+		}
+	}
+
+	if a.Source != nil {
+		object["source"], err = json.Marshal(a.Source)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'source': %w", err)
+		}
+	}
+
+	if a.TaxRate != nil {
+		object["tax_rate"], err = json.Marshal(a.TaxRate)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'tax_rate': %w", err)
+		}
+	}
+
+	if a.Unit != nil {
+		object["unit"], err = json.Marshal(a.Unit)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'unit': %w", err)
+		}
+	}
+
+	if a.UnitPriceMinor != nil {
+		object["unit_price_minor"], err = json.Marshal(a.UnitPriceMinor)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'unit_price_minor': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for UpdateOfferRequest. Returns the specified
+// element and whether it was found
+func (a UpdateOfferRequest) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for UpdateOfferRequest
+func (a *UpdateOfferRequest) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for UpdateOfferRequest to handle AdditionalProperties
+func (a *UpdateOfferRequest) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["buyer_org_id"]; found {
+		err = json.Unmarshal(raw, &a.BuyerOrgId)
+		if err != nil {
+			return fmt.Errorf("error reading 'buyer_org_id': %w", err)
+		}
+		delete(object, "buyer_org_id")
+	}
+
+	if raw, found := object["captured_by"]; found {
+		err = json.Unmarshal(raw, &a.CapturedBy)
+		if err != nil {
+			return fmt.Errorf("error reading 'captured_by': %w", err)
+		}
+		delete(object, "captured_by")
+	}
+
+	if raw, found := object["currency"]; found {
+		err = json.Unmarshal(raw, &a.Currency)
+		if err != nil {
+			return fmt.Errorf("error reading 'currency': %w", err)
+		}
+		delete(object, "currency")
+	}
+
+	if raw, found := object["intro_text"]; found {
+		err = json.Unmarshal(raw, &a.IntroText)
+		if err != nil {
+			return fmt.Errorf("error reading 'intro_text': %w", err)
+		}
+		delete(object, "intro_text")
+	}
+
+	if raw, found := object["source"]; found {
+		err = json.Unmarshal(raw, &a.Source)
+		if err != nil {
+			return fmt.Errorf("error reading 'source': %w", err)
+		}
+		delete(object, "source")
+	}
+
+	if raw, found := object["template_id"]; found {
+		err = json.Unmarshal(raw, &a.TemplateId)
+		if err != nil {
+			return fmt.Errorf("error reading 'template_id': %w", err)
+		}
+		delete(object, "template_id")
+	}
+
+	if raw, found := object["terms_text"]; found {
+		err = json.Unmarshal(raw, &a.TermsText)
+		if err != nil {
+			return fmt.Errorf("error reading 'terms_text': %w", err)
+		}
+		delete(object, "terms_text")
+	}
+
+	if raw, found := object["valid_until"]; found {
+		err = json.Unmarshal(raw, &a.ValidUntil)
+		if err != nil {
+			return fmt.Errorf("error reading 'valid_until': %w", err)
+		}
+		delete(object, "valid_until")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for UpdateOfferRequest to handle AdditionalProperties
+func (a UpdateOfferRequest) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.BuyerOrgId != nil {
+		object["buyer_org_id"], err = json.Marshal(a.BuyerOrgId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'buyer_org_id': %w", err)
+		}
+	}
+
+	if a.CapturedBy != nil {
+		object["captured_by"], err = json.Marshal(a.CapturedBy)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'captured_by': %w", err)
+		}
+	}
+
+	if a.Currency != nil {
+		object["currency"], err = json.Marshal(a.Currency)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'currency': %w", err)
+		}
+	}
+
+	if a.IntroText != nil {
+		object["intro_text"], err = json.Marshal(a.IntroText)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'intro_text': %w", err)
+		}
+	}
+
+	if a.Source != nil {
+		object["source"], err = json.Marshal(a.Source)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'source': %w", err)
+		}
+	}
+
+	if a.TemplateId != nil {
+		object["template_id"], err = json.Marshal(a.TemplateId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'template_id': %w", err)
+		}
+	}
+
+	if a.TermsText != nil {
+		object["terms_text"], err = json.Marshal(a.TermsText)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'terms_text': %w", err)
+		}
+	}
+
+	if a.ValidUntil != nil {
+		object["valid_until"], err = json.Marshal(a.ValidUntil)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'valid_until': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
 // Getter for additional properties for UpdateOrganizationRequest. Returns the specified
 // element and whether it was found
 func (a UpdateOrganizationRequest) Get(fieldName string) (value interface{}, found bool) {
@@ -10142,6 +11908,12 @@ type ServerInterface interface {
 	// Accept an inferred next step into exactly one task (idempotent).
 	// (POST /deals/{id}/next-step:accept)
 	AcceptDealNextStep(w http.ResponseWriter, r *http.Request, idParam IdParam, params AcceptDealNextStepParams)
+	// List offers under a deal (all revisions; most recent first).
+	// (GET /deals/{id}/offers)
+	ListDealOffers(w http.ResponseWriter, r *http.Request, idParam IdParam, params ListDealOffersParams)
+	// Create a draft offer under this deal.
+	// (POST /deals/{id}/offers)
+	CreateDealOffer(w http.ResponseWriter, r *http.Request, idParam IdParam, params CreateDealOfferParams)
 	// Evidenced warm/neutral/blocking signals for a deal's stakeholders (pure read; zero writes).
 	// (GET /deals/{id}/people-signals)
 	GetDealPeopleSignals(w http.ResponseWriter, r *http.Request, idParam IdParam)
@@ -10271,6 +12043,39 @@ type ServerInterface interface {
 	// Revoke a role from a workspace member.
 	// (DELETE /members/{user_id}/roles/{role_key})
 	RevokeMemberRole(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID, roleKey string)
+	// List offer templates (branded DE/EN PDF layouts; admin surface).
+	// (GET /offer-templates)
+	ListOfferTemplates(w http.ResponseWriter, r *http.Request, params ListOfferTemplatesParams)
+	// Create an offer template.
+	// (POST /offer-templates)
+	CreateOfferTemplate(w http.ResponseWriter, r *http.Request, params CreateOfferTemplateParams)
+	// Archive (soft-delete) an offer template.
+	// (DELETE /offer-templates/{id})
+	ArchiveOfferTemplate(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Get an offer template by id.
+	// (GET /offer-templates/{id})
+	GetOfferTemplate(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Update an offer template (full replace — all writable fields replaced).
+	// (PUT /offer-templates/{id})
+	UpdateOfferTemplate(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateOfferTemplateParams)
+	// Get an offer by id.
+	// (GET /offers/{id})
+	GetOffer(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Update an offer (partial). Allowed only while status=draft.
+	// (PATCH /offers/{id})
+	UpdateOffer(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateOfferParams)
+	// List an offer's line items, in position order.
+	// (GET /offers/{id}/line-items)
+	ListOfferLineItems(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Add a line item to an offer. Allowed only while the offer is status=draft.
+	// (POST /offers/{id}/line-items)
+	CreateOfferLineItem(w http.ResponseWriter, r *http.Request, idParam IdParam, params CreateOfferLineItemParams)
+	// Remove a line item from an offer. Allowed only while the parent offer is status=draft.
+	// (DELETE /offers/{id}/line-items/{lineId})
+	DeleteOfferLineItem(w http.ResponseWriter, r *http.Request, idParam IdParam, lineId openapi_types.UUID)
+	// Update a line item (partial). Allowed only while the parent offer is status=draft.
+	// (PATCH /offers/{id}/line-items/{lineId})
+	UpdateOfferLineItem(w http.ResponseWriter, r *http.Request, idParam IdParam, lineId openapi_types.UUID, params UpdateOfferLineItemParams)
 	// List organizations (live by default; cursor-paginated).
 	// (GET /organizations)
 	ListOrganizations(w http.ResponseWriter, r *http.Request, params ListOrganizationsParams)
@@ -10676,6 +12481,18 @@ func (_ Unimplemented) AcceptDealNextStep(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// List offers under a deal (all revisions; most recent first).
+// (GET /deals/{id}/offers)
+func (_ Unimplemented) ListDealOffers(w http.ResponseWriter, r *http.Request, idParam IdParam, params ListDealOffersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a draft offer under this deal.
+// (POST /deals/{id}/offers)
+func (_ Unimplemented) CreateDealOffer(w http.ResponseWriter, r *http.Request, idParam IdParam, params CreateDealOfferParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Evidenced warm/neutral/blocking signals for a deal's stakeholders (pure read; zero writes).
 // (GET /deals/{id}/people-signals)
 func (_ Unimplemented) GetDealPeopleSignals(w http.ResponseWriter, r *http.Request, idParam IdParam) {
@@ -10931,6 +12748,72 @@ func (_ Unimplemented) AssignMemberRole(w http.ResponseWriter, r *http.Request, 
 // Revoke a role from a workspace member.
 // (DELETE /members/{user_id}/roles/{role_key})
 func (_ Unimplemented) RevokeMemberRole(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID, roleKey string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List offer templates (branded DE/EN PDF layouts; admin surface).
+// (GET /offer-templates)
+func (_ Unimplemented) ListOfferTemplates(w http.ResponseWriter, r *http.Request, params ListOfferTemplatesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create an offer template.
+// (POST /offer-templates)
+func (_ Unimplemented) CreateOfferTemplate(w http.ResponseWriter, r *http.Request, params CreateOfferTemplateParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Archive (soft-delete) an offer template.
+// (DELETE /offer-templates/{id})
+func (_ Unimplemented) ArchiveOfferTemplate(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get an offer template by id.
+// (GET /offer-templates/{id})
+func (_ Unimplemented) GetOfferTemplate(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update an offer template (full replace — all writable fields replaced).
+// (PUT /offer-templates/{id})
+func (_ Unimplemented) UpdateOfferTemplate(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateOfferTemplateParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get an offer by id.
+// (GET /offers/{id})
+func (_ Unimplemented) GetOffer(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update an offer (partial). Allowed only while status=draft.
+// (PATCH /offers/{id})
+func (_ Unimplemented) UpdateOffer(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateOfferParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List an offer's line items, in position order.
+// (GET /offers/{id}/line-items)
+func (_ Unimplemented) ListOfferLineItems(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Add a line item to an offer. Allowed only while the offer is status=draft.
+// (POST /offers/{id}/line-items)
+func (_ Unimplemented) CreateOfferLineItem(w http.ResponseWriter, r *http.Request, idParam IdParam, params CreateOfferLineItemParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Remove a line item from an offer. Allowed only while the parent offer is status=draft.
+// (DELETE /offers/{id}/line-items/{lineId})
+func (_ Unimplemented) DeleteOfferLineItem(w http.ResponseWriter, r *http.Request, idParam IdParam, lineId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update a line item (partial). Allowed only while the parent offer is status=draft.
+// (PATCH /offers/{id}/line-items/{lineId})
+func (_ Unimplemented) UpdateOfferLineItem(w http.ResponseWriter, r *http.Request, idParam IdParam, lineId openapi_types.UUID, params UpdateOfferLineItemParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -13196,6 +15079,134 @@ func (siw *ServerInterfaceWrapper) AcceptDealNextStep(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// ListDealOffers operation middleware
+func (siw *ServerInterfaceWrapper) ListDealOffers(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListDealOffersParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDealOffers(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateDealOffer operation middleware
+func (siw *ServerInterfaceWrapper) CreateDealOffer(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateDealOfferParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateDealOffer(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetDealPeopleSignals operation middleware
 func (siw *ServerInterfaceWrapper) GetDealPeopleSignals(w http.ResponseWriter, r *http.Request) {
 	var err error
@@ -14859,6 +16870,547 @@ func (siw *ServerInterfaceWrapper) RevokeMemberRole(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RevokeMemberRole(w, r, userId, roleKey)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListOfferTemplates operation middleware
+func (siw *ServerInterfaceWrapper) ListOfferTemplates(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListOfferTemplatesParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListOfferTemplates(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateOfferTemplate operation middleware
+func (siw *ServerInterfaceWrapper) CreateOfferTemplate(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateOfferTemplateParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateOfferTemplate(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveOfferTemplate operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveOfferTemplate(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveOfferTemplate(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOfferTemplate operation middleware
+func (siw *ServerInterfaceWrapper) GetOfferTemplate(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOfferTemplate(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateOfferTemplate operation middleware
+func (siw *ServerInterfaceWrapper) UpdateOfferTemplate(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateOfferTemplateParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatchParam IfMatchParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatchParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatchParam = &IfMatchParam
+
+	}
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateOfferTemplate(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOffer operation middleware
+func (siw *ServerInterfaceWrapper) GetOffer(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOffer(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateOffer operation middleware
+func (siw *ServerInterfaceWrapper) UpdateOffer(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateOfferParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatchParam IfMatchParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatchParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatchParam = &IfMatchParam
+
+	}
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateOffer(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListOfferLineItems operation middleware
+func (siw *ServerInterfaceWrapper) ListOfferLineItems(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListOfferLineItems(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateOfferLineItem operation middleware
+func (siw *ServerInterfaceWrapper) CreateOfferLineItem(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateOfferLineItemParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateOfferLineItem(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteOfferLineItem operation middleware
+func (siw *ServerInterfaceWrapper) DeleteOfferLineItem(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "lineId" -------------
+	var lineId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "lineId", chi.URLParam(r, "lineId"), &lineId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lineId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteOfferLineItem(w, r, idParam, lineId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateOfferLineItem operation middleware
+func (siw *ServerInterfaceWrapper) UpdateOfferLineItem(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "lineId" -------------
+	var lineId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "lineId", chi.URLParam(r, "lineId"), &lineId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lineId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateOfferLineItemParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateOfferLineItem(w, r, idParam, lineId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -17784,6 +20336,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/deals/{id}/next-step:accept", wrapper.AcceptDealNextStep)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/deals/{id}/offers", wrapper.ListDealOffers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/deals/{id}/offers", wrapper.CreateDealOffer)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/deals/{id}/people-signals", wrapper.GetDealPeopleSignals)
 	})
 	r.Group(func(r chi.Router) {
@@ -17911,6 +20469,39 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/members/{user_id}/roles/{role_key}", wrapper.RevokeMemberRole)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/offer-templates", wrapper.ListOfferTemplates)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/offer-templates", wrapper.CreateOfferTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/offer-templates/{id}", wrapper.ArchiveOfferTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/offer-templates/{id}", wrapper.GetOfferTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/offer-templates/{id}", wrapper.UpdateOfferTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/offers/{id}", wrapper.GetOffer)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/offers/{id}", wrapper.UpdateOffer)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/offers/{id}/line-items", wrapper.ListOfferLineItems)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/offers/{id}/line-items", wrapper.CreateOfferLineItem)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/offers/{id}/line-items/{lineId}", wrapper.DeleteOfferLineItem)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/offers/{id}/line-items/{lineId}", wrapper.UpdateOfferLineItem)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/organizations", wrapper.ListOrganizations)
