@@ -222,3 +222,72 @@ func TestOfferStore_Update_UuidFKColumns_NoTypeMismatch(t *testing.T) {
 		t.Fatalf("expected template_id=%s, got %+v", templateID, updated.TemplateID)
 	}
 }
+
+func TestOfferStore_Regenerate_SentOffer_ClonesAndSupersedes(t *testing.T) {
+	db := pgtest.OpenTestDB(t)
+	wsID, dealID := seedOfferWorkspace(t, db)
+	s := adapters.NewOfferStore(db)
+	lineStore := adapters.NewOfferLineItemStore(db, adapters.NewProductStore(db))
+
+	num := "ANG-" + ids.New()
+	original := domain.NewOffer(dealID, num, "EUR", provTestOffer())
+	original.WorkspaceID = wsID
+	created, err := s.Create(context.Background(), original)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	li := domain.OfferLineItem{
+		WorkspaceID: wsID, OfferID: created.ID, Position: 1,
+		Description: "Consulting Day", Unit: "day", Quantity: 2, UnitPriceMinor: 50000,
+		Source: "test", CapturedBy: "human:test",
+	}
+	if _, err := lineStore.Create(context.Background(), li, nil); err != nil {
+		t.Fatalf("create line: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE offer SET status=$2 WHERE id=$1::uuid`, created.ID, domain.OfferStatusSent); err != nil {
+		t.Fatalf("force status=sent: %v", err)
+	}
+
+	regenerated, err := s.Regenerate(context.Background(), created.ID, wsID)
+	if err != nil {
+		t.Fatalf("regenerate: %v", err)
+	}
+	if regenerated.ID == created.ID {
+		t.Fatal("expected a new offer id")
+	}
+	if regenerated.Status != domain.OfferStatusDraft {
+		t.Fatalf("expected regenerated offer to be draft, got %s", regenerated.Status)
+	}
+	if regenerated.Revision != created.Revision+1 {
+		t.Fatalf("expected revision %d, got %d", created.Revision+1, regenerated.Revision)
+	}
+	if regenerated.OfferNumber != created.OfferNumber {
+		t.Fatalf("expected offer_number to be cloned, got %s want %s", regenerated.OfferNumber, created.OfferNumber)
+	}
+	if regenerated.DealID != created.DealID {
+		t.Fatalf("expected deal_id to be cloned, got %s want %s", regenerated.DealID, created.DealID)
+	}
+	if regenerated.Source != created.Source || regenerated.CapturedBy != created.CapturedBy {
+		t.Fatalf("expected provenance to be cloned, got source=%s captured_by=%s", regenerated.Source, regenerated.CapturedBy)
+	}
+
+	originalRow, err := s.Get(context.Background(), created.ID, wsID)
+	if err != nil {
+		t.Fatalf("get original: %v", err)
+	}
+	if originalRow.Status != domain.OfferStatusSuperseded {
+		t.Fatalf("expected original to be superseded, got %s", originalRow.Status)
+	}
+
+	items, err := lineStore.List(context.Background(), regenerated.ID, wsID)
+	if err != nil {
+		t.Fatalf("list regenerated lines: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one cloned line item, got %d", len(items))
+	}
+	if items[0].Description != li.Description || items[0].UnitPriceMinor != li.UnitPriceMinor || items[0].Quantity != li.Quantity {
+		t.Fatalf("expected cloned line item fields to match source, got %+v", items[0])
+	}
+}

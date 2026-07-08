@@ -33,6 +33,9 @@ var ErrDuplicateOfferNumber = errors.New("duplicate offer_number+revision")
 // (OFFER-WIRE-4) — returned by every offer/line-item write path.
 var ErrOfferNotDraft = errors.New("offer is not draft")
 
+// ErrOfferNotSent reports a mutation attempted against an offer that is not sent.
+var ErrOfferNotSent = errors.New("offer is not sent")
+
 // computeLineTotals derives one line's net/tax minor units from its
 // quantity/unit_price_minor/discount_pct/tax_rate (OFFER-PARAM-4):
 // line_net = round(quantity * unit_price_minor * (1 - discount_pct/100)),
@@ -107,6 +110,14 @@ func lockOfferForMutation(ctx context.Context, tx *sql.Tx, offerID, workspaceID 
 func requireDraft(status string) error {
 	if status != domain.OfferStatusDraft {
 		return ErrOfferNotDraft
+	}
+	return nil
+}
+
+// requireSent returns ErrOfferNotSent unless status is sent.
+func requireSent(status string) error {
+	if status != domain.OfferStatusSent {
+		return ErrOfferNotSent
 	}
 	return nil
 }
@@ -358,4 +369,96 @@ func (s *OfferStore) Update(ctx context.Context, id, workspaceID string, updates
 		return domain.Offer{}, err
 	}
 	return s.Get(ctx, id, workspaceID)
+}
+
+// Regenerate clones a sent offer into a new draft revision and marks the
+// prior revision superseded. The new revision keeps the prior line-item
+// snapshot and provenance, but is inserted as a fresh row with a new id and
+// revision+1.
+func (s *OfferStore) Regenerate(ctx context.Context, id, workspaceID string) (domain.Offer, error) {
+	var out domain.Offer
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		status, version, err := lockOfferForMutation(ctx, tx, id, workspaceID)
+		if err != nil {
+			return err
+		}
+		if err := requireSent(status); err != nil {
+			return err
+		}
+
+		orig, err := scanOffer(tx.QueryRowContext(ctx, offerGetQuery, id, workspaceID))
+		if err != nil {
+			return err
+		}
+
+		out = orig
+		out.ID = ids.New()
+		out.Status = domain.OfferStatusDraft
+		out.Revision = orig.Revision + 1
+		out.Version = 1
+		out.AcceptedAt = nil
+		out.PdfAssetRef = nil
+		out.CreatedAt = time.Time{}
+		out.UpdatedAt = time.Time{}
+		out.ArchivedAt = nil
+
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO offer (
+				id, workspace_id, deal_id, offer_number, revision, status, currency,
+				buyer_org_id, buyer_snapshot, issuer_snapshot, valid_until, intro_text,
+				terms_text, net_minor, tax_minor, gross_minor, fx_rate_to_base,
+				fx_rate_date, template_id, pdf_asset_ref, accepted_at, version,
+				source, captured_by
+			)
+			SELECT
+				$1::uuid, workspace_id, deal_id, offer_number, $2, $3, currency,
+				buyer_org_id, buyer_snapshot, issuer_snapshot, valid_until, intro_text,
+				terms_text, net_minor, tax_minor, gross_minor, fx_rate_to_base,
+				fx_rate_date, template_id, NULL, NULL, 1,
+				source, captured_by
+			FROM offer
+			WHERE id=$4::uuid AND workspace_id=$5::uuid`,
+			out.ID, out.Revision, out.Status, id, workspaceID); err != nil {
+			return fmt.Errorf("offer regenerate insert: %w", err)
+		}
+
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO offer_line_item (
+				id, workspace_id, offer_id, position, product_id, description, unit,
+				quantity, unit_price_minor, discount_pct, tax_rate
+			)
+			SELECT
+				uuidv7(), workspace_id, $1::uuid, position, product_id, description, unit,
+				quantity, unit_price_minor, discount_pct, tax_rate
+			FROM offer_line_item
+			WHERE offer_id=$2::uuid AND workspace_id=$3::uuid AND archived_at IS NULL`,
+			out.ID, id, workspaceID); err != nil {
+			return fmt.Errorf("offer regenerate lines: %w", err)
+		}
+
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE offer SET status=$2, version=$3
+			WHERE id=$1::uuid AND workspace_id=$4::uuid`,
+			id, domain.OfferStatusSuperseded, version+1, workspaceID); err != nil {
+			return fmt.Errorf("offer regenerate supersede: %w", err)
+		}
+
+		payload, _ := json.Marshal(map[string]any{"offer_id": id, "deal_id": orig.DealID, "new_offer_id": out.ID})
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
+			workspaceID, "offer.superseded", out.ID, payload); err != nil {
+			return fmt.Errorf("offer regenerate event: %w", err)
+		}
+
+		e := crmaudit.EntryFromPrincipal(ctx, "create", entityTypeOffer, &out.ID, nil, out)
+		e.WorkspaceID = workspaceID
+		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+			return fmt.Errorf("offer regenerate audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.Offer{}, err
+	}
+	return s.Get(ctx, out.ID, workspaceID)
 }

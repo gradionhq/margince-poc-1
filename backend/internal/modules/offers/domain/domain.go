@@ -79,6 +79,12 @@ func NewOfferTemplate(name string, p prov.Provenance) OfferTemplate {
 // ever accept a mutation against (OFFER-WIRE-4 draft-only guard).
 const OfferStatusDraft = "draft"
 
+// OfferStatusSent marks an offer that has been frozen and sent.
+const OfferStatusSent = "sent"
+
+// OfferStatusSuperseded marks a sent offer that has been replaced by a new revision.
+const OfferStatusSuperseded = "superseded"
+
 // Offer is a versioned Angebot bound to one deal (OFFER-DDL-2). net_minor/
 // tax_minor/gross_minor are DERIVED server-side from line items
 // (OFFER-PARAM-4) — never accepted from the client (API-ERR-15).
