@@ -380,6 +380,19 @@ describe("Offer contract compliance (OFFER-WIRE-3/4)", () => {
   });
 });
 
+describe("UpdateOfferRequest contract compliance (OFFER-WIRE-4)", () => {
+  it("never carries status, revision, or money totals — draft-only editable fields", () => {
+    const updateBody: components["schemas"]["UpdateOfferRequest"] = {
+      valid_until: "2026-08-01",
+      intro_text: "Updated intro.",
+    };
+    expect("status" in updateBody).toBe(false);
+    expect("revision" in updateBody).toBe(false);
+    expect("net_minor" in updateBody).toBe(false);
+    expect("gross_minor" in updateBody).toBe(false);
+  });
+});
+
 describe("PipelineRollup contract compliance (DEAL-EXT-1)", () => {
   it("matches DEAL-FORM-2's shape plus per-stage and per-deal breakdowns", () => {
     const rollup: components["schemas"]["PipelineRollup"] = {

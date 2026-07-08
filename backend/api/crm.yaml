@@ -1186,6 +1186,66 @@ paths:
                     detail: An offer with this offer_number and revision already exists.
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  /offers/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Offers]
+      operationId: getOffer
+      summary: Get an offer by id.
+      x-mcp-tool: { verb: read_record, record_type: offer, tier: green }
+      responses:
+        '200':
+          description: The offer.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Offer' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Offers]
+      operationId: updateOffer
+      summary: Update an offer (partial). Allowed only while status=draft.
+      description: |
+        A sent offer is an immutable record (OFFER-AC-1) — attempting to update a non-draft
+        offer is rejected as a state conflict (409 offer_not_draft; the state check itself is
+        a handler concern, out of this contract-only ticket's scope). Money totals
+        (net/tax/gross_minor) are never accepted on this request — always server-derived from
+        line items (API-ERR-15).
+      x-mcp-tool: { verb: update_record, record_type: offer, tier: green }
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateOfferRequest' }
+      responses:
+        '200':
+          description: Updated offer.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Offer' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: 'Optimistic-lock failure (version_skew), OR the offer is not in draft status (offer_not_draft) — both are state conflicts on this endpoint.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                not_draft:
+                  value:
+                    type: 'https://errors.margince.com/offer_not_draft'
+                    title: Offer not editable
+                    status: 409
+                    code: offer_not_draft
+                    detail: This offer is no longer a draft and cannot be updated.
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   # ---------------------------- /pipelines ----------------------------------
   /pipelines:
     get:
@@ -5301,6 +5361,21 @@ components:
       properties:
         data: { type: array, items: { $ref: '#/components/schemas/Offer' } }
         page: { $ref: '#/components/schemas/PageInfo' }
+
+    UpdateOfferRequest:
+      type: object
+      description: Partial update via PATCH. Only fields present in the body are changed. Allowed only while status=draft (handler concern, out of this contract-only ticket).
+      properties:
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        buyer_org_id: { type: [string, 'null'], format: uuid }
+        valid_until: { type: [string, 'null'], format: date }
+        intro_text: { type: [string, 'null'] }
+        terms_text: { type: [string, 'null'] }
+        template_id: { type: [string, 'null'], format: uuid }
+        source: { type: string }
+        captured_by: { type: string }
+      additionalProperties: true
+      x-extension: true
 
     # ---- DraftingAsset ----
     DraftingAsset:

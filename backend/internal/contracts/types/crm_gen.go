@@ -5155,6 +5155,19 @@ type UpdateLeadRequest struct {
 // UpdateLeadRequestStatus defines model for UpdateLeadRequest.Status.
 type UpdateLeadRequestStatus string
 
+// UpdateOfferRequest Partial update via PATCH. Only fields present in the body are changed. Allowed only while status=draft (handler concern, out of this contract-only ticket).
+type UpdateOfferRequest struct {
+	BuyerOrgId           *openapi_types.UUID    `json:"buyer_org_id,omitempty"`
+	CapturedBy           *string                `json:"captured_by,omitempty"`
+	Currency             *string                `json:"currency,omitempty"`
+	IntroText            *string                `json:"intro_text,omitempty"`
+	Source               *string                `json:"source,omitempty"`
+	TemplateId           *openapi_types.UUID    `json:"template_id,omitempty"`
+	TermsText            *string                `json:"terms_text,omitempty"`
+	ValidUntil           *openapi_types.Date    `json:"valid_until,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
+}
+
 // UpdateOfferTemplateRequest Full replace via PUT — mirrors UpdateProductRequest's rate-card versioning shape.
 type UpdateOfferTemplateRequest struct {
 	CapturedBy *string                 `json:"captured_by,omitempty"`
@@ -5901,6 +5914,25 @@ type UpdateOfferTemplateParams struct {
 	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
 }
 
+// UpdateOfferParams defines parameters for UpdateOffer.
+type UpdateOfferParams struct {
+	// IfMatchParam Optional optimistic-concurrency precondition for a mutating request (PATCH/advance/merge):
+	// the last-seen entity `version`. If the row's current `version` differs, the write is
+	// rejected with `409 code: version_skew` (ErrVersionSkew) and no change is made — re-read,
+	// re-apply, retry. Omitting it is last-write-wins (discouraged for agent/automated writers).
+	// Accepted on every native-mode mutating endpoint that returns a versioned entity.
+	IfMatchParam *IfMatchParam `json:"If-Match,omitempty"`
+
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+}
+
 // ListOrganizationsParams defines parameters for ListOrganizations.
 type ListOrganizationsParams struct {
 	// CursorParam Opaque keyset cursor from a prior response's `page.next_cursor`. The cursor encodes the
@@ -6481,6 +6513,9 @@ type CreateOfferTemplateJSONRequestBody = CreateOfferTemplateRequest
 
 // UpdateOfferTemplateJSONRequestBody defines body for UpdateOfferTemplate for application/json ContentType.
 type UpdateOfferTemplateJSONRequestBody = UpdateOfferTemplateRequest
+
+// UpdateOfferJSONRequestBody defines body for UpdateOffer for application/json ContentType.
+type UpdateOfferJSONRequestBody = UpdateOfferRequest
 
 // CreateOrganizationJSONRequestBody defines body for CreateOrganization for application/json ContentType.
 type CreateOrganizationJSONRequestBody = CreateOrganizationRequest
@@ -9988,6 +10023,179 @@ func (a UpdateDealRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(object)
 }
 
+// Getter for additional properties for UpdateOfferRequest. Returns the specified
+// element and whether it was found
+func (a UpdateOfferRequest) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for UpdateOfferRequest
+func (a *UpdateOfferRequest) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for UpdateOfferRequest to handle AdditionalProperties
+func (a *UpdateOfferRequest) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["buyer_org_id"]; found {
+		err = json.Unmarshal(raw, &a.BuyerOrgId)
+		if err != nil {
+			return fmt.Errorf("error reading 'buyer_org_id': %w", err)
+		}
+		delete(object, "buyer_org_id")
+	}
+
+	if raw, found := object["captured_by"]; found {
+		err = json.Unmarshal(raw, &a.CapturedBy)
+		if err != nil {
+			return fmt.Errorf("error reading 'captured_by': %w", err)
+		}
+		delete(object, "captured_by")
+	}
+
+	if raw, found := object["currency"]; found {
+		err = json.Unmarshal(raw, &a.Currency)
+		if err != nil {
+			return fmt.Errorf("error reading 'currency': %w", err)
+		}
+		delete(object, "currency")
+	}
+
+	if raw, found := object["intro_text"]; found {
+		err = json.Unmarshal(raw, &a.IntroText)
+		if err != nil {
+			return fmt.Errorf("error reading 'intro_text': %w", err)
+		}
+		delete(object, "intro_text")
+	}
+
+	if raw, found := object["source"]; found {
+		err = json.Unmarshal(raw, &a.Source)
+		if err != nil {
+			return fmt.Errorf("error reading 'source': %w", err)
+		}
+		delete(object, "source")
+	}
+
+	if raw, found := object["template_id"]; found {
+		err = json.Unmarshal(raw, &a.TemplateId)
+		if err != nil {
+			return fmt.Errorf("error reading 'template_id': %w", err)
+		}
+		delete(object, "template_id")
+	}
+
+	if raw, found := object["terms_text"]; found {
+		err = json.Unmarshal(raw, &a.TermsText)
+		if err != nil {
+			return fmt.Errorf("error reading 'terms_text': %w", err)
+		}
+		delete(object, "terms_text")
+	}
+
+	if raw, found := object["valid_until"]; found {
+		err = json.Unmarshal(raw, &a.ValidUntil)
+		if err != nil {
+			return fmt.Errorf("error reading 'valid_until': %w", err)
+		}
+		delete(object, "valid_until")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for UpdateOfferRequest to handle AdditionalProperties
+func (a UpdateOfferRequest) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.BuyerOrgId != nil {
+		object["buyer_org_id"], err = json.Marshal(a.BuyerOrgId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'buyer_org_id': %w", err)
+		}
+	}
+
+	if a.CapturedBy != nil {
+		object["captured_by"], err = json.Marshal(a.CapturedBy)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'captured_by': %w", err)
+		}
+	}
+
+	if a.Currency != nil {
+		object["currency"], err = json.Marshal(a.Currency)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'currency': %w", err)
+		}
+	}
+
+	if a.IntroText != nil {
+		object["intro_text"], err = json.Marshal(a.IntroText)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'intro_text': %w", err)
+		}
+	}
+
+	if a.Source != nil {
+		object["source"], err = json.Marshal(a.Source)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'source': %w", err)
+		}
+	}
+
+	if a.TemplateId != nil {
+		object["template_id"], err = json.Marshal(a.TemplateId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'template_id': %w", err)
+		}
+	}
+
+	if a.TermsText != nil {
+		object["terms_text"], err = json.Marshal(a.TermsText)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'terms_text': %w", err)
+		}
+	}
+
+	if a.ValidUntil != nil {
+		object["valid_until"], err = json.Marshal(a.ValidUntil)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'valid_until': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
 // Getter for additional properties for UpdateOrganizationRequest. Returns the specified
 // element and whether it was found
 func (a UpdateOrganizationRequest) Get(fieldName string) (value interface{}, found bool) {
@@ -10561,6 +10769,12 @@ type ServerInterface interface {
 	// Update an offer template (full replace — all writable fields replaced).
 	// (PUT /offer-templates/{id})
 	UpdateOfferTemplate(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateOfferTemplateParams)
+	// Get an offer by id.
+	// (GET /offers/{id})
+	GetOffer(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Update an offer (partial). Allowed only while status=draft.
+	// (PATCH /offers/{id})
+	UpdateOffer(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateOfferParams)
 	// List organizations (live by default; cursor-paginated).
 	// (GET /organizations)
 	ListOrganizations(w http.ResponseWriter, r *http.Request, params ListOrganizationsParams)
@@ -11239,6 +11453,18 @@ func (_ Unimplemented) GetOfferTemplate(w http.ResponseWriter, r *http.Request, 
 // Update an offer template (full replace — all writable fields replaced).
 // (PUT /offer-templates/{id})
 func (_ Unimplemented) UpdateOfferTemplate(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateOfferTemplateParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get an offer by id.
+// (GET /offers/{id})
+func (_ Unimplemented) GetOffer(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update an offer (partial). Allowed only while status=draft.
+// (PATCH /offers/{id})
+func (_ Unimplemented) UpdateOffer(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateOfferParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -15247,6 +15473,111 @@ func (siw *ServerInterfaceWrapper) UpdateOfferTemplate(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// GetOffer operation middleware
+func (siw *ServerInterfaceWrapper) GetOffer(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOffer(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateOffer operation middleware
+func (siw *ServerInterfaceWrapper) UpdateOffer(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateOfferParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatchParam IfMatchParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatchParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatchParam = &IfMatchParam
+
+	}
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateOffer(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListOrganizations operation middleware
 func (siw *ServerInterfaceWrapper) ListOrganizations(w http.ResponseWriter, r *http.Request) {
 	var err error
@@ -18299,6 +18630,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/offer-templates/{id}", wrapper.UpdateOfferTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/offers/{id}", wrapper.GetOffer)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/offers/{id}", wrapper.UpdateOffer)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/organizations", wrapper.ListOrganizations)
