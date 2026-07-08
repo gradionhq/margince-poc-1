@@ -112,12 +112,7 @@ func TestProductHandler_Create_Valid_Returns201(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 
-	if w.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want 201, body=%s", w.Code, w.Body.String())
-	}
-	if w.Header().Get("Location") == "" {
-		t.Fatal("expected Location header")
-	}
+	assertCreated201(t, w)
 	respBody := decodeJSONBody(t, w)
 	if unitPrice, ok := respBody["unit_price_minor"].(float64); !ok || int64(unitPrice) != 150000 {
 		t.Fatalf("expected unit_price_minor=150000 as exact int64, got %v", respBody["unit_price_minor"])
@@ -158,19 +153,7 @@ func TestProductHandler_Create_DuplicateSKU_Returns409(t *testing.T) {
 		"source":           "test",
 		"captured_by":      "human:test",
 	}
-	bodyBytes, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/products", bytes.NewReader(bodyBytes))
-	req = withWorkspace(req)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-
-	if w.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want 409, body=%s", w.Code, w.Body.String())
-	}
-	respBody := decodeJSONBody(t, w)
-	if code, ok := respBody["code"].(string); !ok || code != "product_sku_duplicate" {
-		t.Fatalf("expected code=product_sku_duplicate, got %v", respBody["code"])
-	}
+	respBody := postExpectConflict(t, h, "/products", body, "product_sku_duplicate")
 	if details, ok := respBody["details"].(map[string]any); !ok || details["existing_id"] != "existing-id" {
 		t.Fatalf("expected details.existing_id=existing-id, got %v", respBody["details"])
 	}
@@ -185,15 +168,7 @@ func TestProductHandler_List_Empty_Returns200(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
-	}
-	respBody := decodeJSONBody(t, w)
-	if data, ok := respBody["data"]; ok && data != nil {
-		if items, ok := data.([]any); !ok || len(items) != 0 {
-			t.Fatalf("expected empty data array, got %v", respBody["data"])
-		}
-	}
+	assertEmptyListOK(t, w)
 }
 
 func TestProductHandler_Update_VersionSkew_Returns409(t *testing.T) {

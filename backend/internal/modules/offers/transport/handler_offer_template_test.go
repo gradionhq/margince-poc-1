@@ -103,12 +103,7 @@ func TestOfferTemplateHandler_Create_Valid_Returns201(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 
-	if w.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want 201, body=%s", w.Code, w.Body.String())
-	}
-	if w.Header().Get("Location") == "" {
-		t.Fatal("expected Location header")
-	}
+	assertCreated201(t, w)
 }
 
 func TestOfferTemplateHandler_Create_DuplicateName_Returns409(t *testing.T) {
@@ -121,19 +116,7 @@ func TestOfferTemplateHandler_Create_DuplicateName_Returns409(t *testing.T) {
 		"source":      "test",
 		"captured_by": "human:test",
 	}
-	bodyBytes, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/offer-templates", bytes.NewReader(bodyBytes))
-	req = withWorkspace(req)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-
-	if w.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want 409, body=%s", w.Code, w.Body.String())
-	}
-	respBody := decodeJSONBody(t, w)
-	if code, ok := respBody["code"].(string); !ok || code != "offer_template_name_duplicate" {
-		t.Fatalf("expected code=offer_template_name_duplicate, got %v", respBody["code"])
-	}
+	postExpectConflict(t, h, "/offer-templates", body, "offer_template_name_duplicate")
 }
 
 func TestOfferTemplateHandler_Create_DefaultConflict_Returns409(t *testing.T) {
@@ -147,19 +130,7 @@ func TestOfferTemplateHandler_Create_DefaultConflict_Returns409(t *testing.T) {
 		"source":      "test",
 		"captured_by": "human:test",
 	}
-	bodyBytes, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/offer-templates", bytes.NewReader(bodyBytes))
-	req = withWorkspace(req)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-
-	if w.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want 409, body=%s", w.Code, w.Body.String())
-	}
-	respBody := decodeJSONBody(t, w)
-	if code, ok := respBody["code"].(string); !ok || code != "offer_template_default_conflict" {
-		t.Fatalf("expected code=offer_template_default_conflict, got %v", respBody["code"])
-	}
+	postExpectConflict(t, h, "/offer-templates", body, "offer_template_default_conflict")
 }
 
 func TestOfferTemplateHandler_List_Empty_Returns200(t *testing.T) {
@@ -171,15 +142,7 @@ func TestOfferTemplateHandler_List_Empty_Returns200(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
-	}
-	respBody := decodeJSONBody(t, w)
-	if data, ok := respBody["data"]; ok && data != nil {
-		if items, ok := data.([]any); !ok || len(items) != 0 {
-			t.Fatalf("expected empty data array, got %v", respBody["data"])
-		}
-	}
+	assertEmptyListOK(t, w)
 }
 
 func TestOfferTemplateHandler_Archive_Returns200(t *testing.T) {
