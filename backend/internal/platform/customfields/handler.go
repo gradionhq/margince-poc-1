@@ -7,30 +7,34 @@ import (
 	"net/http"
 	"strings"
 
-	httpkit "github.com/gradionhq/margince/backend/internal/shared/kernel/httpkit"
 	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
 	"github.com/gradionhq/margince/backend/internal/shared/ports/mcp"
 )
 
+const (
+	mpcVerbUpdateRecord = "update_record"
+	mpcRecordTypeField  = "custom_field"
+)
+
 // createCustomFieldTool is the createCustomField x-mcp-tool declaration
 // (crm.yaml: create_record/custom_field/yellow — see tools_gen.go's
 // generated table). Always yellow, never a dynamic-tier resolver.
-var createCustomFieldTool = mcp.GeneratedTool{OperationID: "createCustomField", Verb: "create_record", RecordType: "custom_field", Tier: mcp.TierYellow}
+var createCustomFieldTool = mcp.GeneratedTool{OperationID: "createCustomField", Verb: "create_record", RecordType: mpcRecordTypeField, Tier: mcp.TierYellow}
 
 // renameCustomFieldTool is the renameCustomField x-mcp-tool declaration
 // (crm.yaml: update_record/custom_field/green). Always green — toolgate.Enforce
 // passes any agent principal freely, kept for uniformity with the other two tools.
-var renameCustomFieldTool = mcp.GeneratedTool{OperationID: "renameCustomField", Verb: "update_record", RecordType: "custom_field", Tier: mcp.TierGreen}
+var renameCustomFieldTool = mcp.GeneratedTool{OperationID: "renameCustomField", Verb: mpcVerbUpdateRecord, RecordType: mpcRecordTypeField, Tier: mcp.TierGreen}
 
 // retireCustomFieldTool is the retireCustomField x-mcp-tool declaration
 // (crm.yaml: update_record/custom_field/yellow).
-var retireCustomFieldTool = mcp.GeneratedTool{OperationID: "retireCustomField", Verb: "update_record", RecordType: "custom_field", Tier: mcp.TierYellow}
+var retireCustomFieldTool = mcp.GeneratedTool{OperationID: "retireCustomField", Verb: mpcVerbUpdateRecord, RecordType: mpcRecordTypeField, Tier: mcp.TierYellow}
 
 // updateCustomFieldOptionsTool is the updateCustomFieldOptions x-mcp-tool
 // declaration (crm.yaml: update_record/custom_field/yellow, CF-T04).
-var updateCustomFieldOptionsTool = mcp.GeneratedTool{OperationID: "updateCustomFieldOptions", Verb: "update_record", RecordType: "custom_field", Tier: mcp.TierYellow}
+var updateCustomFieldOptionsTool = mcp.GeneratedTool{OperationID: "updateCustomFieldOptions", Verb: mpcVerbUpdateRecord, RecordType: mpcRecordTypeField, Tier: mcp.TierYellow}
 
 // Handler serves /custom-fields (CF-T03): POST (create) is wired to the
 // governed add-field engine; GET (list) stays 501 — CF-T02 contracted it,
@@ -45,6 +49,17 @@ func NewHandler(db *sql.DB, verifier approvalsport.Verifier) *Handler {
 	return &Handler{db: db, verifier: verifier}
 }
 
+// pathID extracts an ID from a request path. Given "/custom-fields/abc" and
+// prefix "/custom-fields", returns "abc".
+func pathID(path, prefix string) string {
+	rest := strings.TrimPrefix(path, prefix)
+	rest = strings.TrimPrefix(rest, "/")
+	if i := strings.Index(rest, "/"); i >= 0 {
+		rest = rest[:i]
+	}
+	return rest
+}
+
 // ServeHTTP dispatches on method + path. The collection route (POST create)
 // is method-only; the three id-scoped routes need the id (and, for retire/
 // options, a path suffix) parsed out of r.URL.Path — this Handler is
@@ -55,7 +70,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.serveSuffixRoutes(w, r) {
 		return
 	}
-	id := httpkit.PathID(r.URL.Path, "/custom-fields")
+	id := pathID(r.URL.Path, "/custom-fields")
 	switch {
 	case r.Method == http.MethodPost && id == "":
 		h.create(w, r)
@@ -71,12 +86,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // (mirrors organizations/transport/handler_org.go's serveSuffixRoutes).
 func (h *Handler) serveSuffixRoutes(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/retire") {
-		id := httpkit.PathID(strings.TrimSuffix(r.URL.Path, "/retire"), "/custom-fields")
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/retire"), "/custom-fields")
 		h.retire(w, r, id)
 		return true
 	}
 	if r.Method == http.MethodPatch && strings.HasSuffix(r.URL.Path, "/options") {
-		id := httpkit.PathID(strings.TrimSuffix(r.URL.Path, "/options"), "/custom-fields")
+		id := pathID(strings.TrimSuffix(r.URL.Path, "/options"), "/custom-fields")
 		h.setOptions(w, r, id)
 		return true
 	}
@@ -222,7 +237,7 @@ func (h *Handler) setOptions(w http.ResponseWriter, r *http.Request, id string) 
 	}
 
 	p, _ := crmctx.From(r.Context())
-	if err := toolgate.Enforce(r.Context(), p, h.verifier, updateCustomFieldOptionsTool, p.TenantID, map[string]any{"options": body.Options}, nil, r.Header.Get("X-Approval-Token")); err != nil {
+	if err := toolgate.Enforce(r.Context(), p, h.verifier, updateCustomFieldOptionsTool, p.TenantID, map[string]any{fieldOptions: body.Options}, nil, r.Header.Get("X-Approval-Token")); err != nil {
 		if errors.Is(err, toolgate.ErrApprovalRequired) {
 			jsonProblem(w, http.StatusForbidden, "approval_required", "Editing a picklist's options is confirm-first; supply an approval token.")
 		} else {

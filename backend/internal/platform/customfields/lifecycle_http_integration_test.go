@@ -11,21 +11,18 @@ import (
 	"testing"
 	"time"
 
-	customfields "github.com/gradionhq/margince/backend/internal/platform/customfields"
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
+	customfields "github.com/gradionhq/margince/backend/internal/platform/customfields"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
 )
 
-func patchCF(h *customfields.Handler, path, wsID, userID string, isAgent bool, token string, body map[string]any) *httptest.ResponseRecorder {
+func patchCF(h *customfields.Handler, path, wsID, userID string, isAgent bool, _ string, body map[string]any) *httptest.ResponseRecorder {
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPatch, path, bytes.NewReader(b))
 	ctx := crmctx.With(req.Context(), crmctx.Principal{UserID: userID, TenantID: wsID, IsAgent: isAgent})
 	req = req.WithContext(ctx)
-	if token != "" {
-		req.Header.Set("X-Approval-Token", token)
-	}
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	return w

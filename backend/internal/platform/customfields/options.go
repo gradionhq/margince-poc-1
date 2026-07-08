@@ -91,7 +91,7 @@ func SetOptions(ctx context.Context, db *sql.DB, id string, options []string) (C
 	}
 	entID := out.ID
 	if _, err := crmaudit.WriteTx(ctx, tx, crmaudit.EntryFromPrincipal(ctx, "update", "custom_field", &entID,
-		map[string]any{"options": oldOptions}, map[string]any{"options": options})); err != nil {
+		map[string]any{fieldOptions: oldOptions}, map[string]any{fieldOptions: options})); err != nil {
 		return Created{}, fmt.Errorf("customfields: audit write: %w", err)
 	}
 

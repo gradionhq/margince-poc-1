@@ -20,8 +20,8 @@ func (f fakeVerifier) VerifyAndConsume(ctx context.Context, token string, want a
 	return f.err
 }
 
-func withCFPrincipal(r *http.Request, isAgent bool, userID, wsID string) *http.Request {
-	ctx := crmctx.With(r.Context(), crmctx.Principal{UserID: userID, TenantID: wsID, IsAgent: isAgent})
+func withCFPrincipal(r *http.Request, isAgent bool, _, _ string) *http.Request {
+	ctx := crmctx.With(r.Context(), crmctx.Principal{UserID: "00000000-0000-0000-0000-0000000c0001", TenantID: "00000000-0000-0000-0000-0000000c0099", IsAgent: isAgent})
 	return r.WithContext(ctx)
 }
 

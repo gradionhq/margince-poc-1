@@ -79,6 +79,8 @@ const (
 // extracted for the same goconst reason as the fieldXxx consts above.
 const codeRequired = "required"
 
+const fieldOptions = "options"
+
 // Validate checks spec against the closed type/object sets and the
 // conditional-required rules (CreateCustomFieldRequest doc: currency
 // required iff type=currency, options required non-empty iff
@@ -98,7 +100,7 @@ func Validate(spec FieldSpec) []FieldError {
 		errs = append(errs, FieldError{Field: "currency", Code: "required_for_type_currency"})
 	}
 	if spec.Type == TypePicklist && len(spec.Options) == 0 {
-		errs = append(errs, FieldError{Field: "options", Code: "required_for_type_picklist"})
+		errs = append(errs, FieldError{Field: fieldOptions, Code: "required_for_type_picklist"})
 	}
 	if strings.TrimSpace(spec.Source) == "" {
 		errs = append(errs, FieldError{Field: "source", Code: codeRequired})
