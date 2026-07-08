@@ -88,6 +88,7 @@ components:
   database:     { in: internal/platform/database }
   httpserver:   { in: internal/platform/httpserver }
   toolgate:     { in: internal/platform/toolgate }
+  customfields: { in: internal/platform/customfields }
   # Tier-1 / Tier-2 domain modules
   identity:          { in: internal/modules/identity }
   identitytransport: { in: internal/modules/identity/transport }
@@ -375,5 +376,8 @@ deps:
     mayDependOn: [agentsdomain, agentsports, approvals, audit, database, mcp, errs]
   toolgate:
     mayDependOn: [mcp, approvalsport, crmctx, ids]
+  customfields:
+    mayDependOn: [crmctx, database, audit, toolgate, mcp, approvalsport]
+    canUse: [pq]
   contracts:
     canUse: [oapi, chi]

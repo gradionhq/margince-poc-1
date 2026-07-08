@@ -28,6 +28,7 @@ import (
 	relstransport "github.com/gradionhq/margince/backend/internal/modules/relationships/transport"
 	platformauth "github.com/gradionhq/margince/backend/internal/platform/auth"
 	platformconfig "github.com/gradionhq/margince/backend/internal/platform/config"
+	customfields "github.com/gradionhq/margince/backend/internal/platform/customfields"
 	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/authz"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
@@ -128,6 +129,7 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 	crud("/relationships", platformauth.ObjRelationship, relstransport.NewRelationshipHandler(relationships.NewRelationshipStore(k.db)))
 	crud("/activities", platformauth.ObjActivity, actstransport.NewActivityHandler(activities.NewActivityStore(k.db)))
 	crud("/record-grants", platformauth.ObjRecordGrant, relstransport.NewRecordGrantHandler(people.NewRecordGrantStore(k.db), k.db, k.verifier))
+	crud("/custom-fields", platformauth.ObjCustomField, customfields.NewHandler(k.db, k.verifier))
 	crud("/products", platformauth.ObjProduct, offerstransport.NewProductHandler(offers.NewProductStore(k.db)))
 	crud("/offer-templates", platformauth.ObjOfferTemplate, offerstransport.NewOfferTemplateHandler(offers.NewOfferTemplateStore(k.db)))
 

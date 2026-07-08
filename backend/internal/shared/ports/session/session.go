@@ -57,6 +57,7 @@ var knownObjects = map[string]bool{
 	"relationship":   true, // T08: generic employment/deal_stakeholder edge CRUD
 	"record_grant":   true, // GH-209 WS-B: record_grant sharing/manage_sharing gate
 	"offer_template": true,
+	"custom_field":   true, // CF-T03: custom-field definition CRUD gate
 }
 
 var knownRowScopes = map[string]bool{
