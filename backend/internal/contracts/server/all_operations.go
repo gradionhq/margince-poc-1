@@ -25,6 +25,7 @@ type AllOperations struct {
 	AIAdapter
 	AccessAdapter
 	ApprovalsAdapter
+	AttachmentsAdapter
 	AutomationsAdapter
 	ComplianceAdapter
 	ConversationsAdapter
