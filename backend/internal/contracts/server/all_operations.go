@@ -28,6 +28,7 @@ type AllOperations struct {
 	AutomationsAdapter
 	ComplianceAdapter
 	ConversationsAdapter
+	CustomFieldsAdapter
 	DealRoomsAdapter
 	DraftingAssetsAdapter
 	ExportsAdapter

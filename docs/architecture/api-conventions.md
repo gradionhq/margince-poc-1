@@ -152,6 +152,7 @@ mapper writes the REST body; the MCP mapper renders the same sentinel for tools)
 | API-ERR-19 | `ErrIncumbentAlreadyConnected` | 409 | `incumbent_already_connected` | Second incumbent connect rejected |
 | API-ERR-20 | `ErrOverlayFlipBlocked` | 409 | `overlay_flip_blocked` | Flip preflight unsatisfied |
 | API-ERR-21 | `ErrIncumbentBudgetExhausted` | 503 | `incumbent_budget_exhausted` | Degrade-don't-starve (AC-OV-7); reads fall back to mirror-with-staleness |
+| API-ERR-22 | `ErrStructuralChangeRefused` | 422 | `structural_change_refused` | A custom-field create is judged structural (new object/relationship/logic) — the bounded runtime-field concession's refusal (ADR-0002 Amendment 2). `details.route: "source_development_path"` lets a caller branch on "needs a source change" vs. an ordinary 422. |
 
 ### Wire — list envelope & pagination
 Source: margince-poc/docs/architecture/api-conventions.md#list-envelope; contract/README.md#pagination--cursor-based @ 5a0b29c
