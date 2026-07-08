@@ -94,27 +94,51 @@ make migrate-status
 
 ---
 
-## Step 6: Boot stack and verify relinkActivity returns 501 (contract-only, no route mounted)
+## Step 6: Boot stack and verify relinkActivity is unmounted (404, not a live route)
 
 **Command:**
 ```bash
 make run &
 ```
 
-Wait for the API to start (look for "listening on :8080" or similar in logs). Then:
+Wait for the API to start (look for "listening on :8080" or similar in logs). Then log in
+to get an authenticated session cookie (the `/activities/` subtree is behind auth
+middleware, so an unauthenticated request would return 401 and prove nothing about
+whether the route itself is mounted):
 
 ```bash
-curl -X POST http://localhost:8080/v1/activities/00000000-0000-0000-0000-000000000001/relink \
+curl -s -X POST http://localhost:8080/auth/login \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer test-token" \
-  -d '{"entity_type": "person", "entity_id": "00000000-0000-0000-0000-000000000002"}' \
-  -w '\nHTTP Status: %{http_code}\n'
+  -d '{"email":"admin@example.com","password":"changeme"}' \
+  -c /tmp/cookies.txt
+```
+
+Then probe the relink route using an existing activity id (there is no `/v1` path
+prefix on this server — use the bare path):
+
+```bash
+ACT_ID=$(PGPASSWORD=margince psql -h localhost -U margince -d margince -tAc "select id from activity limit 1;")
+
+curl -s -i -X POST "http://localhost:8080/activities/$ACT_ID/relink" \
+  -b /tmp/cookies.txt \
+  -H "X-Workspace-ID: 00000000-0000-0000-0000-000000000001" \
+  -H "Content-Type: application/json" \
+  -d '{"entity_type": "person", "entity_id": "00000000-0000-0000-0000-000000000002"}'
 ```
 
 **Expected:**
-- HTTP response: **501 Not Implemented** (not 404/unmounted, not 200/implemented — the 501 stub is correctly wired by the contract)
-- This confirms the operation is contract-declared but not yet business-logic implemented (AT-T05 wires the real mutation)
-- The fact that a 501 is returned (not 404) proves the route exists but is unimplemented
+- HTTP response: **404 Not Found**, plain-text body `404 page not found` (not 501, not 200)
+- The real live server dispatches through `routes.go`'s `crud("/activities", ...)`
+  registration to the hand-written `ActivityHandler.ServeHTTP`, whose switch only
+  handles `GET` (list/get), `PATCH`, and `DELETE` with a non-empty id; `POST` matches
+  none of those cases and falls through to the handler's own `default: http.NotFound(w, r)`
+  branch
+- This confirms no route is actually mounted for `relinkActivity` yet — the 404 is the
+  expected, correct response, not a bug. (The `RelinkActivity` 501 stub added to
+  `activities_adapter.go` is part of the `types.ServerInterface` conformance layer only —
+  per `all_operations.go`'s own doc comment, that layer is "interface-generation scope
+  only" and "nothing here is wired to serve traffic," so it is never invoked for a real
+  HTTP request; AT-T05 is expected to wire the real mutation and live route)
 
 ---
 
@@ -132,4 +156,4 @@ make check
 
 ---
 
-**Summary:** All seven UAT steps completed successfully. The contract is correctly declared, the migration properly widens the audit CHECK, the stack can be round-tripped cleanly, and the 501 stub for `relinkActivity` confirms the operation is contract-only with no live route yet. The project gate is fully green.
+**Summary:** All seven UAT steps completed successfully. The contract is correctly declared, the migration properly widens the audit CHECK, the stack can be round-tripped cleanly, and the 404 response for `relinkActivity` confirms the operation is contract-only with no live route mounted yet (the `RelinkActivity` 501 stub exists only in the `types.ServerInterface` conformance layer and is never invoked by the live server). The project gate is fully green.
