@@ -353,10 +353,14 @@ func TestOfferHandler_RoutingDispatch_UnknownSuffix_404(t *testing.T) {
 
 // Compile-time assertions that fakeOfferStore and fakeOfferLineItemStore
 // implement the seam interfaces the handler uses.
-var _ offerStoreSeam = (*fakeOfferStore)(nil)
-var _ offerLineItemStoreSeam = (*fakeOfferLineItemStore)(nil)
+var (
+	_ offerStoreSeam         = (*fakeOfferStore)(nil)
+	_ offerLineItemStoreSeam = (*fakeOfferLineItemStore)(nil)
+)
 
 // Compile-time check that errors.Is works as expected for the non-pointer sentinel.
-var _ error = adapters.ErrOfferNotDraft
-var _ error = adapters.ErrDuplicateOfferNumber
-var _ = errors.Is(adapters.ErrOfferNotDraft, adapters.ErrOfferNotDraft)
+var (
+	_ error = adapters.ErrOfferNotDraft
+	_ error = adapters.ErrDuplicateOfferNumber
+	_       = errors.Is(adapters.ErrOfferNotDraft, adapters.ErrOfferNotDraft)
+)

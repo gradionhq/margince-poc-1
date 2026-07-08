@@ -48,9 +48,11 @@ func TestOfferLineItemStore_Create_ProductSnapshot(t *testing.T) {
 		t.Fatalf("seed product: %v", err)
 	}
 
-	li := domain.OfferLineItem{WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
+	li := domain.OfferLineItem{
+		WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
 		ProductID: &createdProduct.ID, Description: "placeholder", Quantity: 2, UnitPriceMinor: 1,
-		Source: "test", CapturedBy: "human:test"}
+		Source: "test", CapturedBy: "human:test",
+	}
 	created, err := lineStore.Create(context.Background(), li, nil)
 	if err != nil {
 		t.Fatalf("create line: %v", err)
@@ -101,9 +103,11 @@ func TestOfferLineItemStore_Reconciliation_RoundThenSum_DivergesFromSumThenRound
 	offer := newDraftOffer(t, db, wsID, dealID)
 
 	for pos := 1; pos <= 2; pos++ {
-		li := domain.OfferLineItem{WorkspaceID: wsID, OfferID: offer.ID, Position: pos,
+		li := domain.OfferLineItem{
+			WorkspaceID: wsID, OfferID: offer.ID, Position: pos,
 			Description: "Divergence line", Quantity: 1, UnitPriceMinor: 201, DiscountPct: 50,
-			Source: "test", CapturedBy: "human:test"}
+			Source: "test", CapturedBy: "human:test",
+		}
 		if _, err := lineStore.Create(context.Background(), li, f64Ptr(50)); err != nil {
 			t.Fatalf("create line %d: %v", pos, err)
 		}
@@ -143,13 +147,17 @@ func TestOfferLineItemStore_Create_PositionConflict_Rejected(t *testing.T) {
 	lineStore := adapters.NewOfferLineItemStore(db, adapters.NewProductStore(db))
 	offer := newDraftOffer(t, db, wsID, dealID)
 
-	base := domain.OfferLineItem{WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
-		Description: "A", Quantity: 1, UnitPriceMinor: 100, Source: "test", CapturedBy: "human:test"}
+	base := domain.OfferLineItem{
+		WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
+		Description: "A", Quantity: 1, UnitPriceMinor: 100, Source: "test", CapturedBy: "human:test",
+	}
 	if _, err := lineStore.Create(context.Background(), base, nil); err != nil {
 		t.Fatalf("first create: %v", err)
 	}
-	dup := domain.OfferLineItem{WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
-		Description: "B", Quantity: 1, UnitPriceMinor: 100, Source: "test", CapturedBy: "human:test"}
+	dup := domain.OfferLineItem{
+		WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
+		Description: "B", Quantity: 1, UnitPriceMinor: 100, Source: "test", CapturedBy: "human:test",
+	}
 	_, err := lineStore.Create(context.Background(), dup, nil)
 	var posErr *adapters.ErrDuplicatePosition
 	if !errors.As(err, &posErr) {
@@ -163,8 +171,10 @@ func TestOfferLineItemStore_Mutations_RejectedWhenOfferNotDraft(t *testing.T) {
 	lineStore := adapters.NewOfferLineItemStore(db, adapters.NewProductStore(db))
 	offer := newDraftOffer(t, db, wsID, dealID)
 
-	li := domain.OfferLineItem{WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
-		Description: "A", Quantity: 1, UnitPriceMinor: 100, Source: "test", CapturedBy: "human:test"}
+	li := domain.OfferLineItem{
+		WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
+		Description: "A", Quantity: 1, UnitPriceMinor: 100, Source: "test", CapturedBy: "human:test",
+	}
 	created, err := lineStore.Create(context.Background(), li, nil)
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -186,8 +196,10 @@ func TestOfferLineItemStore_Delete_HardDeletes_And_RecomputesTotals(t *testing.T
 	lineStore := adapters.NewOfferLineItemStore(db, adapters.NewProductStore(db))
 	offer := newDraftOffer(t, db, wsID, dealID)
 
-	li := domain.OfferLineItem{WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
-		Description: "A", Quantity: 2, UnitPriceMinor: 500, Source: "test", CapturedBy: "human:test"}
+	li := domain.OfferLineItem{
+		WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
+		Description: "A", Quantity: 2, UnitPriceMinor: 500, Source: "test", CapturedBy: "human:test",
+	}
 	created, err := lineStore.Create(context.Background(), li, nil)
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -217,8 +229,10 @@ func TestOfferLineItemStore_Create_MissingProvenance_Rejected(t *testing.T) {
 	lineStore := adapters.NewOfferLineItemStore(db, adapters.NewProductStore(db))
 	offer := newDraftOffer(t, db, wsID, dealID)
 
-	li := domain.OfferLineItem{WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
-		Description: "A", Quantity: 1, UnitPriceMinor: 100}
+	li := domain.OfferLineItem{
+		WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
+		Description: "A", Quantity: 1, UnitPriceMinor: 100,
+	}
 	_, err := lineStore.Create(context.Background(), li, nil)
 	if !errors.Is(err, errs.ErrNullProvenance) {
 		t.Fatalf("expected ErrNullProvenance, got %v", err)

@@ -50,7 +50,9 @@ func seedOfferWorkspace(t *testing.T, db *sql.DB) (wsID, dealID string) {
 	return wsID, dealID
 }
 
-func provTestOffer() prov.Provenance { return prov.Provenance{Source: "test", CapturedBy: "human:test"} }
+func provTestOffer() prov.Provenance {
+	return prov.Provenance{Source: "test", CapturedBy: "human:test"}
+}
 
 func TestOfferStore_CreateGetListUpdate_RoundTrip(t *testing.T) {
 	db := pgtest.OpenTestDB(t)
