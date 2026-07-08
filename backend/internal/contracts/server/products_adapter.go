@@ -1,3 +1,4 @@
+//nolint:dupl // adapter boilerplate is structurally identical to OfferTemplatesAdapter by design
 package server
 
 import (
