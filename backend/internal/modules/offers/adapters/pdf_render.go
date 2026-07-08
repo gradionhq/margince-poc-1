@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/go-pdf/fpdf"
+
 	"github.com/gradionhq/margince/backend/internal/modules/offers/domain"
 )
 
@@ -43,7 +44,7 @@ type pdfLabels struct {
 // string, matching OfferTemplate's own default) get German labels;
 // everything else gets English labels.
 func resolvePDFLabels(locale string) pdfLabels {
-	if locale == "de-DE" || locale == "" {
+	if locale == localeDE || locale == "" {
 		return pdfLabels{
 			title:     "Angebot",
 			buyer:     "Kunde",
@@ -63,19 +64,9 @@ func resolvePDFLabels(locale string) pdfLabels {
 	}
 }
 
-// RenderOfferPDF builds the branded offer PDF from persisted offer data.
-func RenderOfferPDF(o domain.Offer, lineItems []domain.OfferLineItem, buyerBlock map[string]any, issuerName, locale string) ([]byte, error) {
-	labels := resolvePDFLabels(locale)
-
-	pdf := fpdf.New("P", "mm", "A4", "")
-	pdf.SetCompression(false)
-	pdf.SetMargins(16, 16, 16)
-	pdf.SetAutoPageBreak(true, 16)
-	pdf.SetTitle(labels.title+" "+o.OfferNumber, false)
-	pdf.SetCreator("margince", false)
-	pdf.SetAuthor(issuerName, false)
-	pdf.SetSubject(labels.title+" PDF", false)
-	pdf.AddPage()
+// writeOfferHeader writes the title/revision/issuer block and the buyer
+// block onto pdf.
+func writeOfferHeader(pdf *fpdf.Fpdf, o domain.Offer, buyerBlock map[string]any, issuerName string, labels pdfLabels) {
 	pdf.SetFont("Helvetica", "B", 18)
 	pdf.Cell(0, 8, labels.title+" "+o.OfferNumber)
 	pdf.Ln(10)
@@ -101,7 +92,10 @@ func RenderOfferPDF(o domain.Offer, lineItems []domain.OfferLineItem, buyerBlock
 		pdf.MultiCell(0, 6, address, "", "L", false)
 	}
 	pdf.Ln(4)
+}
 
+// writeLineItemTable writes the line-items section onto pdf.
+func writeLineItemTable(pdf *fpdf.Fpdf, lineItems []domain.OfferLineItem, currency string, labels pdfLabels) {
 	pdf.SetFont("Helvetica", "B", 12)
 	pdf.Cell(0, 6, labels.lineItems)
 	pdf.Ln(7)
@@ -109,10 +103,28 @@ func RenderOfferPDF(o domain.Offer, lineItems []domain.OfferLineItem, buyerBlock
 	for _, li := range lineItems {
 		pdf.Cell(0, 5, fmt.Sprintf("%d. %s", li.Position, li.Description))
 		pdf.Ln(5)
-		pdf.Cell(0, 5, fmt.Sprintf("%s x %s", formatLineQuantity(li.Quantity), formatMinor(li.UnitPriceMinor, o.Currency)))
+		pdf.Cell(0, 5, fmt.Sprintf("%s x %s", formatLineQuantity(li.Quantity), formatMinor(li.UnitPriceMinor, currency)))
 		pdf.Ln(5)
 	}
 	pdf.Ln(2)
+}
+
+// RenderOfferPDF builds the branded offer PDF from persisted offer data.
+func RenderOfferPDF(o domain.Offer, lineItems []domain.OfferLineItem, buyerBlock map[string]any, issuerName, locale string) ([]byte, error) {
+	labels := resolvePDFLabels(locale)
+
+	pdf := fpdf.New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.SetMargins(16, 16, 16)
+	pdf.SetAutoPageBreak(true, 16)
+	pdf.SetTitle(labels.title+" "+o.OfferNumber, false)
+	pdf.SetCreator("margince", false)
+	pdf.SetAuthor(issuerName, false)
+	pdf.SetSubject(labels.title+" PDF", false)
+	pdf.AddPage()
+
+	writeOfferHeader(pdf, o, buyerBlock, issuerName, labels)
+	writeLineItemTable(pdf, lineItems, o.Currency, labels)
 
 	pdf.SetFont("Helvetica", "B", 12)
 	pdf.Cell(0, 6, "Totals")

@@ -581,13 +581,6 @@ func TestOfferHandler_Regenerate_DraftOffer_409(t *testing.T) {
 	}
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // Compile-time assertions that fakeOfferStore and fakeOfferLineItemStore
 // implement the seam interfaces the handler uses.
 var (

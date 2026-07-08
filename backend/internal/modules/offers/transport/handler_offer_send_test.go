@@ -23,19 +23,6 @@ import (
 	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
 )
 
-// seedAppUser mirrors modules/directory's helpers_shared_test.go helper of
-// the same name: audit_log.on_behalf_of FKs to app_user(id), so an agent
-// principal's UserID must be a seeded app_user row, not an arbitrary string.
-func seedAppUser(t *testing.T, db *sql.DB, id, wsID string) {
-	t.Helper()
-	if _, err := db.Exec(
-		`INSERT INTO app_user(id,workspace_id,email,display_name,is_agent) VALUES($1::uuid,$2::uuid,$3,'Agent Test',true) ON CONFLICT DO NOTHING`,
-		id, wsID, "merge-agent-"+id+"@example.com",
-	); err != nil {
-		t.Fatal("seed app_user:", err)
-	}
-}
-
 func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
@@ -63,8 +50,8 @@ func offerHandlerForTest(db *sql.DB) *OfferHandler {
 	return NewOfferHandler(adapters.NewOfferStore(db), adapters.NewOfferLineItemStore(db, adapters.NewProductStore(db)), &crmapprovals.DBVerifier{DB: db}, blobstore.NewMemoryStore())
 }
 
-func withOfferWorkspace(r *http.Request, wsID, userID string, isAgent bool) *http.Request {
-	ctx := crmctx.With(r.Context(), crmctx.Principal{TenantID: wsID, UserID: userID, IsAgent: isAgent})
+func withOfferWorkspace(r *http.Request, wsID, userID string) *http.Request {
+	ctx := crmctx.With(r.Context(), crmctx.Principal{TenantID: wsID, UserID: userID})
 	return r.WithContext(ctx)
 }
 
@@ -133,7 +120,7 @@ func createDraftOffer(t *testing.T, h *OfferHandler, wsID, dealID, buyerOrgID, u
 	}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/deals/"+dealID+"/offers", bytes.NewReader(b))
-	req = withOfferWorkspace(req, wsID, userID, false)
+	req = withOfferWorkspace(req, wsID, userID)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	assertCreated201(t, w)
@@ -159,7 +146,7 @@ func addLineItem(t *testing.T, h *OfferHandler, wsID, offerID, userID string) {
 	}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/line-items", bytes.NewReader(b))
-	req = withOfferWorkspace(req, wsID, userID, false)
+	req = withOfferWorkspace(req, wsID, userID)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	assertCreated201(t, w)
@@ -168,7 +155,7 @@ func addLineItem(t *testing.T, h *OfferHandler, wsID, offerID, userID string) {
 func getOffer(t *testing.T, h *OfferHandler, wsID, offerID, userID string) map[string]any {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/offers/"+offerID, nil)
-	req = withOfferWorkspace(req, wsID, userID, false)
+	req = withOfferWorkspace(req, wsID, userID)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -180,7 +167,7 @@ func getOffer(t *testing.T, h *OfferHandler, wsID, offerID, userID string) map[s
 func offerLineItems(t *testing.T, h *OfferHandler, wsID, offerID, userID string) []any {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/offers/"+offerID+"/line-items", nil)
-	req = withOfferWorkspace(req, wsID, userID, false)
+	req = withOfferWorkspace(req, wsID, userID)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -213,7 +200,7 @@ func TestOfferHandler_Render_SetsRealPdfAssetRef(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/render", nil)
-	req = withOfferWorkspace(req, wsID, humanID, false)
+	req = withOfferWorkspace(req, wsID, humanID)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -366,7 +353,7 @@ func TestOfferHandler_Send_SameCurrency_NoFXRowNeeded(t *testing.T) {
 	addLineItem(t, h, wsID, offerID, humanID)
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/send", nil)
-	req = withOfferWorkspace(req, wsID, humanID, false)
+	req = withOfferWorkspace(req, wsID, humanID)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -389,7 +376,7 @@ func TestOfferHandler_Send_CrossCurrency_NoStoredRate_422(t *testing.T) {
 	addLineItem(t, h, wsID, offerID, humanID)
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/send", nil)
-	req = withOfferWorkspace(req, wsID, humanID, false)
+	req = withOfferWorkspace(req, wsID, humanID)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusUnprocessableEntity {
@@ -432,7 +419,7 @@ func TestOfferHandler_PatchAfterSend_Still409OfferNotDraft(t *testing.T) {
 	body := map[string]any{"intro_text": "hello"}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPatch, "/offers/"+offerID, bytes.NewReader(b))
-	req = withOfferWorkspace(req, wsID, humanID, false)
+	req = withOfferWorkspace(req, wsID, humanID)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusConflict {
@@ -478,7 +465,7 @@ func TestOfferHandler_Regenerate_SentOffer_NewDraftRevisionSupersedesePrior(t *t
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/regenerate", nil)
-	req = withOfferWorkspace(req, wsID, humanID, false)
+	req = withOfferWorkspace(req, wsID, humanID)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -524,7 +511,7 @@ func TestOfferHandler_Regenerate_DraftOffer_409OfferNotSent(t *testing.T) {
 	addLineItem(t, h, wsID, offerID, humanID)
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/regenerate", nil)
-	req = withOfferWorkspace(req, wsID, humanID, false)
+	req = withOfferWorkspace(req, wsID, humanID)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusConflict {
