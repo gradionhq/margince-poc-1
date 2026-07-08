@@ -41,6 +41,7 @@ type AllOperations struct {
 	OfferTemplatesAdapter
 	OffersAdapter
 	ProductsAdapter
+	QuotasAdapter
 	ReportsAdapter
 	SearchAdapter
 	TagsAdapter

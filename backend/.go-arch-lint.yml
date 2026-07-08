@@ -156,6 +156,10 @@ components:
   approvalsports:    { in: internal/modules/approvals/ports }
   approvalsadapters: { in: internal/modules/approvals/adapters }
   approvalsapp:      { in: internal/modules/approvals/app }
+  agents:            { in: internal/modules/agents }
+  agentsdomain:      { in: internal/modules/agents/domain }
+  agentsports:       { in: internal/modules/agents/ports }
+  agentsapp:         { in: internal/modules/agents/app }
 deps:
   # Tier-0 seams + kernel are not listed -> may depend on nothing internal.
   # Exception: datasource aliases errs.ErrVersionSkew (ADR-0036/B-E18.1a) — both are Tier-0.
@@ -338,6 +342,14 @@ deps:
     canUse: [river]
   approvalsapp:
     mayDependOn: [approvalsdomain, approvalsports, datasource, audit, errs, database]
+  agents:
+    mayDependOn: [agentsdomain, agentsports, agentsapp, approvals]
+  agentsdomain:
+    mayDependOn: [mcp]
+  agentsports:
+    mayDependOn: [agentsdomain, approvals]
+  agentsapp:
+    mayDependOn: [agentsdomain, agentsports, approvals, audit, database, mcp, errs]
   toolgate:
     mayDependOn: [mcp, approvalsport, crmctx, ids]
   contracts:
