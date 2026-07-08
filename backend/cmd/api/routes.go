@@ -23,9 +23,13 @@ import (
 	partnerstransport "github.com/gradionhq/margince/backend/internal/modules/partners/transport"
 	people "github.com/gradionhq/margince/backend/internal/modules/people"
 	peopletransport "github.com/gradionhq/margince/backend/internal/modules/people/transport"
+	records "github.com/gradionhq/margince/backend/internal/modules/records"
+	recordsadapters "github.com/gradionhq/margince/backend/internal/modules/records/adapters"
+	recordstransport "github.com/gradionhq/margince/backend/internal/modules/records/transport"
 	relationships "github.com/gradionhq/margince/backend/internal/modules/relationships"
 	relstransport "github.com/gradionhq/margince/backend/internal/modules/relationships/transport"
 	platformauth "github.com/gradionhq/margince/backend/internal/platform/auth"
+	"github.com/gradionhq/margince/backend/internal/platform/blobstore"
 	platformconfig "github.com/gradionhq/margince/backend/internal/platform/config"
 	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/authz"
@@ -38,6 +42,7 @@ type routeKit struct {
 	ctx           context.Context
 	cfg           platformconfig.Config
 	riverClient   *river.Client[*sql.Tx]
+	blob          blobstore.Store
 	sessionStore  *crmauth.SessionStore
 	passportStore *crmauth.PassportStore
 	verifier      *crmapprovals.DBVerifier
@@ -46,7 +51,7 @@ type routeKit struct {
 }
 
 // buildMux constructs the fully-wired route mux.
-func buildMux(ctx context.Context, db *sql.DB, cfg platformconfig.Config, riverClient *river.Client[*sql.Tx]) *http.ServeMux {
+func buildMux(ctx context.Context, db *sql.DB, cfg platformconfig.Config, riverClient *river.Client[*sql.Tx], blob blobstore.Store) *http.ServeMux {
 	sessionStore := crmauth.NewSessionStore(db)
 	passportStore := crmauth.NewPassportStore(db)
 	sessMW := platformauth.SessionMiddleware(&crmauth.SessionVerifier{Sessions: sessionStore, Passports: passportStore})
@@ -75,6 +80,7 @@ func buildMux(ctx context.Context, db *sql.DB, cfg platformconfig.Config, riverC
 		ctx:           ctx,
 		cfg:           cfg,
 		riverClient:   riverClient,
+		blob:          blob,
 		sessionStore:  sessionStore,
 		passportStore: passportStore,
 		verifier:      &crmapprovals.DBVerifier{DB: db},
@@ -129,6 +135,8 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 	crud("/record-grants", platformauth.ObjRecordGrant, relstransport.NewRecordGrantHandler(people.NewRecordGrantStore(k.db), k.db, k.verifier))
 	crud("/products", platformauth.ObjProduct, offerstransport.NewProductHandler(offers.NewProductStore(k.db)))
 	crud("/offer-templates", platformauth.ObjOfferTemplate, offerstransport.NewOfferTemplateHandler(offers.NewOfferTemplateStore(k.db)))
+	activityStore := activities.NewActivityStore(k.db)
+	crud("/attachments", platformauth.ObjAttachment, recordstransport.NewAttachmentHandler(records.NewAttachmentStore(k.db), k.blob, recordsadapters.NewDownloadAuditWriter(activityStore), k.db))
 
 	historyAuthz := authz.Authorizer(func(ctx context.Context, object, action string) error {
 		p, _ := crmctx.From(ctx)

@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/gradionhq/margince/backend/internal/modules/records/domain"
-	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/platform/blobstore"
+	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
 
