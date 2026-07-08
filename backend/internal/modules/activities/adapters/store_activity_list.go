@@ -119,7 +119,7 @@ func (s *ActivityStore) ListFiltered(ctx context.Context, workspaceID, cursor st
 			SELECT a.id, a.workspace_id, a.kind, a.subject, a.body,
 			       a.occurred_at, a.due_at, a.assignee_id, a.remind_at, a.is_done, a.done_at,
 			       a.duration_seconds, a.direction, a.meeting_status, a.source_system, a.source_id,
-			       a.version, a.source, a.captured_by, a.created_at, a.updated_at
+			       a.version, a.source, a.captured_by, a.created_at, a.updated_at, a.archived_at
 			FROM activity a`)
 		if f.EntityType != "" && f.EntityID != "" {
 			query.WriteString(` JOIN activity_link al ON al.activity_id = a.id`)
@@ -139,7 +139,7 @@ func (s *ActivityStore) ListFiltered(ctx context.Context, workspaceID, cursor st
 				&a.OccurredAt, &a.DueAt, &a.AssigneeID, &a.RemindAt, &a.IsDone, &a.DoneAt,
 				&a.DurationSeconds, &a.Direction, &a.MeetingStatus, &a.SourceSystem, &a.SourceID,
 				&a.Version, &a.Source, &a.CapturedBy,
-				&a.CreatedAt, &a.UpdatedAt); err != nil {
+				&a.CreatedAt, &a.UpdatedAt, &a.ArchivedAt); err != nil {
 				return err
 			}
 			a.Links = []domain.ActivityLink{}

@@ -429,6 +429,33 @@ func TestActivityStore_ListFiltered_KindFilter(t *testing.T) {
 	}
 }
 
+func TestActivityStore_ListFiltered_IncludeArchived_ReturnsArchivedAtSet(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "lf-archived")
+	s := NewActivityStore(db)
+	id := seedActivityRow(t, db, wsID, "note", nil, nil, "to-archive", time.Now().UTC())
+	if _, err := s.Archive(context.Background(), id, wsID); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+
+	out, _, err := s.ListFiltered(context.Background(), wsID, "", 20, domain.ActivityListFilter{IncludeArchived: true})
+	if err != nil {
+		t.Fatalf("ListFiltered: %v", err)
+	}
+	var found *domain.Activity
+	for i := range out {
+		if out[i].ID == id {
+			found = &out[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected the archived row %s to be included with include_archived=true, got %+v", id, out)
+	}
+	if found.ArchivedAt == nil {
+		t.Fatal("expected ArchivedAt to be set on the archived row returned by ListFiltered")
+	}
+}
+
 func TestActivityStore_ListFiltered_EntityScoped_MatchesLegacyList(t *testing.T) {
 	db := openActivityStoreTestDB(t)
 	wsID, _, dealID := seedActivityStoreFixtures(t, db, "lf-entity")
