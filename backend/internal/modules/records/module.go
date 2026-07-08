@@ -11,6 +11,7 @@ import (
 	"github.com/lib/pq"
 
 	"github.com/gradionhq/margince/backend/internal/modules/deals"
+	"github.com/gradionhq/margince/backend/internal/modules/records/adapters"
 	"github.com/gradionhq/margince/backend/internal/platform/auth"
 	"github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
@@ -61,13 +62,9 @@ func currentQuarterBounds(now time.Time, loc *time.Location) (start, end time.Ti
 	return start, end
 }
 
-// nodeReadable implements the RD-T04 Architecture-section readability table for one tree node:
-// whether a viewer with the given organization.read row_scope may read the node.
-//   - "all": always.
-//   - "own": owner is the viewer, or a live record_grant exists (hasGrant). A NULL owner is not
-//     auto-included.
-//   - "team": as "own", plus the owner is one of the viewer's teammates.
-//   - anything else (including an absent entry): not readable.
+// nodeReadable applies the RD-T04 row_scope readability table: "all" always passes; "own"
+// requires ownerIsViewer or hasGrant (NULL owner is not auto-included); "team" also passes
+// if ownerIsTeammate. Any other scope returns false.
 func nodeReadable(rowScope string, ownerID, viewerID sql.NullString, teammates map[string]bool, hasGrant bool) bool {
 	switch rowScope {
 	case "all":
@@ -486,3 +483,18 @@ func (s *RollupStore) activityCount30d(ctx context.Context, tx *sql.Tx, workspac
 	}
 	return count, nil
 }
+
+// Quota is a per-owner or per-team revenue target for one period (RD-DDL-2).
+type Quota = adapters.Quota
+
+// QuotaListFilter narrows a List call to a specific owner or team.
+type QuotaListFilter = adapters.QuotaListFilter
+
+// QuotaStore executes parameterized SQL against the quota table.
+type QuotaStore = adapters.QuotaStore
+
+// ErrOwnerXorTeamRequired fires when owner_id XOR team_id is not satisfied (RD-DDL-2).
+var ErrOwnerXorTeamRequired = adapters.ErrOwnerXorTeamRequired
+
+// NewQuotaStore returns a QuotaStore backed by db.
+func NewQuotaStore(db *sql.DB) *QuotaStore { return adapters.NewQuotaStore(db) }

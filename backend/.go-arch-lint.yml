@@ -145,6 +145,7 @@ components:
   dealsadapters:     { in: internal/modules/deals/adapters }
   dealsapp:          { in: internal/modules/deals/app }
   records:           { in: internal/modules/records }
+  recordsadapters:   { in: internal/modules/records/adapters }
   people:            { in: internal/modules/people }
   peopledomain:      { in: internal/modules/people/domain }
   peopleports:       { in: internal/modules/people/ports }
@@ -330,7 +331,10 @@ deps:
   # deals' FX/weighting funcs, database.WithWorkspaceTx, and auth.LoadRolePermissions +
   # session types for the row_scope RBAC lookup (self-contained tree-walk + aggregation).
   records:
-    mayDependOn: [deals, dealsdomain, errs, database, auth, session]
+    mayDependOn: [deals, dealsdomain, errs, database, auth, session, recordsadapters]
+    canUse: [pq]
+  recordsadapters:
+    mayDependOn: [errs, database, audit, sqlutil]
     canUse: [pq]
   # people domain uses strengthkern for PersonStrengthFrom; peopledomain composes
   # ActivityRef/deal/relationship refs (intentional cross-module composite-reference sharing).
