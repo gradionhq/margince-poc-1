@@ -62,6 +62,8 @@ func NewAllOperations(
 	activities ActivitiesAdapter,
 	audit AuditAdapter,
 	identity IdentityAdapter,
+	products ProductsAdapter,
+	offerTemplates OfferTemplatesAdapter,
 ) *AllOperations {
 	return &AllOperations{
 		PeopleAdapter:        people,
@@ -73,5 +75,7 @@ func NewAllOperations(
 		ActivitiesAdapter:    activities,
 		AuditAdapter:         audit,
 		IdentityAdapter:      identity,
+		ProductsAdapter:      products,
+		OfferTemplatesAdapter: offerTemplates,
 	}
 }

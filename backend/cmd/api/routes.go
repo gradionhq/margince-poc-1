@@ -15,6 +15,8 @@ import (
 	dealstransport "github.com/gradionhq/margince/backend/internal/modules/deals/transport"
 	crmauth "github.com/gradionhq/margince/backend/internal/modules/identity"
 	identitytransport "github.com/gradionhq/margince/backend/internal/modules/identity/transport"
+	offers "github.com/gradionhq/margince/backend/internal/modules/offers"
+	offerstransport "github.com/gradionhq/margince/backend/internal/modules/offers/transport"
 	organizations "github.com/gradionhq/margince/backend/internal/modules/organizations"
 	orgstransport "github.com/gradionhq/margince/backend/internal/modules/organizations/transport"
 	partners "github.com/gradionhq/margince/backend/internal/modules/partners"
@@ -125,6 +127,8 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 	crud("/relationships", platformauth.ObjRelationship, relstransport.NewRelationshipHandler(relationships.NewRelationshipStore(k.db)))
 	crud("/activities", platformauth.ObjActivity, actstransport.NewActivityHandler(activities.NewActivityStore(k.db)))
 	crud("/record-grants", platformauth.ObjRecordGrant, relstransport.NewRecordGrantHandler(people.NewRecordGrantStore(k.db), k.db, k.verifier))
+	crud("/products", platformauth.ObjProduct, offerstransport.NewProductHandler(offers.NewProductStore(k.db)))
+	crud("/offer-templates", platformauth.ObjOfferTemplate, offerstransport.NewOfferTemplateHandler(offers.NewOfferTemplateStore(k.db)))
 
 	historyAuthz := authz.Authorizer(func(ctx context.Context, object, action string) error {
 		p, _ := crmctx.From(ctx)

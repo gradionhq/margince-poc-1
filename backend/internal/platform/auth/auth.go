@@ -104,6 +104,8 @@ const (
 	ObjRelationship = "relationship"
 	ObjActivity     = "activity"
 	ObjRecordGrant  = "record_grant"
+	ObjProduct      = "product"
+	ObjOfferTemplate = "offer_template"
 )
 
 // MethodToAction maps an HTTP method to the canonical RBAC action name.
