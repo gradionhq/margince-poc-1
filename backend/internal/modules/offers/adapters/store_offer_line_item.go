@@ -1,0 +1,280 @@
+package adapters
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+
+	"github.com/gradionhq/margince/backend/internal/modules/offers/domain"
+	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
+	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
+)
+
+const entityTypeOfferLineItem = "offer_line_item"
+
+// productReader is the narrow seam OfferLineItemStore needs to snapshot a
+// product's description/unit_price_minor/default_tax_rate onto a line at
+// pick time (OFFER-AC-9b) — read once at create, never re-read later.
+// *ProductStore (same package) already satisfies this.
+type productReader interface {
+	Get(ctx context.Context, id, workspaceID string) (domain.Product, error)
+}
+
+// ErrDuplicatePosition reports a live-row position collision within an offer
+// (offer_line_item_position_unique), pre-checked ahead of INSERT/UPDATE —
+// mirrors ErrDuplicateSKU's shape.
+type ErrDuplicatePosition struct {
+	ExistingID string
+	Position   int
+}
+
+func (e *ErrDuplicatePosition) Error() string {
+	return fmt.Sprintf("duplicate position: existing_id=%s position=%d", e.ExistingID, e.Position)
+}
+
+// OfferLineItemStore executes parameterized SQL against offer_line_item.
+type OfferLineItemStore struct {
+	db       *sql.DB
+	products productReader
+}
+
+// NewOfferLineItemStore returns an OfferLineItemStore backed by db, reading
+// product snapshots through products.
+func NewOfferLineItemStore(db *sql.DB, products productReader) *OfferLineItemStore {
+	return &OfferLineItemStore{db: db, products: products}
+}
+
+func (s *OfferLineItemStore) checkPositionConflict(ctx context.Context, tx *sql.Tx, offerID, excludeID string, position int) error {
+	var existingID string
+	err := tx.QueryRowContext(ctx, `
+		SELECT id FROM offer_line_item
+		WHERE offer_id=$1::uuid AND position=$2 AND id <> $3::uuid`,
+		offerID, position, sqlutil.NullStrParam(excludeID)).Scan(&existingID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return &ErrDuplicatePosition{ExistingID: existingID, Position: position}
+}
+
+// offerLineItemSelectCols lists the DB columns for offer_line_item.
+// source/captured_by are validated (RequireProvenance) but not DB-backed
+// (no column in the DDL) — echoed back from the input on create only,
+// mirroring OfferTemplate's same pattern.
+const offerLineItemSelectCols = `
+	id, workspace_id, offer_id, position, product_id, description, unit,
+	quantity, unit_price_minor, discount_pct, tax_rate,
+	created_at, updated_at, archived_at`
+
+func scanOfferLineItem(row interface{ Scan(dest ...any) error }) (domain.OfferLineItem, error) {
+	var li domain.OfferLineItem
+	err := row.Scan(&li.ID, &li.WorkspaceID, &li.OfferID, &li.Position, &li.ProductID,
+		&li.Description, &li.Unit, &li.Quantity, &li.UnitPriceMinor, &li.DiscountPct,
+		&li.TaxRate, &li.CreatedAt, &li.UpdatedAt, &li.ArchivedAt)
+	return li, err
+}
+
+// Create snapshots the referenced product (if any) onto the line — copying
+// description/unit_price_minor always, and tax_rate unless explicitTaxRate
+// overrides it (OFFER-AC-9b) — inserts the row, recomputes the parent
+// offer's totals, and writes one audit_log entry, all in one tx locked
+// against a concurrent offer status flip (OFFER-WIRE-4).
+// source/captured_by are validated but not persisted (no DB column) —
+// echoed back on the returned struct only, mirroring OfferTemplate.
+func (s *OfferLineItemStore) Create(ctx context.Context, li domain.OfferLineItem, explicitTaxRate *float64) (domain.OfferLineItem, error) {
+	if err := sqlutil.RequireProvenance(li.Source, li.CapturedBy); err != nil {
+		return domain.OfferLineItem{}, err
+	}
+	if li.Unit == "" {
+		li.Unit = "unit"
+	}
+	if li.ProductID != nil {
+		p, err := s.products.Get(ctx, *li.ProductID, li.WorkspaceID)
+		if err != nil {
+			return domain.OfferLineItem{}, err
+		}
+		if p.Description != nil {
+			li.Description = *p.Description
+		} else {
+			li.Description = p.Name
+		}
+		li.UnitPriceMinor = p.UnitPriceMinor
+		if explicitTaxRate == nil && p.DefaultTaxRate != nil {
+			li.TaxRate = *p.DefaultTaxRate
+		}
+	}
+	if explicitTaxRate != nil {
+		li.TaxRate = *explicitTaxRate
+	}
+	li.ID = ids.New()
+
+	var out domain.OfferLineItem
+	err := database.WithWorkspaceTx(ctx, s.db, li.WorkspaceID, func(tx *sql.Tx) error {
+		status, _, err := lockOfferForMutation(ctx, tx, li.OfferID, li.WorkspaceID)
+		if err != nil {
+			return err
+		}
+		if err := requireDraft(status); err != nil {
+			return err
+		}
+		if err := s.checkPositionConflict(ctx, tx, li.OfferID, nilUUID, li.Position); err != nil {
+			return err
+		}
+		row := tx.QueryRowContext(ctx, `
+			INSERT INTO offer_line_item (id, workspace_id, offer_id, position, product_id,
+			    description, unit, quantity, unit_price_minor, discount_pct, tax_rate)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+			RETURNING `+offerLineItemSelectCols,
+			li.ID, li.WorkspaceID, li.OfferID, li.Position, li.ProductID,
+			li.Description, li.Unit, li.Quantity, li.UnitPriceMinor, li.DiscountPct, li.TaxRate)
+		var scanErr error
+		out, scanErr = scanOfferLineItem(row)
+		if scanErr != nil {
+			return fmt.Errorf("offer_line_item create: %w", scanErr)
+		}
+		if err := recomputeOfferTotals(ctx, tx, li.OfferID, li.WorkspaceID); err != nil {
+			return err
+		}
+		e := crmaudit.EntryFromPrincipal(ctx, "create", entityTypeOfferLineItem, &li.ID, nil, out)
+		e.WorkspaceID = li.WorkspaceID
+		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+			return fmt.Errorf("offer_line_item create audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.OfferLineItem{}, err
+	}
+	// Echo back source/captured_by from input (validated but not DB-backed).
+	out.Source, out.CapturedBy = li.Source, li.CapturedBy
+	return out, nil
+}
+
+// List returns offerID's live line items in position order (no pagination —
+// crm.yaml's listOfferLineItems declares no cursor/limit params).
+func (s *OfferLineItemStore) List(ctx context.Context, offerID, workspaceID string) ([]domain.OfferLineItem, error) {
+	out := []domain.OfferLineItem{}
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `SELECT `+offerLineItemSelectCols+`
+			FROM offer_line_item WHERE offer_id=$1::uuid AND workspace_id=$2::uuid
+			ORDER BY position`, offerID, workspaceID)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			li, scanErr := scanOfferLineItem(rows)
+			if scanErr != nil {
+				return scanErr
+			}
+			out = append(out, li)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+// Update applies a bounded partial update (position/product_id/description/
+// unit/quantity/unit_price_minor/discount_pct/tax_rate —
+// product_id here is a plain FK write, NOT a re-snapshot trigger; see Global
+// Constraint 3), recomputes the parent offer's totals, and writes one
+// audit_log entry — atomic with the OFFER-WIRE-4 draft-only guard.
+func (s *OfferLineItemStore) Update(ctx context.Context, id, offerID, workspaceID string, updates map[string]any) (domain.OfferLineItem, error) {
+	var out domain.OfferLineItem
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		status, _, err := lockOfferForMutation(ctx, tx, offerID, workspaceID)
+		if err != nil {
+			return err
+		}
+		if err := requireDraft(status); err != nil {
+			return err
+		}
+		if posVal := nullInt64(updates, "position"); posVal != nil {
+			if err := s.checkPositionConflict(ctx, tx, offerID, id, int(posVal.(int64))); err != nil {
+				return err
+			}
+		}
+		row := tx.QueryRowContext(ctx, `
+			UPDATE offer_line_item
+			SET position         = COALESCE($4, position),
+			    product_id       = CASE WHEN $5 THEN $6 ELSE product_id END,
+			    description      = COALESCE($7, description),
+			    unit             = COALESCE($8, unit),
+			    quantity         = COALESCE($9, quantity),
+			    unit_price_minor = COALESCE($10, unit_price_minor),
+			    discount_pct     = COALESCE($11, discount_pct),
+			    tax_rate         = COALESCE($12, tax_rate)
+			WHERE id=$1::uuid AND offer_id=$2::uuid AND workspace_id=$3::uuid
+			RETURNING `+offerLineItemSelectCols,
+			id, offerID, workspaceID,
+			nullInt64(updates, "position"),
+			hasKey(updates, "product_id"), sqlutil.NullStr(updates, "product_id"),
+			sqlutil.NullStr(updates, "description"),
+			sqlutil.NullStr(updates, "unit"),
+			nullFloat64(updates, "quantity"),
+			nullInt64(updates, "unit_price_minor"),
+			nullFloat64(updates, "discount_pct"),
+			nullFloat64(updates, "tax_rate"))
+		var scanErr error
+		out, scanErr = scanOfferLineItem(row)
+		if errors.Is(scanErr, sql.ErrNoRows) {
+			return errs.ErrNotFound
+		}
+		if scanErr != nil {
+			return fmt.Errorf("offer_line_item update: %w", scanErr)
+		}
+		if err := recomputeOfferTotals(ctx, tx, offerID, workspaceID); err != nil {
+			return err
+		}
+		e := crmaudit.EntryFromPrincipal(ctx, "update", entityTypeOfferLineItem, &id, nil, nil)
+		e.WorkspaceID = workspaceID
+		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+			return fmt.Errorf("offer_line_item update audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.OfferLineItem{}, err
+	}
+	return out, nil
+}
+
+// Delete hard-deletes the line item (crm.yaml's explicit "Hard-deletes ...
+// Returns 204" — see Global Constraint 1), recomputes the parent offer's
+// totals, and writes one audit_log entry (action=delete — Global
+// Constraint 2) — atomic with the OFFER-WIRE-4 draft-only guard.
+func (s *OfferLineItemStore) Delete(ctx context.Context, id, offerID, workspaceID string) error {
+	return database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		status, _, err := lockOfferForMutation(ctx, tx, offerID, workspaceID)
+		if err != nil {
+			return err
+		}
+		if err := requireDraft(status); err != nil {
+			return err
+		}
+		res, err := tx.ExecContext(ctx,
+			`DELETE FROM offer_line_item WHERE id=$1::uuid AND offer_id=$2::uuid AND workspace_id=$3::uuid`,
+			id, offerID, workspaceID)
+		if err != nil {
+			return fmt.Errorf("offer_line_item delete: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return errs.ErrNotFound
+		}
+		if err := recomputeOfferTotals(ctx, tx, offerID, workspaceID); err != nil {
+			return err
+		}
+		e := crmaudit.EntryFromPrincipal(ctx, "archive", entityTypeOfferLineItem, &id, nil, nil)
+		e.WorkspaceID = workspaceID
+		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+			return fmt.Errorf("offer_line_item delete audit: %w", err)
+		}
+		return nil
+	})
+}
