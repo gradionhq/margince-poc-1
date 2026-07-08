@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 	_ "github.com/lib/pq" // postgres driver registration, carried over unchanged from this file's original cmd/api/auth_handler.go (poc)
 
 	crmauth "github.com/gradionhq/margince/backend/internal/modules/identity"
+	platformauth "github.com/gradionhq/margince/backend/internal/platform/auth"
 	"github.com/gradionhq/margince/backend/internal/platform/httpserver"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
@@ -41,6 +43,30 @@ func readJSON(r *http.Request, dst any) error {
 	return json.NewDecoder(r.Body).Decode(dst)
 }
 
+// clientIP extracts the caller's IP for session provenance (session.ip, D4).
+// RemoteAddr only — this deployment has no trusted reverse-proxy chain
+// configured, so honoring X-Forwarded-For would let a client spoof any IP.
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+// defaultConsentPurposes are seeded into every newly-signed-up workspace (D2
+// step 7 — consent_purpose became per-workspace in migration 000070; nothing
+// previously seeded a purpose set for new workspaces). This literal is
+// independent of that migration's own backfill for pre-existing workspaces,
+// which seeds directly from the old global rows; the two lists happen to share
+// the same 4 entries today but are not the same code path.
+var defaultConsentPurposes = []struct{ Key, Label string }{
+	{"marketing_email", "Email marketing communications"},
+	{"marketing_phone", "Phone marketing communications"},
+	{"profiling", "Profiling and personalisation"},
+	{"product_updates", "Product update notifications"},
+}
+
 // adminPermissionsJSON is the permission JSONB granted to a workspace's bootstrap
 // admin. It mirrors the seeded `admin` role (see backend/seed/dev.sql): full CRUA on the
 // core objects, read on report, and mint/read/revoke on passport.
@@ -52,19 +78,19 @@ var adminPermissionsJSON = func() string {
 		}
 		return m
 	}
-	crua := []string{httpserver.ActionRead, httpserver.ActionCreate, httpserver.ActionUpdate, httpserver.ActionArchive}
+	crua := []string{platformauth.ActionRead, platformauth.ActionCreate, platformauth.ActionUpdate, platformauth.ActionArchive}
 	perms := map[string]any{
-		httpserver.ObjPerson: all(crua...),
-		"organization":       all(crua...),
-		"deal":               all(crua...),
-		"pipeline":           all(crua...),
-		"activity":           all(crua...),
-		"lead":               all(crua...),
-		"report":             all(httpserver.ActionRead),
-		"passport":           all(httpserver.ActionRead, httpserver.ActionCreate, httpserver.ActionArchive),
-		"approval":           all(httpserver.ActionRead, "decide"),
-		"workspace":          map[string]any{"manage_members": map[string]any{"row_scope": "all"}},
-		"record_grant":       all(httpserver.ActionRead, httpserver.ActionCreate, httpserver.ActionArchive),
+		platformauth.ObjPerson: all(crua...),
+		"organization":         all(crua...),
+		"deal":                 all(crua...),
+		"pipeline":             all(crua...),
+		"activity":             all(crua...),
+		"lead":                 all(crua...),
+		"report":               all(platformauth.ActionRead),
+		"passport":             all(platformauth.ActionRead, platformauth.ActionCreate, platformauth.ActionArchive),
+		"approval":             all(platformauth.ActionRead, "decide"),
+		"workspace":            map[string]any{"manage_members": map[string]any{"row_scope": "all"}},
+		"record_grant":         all(platformauth.ActionRead, platformauth.ActionCreate, platformauth.ActionArchive),
 	}
 	b, err := json.Marshal(perms)
 	if err != nil {
@@ -106,6 +132,18 @@ func HandleCreateWorkspace(db *sql.DB) http.HandlerFunc {
 			wsID, req.Name, req.Slug, req.BaseCurrency); err != nil {
 			httpserver.WriteProblem(w, http.StatusConflict, httpserver.CodeConflict)
 			return
+		}
+		// D2 step 7: seed this workspace's own consent_purpose rows in the same
+		// tx — without this, every person_consent/consent_event insert (which
+		// FKs to consent_purpose) would fail for a workspace created after
+		// migration 000070 widened consent_purpose to per-workspace.
+		for _, cp := range defaultConsentPurposes {
+			if _, err := tx.ExecContext(r.Context(),
+				`INSERT INTO consent_purpose (workspace_id, key, label) VALUES ($1::uuid, $2, $3)`,
+				wsID, cp.Key, cp.Label); err != nil {
+				httpserver.WriteInternal(w)
+				return
+			}
 		}
 		if _, err := tx.ExecContext(r.Context(),
 			`INSERT INTO app_user (id, workspace_id, email, display_name, password_hash)
@@ -168,7 +206,7 @@ func HandleLogin(db *sql.DB, sessions *crmauth.SessionStore) http.HandlerFunc {
 			httpserver.WriteInternal(w)
 			return
 		}
-		rawToken, err := sessions.Create(r.Context(), workspaceID, userID)
+		rawToken, err := sessions.Create(r.Context(), workspaceID, userID, r.UserAgent(), clientIP(r))
 		if err != nil {
 			httpserver.WriteInternal(w)
 			return
@@ -196,7 +234,10 @@ func HandleLogout(sessions *crmauth.SessionStore) http.HandlerFunc {
 		cookie, err := r.Cookie(crmauth.CookieName)
 		if err == nil {
 			if rec, err := sessions.Lookup(r.Context(), cookie.Value); err == nil {
-				_ = sessions.Delete(r.Context(), rec.WorkspaceID, rec.ID)
+				// Soft-revoke on logout (D4): the restored revoked_at column is
+				// the real writer for "this session must stop authenticating",
+				// not a hard delete.
+				_ = sessions.Revoke(r.Context(), rec.ID, rec.WorkspaceID)
 			}
 		}
 		// Mirror the login cookie's attributes on the clearing cookie so browsers
@@ -240,7 +281,9 @@ func HandleCreatePassport(db *sql.DB, passports *crmauth.PassportStore) http.Han
 			httpserver.WriteProblem(w, http.StatusUnprocessableEntity, httpserver.CodeScopeExceeded)
 			return
 		}
-		rawToken, rec, err := passports.Create(r.Context(), p.TenantID, p.UserID, req.Scopes,
+		// No distinct on-behalf-of principal is carried by this request today,
+		// so on_behalf_of defaults to the granting human themselves.
+		rawToken, rec, err := passports.Create(r.Context(), p.TenantID, p.UserID, p.UserID, "", req.Scopes,
 			time.Duration(req.ExpiresInSeconds)*time.Second)
 		if err != nil {
 			httpserver.WriteInternal(w)

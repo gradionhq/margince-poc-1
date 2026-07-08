@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/gradionhq/margince/backend/pkg/jurisdiction"
+	"github.com/gradionhq/margince/backend/pkg/shared/ports/jurisdiction"
 )
 
 func TestJurisdictionWired(t *testing.T) {

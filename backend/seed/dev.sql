@@ -13,6 +13,22 @@ INSERT INTO workspace (id, name, slug, base_currency)
 VALUES ('00000000-0000-0000-0000-000000000001', 'Dev Workspace', 'dev', 'EUR')
 ON CONFLICT (id) DO NOTHING;
 
+-- ─── Consent purposes (D2 / migration 000070_ws_c_conformance) ─────
+-- consent_purpose went per-workspace in 000070; its own backfill clones
+-- existing workspaces' purposes at MIGRATE time, which runs before this seed
+-- ever creates the dev workspace, so it clones 0 rows for it. The signup
+-- handler (auth_handler.go's defaultConsentPurposes) seeds these 4 for any
+-- newly-signed-up workspace, but the dev workspace is inserted via raw SQL
+-- above, bypassing that path too — so it must be seeded here, mirroring the
+-- same 4 keys/labels.
+INSERT INTO consent_purpose (workspace_id, key, label)
+VALUES
+  ('00000000-0000-0000-0000-000000000001', 'marketing_email', 'Email marketing communications'),
+  ('00000000-0000-0000-0000-000000000001', 'marketing_phone', 'Phone marketing communications'),
+  ('00000000-0000-0000-0000-000000000001', 'profiling',       'Profiling and personalisation'),
+  ('00000000-0000-0000-0000-000000000001', 'product_updates', 'Product update notifications')
+ON CONFLICT (workspace_id, key) DO UPDATE SET label = EXCLUDED.label;
+
 -- ─── Sample people ──────────────────────────────────────────
 
 INSERT INTO person (id, workspace_id, full_name, source, captured_by)

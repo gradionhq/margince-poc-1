@@ -29,10 +29,10 @@ func TestSessionPassport_RLSBackstop(t *testing.T) {
 	userB := seedUser(t, db, wsB)
 
 	sessions := crmauth.NewSessionStore(db)
-	if _, err := sessions.Create(ctx, wsA, userA); err != nil {
+	if _, err := sessions.Create(ctx, wsA, userA, "", ""); err != nil {
 		t.Fatalf("create session A: %v", err)
 	}
-	if _, err := sessions.Create(ctx, wsB, userB); err != nil {
+	if _, err := sessions.Create(ctx, wsB, userB, "", ""); err != nil {
 		t.Fatalf("create session B: %v", err)
 	}
 
@@ -48,10 +48,10 @@ func TestSessionPassport_RLSBackstop(t *testing.T) {
 	}
 
 	passports := crmauth.NewPassportStore(db)
-	if _, _, err := passports.Create(ctx, wsA, userA, []string{"read"}, 3600e9); err != nil {
+	if _, _, err := passports.Create(ctx, wsA, userA, userA, "", []string{"read"}, 3600e9); err != nil {
 		t.Fatalf("create passport A: %v", err)
 	}
-	if _, _, err := passports.Create(ctx, wsB, userB, []string{"read"}, 3600e9); err != nil {
+	if _, _, err := passports.Create(ctx, wsB, userB, userB, "", []string{"read"}, 3600e9); err != nil {
 		t.Fatalf("create passport B: %v", err)
 	}
 

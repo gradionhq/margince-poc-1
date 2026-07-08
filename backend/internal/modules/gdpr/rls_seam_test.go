@@ -12,7 +12,7 @@ import (
 // must route through it (database.WithWorkspaceTx or database.SetWorkspaceScope) instead
 // of opening its own tx and setting the GUC without an accompanying role switch.
 func TestNoRawSetConfig(t *testing.T) {
-	files := []string{"erasure.go", "sar.go", "evaluator.go", "consent.go"}
+	files := []string{"adapters/erasure.go", "adapters/sar.go", "adapters/evaluator.go", "adapters/consent.go"}
 	pattern := regexp.MustCompile(`set_config\(\s*'app\.workspace_id'`)
 	for _, f := range files {
 		b, err := os.ReadFile(f)

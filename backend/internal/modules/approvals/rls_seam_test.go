@@ -11,9 +11,9 @@ import (
 // WS-A design deviation D1) — they must call database.SetWorkspaceScope on
 // their caller-supplied tx instead.
 func TestDeciderUsesSetWorkspaceScope(t *testing.T) {
-	b, err := os.ReadFile("decision.go")
+	b, err := os.ReadFile("app/decision.go")
 	if err != nil {
-		t.Fatalf("read decision.go: %v", err)
+		t.Fatalf("read app/decision.go: %v", err)
 	}
 	if regexp.MustCompile(`set_config\(\s*'app\.workspace_id'`).Match(b) {
 		t.Error("decision.go still contains a raw set_config('app.workspace_id' call — use database.SetWorkspaceScope")

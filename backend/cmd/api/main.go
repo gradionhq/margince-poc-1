@@ -17,34 +17,30 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/riverqueue/river"
 
-	"github.com/gradionhq/margince/backend/internal/platform/httpserver"
-	obs "github.com/gradionhq/margince/backend/internal/shared/kernel/obs"
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
+	crmgdpr "github.com/gradionhq/margince/backend/internal/modules/gdpr"
+	platformauth "github.com/gradionhq/margince/backend/internal/platform/auth"
+	platformconfig "github.com/gradionhq/margince/backend/internal/platform/config"
+	"github.com/gradionhq/margince/backend/internal/platform/events"
+	platformlogger "github.com/gradionhq/margince/backend/internal/platform/logger"
 	crmmigrate "github.com/gradionhq/margince/backend/internal/shared/ports/migrate"
-	"github.com/gradionhq/margince/backend/pkg/jurisdiction"
+	"github.com/gradionhq/margince/backend/pkg/shared/ports/jurisdiction"
 )
 
 func main() {
-	// Composition-switch probe: must run before any infra dial so the composition
-	// test and UAT can invoke it with zero infrastructure.
 	printJuris := flag.Bool("print-jurisdictions", false, "print linked jurisdiction codes and exit")
-	// -migrate aggregates core + every ENABLED pack's migrations. "Enabled" =
-	// "linked & registered": the existing compile-time switch is the gate, so a
-	// `-tags nopacks` binary migrates core only while a DACH build migrates
-	// core+DE. There is NO migration-specific build tag. Runs in this pre-infra
-	// zone so a migrate run never dials river/redis/AI.
 	migrateFlag := flag.Bool("migrate", false, "apply core + enabled-pack migrations to DATABASE_URL and exit")
 	flag.Parse()
 	if *printJuris {
 		codes := jurisdiction.Codes()
 		sort.Strings(codes)
-		// Machine-readable probe output: one code per line on stdout, parsed by the
-		// composition test. Fprintln (not slog) keeps the contract clean of log noise.
 		_, _ = fmt.Fprintln(os.Stdout, strings.Join(codes, "\n"))
 		os.Exit(0)
 	}
 
-	cfg, err := loadConfig()
+	cfg, err := platformconfig.Load()
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
@@ -60,7 +56,7 @@ func main() {
 	if cfg.LogFormat == "text" {
 		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	} else {
-		slog.SetDefault(slog.New(obs.NewJSONHandler(os.Stdout)))
+		slog.SetDefault(slog.New(platformlogger.NewJSONHandler(os.Stdout)))
 	}
 
 	slog.Info(
@@ -71,21 +67,14 @@ func main() {
 		"jurisdictions_linked", jurisdiction.Codes(),
 	)
 
-	// serve owns every infra dial behind a returned error, so all fatals collapse
-	// to this one site — no log.Fatal stranded behind a defer (gocritic exitAfterDefer).
 	if err := serve(cfg); err != nil {
 		log.Fatal(err)
 	}
 }
 
-// serverReadHeaderTimeout bounds how long a client may take to send request
-// headers before the server gives up — the Slowloris guard gosec G114 asks for.
 const serverReadHeaderTimeout = 10 * time.Second
 
-// serve dials infrastructure (db, River, Redis, AI runtime), wires the route mux,
-// and blocks in ListenAndServe. It returns the first fatal error rather than
-// calling log.Fatal itself, so its deferred cleanup always runs.
-func serve(cfg Config) error {
+func serve(cfg platformconfig.Config) error {
 	db, err := sql.Open("postgres", cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("open db: %w", err)
@@ -95,9 +84,9 @@ func serve(cfg Config) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rdb, redisOK := newRedisClient(cfg)
+	rdb, redisOK := events.NewRedisClient(cfg.RedisURL)
 	if redisOK {
-		startOutboxRelay(ctx, db, rdb)
+		events.StartOutboxRelay(ctx, db, rdb)
 	}
 	defer func() {
 		if rdb != nil {
@@ -105,7 +94,24 @@ func serve(cfg Config) error {
 		}
 	}()
 
-	riverClient, err := setupRiver(ctx, db, rdb, cfg)
+	workers := river.NewWorkers()
+	river.AddWorker(workers, crmgdpr.NewRetentionWorker(db))
+	river.AddWorker(workers, crmapprovals.NewExpiryWorker(db))
+
+	periodicJobs := []*river.PeriodicJob{
+		river.NewPeriodicJob(
+			river.PeriodicInterval(24*time.Hour),
+			func() (river.JobArgs, *river.InsertOpts) { return crmgdpr.RetentionSweepArgs{}, nil },
+			&river.PeriodicJobOpts{RunOnStart: false},
+		),
+		river.NewPeriodicJob(
+			river.PeriodicInterval(time.Hour),
+			func() (river.JobArgs, *river.InsertOpts) { return crmapprovals.ExpiryArgs{}, nil },
+			&river.PeriodicJobOpts{RunOnStart: false},
+		),
+	}
+
+	riverClient, err := events.SetupRiver(ctx, db, workers, periodicJobs)
 	if err != nil {
 		return fmt.Errorf("setup river: %w", err)
 	}
@@ -115,11 +121,9 @@ func serve(cfg Config) error {
 	mux := buildMux(ctx, db, cfg, riverClient)
 
 	slog.Info("listening", "addr", cfg.Addr)
-	// An explicit Server with a ReadHeaderTimeout bounds slow-header (Slowloris)
-	// clients; the bare http.ListenAndServe has none (gosec G114).
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpserver.LogRequest(mux),
+		Handler:           platformauth.LogRequest(mux),
 		ReadHeaderTimeout: serverReadHeaderTimeout,
 	}
 	return srv.ListenAndServe()

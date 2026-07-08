@@ -14,7 +14,11 @@ import (
 
 	_ "github.com/lib/pq"
 
-	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
+	activities "github.com/gradionhq/margince/backend/internal/modules/activities"
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
+	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
+	people "github.com/gradionhq/margince/backend/internal/modules/people"
+	relationships "github.com/gradionhq/margince/backend/internal/modules/relationships"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
 
@@ -41,14 +45,14 @@ func withRestoreWorkspace(r *http.Request, wsID string) *http.Request {
 
 func TestPersonHandler_Restore_ArchivedPerson(t *testing.T) {
 	db := openPersonHandlerRestoreTestDB(t)
-	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store, directory.NewRelationshipStore(db), directory.NewDealStore(db), directory.NewActivityStore(db), db)
+	store := people.NewPersonStore(db)
+	h := NewPersonHandler(store, relationships.NewRelationshipStore(db), deals.NewDealStore(db), activities.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 
 	seedWorkspace(t, db, personRestoreHandlerWS)
 	setRLS(t, db, personRestoreHandlerWS)
 
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: personRestoreHandlerWS, UserID: "human:test"})
-	created, err := store.Create(ctx, directory.Person{
+	created, err := store.Create(ctx, people.Person{
 		WorkspaceID: personRestoreHandlerWS,
 		FullName:    "Handler Restore",
 		Source:      "test",
@@ -69,7 +73,7 @@ func TestPersonHandler_Restore_ArchivedPerson(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("POST /people/{id}/restore status=%d want 200, body=%s", w.Code, w.Body.String())
 	}
-	var restored directory.Person
+	var restored people.Person
 	if err := json.NewDecoder(w.Body).Decode(&restored); err != nil {
 		t.Fatalf("decode restore response: %v", err)
 	}
@@ -80,14 +84,14 @@ func TestPersonHandler_Restore_ArchivedPerson(t *testing.T) {
 
 func TestPersonHandler_Restore_RefusesLiveRecord(t *testing.T) {
 	db := openPersonHandlerRestoreTestDB(t)
-	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store, directory.NewRelationshipStore(db), directory.NewDealStore(db), directory.NewActivityStore(db), db)
+	store := people.NewPersonStore(db)
+	h := NewPersonHandler(store, relationships.NewRelationshipStore(db), deals.NewDealStore(db), activities.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 
 	seedWorkspace(t, db, personRestoreHandlerWS)
 	setRLS(t, db, personRestoreHandlerWS)
 
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: personRestoreHandlerWS, UserID: "human:test"})
-	created, err := store.Create(ctx, directory.Person{
+	created, err := store.Create(ctx, people.Person{
 		WorkspaceID: personRestoreHandlerWS,
 		FullName:    "Live Handler Restore",
 		Source:      "test",
@@ -131,14 +135,14 @@ func TestPersonHandler_Restore_RefusesLiveRecord(t *testing.T) {
 
 func TestPersonHandler_Restore_RefusesMergedRecord(t *testing.T) {
 	db := openPersonHandlerRestoreTestDB(t)
-	store := directory.NewPersonStore(db)
-	h := NewPersonHandler(store, directory.NewRelationshipStore(db), directory.NewDealStore(db), directory.NewActivityStore(db), db)
+	store := people.NewPersonStore(db)
+	h := NewPersonHandler(store, relationships.NewRelationshipStore(db), deals.NewDealStore(db), activities.NewActivityStore(db), &crmapprovals.DBVerifier{DB: db})
 
 	seedWorkspace(t, db, personRestoreHandlerWS)
 	setRLS(t, db, personRestoreHandlerWS)
 
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: personRestoreHandlerWS, UserID: "human:test"})
-	survivor, err := store.Create(ctx, directory.Person{
+	survivor, err := store.Create(ctx, people.Person{
 		WorkspaceID: personRestoreHandlerWS,
 		FullName:    "Survivor Person",
 		Source:      "test",
@@ -147,7 +151,7 @@ func TestPersonHandler_Restore_RefusesMergedRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create survivor person: %v", err)
 	}
-	merged, err := store.Create(ctx, directory.Person{
+	merged, err := store.Create(ctx, people.Person{
 		WorkspaceID: personRestoreHandlerWS,
 		FullName:    "Merged Handler Person",
 		Source:      "test",

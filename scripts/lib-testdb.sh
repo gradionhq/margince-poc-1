@@ -44,7 +44,7 @@ bucket_for() { echo "${2:-${BLOBSTORE_BUCKET:-transcripts}}-p${1}"; }
 # match against the go.work module roots). Returns 1 if DIR is in no known module.
 module_for() {
   local dir="${1%/}" m best="" rel
-  for m in backend crm-de cli/crm-gen cli/craft; do
+  for m in backend jurisdictions/de cli/crm-gen cli/craft; do
     case "$dir/" in "$m"/*) [ ${#m} -gt ${#best} ] && best="$m" ;; esac
   done
   [ -n "$best" ] || return 1

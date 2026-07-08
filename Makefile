@@ -1,13 +1,13 @@
 # Margince WP0 gates. See docs/plans/2026-06-24-wp0-repo-foundation-setup.md
 # GNU make 3.81 compatible (recipes use real tabs).
 
-GO_DIRS  := backend crm-de cli/crm-gen cli/craft
+GO_DIRS  := backend jurisdictions/de cli/crm-gen cli/craft
 SEED_DIR := backend/seed
 # Use host psql when available; otherwise fall back to psql inside the infra-postgres container.
 PSQL     := $(if $(shell command -v psql),PGPASSWORD=margince psql -h localhost -U margince -d margince,docker exec -i -e PGPASSWORD=margince infra-postgres-1 psql -U margince -d margince)
 # Same fallback, but against the postgres maintenance DB — needed for CREATE/DROP DATABASE.
 PSQL_ADMIN := $(if $(shell command -v psql),PGPASSWORD=margince psql -h localhost -U margince -d postgres,docker exec -i -e PGPASSWORD=margince infra-postgres-1 psql -U margince -d postgres)
-GOFILES := $(shell find backend crm-de cli -name "*.go" 2>/dev/null)
+GOFILES := $(shell find backend jurisdictions/de cli -name "*.go" 2>/dev/null)
 GO_COVER_MIN := 0
 DOCKER_COMPOSE := $(if $(shell docker compose version >/dev/null 2>&1 && echo yes),docker compose,docker-compose)
 COMPOSE := $(DOCKER_COMPOSE) -f infra/docker-compose.dev.yml
@@ -40,7 +40,7 @@ GOLANGCI_CONFIG := $(CURDIR)/.golangci.yml
 # cache inside $(CURDIR) gives every worktree — and the main checkout — its own.
 export GOLANGCI_LINT_CACHE := $(CURDIR)/.tmp/golangci-cache
 
-.PHONY: help check check-backend check-q check-go check-fe check-fe-static check-craft-doc check-doc-style craft fmt fmt-check vet lint go-file-length test test-v test-cover test-cover-check test-integration test-it test-integration-serial test-liveuat test-lanes arch-lint fitness-jurisdiction audit-coverage audit-coherence rls-store-path contract-lint gen-types gen-types-check contract-breaking-check gen-field gen-manifests gen-manifests-check tools tools-go tidy build run dev psql clean install fe-install fe-playwright fe-build fe-preview fe-lint fe-typecheck fe-format fe-dev storybook fe-test test-contracts infra-up infra-down infra-reset infra-logs db-wait migrate-up migrate-down migrate-status migrate-create test-db-up test-db-reset seed seed-dev seed-reset ds-purity font-lock icon-lint check-image-pins uat_env uat_env_stop fe-uat
+.PHONY: help check check-backend check-q check-go check-fe check-fe-static check-craft-doc check-doc-style craft fmt fmt-check vet lint go-file-length test test-v test-cover test-cover-check test-integration test-it test-integration-serial test-liveuat test-lanes arch-lint fitness-jurisdiction audit-coverage audit-coherence rls-store-path contract-lint gen-types gen-types-check contract-breaking-check gen-field gen-manifests gen-manifests-check gen-mcp-tools gen-mcp-tools-check tools tools-go tidy build run dev psql clean install fe-install fe-playwright fe-build fe-preview fe-lint fe-typecheck fe-format fe-dev storybook fe-test test-contracts infra-up infra-down infra-reset infra-logs db-wait migrate-up migrate-down migrate-status migrate-create test-db-up test-db-reset seed seed-dev seed-reset ds-purity font-lock icon-lint check-image-pins uat_env uat_env_stop fe-uat
 
 help: ## Show targets
 	@grep -hE "^[a-zA-Z_-]+:.*## " $(MAKEFILE_LIST) | awk "BEGIN{FS=\":.*## \"}{printf \"  %-20s %s\\n\",\$$1,\$$2}"
@@ -54,7 +54,7 @@ check: check-backend check-fe ## The gate: backend (format→lint→invariants�
 # Backend half of the gate — everything except the FE static+tests. CI's
 # backend-gates job runs exactly this, keeping CI one-to-one with local `make check`.
 check-backend: fmt-check vet lint go-file-length \
-       gen-types-check contract-breaking-check gen-manifests-check arch-lint fitness-jurisdiction \
+       gen-types-check contract-breaking-check gen-manifests-check gen-mcp-tools-check arch-lint fitness-jurisdiction \
        audit-coverage audit-coherence rls-store-path check-craft-doc check-doc-style check-image-pins test-lanes \
        test ## Backend gate: format → lint → codegen-drift → DAG/invariants → Go unit tests
 	@echo "OK: make check-backend passed"
@@ -189,6 +189,12 @@ gen-manifests: ## Regenerate backend/cmd/api/imports_gen.go from self-registered
 gen-manifests-check: ## Fail if backend/cmd/api/imports_gen.go drifts from connectors/workflows/tools dirs
 	@$(MAKE) gen-manifests
 	@git diff --exit-code backend/cmd/api/imports_gen.go
+gen-mcp-tools: ## Regenerate backend/internal/shared/ports/mcp/tools_gen.go from crm.yaml's x-mcp-tool annotations
+	@cd cli/crm-gen && go build -o ../../bin/crm-gen . && cd ../..
+	@./bin/crm-gen mcp-tools
+gen-mcp-tools-check: ## Fail if tools_gen.go drifts from crm.yaml's x-mcp-tool annotations
+	@$(MAKE) gen-mcp-tools
+	@git diff --exit-code backend/internal/shared/ports/mcp/tools_gen.go
 
 craft: ## Build the craftsmanship gate CLI (review / annotate / residue / eval / dispute)
 	@cd cli/craft && go build -o ../../bin/craft . && echo "built bin/craft"

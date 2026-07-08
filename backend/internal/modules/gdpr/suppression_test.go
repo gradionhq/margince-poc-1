@@ -1,11 +1,15 @@
-package crmgdpr
+package crmgdpr_test
 
-import "testing"
+import (
+	"testing"
+
+	crmgdpr "github.com/gradionhq/margince/backend/internal/modules/gdpr"
+)
 
 func TestHash_StableAndCaseInsensitive(t *testing.T) {
-	h1 := Hash("Alice@Example.COM")
-	h2 := Hash("alice@example.com")
-	h3 := Hash("  alice@example.com  ")
+	h1 := crmgdpr.Hash("Alice@Example.COM")
+	h2 := crmgdpr.Hash("alice@example.com")
+	h3 := crmgdpr.Hash("  alice@example.com  ")
 	if h1 != h2 {
 		t.Errorf("Hash case-sensitive: %q != %q", h1, h2)
 	}
@@ -18,7 +22,7 @@ func TestHash_StableAndCaseInsensitive(t *testing.T) {
 }
 
 func TestHash_DifferentEmailsDifferentHashes(t *testing.T) {
-	if Hash("a@b.com") == Hash("c@d.com") {
+	if crmgdpr.Hash("a@b.com") == crmgdpr.Hash("c@d.com") {
 		t.Error("different emails must produce different hashes")
 	}
 }

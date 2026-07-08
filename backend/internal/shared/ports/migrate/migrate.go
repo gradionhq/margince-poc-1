@@ -26,7 +26,7 @@ import (
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/lib/pq" // registers the "postgres" database/sql driver
 
-	"github.com/gradionhq/margince/backend/pkg/jurisdiction"
+	"github.com/gradionhq/margince/backend/pkg/shared/ports/jurisdiction"
 )
 
 // packTable is the per-pack version-tracking table for a jurisdiction code,

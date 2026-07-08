@@ -7,21 +7,21 @@ import (
 	"errors"
 	"testing"
 
-	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
 	apperrors "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
 func TestStageStore_Update_TerminalProbabilityPinned_Returns422(t *testing.T) {
 	wsID := ids.New()
-	db := openTestDB(t)
-	setRLS(t, db, wsID)
-	seedWorkspace(t, db, wsID)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsID)
+	pgtest.SeedWorkspace(t, db, wsID)
 	ctx := context.Background()
 
 	pstore := NewPipelineStore(db)
-	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "Update Test " + uniq()})
+	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "Update Test " + pgtest.Uniq()})
 	if err != nil {
 		t.Fatal("create pipeline:", err)
 	}
@@ -42,13 +42,13 @@ func TestStageStore_Update_TerminalProbabilityPinned_Returns422(t *testing.T) {
 
 func TestStageStore_Update_WinProbabilityOutOfRange_Returns422(t *testing.T) {
 	wsID := ids.New()
-	db := openTestDB(t)
-	setRLS(t, db, wsID)
-	seedWorkspace(t, db, wsID)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsID)
+	pgtest.SeedWorkspace(t, db, wsID)
 	ctx := context.Background()
 
 	pstore := NewPipelineStore(db)
-	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "Range Test " + uniq()})
+	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "Range Test " + pgtest.Uniq()})
 	if err != nil {
 		t.Fatal("create pipeline:", err)
 	}
@@ -69,17 +69,17 @@ func TestStageStore_Update_WinProbabilityOutOfRange_Returns422(t *testing.T) {
 
 func TestPipelineStore_Update_DefaultCollision_Returns409(t *testing.T) {
 	wsID := ids.New()
-	db := openTestDB(t)
-	setRLS(t, db, wsID)
-	seedWorkspace(t, db, wsID)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsID)
+	pgtest.SeedWorkspace(t, db, wsID)
 	ctx := context.Background()
 
 	pstore := NewPipelineStore(db)
-	a, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "A " + uniq(), IsDefault: true})
+	a, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "A " + pgtest.Uniq(), IsDefault: true})
 	if err != nil {
 		t.Fatal("create pipeline A:", err)
 	}
-	b, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "B " + uniq()})
+	b, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "B " + pgtest.Uniq()})
 	if err != nil {
 		t.Fatal("create pipeline B:", err)
 	}
@@ -93,13 +93,13 @@ func TestPipelineStore_Update_DefaultCollision_Returns409(t *testing.T) {
 
 func TestStageStore_Update_PositionCollision_Returns409(t *testing.T) {
 	wsID := ids.New()
-	db := openTestDB(t)
-	setRLS(t, db, wsID)
-	seedWorkspace(t, db, wsID)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsID)
+	pgtest.SeedWorkspace(t, db, wsID)
 	ctx := context.Background()
 
 	pstore := NewPipelineStore(db)
-	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "PosCollide " + uniq()})
+	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "PosCollide " + pgtest.Uniq()})
 	if err != nil {
 		t.Fatal("create pipeline:", err)
 	}
@@ -122,19 +122,18 @@ func TestStageStore_Update_PositionCollision_Returns409(t *testing.T) {
 // TestStageStore_Update_WinProbabilitySuccess_ReflectsLiveOnDeal covers UAT-5:
 // PATCH /stages/{id} retuning a non-terminal stage's win_probability, then
 // re-reading a deal in that stage, must reflect the new probability
-// immediately (not cached). The `deals` module doesn't own the deal store
-// (it stayed in `modules/directory` per T11), so this test wires the two
-// stores against the same underlying connection to exercise the real
-// deal->stage read path end to end.
+// immediately (not cached). This test wires the deal store and stage store
+// against the same underlying connection to exercise the real deal->stage
+// read path end to end.
 func TestStageStore_Update_WinProbabilitySuccess_ReflectsLiveOnDeal(t *testing.T) {
 	wsID := ids.New()
-	db := openTestDB(t)
-	setRLS(t, db, wsID)
-	seedWorkspace(t, db, wsID)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsID)
+	pgtest.SeedWorkspace(t, db, wsID)
 	ctx := context.Background()
 
 	pstore := NewPipelineStore(db)
-	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "Retune Test " + uniq()})
+	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "Retune Test " + pgtest.Uniq()})
 	if err != nil {
 		t.Fatal("create pipeline:", err)
 	}
@@ -147,8 +146,8 @@ func TestStageStore_Update_WinProbabilitySuccess_ReflectsLiveOnDeal(t *testing.T
 		t.Fatal("create qualified stage:", err)
 	}
 
-	dealStore := directory.NewDealStore(db)
-	deal := directory.NewDeal("Retune Deal "+uniq(), pl.ID, qualified.ID,
+	dealStore := NewDealStore(db)
+	deal := NewDeal("Retune Deal "+pgtest.Uniq(), pl.ID, qualified.ID,
 		prov.Provenance{Source: "unit-test", CapturedBy: "unit-test"})
 	deal.WorkspaceID = wsID
 	created, err := dealStore.Create(ctx, deal, "")
@@ -174,7 +173,7 @@ func TestStageStore_Update_WinProbabilitySuccess_ReflectsLiveOnDeal(t *testing.T
 		t.Fatalf("expected re-read stage WinProbability=30, got %v", reread.WinProbability)
 	}
 
-	// directory.Deal carries no win_probability-shaped field at all (see
+	// deals.Deal carries no win_probability-shaped field at all (see
 	// crmcore.go) -- a deal's win probability is always read live off its
 	// stage via the deal's stage_id FK, never denormalized/cached onto the
 	// deal row. Re-reading the deal after the stage retune confirms the deal

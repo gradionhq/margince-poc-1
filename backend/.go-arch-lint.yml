@@ -11,12 +11,30 @@ version: 3
 #    Production (non-test) cross-layer edges remain fully checked — that is the real signal.
 #    Integration tests living in external `_test` packages necessarily wire sibling modules
 #    to exercise the real pipeline; that is test composition, not a production dependency.
+#
+# AC-E6 confirmed (GH-81 Task 10, WS-E-f): zero `mayDependOn` exceptions remain beyond
+# Tier-0 kernel/port seams and Tier-1 platform components. The three originally-flagged
+# illegal edges are gone: httpserver→identity (resolved by Task 7: httpserver now depends
+# on the Tier-0 `session` port instead), people→directory+approvals and dealtransport→
+# directory+deals+approvals (both resolved by Task 6's catalog split: `directory` and
+# `dealtransport` no longer exist), and every domain module now reaches approval-gating
+# through the Tier-0 `approvalsport` seam instead of the `approvals` domain module
+# directly (Task 3/D9). Re-verify with `make arch-lint` — it reports "OK - No warnings
+# found" with zero notices.
+#
 excludeFiles:
   - ".*_test\\.go$"
   # cmd/api is the composition root (main package), not a DAG-governed component — same
   # scope as pre-merge, when it lived in the separate cmd/server module this file never
   # scanned (1c module merge, task-2-brief.md: "keep scope identical").
   - "/cmd/api/.*\\.go$"
+  # internal/contracts/server (AC-D3/D10) is the oapi-codegen ServerInterface
+  # adapter layer: one struct per crm.yaml tag, each embedding the real
+  # handler(s) from whichever module owns that tag, aggregated into
+  # AllOperations. Its whole purpose is to import across every transport
+  # module, same composition-root shape as cmd/api above — not a DAG-governed
+  # domain component.
+  - "/internal/contracts/server/.*\\.go$"
 allow:
   deepScan: false        # init()-based self-registration triggers false positives in deepScan
 # Vendor allow-list (replaces depOnAnyVendor). A component may import only the vendors named
@@ -28,6 +46,7 @@ vendors:
   redis:   { in: "github.com/redis/go-redis**" }
   migrate: { in: "github.com/golang-migrate/migrate**" }
   oapi:    { in: "github.com/oapi-codegen/runtime**" }
+  chi:     { in: "github.com/go-chi/chi/v5**" }
   minio:   { in: "github.com/minio/minio-go**" }
   uuid:    { in: "github.com/google/uuid" }
   yaml:    { in: "gopkg.in/yaml.v3" }
@@ -35,42 +54,114 @@ vendors:
   text:    { in: "golang.org/x/text**" }
 components:
   # Tier-0 shared kernel (dependency-free leaf layer)
-  obs:          { in: internal/shared/kernel/obs }
   crmctx:       { in: internal/shared/kernel/crmctx }
   ids:          { in: internal/shared/kernel/ids }
   errs:         { in: internal/shared/apperrors }
   prov:         { in: internal/shared/kernel/prov }
   trust:        { in: internal/shared/kernel/trust }
+  authzkern:    { in: internal/shared/kernel/authz }
+  strengthkern: { in: internal/shared/kernel/strength }
+  dedupekern:   { in: internal/shared/kernel/dedupe }
+  sqlutil:      { in: internal/shared/kernel/sqlutil }
+  httpkit:      { in: internal/shared/kernel/httpkit }
+  pgtest:       { in: internal/shared/kernel/pgtest }
   # Tier-0 ports (cross-module seam interfaces)
   wellknown:    { in: internal/shared/ports/wellknown }
   datasource:   { in: internal/shared/ports/datasource }
   mcp:          { in: internal/shared/ports/mcp }
   connector:    { in: internal/shared/ports/connector }
-  workflow:     { in: internal/shared/ports/workflow }
   model:        { in: internal/shared/ports/model }
   retrieval:    { in: internal/shared/ports/retrieval }
-  jurisdiction: { in: pkg/jurisdiction }
+  jurisdiction: { in: pkg/shared/ports/jurisdiction }
   migrate:      { in: internal/shared/ports/migrate }
+  approvalsport: { in: internal/shared/ports/approvals }
+  session:       { in: internal/shared/ports/session }
   # Tier-1 platform (seams WITH impls, cross-cutting)
-  blobstore:  { in: internal/platform/blobstore }
-  keyvault:   { in: internal/platform/keyvault }
-  audit:      { in: internal/platform/audit }
-  database:   { in: internal/platform/database }
-  httpserver: { in: internal/platform/httpserver }
+  # WS-E-d (Task 8, AC-E4): config/events/auth/logger relocated from cmd/api + kernel/obs.
+  logger:       { in: internal/platform/logger }
+  config:       { in: internal/platform/config }
+  events:       { in: internal/platform/events }
+  auth:         { in: internal/platform/auth }
+  blobstore:    { in: internal/platform/blobstore }
+  keyvault:     { in: internal/platform/keyvault }
+  audit:        { in: internal/platform/audit }
+  database:     { in: internal/platform/database }
+  httpserver:   { in: internal/platform/httpserver }
+  toolgate:     { in: internal/platform/toolgate }
   # Tier-1 / Tier-2 domain modules
   identity:          { in: internal/modules/identity }
   identitytransport: { in: internal/modules/identity/transport }
-  directory:         { in: internal/modules/directory }
-  dealtransport:     { in: internal/modules/directory/transport }
+  # Split catalog modules (WS-E-b, Task 6)
+  organizations:           { in: internal/modules/organizations }
+  orgsdomain:              { in: internal/modules/organizations/domain }
+  orgsports:               { in: internal/modules/organizations/ports }
+  orgsadapters:            { in: internal/modules/organizations/adapters }
+  orgsapp:                 { in: internal/modules/organizations/app }
+  orgstransport:           { in: internal/modules/organizations/transport }
+  activities:              { in: internal/modules/activities }
+  activitiesdomain:        { in: internal/modules/activities/domain }
+  activitiesports:         { in: internal/modules/activities/ports }
+  activitiesadapters:      { in: internal/modules/activities/adapters }
+  activitiesapp:           { in: internal/modules/activities/app }
+  activitiestransport:     { in: internal/modules/activities/transport }
+  relationships:           { in: internal/modules/relationships }
+  relsdomain:              { in: internal/modules/relationships/domain }
+  relsports:               { in: internal/modules/relationships/ports }
+  relsadapters:            { in: internal/modules/relationships/adapters }
+  relsapp:                 { in: internal/modules/relationships/app }
+  relstransport:           { in: internal/modules/relationships/transport }
+  leads:                   { in: internal/modules/leads }
+  leadsdomain:             { in: internal/modules/leads/domain }
+  leadsports:              { in: internal/modules/leads/ports }
+  leadsadapters:           { in: internal/modules/leads/adapters }
+  leadsapp:                { in: internal/modules/leads/app }
+  leadstransport:          { in: internal/modules/leads/transport }
+  partners:                { in: internal/modules/partners }
+  partnersdomain:          { in: internal/modules/partners/domain }
+  partnersports:           { in: internal/modules/partners/ports }
+  partnersadapters:        { in: internal/modules/partners/adapters }
+  partnersapp:             { in: internal/modules/partners/app }
+  partnerstransport:       { in: internal/modules/partners/transport }
+  audithistory:            { in: internal/modules/audithistory }
+  audithistorydomain:      { in: internal/modules/audithistory/domain }
+  audithistoryports:       { in: internal/modules/audithistory/ports }
+  audithistoryadapters:    { in: internal/modules/audithistory/adapters }
+  audithistoryapp:         { in: internal/modules/audithistory/app }
+  audithistorytransport:   { in: internal/modules/audithistory/transport }
+  datasourcebindings:      { in: internal/modules/datasourcebindings }
+  datasourcebindingsdomain: { in: internal/modules/datasourcebindings/domain }
+  datasourcebindingsports: { in: internal/modules/datasourcebindings/ports }
+  datasourcebindingsadapters: { in: internal/modules/datasourcebindings/adapters }
+  datasourcebindingsapp:   { in: internal/modules/datasourcebindings/app }
   deals:             { in: internal/modules/deals }
   dealstransport:    { in: internal/modules/deals/transport }
-  people:            { in: internal/modules/people/transport }
+  dealsdomain:       { in: internal/modules/deals/domain }
+  dealsports:        { in: internal/modules/deals/ports }
+  dealsadapters:     { in: internal/modules/deals/adapters }
+  dealsapp:          { in: internal/modules/deals/app }
+  people:            { in: internal/modules/people }
+  peopledomain:      { in: internal/modules/people/domain }
+  peopleports:       { in: internal/modules/people/ports }
+  peopleadapters:    { in: internal/modules/people/adapters }
+  peopleapp:         { in: internal/modules/people/app }
+  peopletransport:   { in: internal/modules/people/transport }
   contracts:         { in: internal/contracts/types }
+  identityadapters:  { in: internal/modules/identity/adapters }
   gdpr:              { in: internal/modules/gdpr }
+  gdprdomain:        { in: internal/modules/gdpr/domain }
+  gdprports:         { in: internal/modules/gdpr/ports }
+  gdpradapters:      { in: internal/modules/gdpr/adapters }
   approvals:         { in: internal/modules/approvals }
+  approvalsdomain:   { in: internal/modules/approvals/domain }
+  approvalsports:    { in: internal/modules/approvals/ports }
+  approvalsadapters: { in: internal/modules/approvals/adapters }
+  approvalsapp:      { in: internal/modules/approvals/app }
 deps:
   # Tier-0 seams + kernel are not listed -> may depend on nothing internal.
   # Exception: datasource aliases errs.ErrVersionSkew (ADR-0036/B-E18.1a) — both are Tier-0.
+  # Exception: session port uses crmctx.Principal as its return type (AC-E3 inversion).
+  session:
+    mayDependOn: [crmctx]
   datasource:
     mayDependOn: [errs, trust]
   migrate:
@@ -80,67 +171,174 @@ deps:
     canUse: [uuid]
   blobstore:
     canUse: [minio]
+  # Kernel utilities (Tier-0, no internal deps beyond shared primitives)
+  dedupekern:
+    canUse: [text]
+  # sqlutil aliases errs.ErrNullProvenance for RequireProvenance; both are Tier-0.
+  sqlutil:
+    mayDependOn: [errs]
+  # httpkit renders problem+json/pagination envelopes; both deps are Tier-0.
+  httpkit:
+    mayDependOn: [errs, crmctx]
+  # pgtest is a non-test integration-test support library (like httptest); it
+  # takes *testing.T and is imported only by (integration-tagged) _test.go files.
+  pgtest:
+    mayDependOn: [crmctx]
+    canUse: [pq]
+  # Tier-1 platform
+  # WS-E-d (Task 8, AC-E4) new platform components:
+  config:
+    mayDependOn: [blobstore, keyvault]
+  events:
+    mayDependOn: [logger]
+    canUse: [river, redis]
+  auth:
+    mayDependOn: [crmctx, logger, session, httpserver]
   identity:
-    mayDependOn: [keyvault, database]
+    mayDependOn: [identityadapters, keyvault]
+  identityadapters:
+    mayDependOn: [keyvault, session, crmctx, database]
     canUse: [crypto]
-  # httpserver (extracted from cmd/api, 1c restructure) wraps auth/session
-  # middleware, so it depends on identity the same way cmd/api used to; its
-  # RFC 7807 problem writer emits the generated contract's Problem type.
   httpserver:
-    mayDependOn: [crmctx, obs, identity, contracts]
-  # identitytransport (extracted from cmd/api, 1c restructure) is the identity
-  # module's HTTP handler layer: it depends on the shared error/middleware
-  # writer (httpserver), the identity domain, audit (role-assignment writes),
-  # and the Tier-0 kernel bits its handlers use directly. canUse: [pq] mirrors
-  # cmd/api's own blank `_ "github.com/lib/pq"` driver-registration import,
-  # carried over unchanged from auth_handler.go's original poc file.
+    mayDependOn: [contracts]
   identitytransport:
-    mayDependOn: [httpserver, identity, audit, crmctx, ids, database]
+    mayDependOn: [httpserver, auth, identity, audit, crmctx, ids, database]
     canUse: [pq]
   audit:
     mayDependOn: [crmctx, ids, database]
   database:
     mayDependOn: [crmctx]
-  # directory is core's successor for the un-mounted spine (org/deal/pipeline/
-  # stage/activity/lead) plus the Person entity/store (see task-3-report.md's
-  # mapping-deviations: Person could not cleanly split out into modules/people
-  # without forcing unexported same-package access in Lead.Promote and
-  # DatasourceProvider to become exported, which this task does not authorize).
-  directory:
-    mayDependOn: [crmctx, datasource, ids, errs, prov, audit, database]
-    canUse: [pq, text] # text: golang.org/x/text/unicode/norm for NFKD unaccent in dedupe.go (T07)
-  deals:
-    mayDependOn: [crmctx, errs, ids, database]
+  # Split catalog modules (WS-E-b, Task 6)
+  orgsdomain:
+    mayDependOn: [prov, ids, dedupekern, strengthkern]
+  orgsports:
+    mayDependOn: [orgsdomain]
+  orgsadapters:
+    mayDependOn: [orgsdomain, errs, ids, prov, database, audit, dedupekern, strengthkern, sqlutil]
     canUse: [pq]
-  # people is the person-specific HTTP transport layer only (handler_person.go);
-  # it depends on directory for the Person type/store (see directory's note
-  # above) plus the Tier-0 kernel bits its handler uses directly. T06 adds
-  # approvals (the X-Approval-Token verify/consume seam) — mergePerson's
-  # 🟡 approval-gate check is an HTTP-boundary concern, made here before the
-  # store's tx opens, same shape as dealtransport's advanceDeal above.
-  people:
-    mayDependOn: [directory, crmctx, errs, prov, approvals]
-  # dealtransport is the deal module's HTTP transport layer (handler_deal.go, T11);
-  # same shape as people above — depends on directory for the Deal type/store plus
-  # the Tier-0 kernel bits its handler uses directly. T12 adds deals (ResolveTier,
-  # the either-endpoint tier resolver) and approvals (the X-Approval-Token
-  # verify/consume seam) — advanceDeal's tier-gate decision is an HTTP-boundary
-  # concern, made here before the store's tx opens.
-  dealtransport:
-    mayDependOn: [directory, crmctx, errs, prov, deals, approvals, database]
-  # dealstransport is the pipeline/stage module's HTTP transport layer
-  # (handler_pipeline.go, handler_stage.go, T10); same shape as
-  # dealtransport/people above — depends on deals for the
-  # Pipeline/Stage type/store plus the Tier-0 kernel bits its handlers use
-  # directly.
+  organizations:
+    mayDependOn: [orgsdomain, orgsadapters]
+  orgstransport:
+    mayDependOn: [orgsadapters, orgsdomain, relationships, relsadapters, relsdomain, deals, dealsadapters, dealsdomain, activities, activitiesadapters, activitiesdomain, approvalsport, toolgate, mcp, crmctx, errs, httpkit]
+  activitiesdomain:
+    mayDependOn: [prov, ids]
+  activitiesports:
+    mayDependOn: [activitiesdomain]
+  activitiesadapters:
+    mayDependOn: [activitiesdomain, errs, ids, database, sqlutil]
+    canUse: [pq]
+  activitiesapp:
+    mayDependOn: [activitiesdomain, activitiesports]
+  activities:
+    mayDependOn: [activitiesdomain, activitiesadapters, activitiesapp, activitiestransport]
+  activitiestransport:
+    mayDependOn: [activities, activitiesadapters, activitiesdomain, crmctx, errs, httpkit]
+  relsdomain:
+    mayDependOn: [prov, ids]
+  relsports:
+    mayDependOn: [relsdomain]
+  relsadapters:
+    mayDependOn: [relsdomain, errs, ids, database, audit, sqlutil]
+    canUse: [pq]
+  relsapp:
+    mayDependOn: [relsports]
+  relationships:
+    mayDependOn: [relsdomain, relsadapters]
+  # relstransport also owns the record_grant HTTP handler (GH-209 WS-B, folded
+  # in via GH-81's merge): peopleadapters for the RecordGrantStore, database for
+  # its own resolveGrantorOwnAccess tx, toolgate/approvalsport/mcp for the 🟡
+  # share_record approval gate.
+  relstransport:
+    mayDependOn: [relationships, relsadapters, relsdomain, crmctx, errs, prov, peopleadapters, database, toolgate, approvalsport, mcp, httpkit]
+  leadsdomain:
+    mayDependOn: [prov, ids]
+  leadsports:
+    mayDependOn: [leadsdomain]
+  leadsadapters:
+    mayDependOn: [leadsdomain, errs, ids, audit, sqlutil]
+    canUse: [pq]
+  leads:
+    mayDependOn: [leadsdomain, leadsadapters, prov]
+  partnersdomain:
+    mayDependOn: [prov, ids]
+  partnersports:
+    mayDependOn: [partnersdomain]
+  partnersadapters:
+    mayDependOn: [partnersdomain, errs, ids, database, audit, sqlutil]
+    canUse: [pq]
+  partners:
+    mayDependOn: [partnersdomain, partnersadapters, prov]
+  partnerstransport:
+    mayDependOn: [partners, partnersadapters, partnersdomain, crmctx, errs, prov, httpkit]
+  audithistorydomain:
+    mayDependOn: [ids]
+  audithistoryports:
+    mayDependOn: [audithistorydomain]
+  audithistoryadapters:
+    mayDependOn: [audithistorydomain, errs, ids, database]
+    canUse: [pq]
+  audithistoryapp:
+    mayDependOn: [audithistorydomain, audithistoryports]
+  audithistorytransport:
+    mayDependOn: [audithistoryadapters, audithistorydomain, audithistoryports, authzkern, crmctx, errs]
+  audithistory:
+    mayDependOn: [audithistorydomain, audithistoryadapters, audithistoryapp, audithistoryports, audithistorytransport, authzkern]
+  datasourcebindingsdomain:
+    mayDependOn: [datasource, ids]
+  datasourcebindingsports:
+    mayDependOn: [datasourcebindingsdomain]
+  datasourcebindingsadapters:
+    mayDependOn: [datasourcebindingsdomain, errs, ids, datasource, datasourcebindingsports]
+    canUse: [pq]
+  datasourcebindings:
+    mayDependOn: [datasourcebindingsdomain, datasourcebindingsadapters, datasourcebindingsports, datasource]
+  # deals additionally depends on mcp (Tier-0) for ResolveDynamicTier.
+  deals:
+    mayDependOn: [dealsdomain, dealsadapters, mcp, prov]
+  dealsdomain:
+    mayDependOn: [mcp, ids, prov]
+  dealsports:
+    mayDependOn: [dealsdomain]
+  dealsadapters:
+    mayDependOn: [dealsdomain, errs, ids, audit, database, sqlutil]
+    canUse: [pq]
+  # dealstransport now owns pipeline/stage AND deal-entity handlers (WS-E-b).
   dealstransport:
-    mayDependOn: [deals, crmctx, errs, prov]
+    mayDependOn: [deals, dealsadapters, dealsdomain, mcp, approvalsport, toolgate, crmctx, errs, prov, activitiesdomain, relsdomain]
+  # people domain uses strengthkern for PersonStrengthFrom; peopledomain composes
+  # ActivityRef/deal/relationship refs (intentional cross-module composite-reference sharing).
+  peopledomain:
+    mayDependOn: [prov, ids, strengthkern, dedupekern, activitiesdomain, dealsdomain, relsdomain]
+  peopleports:
+    mayDependOn: [peopledomain, strengthkern]
+  peopleadapters:
+    mayDependOn: [peopledomain, errs, ids, prov, dedupekern, strengthkern, audit, database, sqlutil]
+    canUse: [pq]
+  people:
+    mayDependOn: [peopledomain, peopleadapters, prov]
+  # peopletransport wires cross-module stores directly (structural typing via seam ifaces
+  # defined locally, but concrete types from sibling modules flow through the constructor).
+  peopletransport:
+    mayDependOn: [people, peopledomain, peopleadapters, relationships, relsadapters, deals, dealsadapters, activities, activitiesadapters, approvalsport, toolgate, mcp, crmctx, errs, prov]
   gdpr:
-    mayDependOn: [crmctx, audit, ids, database]
+    mayDependOn: [gdpradapters, gdprdomain, gdprports, crmctx, audit, ids]
+    canUse: [river]
+  gdprports:
+    mayDependOn: [gdprdomain]
+  gdpradapters:
+    mayDependOn: [gdprdomain, gdprports, audit, errs, ids, crmctx, database]
     canUse: [river]
   approvals:
-    mayDependOn: [mcp, datasource, audit, errs, ids, database]
+    mayDependOn: [approvalsdomain, approvalsports, approvalsadapters, approvalsapp, mcp, datasource, audit, errs, ids, approvalsport]
     canUse: [river]
-  # contracts is generated and imports only the oapi-codegen runtime.
+  approvalsports:
+    mayDependOn: [approvalsdomain]
+  approvalsadapters:
+    mayDependOn: [approvalsdomain, approvalsports, errs, ids, approvalsport, audit, database]
+    canUse: [river]
+  approvalsapp:
+    mayDependOn: [approvalsdomain, approvalsports, datasource, audit, errs, database]
+  toolgate:
+    mayDependOn: [mcp, approvalsport, crmctx, ids]
   contracts:
-    canUse: [oapi]
+    canUse: [oapi, chi]

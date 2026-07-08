@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	coreModPkg = "github.com/gradionhq/margince/backend/internal/modules/directory"
-	packMod    = "github.com/gradionhq/margince/crm-de"
+	coreModPkg = "github.com/gradionhq/margince/backend/internal/modules/people"
+	packMod    = "github.com/gradionhq/margince/jurisdictions/de"
 )
 
 // TestCoreImportsNoPack proves the cross-module boundary go-arch-lint can't model:

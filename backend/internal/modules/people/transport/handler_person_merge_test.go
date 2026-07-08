@@ -12,10 +12,11 @@ import (
 	"time"
 
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
-	directory "github.com/gradionhq/margince/backend/internal/modules/directory"
+	people "github.com/gradionhq/margince/backend/internal/modules/people"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
+	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
 )
 
 // seedAppUser mirrors modules/directory's helpers_shared_test.go helper of
@@ -31,9 +32,9 @@ func seedAppUser(t *testing.T, db *sql.DB, id, wsID string) {
 	}
 }
 
-func createTestPerson(t *testing.T, store *directory.PersonStore, ws, name string) directory.Person {
+func createTestPerson(t *testing.T, store *people.PersonStore, ws, name string) people.Person {
 	t.Helper()
-	p := directory.NewPerson(name, prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	p := people.NewPerson(name, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	p.WorkspaceID = ws
 	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:test", TenantID: ws})
 	created, err := store.Create(ctx, p, nil)
@@ -49,7 +50,7 @@ func TestMergePersonHumanNoTokenSucceeds(t *testing.T) {
 	db := openTestDB(t)
 	ws := ids.New()
 	seedWorkspace(t, db, ws)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	handler := personHandlerForTest(db, store)
 
 	loser := createTestPerson(t, store, ws, "Loser")
@@ -72,7 +73,7 @@ func TestMergePersonAgentRequiresApprovalToken(t *testing.T) {
 	db := openTestDB(t)
 	ws := ids.New()
 	seedWorkspace(t, db, ws)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	handler := personHandlerForTest(db, store)
 	loser := createTestPerson(t, store, ws, "Loser")
 	target := createTestPerson(t, store, ws, "Target")
@@ -94,7 +95,7 @@ func TestMergePersonAgentRequiresApprovalToken(t *testing.T) {
 	// "merge_person"/"merge_organization": a real minted token carries the
 	// declared verb, and VerifyAndConsume does an exact-string match on Tool
 	// (token.go:146). Person vs. org is disambiguated by diff_hash alone.
-	diffHash := crmapprovals.HashDiff(map[string]any{"person_id": loser.ID, "target_id": target.ID})
+	diffHash := approvalsport.HashDiff(map[string]any{"person_id": loser.ID, "target_id": target.ID})
 	token, err := crmapprovals.SignToken(crmapprovals.TokenClaims{
 		JTI: ids.New(), WorkspaceID: ws, Tool: "merge_records", DiffHash: diffHash,
 		Exp: time.Now().Add(time.Hour), SingleUse: true,
@@ -131,7 +132,7 @@ func TestMergePersonSelfMerge422(t *testing.T) {
 	db := openTestDB(t)
 	ws := ids.New()
 	seedWorkspace(t, db, ws)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	handler := personHandlerForTest(db, store)
 	p := createTestPerson(t, store, ws, "Solo")
 
@@ -149,7 +150,7 @@ func TestMergePersonAlreadyMerged422WithPointer(t *testing.T) {
 	db := openTestDB(t)
 	ws := ids.New()
 	seedWorkspace(t, db, ws)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	handler := personHandlerForTest(db, store)
 	a, b, c := createTestPerson(t, store, ws, "A"), createTestPerson(t, store, ws, "B"), createTestPerson(t, store, ws, "C")
 	if _, err := store.Merge(crmctx.With(context.Background(), crmctx.Principal{UserID: "human:t", TenantID: ws}), a.ID, b.ID, ws); err != nil {
@@ -176,7 +177,7 @@ func TestMergePersonConcurrent409VersionSkew(t *testing.T) {
 	db := openTestDB(t)
 	ws := ids.New()
 	seedWorkspace(t, db, ws)
-	store := directory.NewPersonStore(db)
+	store := people.NewPersonStore(db)
 	handler := personHandlerForTest(db, store)
 	loser := createTestPerson(t, store, ws, "Loser")
 	targetB := createTestPerson(t, store, ws, "TargetB")

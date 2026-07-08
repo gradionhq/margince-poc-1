@@ -14,9 +14,9 @@ import (
 // gdpr/approvals/audit's own TestNoRawSetConfig from Tasks 2-3.
 func TestNoRawPoolAccessWithoutExemption(t *testing.T) {
 	files := []string{
-		"oauth_client_store.go", "oauth_auth_code_store.go",
-		"connector_secret_store.go", "incumbent_connection_store.go",
-		"session_store.go", "passport_store.go",
+		"adapters/oauth_client_store.go", "adapters/oauth_auth_code_store.go",
+		"adapters/connector_secret_store.go", "adapters/incumbent_connection_store.go",
+		"adapters/session_store.go", "adapters/passport_store.go",
 	}
 	pattern := regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*\.db\.(ExecContext|QueryContext|QueryRowContext)`)
 	for _, f := range files {

@@ -33,6 +33,11 @@ pnpm exec openapi-down-convert --input "$CRM_YAML" --output .tmp/gen/crm.3.0.yam
 node scripts/contract-disambiguate.mjs .tmp/gen/crm.3.0.yaml .tmp/gen/crm.3.0.fixed.yaml >/dev/null
 "$OAPI" -config backend/api/oapi-types.cfg.yaml -o .tmp/gen/crm_gen.go .tmp/gen/crm.3.0.fixed.yaml >/dev/null
 gofmt -w .tmp/gen/crm_gen.go
+# oapi-codegen's chi-server output leaves stray blank lines gofmt doesn't
+# touch (e.g. right after a wrapper func's opening brace); gofumpt -l is the
+# fmt-check gate (§3.1), so run it here too when available.
+GOFUMPT="$(command -v gofumpt || echo "$HOME/go/bin/gofumpt")"
+[ -x "$GOFUMPT" ] && "$GOFUMPT" -w .tmp/gen/crm_gen.go
 
 if [ "$MODE" = "check" ]; then
   fail=0
