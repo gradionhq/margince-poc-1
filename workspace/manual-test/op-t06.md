@@ -179,23 +179,36 @@ Expected: `403 Forbidden` with `code: approval_required`.
 Mint the approval token for the exact offer send, then retry:
 
 ```bash
-export APPR_TOKEN="$(python3 - <<'PY'
-import base64, json, hmac, hashlib, os, time
+export APPR_TOKEN=$(python3 - "${OFFER_ID}" "uat-op-t06-jti-${OFFER_ID}" <<'PYEOF'
+import hmac as _hmac, hashlib, base64, json, os, sys
+from datetime import datetime, timezone, timedelta
 
-secret = os.environ["APPROVAL_TOKEN_SIGNING_SECRET"].encode()
-payload = {
-    "actor": os.environ["USER_ID"],
-    "workspace_id": os.environ["WS_ID"],
-    "verb": "send_offer",
-    "entity_type": "offer",
-    "entity_id": os.environ["OFFER_ID"],
-    "expires_at": int(time.time()) + 300,
-}
-raw = json.dumps(payload, separators=(',', ':'), sort_keys=True).encode()
-sig = hmac.new(secret, raw, hashlib.sha256).digest()
-print(base64.urlsafe_b64encode(raw).decode().rstrip('=') + "." + base64.urlsafe_b64encode(sig).decode().rstrip('='))
-PY
-)"
+def b64u(b):
+    return base64.urlsafe_b64encode(b).rstrip(b'=').decode()
+
+root = os.environ['APPROVAL_TOKEN_SIGNING_SECRET']
+ws_id = os.environ['WS_ID']
+offer_id, jti = sys.argv[1], sys.argv[2]
+
+# Per-workspace key: HMAC-SHA256(root, workspace_id)
+key = _hmac.new(root.encode(), ws_id.encode(), hashlib.sha256).digest()
+
+# diff_hash: SHA-256 of the canonical (sort_keys) JSON of the bound fields
+diff = {'offer_id': offer_id}
+diff_hash = b64u(hashlib.sha256(
+    json.dumps(diff, sort_keys=True, separators=(',', ':')).encode()
+).digest())
+
+exp = (datetime.now(timezone.utc) + timedelta(minutes=5)).strftime('%Y-%m-%dT%H:%M:%SZ')
+claims = {'jti': jti, 'approval_id': 'uat-' + jti, 'workspace_id': ws_id,
+          'tool': 'send_offer', 'diff_hash': diff_hash, 'exp': exp, 'single_use': True}
+
+hdr = b64u(json.dumps({'alg': 'HS256', 'typ': 'JWT'}, separators=(',', ':')).encode())
+pay = b64u(json.dumps(claims, separators=(',', ':')).encode())
+sig = _hmac.new(key, (hdr + '.' + pay).encode(), hashlib.sha256).digest()
+print(hdr + '.' + pay + '.' + b64u(sig))
+PYEOF
+)
 echo "APPR_TOKEN=${APPR_TOKEN}"
 ```
 
