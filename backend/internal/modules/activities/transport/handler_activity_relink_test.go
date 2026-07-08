@@ -17,19 +17,8 @@ import (
 	actdomain "github.com/gradionhq/margince/backend/internal/modules/activities/domain"
 )
 
-// insertRelinkPerson inserts a single test person tagged with the given suffix
-// and returns its id; it backs seedRelinkHandlerFixtures' two-person seed below.
-func insertRelinkPerson(t *testing.T, db *sql.DB, wsID, tag string) string {
-	t.Helper()
-	var id string
-	if err := db.QueryRow(`INSERT INTO person (id, workspace_id, full_name, source, captured_by)
-		VALUES (uuidv7(), $1, $2, 'test', 'human:test') RETURNING id`, wsID, tag).Scan(&id); err != nil {
-		t.Fatalf("seed person %s: %v", tag, err)
-	}
-	return id
-}
-
-// seedRelinkHandlerFixtures seeds a workspace, two people, and one bare activity.
+// seedRelinkHandlerFixtures seeds a workspace, two people (in a single
+// multi-row insert), and one bare activity.
 func seedRelinkHandlerFixtures(t *testing.T, db *sql.DB, tag string) (personA, personB, activityID string) {
 	t.Helper()
 	tag = tag + "-" + time.Now().Format("20060102150405.000000000")
@@ -40,8 +29,28 @@ func seedRelinkHandlerFixtures(t *testing.T, db *sql.DB, tag string) (personA, p
 	if _, err := db.Exec(`SELECT set_config('app.workspace_id', $1, false)`, activityHandlerTestWorkspaceID); err != nil {
 		t.Fatalf("set rls: %v", err)
 	}
-	personA = insertRelinkPerson(t, db, activityHandlerTestWorkspaceID, "PA-"+tag)
-	personB = insertRelinkPerson(t, db, activityHandlerTestWorkspaceID, "PB-"+tag)
+	rows, err := db.Query(`INSERT INTO person (id, workspace_id, full_name, source, captured_by)
+		VALUES (uuidv7(), $1, $2, 'test', 'human:test'), (uuidv7(), $1, $3, 'test', 'human:test')
+		RETURNING id`, activityHandlerTestWorkspaceID, "PA-"+tag, "PB-"+tag)
+	if err != nil {
+		t.Fatalf("seed people: %v", err)
+	}
+	defer rows.Close()
+	ids := make([]string, 0, 2)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("scan person id: %v", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("seed people rows: %v", err)
+	}
+	if len(ids) != 2 {
+		t.Fatalf("expected 2 seeded person ids, got %d", len(ids))
+	}
+	personA, personB = ids[0], ids[1]
 	if err := db.QueryRow(`INSERT INTO activity (id, workspace_id, kind, subject, is_done, source, captured_by)
 		VALUES (uuidv7(), $1, 'note', $2, false, 'ui', 'human:test') RETURNING id`,
 		activityHandlerTestWorkspaceID, "Relink target-"+tag).Scan(&activityID); err != nil {
