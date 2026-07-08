@@ -198,8 +198,10 @@ make migrate-status
 
 **Expected:**
 
-- First `make migrate-status` returns `74` (non-dirty) — migration 000075 rolled back cleanly;
-  `organization_open_pipeline_rollup` dropped, `deal.amount_minor_base` column removed.
+- First `make migrate-status` returns `73` (non-dirty) — migration 000075 rolled back cleanly;
+  `organization_open_pipeline_rollup` dropped, `deal.amount_minor_base` column removed. (No `000074`
+  file exists on this branch — that number belongs to the unmerged sibling ticket `swarm/at-t01`,
+  so the down migration lands on `73`, not `74`.)
 - Second `make migrate-status` returns `75` (non-dirty) — migration re-applied cleanly.
 - No dirty state at any point. Verifies the down migration reverses the up migration completely
   (RD-AC-6's migration round-trip acceptance criterion).
