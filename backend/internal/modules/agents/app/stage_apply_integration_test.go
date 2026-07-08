@@ -200,6 +200,13 @@ func TestApplyGreen_WritesAuditAndEvent(t *testing.T) {
 	if len(emitter.emitted) != 1 || emitter.emitted[0].topic != "overnight.applied" {
 		t.Fatalf("expected exactly one overnight.applied emission, got %+v", emitter.emitted)
 	}
+	// entity_id must be just the id portion of TargetEntity ("fixture-1"),
+	// never the whole "kind:id" composite ("activity:fixture-1") — a real
+	// EventEmitter's event_outbox.entity_id column is uuid NOT NULL and
+	// would reject the composite string.
+	if got := emitter.emitted[0].entityID; got != "fixture-1" {
+		t.Fatalf("emitted entityID = %q, want %q", got, "fixture-1")
+	}
 
 	var count int
 	if err := db.QueryRow(`SELECT count(*) FROM audit_log WHERE workspace_id = $1::uuid AND actor_id = $2`, wsID, app.ActorOvernight).Scan(&count); err != nil {

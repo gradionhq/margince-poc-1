@@ -22,3 +22,16 @@ func entityTypeFromTarget(target string) string {
 	}
 	return target
 }
+
+// entityIDFromTarget splits a "kind:id" TargetEntity into its entity id
+// (e.g. "deal:abc" -> "abc") for the event_outbox entity_id column, which is
+// uuid NOT NULL (000016_event_outbox.up.sql) — unlike audit_log.entity_id,
+// there is no nullable escape hatch, so the id portion must be extracted.
+func entityIDFromTarget(target string) string {
+	for i := 0; i < len(target); i++ {
+		if target[i] == ':' {
+			return target[i+1:]
+		}
+	}
+	return target
+}
