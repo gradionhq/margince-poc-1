@@ -303,7 +303,7 @@ no gaps.
 happy path, honest-empty).
 
 ```bash
-make test-it DIR=backend/internal/modules/records
+make test-it DIR=backend/internal/modules/records/fieldhistory
 ```
 
 **Expected:** All integration tests pass including (all in
