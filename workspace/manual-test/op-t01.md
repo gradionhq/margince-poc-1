@@ -2,9 +2,13 @@
 
 Contract-only ticket — no handler/business logic ships in this branch (spec Out-of-scope), so
 every step is contract/gate inspection rather than a live HTTP round-trip (no
-`listOfferTemplates`/`createDealOffer`/etc. Go handler exists yet in this repo — confirmed via
+`listOfferTemplates`/`createDealOffer`/etc. real handler logic exists yet in this repo — running
 `grep -rl "OfferTemplate\|createDealOffer\|OfferLineItem" backend/internal --include='*.go'`
-returning nothing besides the generated `crm_gen.go`/`tools_gen.go`).
+now also matches `offers_adapter.go` and `offertemplates_adapter.go`, but both are pure
+501-Not-Implemented conformance stubs — they exist only so the generated
+`types.ServerInterface` compiles and `TestAllOperationsSatisfiesServerInterface` passes,
+mirroring the pre-existing `products_adapter.go` pattern — plus `all_operations.go`
+(registration only) and the generated `crm_gen.go`/`tools_gen.go`).
 
 1. **[auto]** Run `make gen-types && make gen-mcp-tools` then `git status --short`.
    Expected: exits 0; empty diff (clean regeneration — the branch's own crm.yaml already
