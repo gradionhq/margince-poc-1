@@ -109,6 +109,11 @@ components:
   offersports:             { in: internal/modules/offers/ports }
   offersadapters:          { in: internal/modules/offers/adapters }
   offerstransport:         { in: internal/modules/offers/transport }
+  records:                 { in: internal/modules/records }
+  recordsdomain:           { in: internal/modules/records/domain }
+  recordsports:            { in: internal/modules/records/ports }
+  recordsadapters:         { in: internal/modules/records/adapters }
+  recordstransport:        { in: internal/modules/records/transport }
   relationships:           { in: internal/modules/relationships }
   relsdomain:              { in: internal/modules/relationships/domain }
   relsports:               { in: internal/modules/relationships/ports }
@@ -253,6 +258,17 @@ deps:
     mayDependOn: [offersdomain, offersadapters, offerstransport]
   offerstransport:
     mayDependOn: [offers, offersadapters, offersdomain, crmctx, errs, httpkit, prov]
+  recordsdomain:
+    mayDependOn: [prov, ids]
+  recordsports:
+    mayDependOn: [recordsdomain]
+  recordsadapters:
+    mayDependOn: [recordsdomain, recordsports, errs, ids, database, audit, sqlutil, activities]
+    canUse: [pq]
+  records:
+    mayDependOn: [recordsdomain, recordsadapters, recordstransport]
+  recordstransport:
+    mayDependOn: [records, recordsadapters, recordsdomain, recordsports, crmctx, errs, httpkit, prov, blobstore]
   relsdomain:
     mayDependOn: [prov, ids]
   relsports:
