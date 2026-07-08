@@ -114,7 +114,17 @@ func TestOrgMergeFKWalkExhaustive(t *testing.T) {
 		"organization_domain": true, "deal": true, "activity_link": true,
 		"relationship": true, "partner": true,
 	}
-	leftAlone := map[string]bool{"organization": true /* parent_org_id + merged_into_id self-ref */}
+	leftAlone := map[string]bool{
+		"organization": true, /* parent_org_id + merged_into_id self-ref */
+		// offer.buyer_org_id is a live reference at authoring time, but offer.buyer_snapshot
+		// (jsonb) is the authoritative, frozen buyer-identity record captured at send time
+		// per docs/subsystems/offers-and-products.md OFFER-DDL-2's snapshot design — so a
+		// stale buyer_org_id after an org merge doesn't corrupt the offer's legal/financial
+		// record; relinking it live is optional future work, not a data-integrity
+		// requirement, so it's intentionally left alone here rather than blocked on
+		// building relink logic this ticket doesn't own.
+		"offer": true,
+	}
 	for table := range fks {
 		if !relinked[table] && !leftAlone[table] {
 			t.Fatalf("FK from %s into organization(id) is neither relinked nor documented as intentionally left — merge relink logic is incomplete for this table", table)
