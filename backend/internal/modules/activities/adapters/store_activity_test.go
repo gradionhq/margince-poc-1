@@ -68,6 +68,17 @@ func seedActivityStoreFixtures(t *testing.T, db *sql.DB, tag string) (wsID, pers
 	return wsID, personID, dealID
 }
 
+func seedActivityStoreUser(t *testing.T, db *sql.DB, wsID, tag string) string {
+	t.Helper()
+	var userID string
+	if err := db.QueryRow(`INSERT INTO app_user (workspace_id, email, display_name)
+		VALUES ($1, $2, $3) RETURNING id`,
+		wsID, "u-"+tag+"@example.com", "U-"+tag).Scan(&userID); err != nil {
+		t.Fatalf("seed app_user: %v", err)
+	}
+	return userID
+}
+
 func countActivitiesBySource(t *testing.T, db *sql.DB, wsID, sourceSystem, sourceID string) int {
 	t.Helper()
 	var n int
@@ -76,6 +87,17 @@ func countActivitiesBySource(t *testing.T, db *sql.DB, wsID, sourceSystem, sourc
 		t.Fatalf("count activities: %v", err)
 	}
 	return n
+}
+
+func seedActivityRow(t *testing.T, db *sql.DB, wsID, kind string, direction *string, assigneeID *string, subject string, occurredAt time.Time) string {
+	t.Helper()
+	var id string
+	if err := db.QueryRow(`INSERT INTO activity (id, workspace_id, kind, subject, direction, assignee_id, is_done, occurred_at, source, captured_by)
+		VALUES (uuidv7(), $1, $2, $3, $4, $5, false, $6, 'test', 'human:test') RETURNING id`,
+		wsID, kind, subject, direction, assigneeID, occurredAt).Scan(&id); err != nil {
+		t.Fatalf("seed activity row: %v", err)
+	}
+	return id
 }
 
 func TestActivityStore_Create_IdempotentReplay_SameSourceKey(t *testing.T) {
@@ -370,6 +392,120 @@ func TestActivityStore_List_LinksNeverNil(t *testing.T) {
 		if !strings.Contains(string(b), `"links":[]`) {
 			t.Fatalf("List activity %s expected empty links array in JSON, got: %s", a.ID, b)
 		}
+	}
+}
+
+func TestActivityStore_ListFiltered_Unfiltered_NewestFirst(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "lf-unfiltered")
+	s := NewActivityStore(db)
+	now := time.Now().UTC()
+	older := seedActivityRow(t, db, wsID, "note", nil, nil, "older", now.Add(-time.Hour))
+	newer := seedActivityRow(t, db, wsID, "note", nil, nil, "newer", now)
+
+	out, _, err := s.ListFiltered(context.Background(), wsID, "", 20, domain.ActivityListFilter{})
+	if err != nil {
+		t.Fatalf("ListFiltered: %v", err)
+	}
+	if len(out) != 2 || out[0].ID != newer || out[1].ID != older {
+		t.Fatalf("expected [newer, older], got %+v", out)
+	}
+}
+
+func TestActivityStore_ListFiltered_KindFilter(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "lf-kind")
+	s := NewActivityStore(db)
+	now := time.Now().UTC()
+	emailID := seedActivityRow(t, db, wsID, "email", nil, nil, "e", now)
+	seedActivityRow(t, db, wsID, "note", nil, nil, "n", now)
+
+	out, _, err := s.ListFiltered(context.Background(), wsID, "", 20, domain.ActivityListFilter{Kind: "email"})
+	if err != nil {
+		t.Fatalf("ListFiltered: %v", err)
+	}
+	if len(out) != 1 || out[0].ID != emailID {
+		t.Fatalf("expected only the email row, got %+v", out)
+	}
+}
+
+func TestActivityStore_ListFiltered_EntityScoped_MatchesLegacyList(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, dealID := seedActivityStoreFixtures(t, db, "lf-entity")
+	s := NewActivityStore(db)
+	a, _, err := s.Create(context.Background(), domain.Activity{
+		WorkspaceID: wsID, Kind: "note", OccurredAt: time.Now(),
+		Source: "test", CapturedBy: "human:test",
+		Links: []domain.ActivityLink{{EntityType: "deal", EntityID: dealID}},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	legacy, _, err := s.List(context.Background(), wsID, "deal", dealID, "", 20)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	filtered, _, err := s.ListFiltered(context.Background(), wsID, "", 20, domain.ActivityListFilter{EntityType: "deal", EntityID: dealID})
+	if err != nil {
+		t.Fatalf("ListFiltered: %v", err)
+	}
+	if len(legacy) != 1 || len(filtered) != 1 || legacy[0].ID != a.ID || filtered[0].ID != a.ID {
+		t.Fatalf("expected both List and ListFiltered to return the same single row %s, got legacy=%+v filtered=%+v", a.ID, legacy, filtered)
+	}
+}
+
+func TestActivityStore_ListFiltered_AssigneeIDFilter(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "lf-assignee")
+	s := NewActivityStore(db)
+	now := time.Now().UTC()
+	assigneeID := seedActivityStoreUser(t, db, wsID, "lf-assignee")
+	mine := seedActivityRow(t, db, wsID, "task", nil, &assigneeID, "mine", now)
+	seedActivityRow(t, db, wsID, "task", nil, nil, "unassigned", now)
+
+	out, _, err := s.ListFiltered(context.Background(), wsID, "", 20, domain.ActivityListFilter{AssigneeID: assigneeID})
+	if err != nil {
+		t.Fatalf("ListFiltered: %v", err)
+	}
+	if len(out) != 1 || out[0].ID != mine {
+		t.Fatalf("expected only the assigned row, got %+v", out)
+	}
+}
+
+func TestActivityStore_ListFiltered_FullTextSearch(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "lf-q")
+	s := NewActivityStore(db)
+	now := time.Now().UTC()
+	matchID := seedActivityRow(t, db, wsID, "note", nil, nil, "quarterly proposal review", now)
+	seedActivityRow(t, db, wsID, "note", nil, nil, "unrelated subject", now)
+
+	out, _, err := s.ListFiltered(context.Background(), wsID, "", 20, domain.ActivityListFilter{Q: "proposal"})
+	if err != nil {
+		t.Fatalf("ListFiltered: %v", err)
+	}
+	if len(out) != 1 || out[0].ID != matchID {
+		t.Fatalf("expected only the proposal row, got %+v", out)
+	}
+}
+
+func TestActivityStore_ListFiltered_CombinedFilters(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "lf-combined")
+	s := NewActivityStore(db)
+	now := time.Now().UTC()
+	assigneeID := seedActivityStoreUser(t, db, wsID, "lf-combined")
+	match := seedActivityRow(t, db, wsID, "task", nil, &assigneeID, "quarterly review", now)
+	seedActivityRow(t, db, wsID, "task", nil, nil, "quarterly review", now)
+	seedActivityRow(t, db, wsID, "note", nil, nil, "quarterly review", now)
+
+	out, _, err := s.ListFiltered(context.Background(), wsID, "", 20, domain.ActivityListFilter{Kind: "task", AssigneeID: assigneeID, Q: "quarterly"})
+	if err != nil {
+		t.Fatalf("ListFiltered: %v", err)
+	}
+	if len(out) != 1 || out[0].ID != match {
+		t.Fatalf("expected only the fully-matching row, got %+v", out)
 	}
 }
 

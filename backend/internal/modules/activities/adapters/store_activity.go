@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gradionhq/margince/backend/internal/modules/activities/domain"
@@ -257,51 +258,118 @@ func (s *ActivityStore) selectLinks(ctx context.Context, tx *sql.Tx, activityID 
 	return links, rows.Err()
 }
 
-// List returns a keyset page of activities, optionally filtered to a linked entity, and the next cursor.
-func (s *ActivityStore) List(ctx context.Context, workspaceID, entityType, entityID, cursor string, limit int) ([]domain.Activity, string, error) {
+type activitySortSpec struct {
+	column   string
+	cursor   string
+	orderDir string
+}
+
+func parseActivitySortSpec(sort string) activitySortSpec {
+	spec := activitySortSpec{column: "occurred_at", cursor: "occurred_at", orderDir: "DESC"}
+	if sort == "" {
+		return spec
+	}
+	term := strings.TrimSpace(strings.Split(sort, ",")[0])
+	if term == "" {
+		return spec
+	}
+	if strings.HasPrefix(term, "-") {
+		term = strings.TrimPrefix(term, "-")
+	} else {
+		spec.orderDir = "ASC"
+	}
+	switch term {
+	case "occurred_at", "created_at":
+		spec.column = term
+		spec.cursor = term
+	case "due_at":
+		spec.column = "COALESCE(due_at, 'infinity'::timestamptz)"
+		spec.cursor = "COALESCE(due_at, 'infinity'::timestamptz)"
+	default:
+		return activitySortSpec{column: "occurred_at", cursor: "occurred_at", orderDir: "DESC"}
+	}
+	return spec
+}
+
+func buildActivityListWhere(workspaceID, cursor string, limit int, f domain.ActivityListFilter) (string, []any, activitySortSpec, error) {
+	spec := parseActivitySortSpec(f.Sort)
+	args := []any{workspaceID}
+	where := `a.workspace_id=$1::uuid`
+	n := 1
+
+	if !f.IncludeArchived {
+		where += ` AND a.archived_at IS NULL`
+	}
+	if f.EntityType != "" && f.EntityID != "" {
+		colName, ok := entityLinkColumn[f.EntityType]
+		if !ok {
+			return "", nil, spec, fmt.Errorf("unknown entity_type: %s", f.EntityType)
+		}
+		n++
+		args = append(args, f.EntityID)
+		where += fmt.Sprintf(` AND al.%s=$%d::uuid`, colName, n)
+	}
+	if f.Kind != "" {
+		n++
+		args = append(args, f.Kind)
+		where += fmt.Sprintf(` AND a.kind=$%d`, n)
+	}
+	if f.AssigneeID != "" {
+		n++
+		args = append(args, f.AssigneeID)
+		where += fmt.Sprintf(` AND a.assignee_id=$%d::uuid`, n)
+	}
+	if f.Direction != "" {
+		n++
+		args = append(args, f.Direction)
+		where += fmt.Sprintf(` AND a.direction=$%d`, n)
+	}
+	if f.Q != "" {
+		n++
+		args = append(args, f.Q)
+		where += fmt.Sprintf(` AND a.search_tsv @@ websearch_to_tsquery('simple', $%d)`, n)
+	}
+
+	curSortVal, curID, hasCursor := sqlutil.DecodeKeysetCursor(cursor)
+	n++
+	args = append(args, hasCursor)
+	n++
+	args = append(args, sqlutil.NullStrParam(curSortVal))
+	n++
+	args = append(args, sqlutil.NullStrParam(curID))
+	where += fmt.Sprintf(` AND (NOT $%d OR (%s, a.id) %s ($%d::timestamptz, $%d::uuid))`, n-2, spec.cursor, map[bool]string{true: ">", false: "<"}[spec.orderDir == "ASC"], n-1, n)
+
+	return where, args, spec, nil
+}
+
+// ListFiltered returns a cursor-keyed, workspace-scoped activity page with
+// optional filters.
+func (s *ActivityStore) ListFiltered(ctx context.Context, workspaceID, cursor string, limit int, f domain.ActivityListFilter) ([]domain.Activity, string, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
 
-	// ORDER BY occurred_at DESC, id — the seek must compare the FULL key, so a
-	// page boundary mid-timestamp neither skips nor repeats rows. The opaque cursor
-	// carries (occurred_at, id); the row-comparison predicate matches the ordering.
-	curOccurred, curID, hasCursor := sqlutil.DecodeKeysetCursor(cursor)
+	where, args, spec, err := buildActivityListWhere(workspaceID, cursor, limit, f)
+	if err != nil {
+		return nil, "", err
+	}
+	orderDir := spec.orderDir
+	orderCol := spec.column
 
 	out := []domain.Activity{}
-	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		var rows *sql.Rows
-		var err error
-		if entityType != "" && entityID != "" {
-			// Timeline query via activity_link
-			colName := entityLinkColumn[entityType]
-			if colName == "" {
-				return fmt.Errorf("unknown entity_type: %s", entityType)
-			}
-			rows, err = tx.QueryContext(ctx, fmt.Sprintf(`
-				SELECT a.id, a.workspace_id, a.kind, a.subject, a.body,
-				       a.occurred_at, a.due_at, a.assignee_id, a.remind_at, a.is_done, a.done_at,
-				       a.duration_seconds, a.direction, a.meeting_status, a.source_system, a.source_id,
-				       a.version, a.source, a.captured_by, a.created_at, a.updated_at
-				FROM activity a
-				JOIN activity_link al ON al.activity_id = a.id
-				WHERE a.workspace_id=$1::uuid AND al.%s=$2::uuid
-				  AND a.archived_at IS NULL
-				  AND (NOT $3 OR (a.occurred_at, a.id) < ($4::timestamptz, $5::uuid))
-				ORDER BY a.occurred_at DESC, a.id DESC LIMIT $6`, colName),
-				workspaceID, entityID, hasCursor, sqlutil.NullStrParam(curOccurred), sqlutil.NullStrParam(curID), limit+1)
-		} else {
-			rows, err = tx.QueryContext(ctx, `
-				SELECT id, workspace_id, kind, subject, body,
-				       occurred_at, due_at, assignee_id, remind_at, is_done, done_at,
-				       duration_seconds, direction, meeting_status, source_system, source_id,
-				       version, source, captured_by, created_at, updated_at
-				FROM activity
-				WHERE workspace_id=$1::uuid AND archived_at IS NULL
-				  AND (NOT $2 OR (occurred_at, id) < ($3::timestamptz, $4::uuid))
-				ORDER BY occurred_at DESC, id DESC LIMIT $5`,
-				workspaceID, hasCursor, sqlutil.NullStrParam(curOccurred), sqlutil.NullStrParam(curID), limit+1)
+	dbErr := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT a.id, a.workspace_id, a.kind, a.subject, a.body,
+			       a.occurred_at, a.due_at, a.assignee_id, a.remind_at, a.is_done, a.done_at,
+			       a.duration_seconds, a.direction, a.meeting_status, a.source_system, a.source_id,
+			       a.version, a.source, a.captured_by, a.created_at, a.updated_at
+			FROM activity a`)
+		if f.EntityType != "" && f.EntityID != "" {
+			query += ` JOIN activity_link al ON al.activity_id = a.id`
 		}
+		query += ` WHERE ` + where + fmt.Sprintf(` ORDER BY %s %s, a.id %s LIMIT $%d`, orderCol, orderDir, orderDir, len(args)+1)
+		args = append(args, limit+1)
+		rows, err := tx.QueryContext(ctx, query, args...)
 		if err != nil {
 			return err
 		}
@@ -315,25 +383,37 @@ func (s *ActivityStore) List(ctx context.Context, workspaceID, entityType, entit
 				&a.CreatedAt, &a.UpdatedAt); err != nil {
 				return err
 			}
-			// List never selects links (or raw, by design — see
-			// TestActivityStore_List_NeverSelectsRaw), but Activity.Links has no
-			// omitempty and must marshal to JSON "[]", not "null" — so it needs an
-			// explicit non-nil zero value here, mirroring selectLinks' initializer.
 			a.Links = []domain.ActivityLink{}
 			out = append(out, a)
 		}
 		return rows.Err()
 	})
-	if err != nil {
-		return nil, "", err
+	if dbErr != nil {
+		return nil, "", dbErr
 	}
 	var next string
 	if len(out) > limit {
 		last := out[limit-1]
-		next = sqlutil.EncodeKeysetCursor(last.OccurredAt.UTC().Format(time.RFC3339Nano), last.ID)
+		sortVal := last.OccurredAt.UTC().Format(time.RFC3339Nano)
+		switch spec.cursor {
+		case "created_at":
+			sortVal = last.CreatedAt.UTC().Format(time.RFC3339Nano)
+		case "COALESCE(due_at, 'infinity'::timestamptz)":
+			if last.DueAt != nil {
+				sortVal = last.DueAt.UTC().Format(time.RFC3339Nano)
+			} else {
+				sortVal = "infinity"
+			}
+		}
+		next = sqlutil.EncodeKeysetCursor(sortVal, last.ID)
 		out = out[:limit]
 	}
 	return out, next, nil
+}
+
+// List returns a keyset page of activities, optionally filtered to a linked entity, and the next cursor.
+func (s *ActivityStore) List(ctx context.Context, workspaceID, entityType, entityID, cursor string, limit int) ([]domain.Activity, string, error) {
+	return s.ListFiltered(ctx, workspaceID, cursor, limit, domain.ActivityListFilter{EntityType: entityType, EntityID: entityID})
 }
 
 // Update applies partial updates to an activity.
