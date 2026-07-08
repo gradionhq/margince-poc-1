@@ -2,10 +2,15 @@ package transport
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/gradionhq/margince/backend/internal/platform/blobstore"
+	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
 )
 
 // decodeJSONBody unmarshals w's recorded body into a map, failing the test on
@@ -67,3 +72,15 @@ func assertEmptyListOK(t *testing.T, w *httptest.ResponseRecorder) {
 		}
 	}
 }
+
+type fakeVerifier struct{}
+
+func (fakeVerifier) VerifyAndConsume(_ context.Context, _ string, _ approvalsport.Binding) error {
+	return errors.New("unexpected approval verification in unit test")
+}
+
+func newTestOfferHandler() *OfferHandler {
+	return NewOfferHandler(newFakeOfferStore(), newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
+}
+
+var _ approvalsport.Verifier = fakeVerifier{}

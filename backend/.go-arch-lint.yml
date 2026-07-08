@@ -262,7 +262,7 @@ deps:
   offers:
     mayDependOn: [offersdomain, offersadapters, offerstransport]
   offerstransport:
-    mayDependOn: [offers, offersadapters, offersdomain, crmctx, errs, httpkit, prov]
+    mayDependOn: [offers, offersadapters, offersdomain, crmctx, errs, httpkit, prov, blobstore, mcp, toolgate, approvalsport, deals]
   recordsdomain:
     mayDependOn: [prov, ids]
   recordsports:

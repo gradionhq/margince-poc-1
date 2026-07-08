@@ -60,7 +60,7 @@ func buildAllOperations(k *routeKit) *server.AllOperations {
 		server.CustomFieldsAdapter{H: customfields.NewHandler(k.db, k.verifier)},
 		server.ProductsAdapter{H: offerstransport.NewProductHandler(offers.NewProductStore(k.db))},
 		server.OfferTemplatesAdapter{H: offerstransport.NewOfferTemplateHandler(offers.NewOfferTemplateStore(k.db))},
-		server.OffersAdapter{H: offerstransport.NewOfferHandler(offers.NewOfferStore(k.db), offers.NewOfferLineItemStore(k.db, offers.NewProductStore(k.db)))},
+		server.OffersAdapter{H: offerstransport.NewOfferHandler(offers.NewOfferStore(k.db), offers.NewOfferLineItemStore(k.db, offers.NewProductStore(k.db)), k.verifier, k.blob)},
 	)
 	ops.AttachmentsAdapter = server.AttachmentsAdapter{H: recordstransport.NewAttachmentHandler(records.NewAttachmentStore(k.db), k.blob, recordsadapters.NewDownloadAuditWriter(activities.NewActivityStore(k.db)), k.db)}
 	return ops

@@ -5,14 +5,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/gradionhq/margince/backend/internal/modules/deals"
 	"github.com/gradionhq/margince/backend/internal/modules/offers/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/offers/domain"
+	"github.com/gradionhq/margince/backend/internal/platform/blobstore"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
 
 // fakeOfferStore is an in-memory OfferStore for handler tests — mirrors
@@ -85,6 +89,77 @@ func (f *fakeOfferStore) Update(ctx context.Context, id, workspaceID string, upd
 	return o, nil
 }
 
+func (f *fakeOfferStore) Send(ctx context.Context, id, workspaceID string) (domain.Offer, error) {
+	if f.nextErr != nil {
+		err := f.nextErr
+		f.nextErr = nil
+		return domain.Offer{}, err
+	}
+	o, ok := f.offers[id]
+	if !ok {
+		return domain.Offer{}, errs.ErrNotFound
+	}
+	o.Status = domain.OfferStatusSent
+	rate := "1.0000000000"
+	now := time.Now().UTC()
+	o.FxRateToBase = &rate
+	o.FxRateDate = &now
+	o.BuyerSnapshot = map[string]any{}
+	o.IssuerSnapshot = map[string]any{"workspace_id": workspaceID, "name": "Test Workspace"}
+	f.offers[id] = o
+	return o, nil
+}
+
+func (f *fakeOfferStore) Regenerate(ctx context.Context, id, workspaceID string) (domain.Offer, error) {
+	if f.nextErr != nil {
+		err := f.nextErr
+		f.nextErr = nil
+		return domain.Offer{}, err
+	}
+	o, ok := f.offers[id]
+	if !ok {
+		return domain.Offer{}, errs.ErrNotFound
+	}
+	next := o
+	next.ID = "offer-2"
+	next.Revision = o.Revision + 1
+	next.Status = domain.OfferStatusDraft
+	next.Version = 1
+	o.Status = domain.OfferStatusSuperseded
+	o.Version++
+	f.offers[id] = o
+	f.offers[next.ID] = next
+	return next, nil
+}
+
+func (f *fakeOfferStore) PrepareRender(ctx context.Context, id, workspaceID string) (adapters.RenderIngredients, error) {
+	if f.nextErr != nil {
+		err := f.nextErr
+		f.nextErr = nil
+		return adapters.RenderIngredients{}, err
+	}
+	o, ok := f.offers[id]
+	if !ok {
+		return adapters.RenderIngredients{}, errs.ErrNotFound
+	}
+	return adapters.RenderIngredients{Offer: o, IssuerName: "Test Workspace", Locale: "de-DE"}, nil
+}
+
+func (f *fakeOfferStore) SetPdfAssetRef(ctx context.Context, id, workspaceID, ref string) (domain.Offer, error) {
+	if f.nextErr != nil {
+		err := f.nextErr
+		f.nextErr = nil
+		return domain.Offer{}, err
+	}
+	o, ok := f.offers[id]
+	if !ok {
+		return domain.Offer{}, errs.ErrNotFound
+	}
+	o.PdfAssetRef = &ref
+	f.offers[id] = o
+	return o, nil
+}
+
 // fakeOfferLineItemStore is an in-memory OfferLineItemStore for handler tests.
 type fakeOfferLineItemStore struct {
 	items   map[string]domain.OfferLineItem
@@ -147,12 +222,6 @@ func (f *fakeOfferLineItemStore) Delete(ctx context.Context, id, offerID, worksp
 	}
 	delete(f.items, id)
 	return nil
-}
-
-// helpers
-
-func newTestOfferHandler() *OfferHandler {
-	return NewOfferHandler(newFakeOfferStore(), newFakeOfferLineItemStore())
 }
 
 func validCreateOfferBody() map[string]any {
@@ -225,7 +294,7 @@ func TestOfferHandler_CreateDealOffer_MissingProvenance_422(t *testing.T) {
 func TestOfferHandler_CreateDealOffer_DuplicateOfferNumber_409(t *testing.T) {
 	offerStore := newFakeOfferStore()
 	offerStore.nextErr = adapters.ErrDuplicateOfferNumber
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore())
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
 
 	postExpectConflict(t, h, "/deals/deal-1/offers", validCreateOfferBody(), "offer_number_duplicate")
 }
@@ -255,7 +324,7 @@ func TestOfferHandler_GetOffer_NotFound_404(t *testing.T) {
 func TestOfferHandler_UpdateOffer_NotDraft_409(t *testing.T) {
 	offerStore := newFakeOfferStore()
 	offerStore.nextErr = adapters.ErrOfferNotDraft
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore())
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
 
 	body := map[string]any{"intro_text": "hello"}
 	bodyBytes, _ := json.Marshal(body)
@@ -277,7 +346,7 @@ func TestOfferHandler_CreateOfferLineItem_Created(t *testing.T) {
 	offerStore := newFakeOfferStore()
 	o := domain.Offer{ID: "offer-1", Status: domain.OfferStatusDraft, Revision: 1, Version: 1}
 	offerStore.offers["offer-1"] = o
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore())
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
 
 	bodyBytes, _ := json.Marshal(validCreateLineItemBody())
 	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/line-items", bytes.NewReader(bodyBytes))
@@ -291,7 +360,7 @@ func TestOfferHandler_CreateOfferLineItem_Created(t *testing.T) {
 func TestOfferHandler_CreateOfferLineItem_PositionConflict_409(t *testing.T) {
 	lineStore := newFakeOfferLineItemStore()
 	lineStore.nextErr = &adapters.ErrDuplicatePosition{ExistingID: "li-existing", Position: 1}
-	h := NewOfferHandler(newFakeOfferStore(), lineStore)
+	h := NewOfferHandler(newFakeOfferStore(), lineStore, fakeVerifier{}, blobstore.NewMemoryStore())
 
 	respBody := postExpectConflict(t, h, "/offers/offer-1/line-items", validCreateLineItemBody(), "offer_line_item_position_duplicate")
 	if details, ok := respBody["details"].(map[string]any); !ok || details["existing_id"] != "li-existing" {
@@ -307,7 +376,7 @@ func TestOfferHandler_UpdateOfferLineItem_Updated(t *testing.T) {
 		Source: "test", CapturedBy: "human:test",
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	h := NewOfferHandler(newFakeOfferStore(), lineStore)
+	h := NewOfferHandler(newFakeOfferStore(), lineStore, fakeVerifier{}, blobstore.NewMemoryStore())
 
 	body := map[string]any{"description": "Updated"}
 	bodyBytes, _ := json.Marshal(body)
@@ -327,7 +396,7 @@ func TestOfferHandler_DeleteOfferLineItem_NoContent(t *testing.T) {
 		ID: "li-1", OfferID: "offer-1",
 		Source: "test", CapturedBy: "human:test",
 	}
-	h := NewOfferHandler(newFakeOfferStore(), lineStore)
+	h := NewOfferHandler(newFakeOfferStore(), lineStore, fakeVerifier{}, blobstore.NewMemoryStore())
 
 	req := httptest.NewRequest(http.MethodDelete, "/offers/offer-1/line-items/li-1", nil)
 	req = withWorkspace(req)
@@ -341,7 +410,7 @@ func TestOfferHandler_DeleteOfferLineItem_NoContent(t *testing.T) {
 
 func TestOfferHandler_RoutingDispatch_UnknownSuffix_404(t *testing.T) {
 	h := newTestOfferHandler()
-	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/regenerate", nil)
+	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/unknown-verb", nil)
 	req = withWorkspace(req)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
@@ -349,6 +418,174 @@ func TestOfferHandler_RoutingDispatch_UnknownSuffix_404(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404, body=%s", w.Code, w.Body.String())
 	}
+}
+
+func TestOfferHandler_Render_SetsResult(t *testing.T) {
+	offerStore := newFakeOfferStore()
+	offerStore.offers["offer-1"] = domain.Offer{
+		ID: "offer-1", WorkspaceID: testWorkspaceID, DealID: "deal-1", OfferNumber: "ANG-001",
+		Status: domain.OfferStatusDraft, Revision: 1, Version: 1, Currency: "EUR",
+		NetMinor: 125000, TaxMinor: 23750, GrossMinor: 148750,
+	}
+	blob := blobstore.NewMemoryStore()
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blob)
+
+	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/render", nil)
+	req = withWorkspace(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	respBody := decodeJSONBody(t, w)
+	ref, _ := respBody["pdf_asset_ref"].(string)
+	if ref == "" {
+		t.Fatalf("expected pdf_asset_ref set, got %v", respBody["pdf_asset_ref"])
+	}
+	rc, err := blob.Get(context.Background(), ref)
+	if err != nil {
+		t.Fatalf("get pdf blob: %v", err)
+	}
+	defer rc.Close()
+	pdfBytes, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read pdf blob: %v", err)
+	}
+	if !bytes.HasPrefix(pdfBytes, []byte("%PDF-")) {
+		t.Fatalf("expected a PDF header, got %q", pdfBytes[:min(20, len(pdfBytes))])
+	}
+}
+
+func TestOfferHandler_Send_HumanPrincipal_NoTokenNeeded(t *testing.T) {
+	offerStore := newFakeOfferStore()
+	offerStore.offers["offer-1"] = domain.Offer{
+		ID: "offer-1", WorkspaceID: testWorkspaceID, DealID: "deal-1", OfferNumber: "ANG-001",
+		Status: domain.OfferStatusDraft, Revision: 1, Version: 1, Currency: "EUR",
+	}
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/send", nil)
+	req = withWorkspace(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	respBody := decodeJSONBody(t, w)
+	if status, ok := respBody["status"].(string); !ok || status != "sent" {
+		t.Fatalf("expected status=sent, got %v", respBody["status"])
+	}
+	if rate, ok := respBody["fx_rate_to_base"].(string); !ok || rate != "1.0000000000" {
+		t.Fatalf("expected fx_rate_to_base=1.0000000000, got %v", respBody["fx_rate_to_base"])
+	}
+	if respBody["buyer_snapshot"] == nil || respBody["issuer_snapshot"] == nil {
+		t.Fatalf("expected snapshots populated, got buyer=%v issuer=%v", respBody["buyer_snapshot"], respBody["issuer_snapshot"])
+	}
+}
+
+func TestOfferHandler_Send_AgentPrincipal_NoToken_403ApprovalRequired(t *testing.T) {
+	offerStore := newFakeOfferStore()
+	offerStore.offers["offer-1"] = domain.Offer{
+		ID: "offer-1", WorkspaceID: testWorkspaceID, DealID: "deal-1", OfferNumber: "ANG-001",
+		Status: domain.OfferStatusDraft, Revision: 1, Version: 1, Currency: "EUR",
+	}
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/send", nil)
+	req = req.WithContext(crmctx.With(req.Context(), crmctx.Principal{TenantID: testWorkspaceID, UserID: "agent:1", IsAgent: true}))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403, body=%s", w.Code, w.Body.String())
+	}
+	respBody := decodeJSONBody(t, w)
+	if code, ok := respBody["code"].(string); !ok || code != "approval_required" {
+		t.Fatalf("expected code=approval_required, got %v", respBody["code"])
+	}
+}
+
+func TestOfferHandler_Send_FXRateUnavailable_422(t *testing.T) {
+	offerStore := newFakeOfferStore()
+	offerStore.offers["offer-1"] = domain.Offer{
+		ID: "offer-1", WorkspaceID: testWorkspaceID, DealID: "deal-1", OfferNumber: "ANG-001",
+		Status: domain.OfferStatusDraft, Revision: 1, Version: 1, Currency: "USD",
+	}
+	offerStore.nextErr = &deals.FXRateUnavailableError{Currency: "USD", AsOf: time.Date(2026, 7, 8, 0, 0, 0, 0, time.UTC)}
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/send", nil)
+	req = withWorkspace(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422, body=%s", w.Code, w.Body.String())
+	}
+	respBody := decodeJSONBody(t, w)
+	if code, ok := respBody["code"].(string); !ok || code != "fx_rate_unavailable" {
+		t.Fatalf("expected code=fx_rate_unavailable, got %v", respBody["code"])
+	}
+	details, _ := respBody["details"].(map[string]any)
+	if details["currency"] != "USD" || details["as_of"] == nil {
+		t.Fatalf("expected fx details, got %v", details)
+	}
+}
+
+func TestOfferHandler_Regenerate_Success(t *testing.T) {
+	offerStore := newFakeOfferStore()
+	offerStore.offers["offer-1"] = domain.Offer{
+		ID: "offer-1", WorkspaceID: testWorkspaceID, DealID: "deal-1", OfferNumber: "ANG-001",
+		Status: domain.OfferStatusSent, Revision: 1, Version: 1, Currency: "EUR",
+	}
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/regenerate", nil)
+	req = withWorkspace(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	respBody := decodeJSONBody(t, w)
+	if status, ok := respBody["status"].(string); !ok || status != "draft" {
+		t.Fatalf("expected the new revision's status=draft, got %v", respBody["status"])
+	}
+	if rev, ok := respBody["revision"].(float64); !ok || int(rev) != 2 {
+		t.Fatalf("expected revision=2, got %v", respBody["revision"])
+	}
+	if prior := offerStore.offers["offer-1"]; prior.Status != domain.OfferStatusSuperseded {
+		t.Fatalf("expected prior status=superseded, got %s", prior.Status)
+	}
+}
+
+func TestOfferHandler_Regenerate_DraftOffer_409(t *testing.T) {
+	offerStore := newFakeOfferStore()
+	offerStore.nextErr = adapters.ErrOfferNotSent
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/regenerate", nil)
+	req = withWorkspace(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409, body=%s", w.Code, w.Body.String())
+	}
+	respBody := decodeJSONBody(t, w)
+	if code, ok := respBody["code"].(string); !ok || code != "offer_not_sent" {
+		t.Fatalf("expected code=offer_not_sent, got %v", respBody["code"])
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // Compile-time assertions that fakeOfferStore and fakeOfferLineItemStore
