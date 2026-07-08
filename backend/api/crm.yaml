@@ -3761,6 +3761,47 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  /custom-fields/{id}/retire:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [CustomFields]
+      operationId: retireCustomField
+      summary: Retire (soft-retire) a custom field — irreversible-feeling, confirm-first.
+      description: |
+        CUSTOM-FIELDS-WIRE-4. Sets `status=retired`; hides the field from the API and
+        filtering while the column and every value in it are preserved — the engine never
+        drops a column as a side effect (CUSTOM-FIELDS-AC-13). 🟡 (mirrors `archivePerson`'s
+        posture: an irreversible-feeling state change users must confirm) — an agent caller
+        must supply `X-Approval-Token`. Not the generic archive shape: this is a status flip
+        on a still-fetchable row, not `archived_at` (which stays null).
+      x-mcp-tool: { verb: update_record, record_type: custom_field, tier: yellow }
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ApprovalToken'
+      responses:
+        '200':
+          description: >-
+            The retired custom field (`status: "retired"`, `archived_at` still null).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomField' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: RBAC denied, or a 🟡 retire attempted without an approval token.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                approvalRequired:
+                  value:
+                    type: 'https://errors.margince.com/approval_required'
+                    title: Approval required
+                    status: 403
+                    code: approval_required
+                    detail: Retiring a custom field is confirm-first; supply an approval token.
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # DEFERRED — stubs only (data-model.md §12). Intentionally NOT specified:
   #   /sequences, /sequences/{id}/steps, /enrollments   (outbound cadences; sends gated)
   #   /overlay/*                                         (overlay-on-incumbents read model)

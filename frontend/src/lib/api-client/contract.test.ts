@@ -406,3 +406,26 @@ describe("RenameCustomFieldRequest contract compliance (CUSTOM-FIELDS-WIRE-3)", 
     expect(Object.keys(req)).toEqual(["label"]);
   });
 });
+
+describe("CustomField retire shape (CUSTOM-FIELDS-WIRE-4)", () => {
+  it("status flips to retired while archived_at stays null — not the generic archive shape", () => {
+    const retired: components["schemas"]["CustomField"] = {
+      id: "00000000-0000-0000-0000-000000000060",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      object: "deal",
+      label: "Renewal date",
+      slug: "renewal-date",
+      type: "date",
+      status: "retired",
+      column_name: "cf_renewal_date",
+      currency: null,
+      options: null,
+      created_by: "00000000-0000-0000-0000-000000000001",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      archived_at: null,
+    };
+    expect(retired.status).toBe("retired");
+    expect(retired.archived_at).toBeNull();
+  });
+});

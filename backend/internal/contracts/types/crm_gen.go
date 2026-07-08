@@ -5680,6 +5680,27 @@ type RenameCustomFieldParams struct {
 	IfMatchParam *IfMatchParam `json:"If-Match,omitempty"`
 }
 
+// RetireCustomFieldParams defines parameters for RetireCustomField.
+type RetireCustomFieldParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+
+	// ApprovalTokenParam A signed, single-use approval token (see schema `ApprovalToken`) minted by
+	// POST /approvals/{id}/approve, authorizing exactly one 🟡 confirm-first operation. It is a
+	// compact JWS whose claims **bind** the token to a specific approval, effect, tenant and
+	// principal — it is NOT a bare opaque string (ADR-0036). The server rejects a token that is
+	// expired, already consumed, or whose `diff_hash`/`workspace_id`/`passport_id`/`tool` does not
+	// match the operation being executed (`403 code: approval_token_invalid`). Required when an
+	// AGENT principal invokes a 🟡 operation; a human's direct call is itself the approval.
+	ApprovalTokenParam *ApprovalTokenParam `json:"X-Approval-Token,omitempty"`
+}
+
 // ResolveDealRoomByTokenParams defines parameters for ResolveDealRoomByToken.
 type ResolveDealRoomByTokenParams struct {
 	// Token The access_token for the deal room.
@@ -10082,6 +10103,9 @@ type ServerInterface interface {
 	// Rename a custom field's display label (🟢 — not a schema change).
 	// (PATCH /custom-fields/{id})
 	RenameCustomField(w http.ResponseWriter, r *http.Request, idParam IdParam, params RenameCustomFieldParams)
+	// Retire (soft-retire) a custom field — irreversible-feeling, confirm-first.
+	// (POST /custom-fields/{id}/retire)
+	RetireCustomField(w http.ResponseWriter, r *http.Request, idParam IdParam, params RetireCustomFieldParams)
 	// Resolve a published deal room by its access token (unauthenticated public accessor).
 	// (GET /deal-rooms/by-token)
 	ResolveDealRoomByToken(w http.ResponseWriter, r *http.Request, params ResolveDealRoomByTokenParams)
@@ -10571,6 +10595,12 @@ func (_ Unimplemented) CreateCustomField(w http.ResponseWriter, r *http.Request,
 // Rename a custom field's display label (🟢 — not a schema change).
 // (PATCH /custom-fields/{id})
 func (_ Unimplemented) RenameCustomField(w http.ResponseWriter, r *http.Request, idParam IdParam, params RenameCustomFieldParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Retire (soft-retire) a custom field — irreversible-feeling, confirm-first.
+// (POST /custom-fields/{id}/retire)
+func (_ Unimplemented) RetireCustomField(w http.ResponseWriter, r *http.Request, idParam IdParam, params RetireCustomFieldParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -12426,6 +12456,80 @@ func (siw *ServerInterfaceWrapper) RenameCustomField(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RenameCustomField(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RetireCustomField operation middleware
+func (siw *ServerInterfaceWrapper) RetireCustomField(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RetireCustomFieldParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "X-Approval-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Approval-Token")]; found {
+		var ApprovalTokenParam ApprovalTokenParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Approval-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Approval-Token", valueList[0], &ApprovalTokenParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Approval-Token", Err: err})
+			return
+		}
+
+		params.ApprovalTokenParam = &ApprovalTokenParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RetireCustomField(w, r, idParam, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -17639,6 +17743,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/custom-fields/{id}", wrapper.RenameCustomField)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/custom-fields/{id}/retire", wrapper.RetireCustomField)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/deal-rooms/by-token", wrapper.ResolveDealRoomByToken)
