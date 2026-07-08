@@ -126,6 +126,7 @@ func buildRBACMux(t *testing.T, db *sql.DB) http.Handler {
 		relationships.NewRelationshipStore(db),
 		deals.NewDealStore(db),
 		activities.NewActivityStore(db),
+		nil, // rollupStore: not exercised by this test
 		noopVerifier{},
 	)
 	mux.Handle("/people", authWrap("person", "read", personH))

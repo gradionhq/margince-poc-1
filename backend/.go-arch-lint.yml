@@ -145,6 +145,7 @@ components:
   dealsports:        { in: internal/modules/deals/ports }
   dealsadapters:     { in: internal/modules/deals/adapters }
   dealsapp:          { in: internal/modules/deals/app }
+  records:           { in: internal/modules/records }
   people:            { in: internal/modules/people }
   peopledomain:      { in: internal/modules/people/domain }
   peopleports:       { in: internal/modules/people/ports }
@@ -229,7 +230,7 @@ deps:
   organizations:
     mayDependOn: [orgsdomain, orgsadapters]
   orgstransport:
-    mayDependOn: [orgsadapters, orgsdomain, relationships, relsadapters, relsdomain, deals, dealsadapters, dealsdomain, activities, activitiesadapters, activitiesdomain, approvalsport, toolgate, mcp, crmctx, errs, httpkit]
+    mayDependOn: [orgsadapters, orgsdomain, relationships, relsadapters, relsdomain, deals, dealsadapters, dealsdomain, activities, activitiesadapters, activitiesdomain, records, approvalsport, toolgate, mcp, crmctx, errs, httpkit]
   activitiesdomain:
     mayDependOn: [prov, ids]
   activitiesports:
@@ -326,6 +327,12 @@ deps:
   # dealstransport now owns pipeline/stage AND deal-entity handlers (WS-E-b).
   dealstransport:
     mayDependOn: [deals, dealsadapters, dealsdomain, mcp, approvalsport, toolgate, crmctx, errs, prov, activitiesdomain, relsdomain]
+  # records is the records-depth read module (RD-T04): the hierarchy roll-up engine reuses
+  # deals' FX/weighting funcs, database.WithWorkspaceTx, and auth.LoadRolePermissions +
+  # session types for the row_scope RBAC lookup (self-contained tree-walk + aggregation).
+  records:
+    mayDependOn: [deals, dealsdomain, errs, database, auth, session]
+    canUse: [pq]
   # people domain uses strengthkern for PersonStrengthFrom; peopledomain composes
   # ActivityRef/deal/relationship refs (intentional cross-module composite-reference sharing).
   peopledomain:

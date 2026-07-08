@@ -23,6 +23,7 @@ import (
 	partnerstransport "github.com/gradionhq/margince/backend/internal/modules/partners/transport"
 	people "github.com/gradionhq/margince/backend/internal/modules/people"
 	peopletransport "github.com/gradionhq/margince/backend/internal/modules/people/transport"
+	"github.com/gradionhq/margince/backend/internal/modules/records"
 	relationships "github.com/gradionhq/margince/backend/internal/modules/relationships"
 	relstransport "github.com/gradionhq/margince/backend/internal/modules/relationships/transport"
 	platformauth "github.com/gradionhq/margince/backend/internal/platform/auth"
@@ -114,7 +115,7 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 		mux.Handle(path+"/", wrapped)
 	}
 	crud("/people", platformauth.ObjPerson, peopletransport.NewPersonHandler(people.NewPersonStore(k.db), relationships.NewRelationshipStore(k.db), deals.NewDealStore(k.db), activities.NewActivityStore(k.db), k.verifier))
-	crud("/organizations", platformauth.ObjOrganization, orgstransport.NewOrganizationHandler(organizations.NewOrgStore(k.db), relationships.NewRelationshipStore(k.db), deals.NewDealStore(k.db), activities.NewActivityStore(k.db), k.verifier))
+	crud("/organizations", platformauth.ObjOrganization, orgstransport.NewOrganizationHandler(organizations.NewOrgStore(k.db), relationships.NewRelationshipStore(k.db), deals.NewDealStore(k.db), activities.NewActivityStore(k.db), records.NewRollupStore(k.db), k.verifier))
 	dealHandler := dealstransport.NewDealHandler(deals.NewDealStore(k.db), relationships.NewRelationshipStore(k.db), activities.NewActivityStore(k.db), k.verifier)
 	crud("/deals", platformauth.ObjDeal, dealHandler)
 	mux.Handle("POST /deals/{id}/advance", instrument("/deals/advance", k.domainWrap(platformauth.ObjDeal, dealHandler)))
