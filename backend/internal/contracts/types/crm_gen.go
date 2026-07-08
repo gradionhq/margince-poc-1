@@ -2219,6 +2219,27 @@ func (e PromoteLeadRequestTrigger) Valid() bool {
 	}
 }
 
+// Defines values for QuotaAttainmentBand.
+const (
+	Accent QuotaAttainmentBand = "accent"
+	Behind QuotaAttainmentBand = "behind"
+	Met    QuotaAttainmentBand = "met"
+)
+
+// Valid indicates whether the value is a known member of the QuotaAttainmentBand enum.
+func (e QuotaAttainmentBand) Valid() bool {
+	switch e {
+	case Accent:
+		return true
+	case Behind:
+		return true
+	case Met:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RecordConsentRequestNewState.
 const (
 	RecordConsentRequestNewStateGranted   RecordConsentRequestNewState = "granted"
@@ -5564,6 +5585,54 @@ type Quota struct {
 	// not only overlay mode.
 	Version     *RowVersion        `json:"version,omitempty"`
 	WorkspaceId openapi_types.UUID `json:"workspace_id"`
+}
+
+// QuotaAttainment RD-WIRE-3 / RD-FORM-2 — server-computed attainment for one quota, decomposed for
+// "explain this number": attainment = Σ(closed-won base_value_minor in the quota's
+// period) ÷ target_minor, base-currency converted, in integer minor units. Never
+// client-summed — contributing_deals always sums to closed_won_minor. Rides as a
+// sub-resource of the quota (mirrors /pipelines/{id}/rollup and
+// /organizations/{id}/hierarchy-rollup's "computed read with decomposition" shape)
+// rather than an inline field on Quota or a GET ?include= expansion — chosen once,
+// applied consistently; the plain Quota response (list or single-get) never carries
+// attainment fields. A failed or absent computation is an honest error
+// (getQuotaAttainment's 422 responses), never a cached or invented figure (RD-AC-4).
+type QuotaAttainment struct {
+	// AsOfDate The date this attainment was computed.
+	AsOfDate openapi_types.Date `json:"as_of_date"`
+
+	// AttainmentPct closed_won_minor ÷ target_minor × 100 (RD-FORM-2). Uncapped raw value — e.g. 113 for the worked example — display capping (the ring visual stops at a full circle) is a RD-PARAM-4 UI concern, not this field's.
+	AttainmentPct float32 `json:"attainment_pct"`
+
+	// Band Server-computed display band (RD-PARAM-4): met >= 100%, accent 60-99%, behind < 60%. The client never recomputes this from raw attainment_pct.
+	Band QuotaAttainmentBand `json:"band"`
+
+	// ClosedWonMinor Σ base_value_minor over closed-won deals in the quota's period (RD-FORM-2).
+	ClosedWonMinor int64 `json:"closed_won_minor"`
+
+	// ContributingDeals Per-deal decomposition for "Explain This Number"; sums to closed_won_minor.
+	ContributingDeals []QuotaAttainmentDeal `json:"contributing_deals"`
+	Currency          string                `json:"currency"`
+
+	// GapMinor Signed gap to target — closed_won_minor minus target_minor (RD-FORM-2's worked example: +33.872,00 EUR once closed-won exceeds target); positive once attainment exceeds 100%, negative while short of target.
+	GapMinor int64 `json:"gap_minor"`
+
+	// PacePct attainment_pct measured against percent-of-period-elapsed (RD-PARAM-4 pace indicator).
+	PacePct float32            `json:"pace_pct"`
+	QuotaId openapi_types.UUID `json:"quota_id"`
+
+	// TargetMinor The flagged human-set target this attainment is measured against (echoes Quota.target_minor).
+	TargetMinor int64 `json:"target_minor"`
+}
+
+// QuotaAttainmentBand Server-computed display band (RD-PARAM-4): met >= 100%, accent 60-99%, behind < 60%. The client never recomputes this from raw attainment_pct.
+type QuotaAttainmentBand string
+
+// QuotaAttainmentDeal One row of RD-FORM-2's per-deal breakdown — a closed-won deal counted toward this quota's attainment.
+type QuotaAttainmentDeal struct {
+	// BaseValueMinor This deal's counted amount toward closed_won_minor (base currency, minor units).
+	BaseValueMinor int64              `json:"base_value_minor"`
+	DealId         openapi_types.UUID `json:"deal_id"`
 }
 
 // QuotaListResponse defines model for QuotaListResponse.
@@ -12803,6 +12872,9 @@ type ServerInterface interface {
 	// Update a quota (partial).
 	// (PATCH /quotas/{id})
 	UpdateQuota(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateQuotaParams)
+	// Server-computed attainment for this quota (RD-WIRE-3), decomposed per closed-won deal.
+	// (GET /quotas/{id}/attainment)
+	GetQuotaAttainment(w http.ResponseWriter, r *http.Request, idParam IdParam)
 	// List manual per-record grants, filtered by record or by subject (A52/ADR-0039).
 	// (GET /record-grants)
 	ListRecordGrants(w http.ResponseWriter, r *http.Request, params ListRecordGrantsParams)
@@ -13706,6 +13778,12 @@ func (_ Unimplemented) GetQuota(w http.ResponseWriter, r *http.Request, idParam 
 // Update a quota (partial).
 // (PATCH /quotas/{id})
 func (_ Unimplemented) UpdateQuota(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateQuotaParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Server-computed attainment for this quota (RD-WIRE-3), decomposed per closed-won deal.
+// (GET /quotas/{id}/attainment)
+func (_ Unimplemented) GetQuotaAttainment(w http.ResponseWriter, r *http.Request, idParam IdParam) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -20456,6 +20534,37 @@ func (siw *ServerInterfaceWrapper) UpdateQuota(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// GetQuotaAttainment operation middleware
+func (siw *ServerInterfaceWrapper) GetQuotaAttainment(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetQuotaAttainment(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListRecordGrants operation middleware
 func (siw *ServerInterfaceWrapper) ListRecordGrants(w http.ResponseWriter, r *http.Request) {
 	var err error
@@ -21974,6 +22083,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/quotas/{id}", wrapper.UpdateQuota)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/quotas/{id}/attainment", wrapper.GetQuotaAttainment)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/record-grants", wrapper.ListRecordGrants)

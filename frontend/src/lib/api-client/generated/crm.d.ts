@@ -2196,6 +2196,36 @@ export interface paths {
         patch: operations["updateQuota"];
         trace?: never;
     };
+    "/quotas/{id}/attainment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Server-computed attainment for this quota (RD-WIRE-3), decomposed per closed-won deal.
+         * @description RD-FORM-2: attainment = Σ(closed-won base_value_minor in the quota's period) ÷
+         *     target_minor, base-currency converted. Never client-summed — contributing_deals
+         *     always sums to closed_won_minor. A zero or otherwise unusable target refuses the
+         *     computation honestly (422 attainment_target_zero, RD-AC-4/AC-quota-6) rather than
+         *     dividing by zero; a failed clean-core query (e.g. a missing FX rate, mirroring
+         *     getPipelineRollup's fx_rate_unavailable) is an honest error, never a stale or
+         *     invented figure. The actual recompute-or-error logic is a handler concern, out of
+         *     this contract-only ticket's scope.
+         */
+        get: operations["getQuotaAttainment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/offer-templates": {
         parameters: {
             query?: never;
@@ -5642,6 +5672,64 @@ export interface components {
             /** Format: int64 */
             target_minor?: number;
             currency?: string;
+        };
+        /**
+         * @description RD-WIRE-3 / RD-FORM-2 — server-computed attainment for one quota, decomposed for
+         *     "explain this number": attainment = Σ(closed-won base_value_minor in the quota's
+         *     period) ÷ target_minor, base-currency converted, in integer minor units. Never
+         *     client-summed — contributing_deals always sums to closed_won_minor. Rides as a
+         *     sub-resource of the quota (mirrors /pipelines/{id}/rollup and
+         *     /organizations/{id}/hierarchy-rollup's "computed read with decomposition" shape)
+         *     rather than an inline field on Quota or a GET ?include= expansion — chosen once,
+         *     applied consistently; the plain Quota response (list or single-get) never carries
+         *     attainment fields. A failed or absent computation is an honest error
+         *     (getQuotaAttainment's 422 responses), never a cached or invented figure (RD-AC-4).
+         */
+        QuotaAttainment: {
+            /** Format: uuid */
+            quota_id: string;
+            /**
+             * Format: int64
+             * @description Σ base_value_minor over closed-won deals in the quota's period (RD-FORM-2).
+             */
+            closed_won_minor: number;
+            /**
+             * Format: int64
+             * @description The flagged human-set target this attainment is measured against (echoes Quota.target_minor).
+             */
+            target_minor: number;
+            currency: string;
+            /** @description closed_won_minor ÷ target_minor × 100 (RD-FORM-2). Uncapped raw value — e.g. 113 for the worked example — display capping (the ring visual stops at a full circle) is a RD-PARAM-4 UI concern, not this field's. */
+            attainment_pct: number;
+            /**
+             * Format: int64
+             * @description Signed gap to target — closed_won_minor minus target_minor (RD-FORM-2's worked example: +33.872,00 EUR once closed-won exceeds target); positive once attainment exceeds 100%, negative while short of target.
+             */
+            gap_minor: number;
+            /** @description attainment_pct measured against percent-of-period-elapsed (RD-PARAM-4 pace indicator). */
+            pace_pct: number;
+            /**
+             * @description Server-computed display band (RD-PARAM-4): met >= 100%, accent 60-99%, behind < 60%. The client never recomputes this from raw attainment_pct.
+             * @enum {string}
+             */
+            band: "met" | "accent" | "behind";
+            /**
+             * Format: date
+             * @description The date this attainment was computed.
+             */
+            as_of_date: string;
+            /** @description Per-deal decomposition for "Explain This Number"; sums to closed_won_minor. */
+            contributing_deals: components["schemas"]["QuotaAttainmentDeal"][];
+        };
+        /** @description One row of RD-FORM-2's per-deal breakdown — a closed-won deal counted toward this quota's attainment. */
+        QuotaAttainmentDeal: {
+            /** Format: uuid */
+            deal_id: string;
+            /**
+             * Format: int64
+             * @description This deal's counted amount toward closed_won_minor (base currency, minor units).
+             */
+            base_value_minor: number;
         };
     };
     responses: {
@@ -10720,6 +10808,41 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             /** @description Validation failed, including the owner-XOR-team contract. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getQuotaAttainment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description This quota's server-computed attainment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuotaAttainment"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Attainment cannot be honestly computed — target is zero, or the clean-core query failed. */
             422: {
                 headers: {
                     [name: string]: unknown;

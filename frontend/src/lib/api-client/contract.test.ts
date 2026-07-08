@@ -588,6 +588,44 @@ describe("CustomField retire shape (CUSTOM-FIELDS-WIRE-4)", () => {
   });
 });
 
+describe("QuotaAttainment contract compliance (RD-WIRE-3)", () => {
+  it("decomposes to contributing_deals that sum to closed_won_minor, and carries a display band", () => {
+    const attainment: components["schemas"]["QuotaAttainment"] = {
+      quota_id: "00000000-0000-0000-0000-000000000070",
+      closed_won_minor: 31387200,
+      target_minor: 28000000,
+      currency: "EUR",
+      attainment_pct: 113,
+      gap_minor: 3387200,
+      pace_pct: 95,
+      band: "met",
+      as_of_date: "2026-03-31",
+      contributing_deals: [
+        { deal_id: "00000000-0000-0000-0000-000000000080", base_value_minor: 15000000 },
+        { deal_id: "00000000-0000-0000-0000-000000000081", base_value_minor: 16387200 },
+      ],
+    };
+    const sum = attainment.contributing_deals.reduce((acc, d) => acc + d.base_value_minor, 0);
+    expect(sum).toBe(attainment.closed_won_minor);
+    expect(attainment.band).toBe("met");
+    expect(attainment.attainment_pct).toBeGreaterThan(100); // uncapped raw value (RD-PARAM-4)
+    // gap_minor = closed_won_minor - target_minor (RD-FORM-2 worked example: positive surplus once attainment > 100%)
+    expect(attainment.gap_minor).toBe(attainment.closed_won_minor - attainment.target_minor);
+  });
+
+  it("Problem carries a distinct code for a zero-target refusal vs. a failed computation", () => {
+    const targetZero: components["schemas"]["Problem"] = {
+      status: 422,
+      code: "attainment_target_zero",
+    };
+    const computationFailed: components["schemas"]["Problem"] = {
+      status: 422,
+      code: "attainment_computation_failed",
+    };
+    expect(targetZero.code).not.toBe(computationFailed.code);
+  });
+});
+
 describe("Quota archive shape (RD-WIRE-2)", () => {
   it("200 + full archived entity — not the /automations/{id} 204 shape", () => {
     const archived: components["schemas"]["Quota"] = {
