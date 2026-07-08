@@ -258,6 +258,38 @@ func TestActivityHandler_Post_CreatesThenReplaysIdempotently(t *testing.T) {
 	}
 }
 
+func TestActivityHandler_List_NeverBlocksOnSlowSummaryStub_ACT_AC_6(t *testing.T) {
+	// This goroutine stands in for a hypothetical async summary fetch and must
+	// not delay the real listActivities response.
+	db := openActivityHandlerTestDB(t)
+	seedActivityHandlerFixtures(t, db, "ac6")
+	h := NewActivityHandler(actadapters.NewActivityStore(db))
+
+	slowStubDone := make(chan struct{})
+	go func() {
+		time.Sleep(2 * time.Second)
+		close(slowStubDone)
+	}()
+
+	req := withActivityWorkspace(httptest.NewRequest(http.MethodGet, "/activities", nil))
+	w := httptest.NewRecorder()
+	start := time.Now()
+	h.ServeHTTP(w, req)
+	elapsed := time.Since(start)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	select {
+	case <-slowStubDone:
+		t.Fatal("the slow summary stub finished before the timeline response; the race did not actually exercise concurrency")
+	default:
+	}
+	if elapsed > 150*time.Millisecond {
+		t.Fatalf("listActivities took %v, want well under its budget regardless of a concurrently-running slow summary stub", elapsed)
+	}
+}
+
 func TestActivityHandler_Post_MissingProvenance_Returns422(t *testing.T) {
 	db := openActivityHandlerTestDB(t)
 	h := NewActivityHandler(actadapters.NewActivityStore(db))
