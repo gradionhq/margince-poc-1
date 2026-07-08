@@ -55,5 +55,6 @@ func buildAllOperations(k *routeKit) *server.AllOperations {
 		*server.NewIdentityAdapter(k.db, k.sessionStore, k.passportStore),
 		server.ProductsAdapter{H: offerstransport.NewProductHandler(offers.NewProductStore(k.db))},
 		server.OfferTemplatesAdapter{H: offerstransport.NewOfferTemplateHandler(offers.NewOfferTemplateStore(k.db))},
+		server.OffersAdapter{H: offerstransport.NewOfferHandler(offers.NewOfferStore(k.db), offers.NewOfferLineItemStore(k.db, offers.NewProductStore(k.db)))},
 	)
 }
