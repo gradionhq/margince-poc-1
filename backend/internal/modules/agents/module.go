@@ -83,3 +83,11 @@ func StageProposal(ctx context.Context, tx DBExec, repo crmapprovals.Repository,
 func ApplyGreen(ctx context.Context, tx DBExec, effector Effector, emitter EventEmitter, p RoutedProposal) (string, error) {
 	return app.ApplyGreen(ctx, tx, effector, emitter, p)
 }
+
+// DecidedEventPayload mirrors approvals' emitted approval.decided payload.
+type DecidedEventPayload = app.DecidedEventPayload
+
+// HandleDecided consumes one approval.decided event for an overnight.* item.
+func HandleDecided(ctx context.Context, tx DBExec, repo crmapprovals.Repository, effector Effector, emitter EventEmitter, payload DecidedEventPayload) error {
+	return app.HandleDecided(ctx, tx, repo, effector, emitter, payload)
+}
