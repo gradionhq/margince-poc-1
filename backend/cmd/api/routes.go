@@ -139,6 +139,10 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 	crud("/offer-templates", platformauth.ObjOfferTemplate, offerstransport.NewOfferTemplateHandler(offers.NewOfferTemplateStore(k.db)))
 	activityStore := activities.NewActivityStore(k.db)
 	crud("/attachments", platformauth.ObjAttachment, recordstransport.NewAttachmentHandler(records.NewAttachmentStore(k.db), k.blob, recordsadapters.NewDownloadAuditWriter(activityStore), k.db))
+	offerHandler := offerstransport.NewOfferHandler(offers.NewOfferStore(k.db), offers.NewOfferLineItemStore(k.db, offers.NewProductStore(k.db)))
+	mux.Handle("GET /deals/{id}/offers", instrument("/deals/offers", k.domainWrap(platformauth.ObjOffer, offerHandler)))
+	mux.Handle("POST /deals/{id}/offers", instrument("/deals/offers", k.domainWrap(platformauth.ObjOffer, offerHandler)))
+	crud("/offers", platformauth.ObjOffer, offerHandler)
 
 	historyAuthz := authz.Authorizer(func(ctx context.Context, object, action string) error {
 		p, _ := crmctx.From(ctx)

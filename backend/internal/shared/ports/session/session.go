@@ -58,6 +58,7 @@ var knownObjects = map[string]bool{
 	"record_grant":   true, // GH-209 WS-B: record_grant sharing/manage_sharing gate
 	"offer_template": true,
 	"attachment":     true, // RD-T05: attachment CRUD RBAC gate
+	"offer":          true,
 	"custom_field":   true, // CF-T03: custom-field definition CRUD gate
 }
 

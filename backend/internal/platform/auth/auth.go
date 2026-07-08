@@ -108,6 +108,7 @@ const (
 	ObjProduct       = "product"
 	ObjOfferTemplate = "offer_template"
 	ObjAttachment    = "attachment"
+	ObjOffer         = "offer"
 )
 
 // MethodToAction maps an HTTP method to the canonical RBAC action name.
