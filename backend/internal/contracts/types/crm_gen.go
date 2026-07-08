@@ -4781,17 +4781,29 @@ type Offer struct {
 	AcceptedAt *time.Time          `json:"accepted_at,omitempty"`
 	ArchivedAt *time.Time          `json:"archived_at,omitempty"`
 	BuyerOrgId *openapi_types.UUID `json:"buyer_org_id,omitempty"`
-	CapturedBy string              `json:"captured_by"`
-	CreatedAt  time.Time           `json:"created_at"`
-	Currency   string              `json:"currency"`
+
+	// BuyerSnapshot Buyer name/address/VAT captured at send time (OFFER-PARAM-5); null until sent.
+	BuyerSnapshot *map[string]interface{} `json:"buyer_snapshot,omitempty"`
+	CapturedBy    string                  `json:"captured_by"`
+	CreatedAt     time.Time               `json:"created_at"`
+	Currency      string                  `json:"currency"`
 
 	// DealId The deal this offer is bound to.
 	DealId openapi_types.UUID `json:"deal_id"`
+
+	// FxRateDate Frozen alongside fx_rate_to_base at send; null until sent.
+	FxRateDate *openapi_types.Date `json:"fx_rate_date,omitempty"`
+
+	// FxRateToBase Native→base, frozen at send (OFFER-PARAM-5, RT-PR-C2); null until sent. Decimal-as-string to avoid float rounding of the 10-dp rate.
+	FxRateToBase *string `json:"fx_rate_to_base,omitempty"`
 
 	// GrossMinor Derived from line items; never accepted on request (API-ERR-15).
 	GrossMinor *int64             `json:"gross_minor,omitempty"`
 	Id         openapi_types.UUID `json:"id"`
 	IntroText  *string            `json:"intro_text,omitempty"`
+
+	// IssuerSnapshot Seller legal block captured at send time (OFFER-PARAM-5); null until sent.
+	IssuerSnapshot *map[string]interface{} `json:"issuer_snapshot,omitempty"`
 
 	// NetMinor Derived from line items (OFFER-PARAM-4); never accepted on request (API-ERR-15).
 	NetMinor *int64 `json:"net_minor,omitempty"`
@@ -4799,14 +4811,14 @@ type Offer struct {
 	// OfferNumber Human-facing "Angebot" number; unique per (workspace
 	OfferNumber string `json:"offer_number"`
 
-	// PdfAssetRef Rendered PDF ref — set by the render action (OFFER-WIRE-7
+	// PdfAssetRef Rendered PDF ref — set by the render action (OFFER-WIRE-7).
 	PdfAssetRef *string `json:"pdf_asset_ref,omitempty"`
 
 	// Revision Bumped when a sent offer is regenerated into a new draft (OFFER-PARAM-6); starts at 1.
 	Revision *int   `json:"revision,omitempty"`
 	Source   string `json:"source"`
 
-	// Status Editable only while draft (OFFER-WIRE-4); the transition verbs (regenerate/send/accept) are a later ticket (OFFER-WIRE-6..9).
+	// Status Editable only while draft (OFFER-WIRE-4); flipped by the regenerate/render/send/accept verbs (OFFER-WIRE-6..9).
 	Status *OfferStatus `json:"status,omitempty"`
 
 	// TaxMinor Derived from line items; never accepted on request (API-ERR-15).
@@ -4828,7 +4840,7 @@ type Offer struct {
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
-// OfferStatus Editable only while draft (OFFER-WIRE-4); the transition verbs (regenerate/send/accept) are a later ticket (OFFER-WIRE-6..9).
+// OfferStatus Editable only while draft (OFFER-WIRE-4); flipped by the regenerate/render/send/accept verbs (OFFER-WIRE-6..9).
 type OfferStatus string
 
 // OfferLineItem A typed line item on an offer; price is a snapshot copied from product (never
@@ -6956,6 +6968,27 @@ type UpdateOfferParams struct {
 	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
 }
 
+// AcceptOfferParams defines parameters for AcceptOffer.
+type AcceptOfferParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+
+	// ApprovalTokenParam A signed, single-use approval token (see schema `ApprovalToken`) minted by
+	// POST /approvals/{id}/approve, authorizing exactly one 🟡 confirm-first operation. It is a
+	// compact JWS whose claims **bind** the token to a specific approval, effect, tenant and
+	// principal — it is NOT a bare opaque string (ADR-0036). The server rejects a token that is
+	// expired, already consumed, or whose `diff_hash`/`workspace_id`/`passport_id`/`tool` does not
+	// match the operation being executed (`403 code: approval_token_invalid`). Required when an
+	// AGENT principal invokes a 🟡 operation; a human's direct call is itself the approval.
+	ApprovalTokenParam *ApprovalTokenParam `json:"X-Approval-Token,omitempty"`
+}
+
 // CreateOfferLineItemParams defines parameters for CreateOfferLineItem.
 type CreateOfferLineItemParams struct {
 	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
@@ -6978,6 +7011,51 @@ type UpdateOfferLineItemParams struct {
 	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
 	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
 	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+}
+
+// RegenerateOfferParams defines parameters for RegenerateOffer.
+type RegenerateOfferParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+}
+
+// RenderOfferParams defines parameters for RenderOffer.
+type RenderOfferParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+}
+
+// SendOfferParams defines parameters for SendOffer.
+type SendOfferParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+
+	// ApprovalTokenParam A signed, single-use approval token (see schema `ApprovalToken`) minted by
+	// POST /approvals/{id}/approve, authorizing exactly one 🟡 confirm-first operation. It is a
+	// compact JWS whose claims **bind** the token to a specific approval, effect, tenant and
+	// principal — it is NOT a bare opaque string (ADR-0036). The server rejects a token that is
+	// expired, already consumed, or whose `diff_hash`/`workspace_id`/`passport_id`/`tool` does not
+	// match the operation being executed (`403 code: approval_token_invalid`). Required when an
+	// AGENT principal invokes a 🟡 operation; a human's direct call is itself the approval.
+	ApprovalTokenParam *ApprovalTokenParam `json:"X-Approval-Token,omitempty"`
 }
 
 // ListOrganizationsParams defines parameters for ListOrganizations.
@@ -9996,6 +10074,14 @@ func (a *Offer) UnmarshalJSON(b []byte) error {
 		delete(object, "buyer_org_id")
 	}
 
+	if raw, found := object["buyer_snapshot"]; found {
+		err = json.Unmarshal(raw, &a.BuyerSnapshot)
+		if err != nil {
+			return fmt.Errorf("error reading 'buyer_snapshot': %w", err)
+		}
+		delete(object, "buyer_snapshot")
+	}
+
 	if raw, found := object["captured_by"]; found {
 		err = json.Unmarshal(raw, &a.CapturedBy)
 		if err != nil {
@@ -10028,6 +10114,22 @@ func (a *Offer) UnmarshalJSON(b []byte) error {
 		delete(object, "deal_id")
 	}
 
+	if raw, found := object["fx_rate_date"]; found {
+		err = json.Unmarshal(raw, &a.FxRateDate)
+		if err != nil {
+			return fmt.Errorf("error reading 'fx_rate_date': %w", err)
+		}
+		delete(object, "fx_rate_date")
+	}
+
+	if raw, found := object["fx_rate_to_base"]; found {
+		err = json.Unmarshal(raw, &a.FxRateToBase)
+		if err != nil {
+			return fmt.Errorf("error reading 'fx_rate_to_base': %w", err)
+		}
+		delete(object, "fx_rate_to_base")
+	}
+
 	if raw, found := object["gross_minor"]; found {
 		err = json.Unmarshal(raw, &a.GrossMinor)
 		if err != nil {
@@ -10050,6 +10152,14 @@ func (a *Offer) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("error reading 'intro_text': %w", err)
 		}
 		delete(object, "intro_text")
+	}
+
+	if raw, found := object["issuer_snapshot"]; found {
+		err = json.Unmarshal(raw, &a.IssuerSnapshot)
+		if err != nil {
+			return fmt.Errorf("error reading 'issuer_snapshot': %w", err)
+		}
+		delete(object, "issuer_snapshot")
 	}
 
 	if raw, found := object["net_minor"]; found {
@@ -10196,6 +10306,13 @@ func (a Offer) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if a.BuyerSnapshot != nil {
+		object["buyer_snapshot"], err = json.Marshal(a.BuyerSnapshot)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'buyer_snapshot': %w", err)
+		}
+	}
+
 	object["captured_by"], err = json.Marshal(a.CapturedBy)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'captured_by': %w", err)
@@ -10216,6 +10333,20 @@ func (a Offer) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("error marshaling 'deal_id': %w", err)
 	}
 
+	if a.FxRateDate != nil {
+		object["fx_rate_date"], err = json.Marshal(a.FxRateDate)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'fx_rate_date': %w", err)
+		}
+	}
+
+	if a.FxRateToBase != nil {
+		object["fx_rate_to_base"], err = json.Marshal(a.FxRateToBase)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'fx_rate_to_base': %w", err)
+		}
+	}
+
 	object["gross_minor"], err = json.Marshal(a.GrossMinor)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'gross_minor': %w", err)
@@ -10230,6 +10361,13 @@ func (a Offer) MarshalJSON() ([]byte, error) {
 		object["intro_text"], err = json.Marshal(a.IntroText)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'intro_text': %w", err)
+		}
+	}
+
+	if a.IssuerSnapshot != nil {
+		object["issuer_snapshot"], err = json.Marshal(a.IssuerSnapshot)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'issuer_snapshot': %w", err)
 		}
 	}
 
@@ -12743,6 +12881,9 @@ type ServerInterface interface {
 	// Update an offer (partial). Allowed only while status=draft.
 	// (PATCH /offers/{id})
 	UpdateOffer(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateOfferParams)
+	// Accept a sent offer — in-room buyer action (no e-sign in V1).
+	// (POST /offers/{id}/accept)
+	AcceptOffer(w http.ResponseWriter, r *http.Request, idParam IdParam, params AcceptOfferParams)
 	// List an offer's line items, in position order.
 	// (GET /offers/{id}/line-items)
 	ListOfferLineItems(w http.ResponseWriter, r *http.Request, idParam IdParam)
@@ -12755,6 +12896,15 @@ type ServerInterface interface {
 	// Update a line item (partial). Allowed only while the parent offer is status=draft.
 	// (PATCH /offers/{id}/line-items/{lineId})
 	UpdateOfferLineItem(w http.ResponseWriter, r *http.Request, idParam IdParam, lineId openapi_types.UUID, params UpdateOfferLineItemParams)
+	// Regenerate a sent offer into a new draft revision (AI regenerate-from-signal).
+	// (POST /offers/{id}/regenerate)
+	RegenerateOffer(w http.ResponseWriter, r *http.Request, idParam IdParam, params RegenerateOfferParams)
+	// Render the offer's branded PDF (sets pdf_asset_ref).
+	// (POST /offers/{id}/render)
+	RenderOffer(w http.ResponseWriter, r *http.Request, idParam IdParam, params RenderOfferParams)
+	// Send the offer — 🟡 confirm-first / gated (leaves the workspace).
+	// (POST /offers/{id}/send)
+	SendOffer(w http.ResponseWriter, r *http.Request, idParam IdParam, params SendOfferParams)
 	// List organizations (live by default; cursor-paginated).
 	// (GET /organizations)
 	ListOrganizations(w http.ResponseWriter, r *http.Request, params ListOrganizationsParams)
@@ -13523,6 +13673,12 @@ func (_ Unimplemented) UpdateOffer(w http.ResponseWriter, r *http.Request, idPar
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Accept a sent offer — in-room buyer action (no e-sign in V1).
+// (POST /offers/{id}/accept)
+func (_ Unimplemented) AcceptOffer(w http.ResponseWriter, r *http.Request, idParam IdParam, params AcceptOfferParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // List an offer's line items, in position order.
 // (GET /offers/{id}/line-items)
 func (_ Unimplemented) ListOfferLineItems(w http.ResponseWriter, r *http.Request, idParam IdParam) {
@@ -13544,6 +13700,24 @@ func (_ Unimplemented) DeleteOfferLineItem(w http.ResponseWriter, r *http.Reques
 // Update a line item (partial). Allowed only while the parent offer is status=draft.
 // (PATCH /offers/{id}/line-items/{lineId})
 func (_ Unimplemented) UpdateOfferLineItem(w http.ResponseWriter, r *http.Request, idParam IdParam, lineId openapi_types.UUID, params UpdateOfferLineItemParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Regenerate a sent offer into a new draft revision (AI regenerate-from-signal).
+// (POST /offers/{id}/regenerate)
+func (_ Unimplemented) RegenerateOffer(w http.ResponseWriter, r *http.Request, idParam IdParam, params RegenerateOfferParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Render the offer's branded PDF (sets pdf_asset_ref).
+// (POST /offers/{id}/render)
+func (_ Unimplemented) RenderOffer(w http.ResponseWriter, r *http.Request, idParam IdParam, params RenderOfferParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Send the offer — 🟡 confirm-first / gated (leaves the workspace).
+// (POST /offers/{id}/send)
+func (_ Unimplemented) SendOffer(w http.ResponseWriter, r *http.Request, idParam IdParam, params SendOfferParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -18316,6 +18490,80 @@ func (siw *ServerInterfaceWrapper) UpdateOffer(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// AcceptOffer operation middleware
+func (siw *ServerInterfaceWrapper) AcceptOffer(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AcceptOfferParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "X-Approval-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Approval-Token")]; found {
+		var ApprovalTokenParam ApprovalTokenParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Approval-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Approval-Token", valueList[0], &ApprovalTokenParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Approval-Token", Err: err})
+			return
+		}
+
+		params.ApprovalTokenParam = &ApprovalTokenParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AcceptOffer(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListOfferLineItems operation middleware
 func (siw *ServerInterfaceWrapper) ListOfferLineItems(w http.ResponseWriter, r *http.Request) {
 	var err error
@@ -18497,6 +18745,190 @@ func (siw *ServerInterfaceWrapper) UpdateOfferLineItem(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateOfferLineItem(w, r, idParam, lineId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RegenerateOffer operation middleware
+func (siw *ServerInterfaceWrapper) RegenerateOffer(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RegenerateOfferParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RegenerateOffer(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RenderOffer operation middleware
+func (siw *ServerInterfaceWrapper) RenderOffer(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RenderOfferParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RenderOffer(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SendOffer operation middleware
+func (siw *ServerInterfaceWrapper) SendOffer(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SendOfferParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "X-Approval-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Approval-Token")]; found {
+		var ApprovalTokenParam ApprovalTokenParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Approval-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Approval-Token", valueList[0], &ApprovalTokenParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Approval-Token", Err: err})
+			return
+		}
+
+		params.ApprovalTokenParam = &ApprovalTokenParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SendOffer(w, r, idParam, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -21956,6 +22388,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Patch(options.BaseURL+"/offers/{id}", wrapper.UpdateOffer)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/offers/{id}/accept", wrapper.AcceptOffer)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/offers/{id}/line-items", wrapper.ListOfferLineItems)
 	})
 	r.Group(func(r chi.Router) {
@@ -21966,6 +22401,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/offers/{id}/line-items/{lineId}", wrapper.UpdateOfferLineItem)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/offers/{id}/regenerate", wrapper.RegenerateOffer)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/offers/{id}/render", wrapper.RenderOffer)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/offers/{id}/send", wrapper.SendOffer)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/organizations", wrapper.ListOrganizations)

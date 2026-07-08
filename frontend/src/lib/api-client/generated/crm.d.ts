@@ -702,6 +702,118 @@ export interface paths {
         patch: operations["updateOfferLineItem"];
         trace?: never;
     };
+    "/offers/{id}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Regenerate a sent offer into a new draft revision (AI regenerate-from-signal).
+         * @description The `draft_offer` MCP verb. Creates a new `draft` revision `n+1` from the offer's current
+         *     state and flips the prior revision to `superseded` (OFFER-PARAM-6) — a sent offer is
+         *     never edited in place (OFFER-AC-1). Non-destructive (nothing is lost, only superseded),
+         *     so this is 🟢 unlike `send`/`accept`. The response is the new draft revision itself, not a
+         *     diff object.
+         */
+        post: operations["regenerateOffer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/offers/{id}/render": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Render the offer's branded PDF (sets pdf_asset_ref).
+         * @description The `render_offer` MCP verb. Produces the branded DE/EN PDF from the offer's current
+         *     template + line items and stores the resulting `pdf_asset_ref` (OFFER-WIRE-7); rendered
+         *     totals must equal the server-computed totals (OFFER-AC-9). Not itself an outbound or
+         *     irreversible act — `send` is the gated step — so this is 🟢.
+         */
+        post: operations["renderOffer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/offers/{id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send the offer — 🟡 confirm-first / gated (leaves the workspace).
+         * @description The `send_offer` MCP verb. Publishes to the Deal Room / emails the rendered PDF and sets
+         *     `status=sent`. Outbound + irreversible → 🟡 confirm-first, mirroring `sendEmail` exactly:
+         *     an agent caller must supply a valid `X-Approval-Token`; a human caller's own action is the
+         *     approval (API-CONV-10). A missing/invalid token on an agent call resolves to `403
+         *     approval_required` (API-ERR-10). Freezes `fx_rate_to_base`/`fx_rate_date` and captures
+         *     `buyer_snapshot`/`issuer_snapshot` at this exact moment (OFFER-PARAM-5) — a missing FX rate
+         *     for a non-base currency hard-fails `422 fx_rate_unavailable`, never rate=1 (OFFER-AC-8).
+         */
+        post: operations["sendOffer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/offers/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept a sent offer — in-room buyer action (no e-sign in V1).
+         * @description The `accept_offer` MCP verb. Flips `status=accepted` (+ `accepted_at`), syncs the parent
+         *     deal's `amount_minor` from this offer's `gross_minor` (the offer becomes the deal's value
+         *     source), and emits `offer.accepted` paired with a `deal.updated` on one correlation id
+         *     (OFFER-AC-2, event-bus EVT-SEM-4). Tier 🟡: normally the buyer's own in-room action (no
+         *     token needed — their action IS the approval, API-CONV-10), but also callable by an agent
+         *     on the seller's behalf, and it mutates `deal.amount_minor` — an agent caller without a
+         *     valid `X-Approval-Token` resolves to `403 approval_required`, mirroring `sendOffer`'s
+         *     gating exactly.
+         */
+        post: operations["acceptOffer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pipelines": {
         parameters: {
             query?: never;
@@ -4043,7 +4155,7 @@ export interface components {
             /** @description Bumped when a sent offer is regenerated into a new draft (OFFER-PARAM-6); starts at 1. */
             readonly revision: number;
             /**
-             * @description Editable only while draft (OFFER-WIRE-4); the transition verbs (regenerate/send/accept) are a later ticket (OFFER-WIRE-6..9).
+             * @description Editable only while draft (OFFER-WIRE-4); flipped by the regenerate/render/send/accept verbs (OFFER-WIRE-6..9).
              * @default draft
              * @enum {string}
              */
@@ -4051,6 +4163,14 @@ export interface components {
             currency: string;
             /** Format: uuid */
             buyer_org_id?: string | null;
+            /** @description Buyer name/address/VAT captured at send time (OFFER-PARAM-5); null until sent. */
+            readonly buyer_snapshot?: {
+                [key: string]: unknown;
+            } | null;
+            /** @description Seller legal block captured at send time (OFFER-PARAM-5); null until sent. */
+            readonly issuer_snapshot?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Format: date
              * @description Drives the expired status (OFFER-PARAM-3).
@@ -4073,9 +4193,16 @@ export interface components {
              * @description Derived from line items; never accepted on request (API-ERR-15).
              */
             readonly gross_minor: number;
+            /** @description Native→base, frozen at send (OFFER-PARAM-5, RT-PR-C2); null until sent. Decimal-as-string to avoid float rounding of the 10-dp rate. */
+            readonly fx_rate_to_base?: string | null;
+            /**
+             * Format: date
+             * @description Frozen alongside fx_rate_to_base at send; null until sent.
+             */
+            readonly fx_rate_date?: string | null;
             /** Format: uuid */
             template_id?: string | null;
-            /** @description Rendered PDF ref — set by the render action (OFFER-WIRE-7 */
+            /** @description Rendered PDF ref — set by the render action (OFFER-WIRE-7). */
             readonly pdf_asset_ref?: string | null;
             /** Format: date-time */
             readonly accepted_at?: string | null;
@@ -7454,6 +7581,200 @@ export interface operations {
                 };
             };
             422: components["responses"]["ValidationError"];
+        };
+    };
+    regenerateOffer: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+                 *     `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+                 *     returns the original status + body. Reusing the same key with a *different* request body
+                 *     returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+                 *     **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+                 *     retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+                 *     (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new draft revision. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Offer"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    renderOffer: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+                 *     `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+                 *     returns the original status + body. Reusing the same key with a *different* request body
+                 *     returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+                 *     **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+                 *     retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+                 *     (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The offer, with pdf_asset_ref populated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Offer"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    sendOffer: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+                 *     `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+                 *     returns the original status + body. Reusing the same key with a *different* request body
+                 *     returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+                 *     **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+                 *     retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+                 *     (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description A signed, single-use approval token (see schema `ApprovalToken`) minted by
+                 *     POST /approvals/{id}/approve, authorizing exactly one 🟡 confirm-first operation. It is a
+                 *     compact JWS whose claims **bind** the token to a specific approval, effect, tenant and
+                 *     principal — it is NOT a bare opaque string (ADR-0036). The server rejects a token that is
+                 *     expired, already consumed, or whose `diff_hash`/`workspace_id`/`passport_id`/`tool` does not
+                 *     match the operation being executed (`403 code: approval_token_invalid`). Required when an
+                 *     AGENT principal invokes a 🟡 operation; a human's direct call is itself the approval.
+                 */
+                "X-Approval-Token"?: components["parameters"]["ApprovalToken"];
+            };
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sent offer (status=sent), FX + snapshots frozen. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Offer"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Approval token missing or invalid for a 🟡 send, or RBAC denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    acceptOffer: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+                 *     `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+                 *     returns the original status + body. Reusing the same key with a *different* request body
+                 *     returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+                 *     **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+                 *     retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+                 *     (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description A signed, single-use approval token (see schema `ApprovalToken`) minted by
+                 *     POST /approvals/{id}/approve, authorizing exactly one 🟡 confirm-first operation. It is a
+                 *     compact JWS whose claims **bind** the token to a specific approval, effect, tenant and
+                 *     principal — it is NOT a bare opaque string (ADR-0036). The server rejects a token that is
+                 *     expired, already consumed, or whose `diff_hash`/`workspace_id`/`passport_id`/`tool` does not
+                 *     match the operation being executed (`403 code: approval_token_invalid`). Required when an
+                 *     AGENT principal invokes a 🟡 operation; a human's direct call is itself the approval.
+                 */
+                "X-Approval-Token"?: components["parameters"]["ApprovalToken"];
+            };
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The accepted offer (status=accepted, accepted_at populated). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Offer"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Approval token missing or invalid for a 🟡 accept, or RBAC denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description The offer is not in a state that can be accepted (already accepted/rejected/expired/superseded, or still draft; code: offer_not_acceptable). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     listPipelines: {
