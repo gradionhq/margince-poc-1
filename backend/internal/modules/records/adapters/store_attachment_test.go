@@ -83,6 +83,39 @@ func TestAttachmentStore_CreateGetArchive_RoundTrip(t *testing.T) {
 	}
 }
 
+// Regression test for a live-stack UAT bug: GetAny must return an archived
+// row that the archived_at-filtered Get 404s on — the single-item GET
+// transport handler relies on this to keep archived attachments retrievable
+// (disclosed-locked 200) instead of 404ing.
+func TestAttachmentStore_GetAny_ReturnsArchivedRowThatGet404s(t *testing.T) {
+	db := pgtest.OpenTestDB(t)
+	ctx, ws, personID := seedAttachmentWorkspace(t, db)
+	s := adapters.NewAttachmentStore(db)
+
+	created, err := s.Create(ctx, newAttachmentFixture(ws, personID))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := s.Archive(ctx, created.ID, ws); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+
+	if _, err := s.Get(ctx, created.ID, ws); !errors.Is(err, errs.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for archived row's filtered Get, got %v", err)
+	}
+
+	got, err := s.GetAny(ctx, created.ID, ws)
+	if err != nil {
+		t.Fatalf("GetAny: unexpected error for archived row: %v", err)
+	}
+	if got.ID != created.ID {
+		t.Fatalf("GetAny returned wrong row: got id %q, want %q", got.ID, created.ID)
+	}
+	if got.ArchivedAt == nil {
+		t.Fatal("GetAny: expected archived_at set on the returned row")
+	}
+}
+
 func TestAttachmentStore_Create_MissingProvenance_Rejected(t *testing.T) {
 	db := pgtest.OpenTestDB(t)
 	ctx, ws, personID := seedAttachmentWorkspace(t, db)

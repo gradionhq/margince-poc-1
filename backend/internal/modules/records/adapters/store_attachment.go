@@ -185,7 +185,7 @@ func (s *AttachmentStore) Archive(ctx context.Context, id, workspaceID string) (
 	if err != nil {
 		return domain.Attachment{}, err
 	}
-	return s.getAny(ctx, id, workspaceID)
+	return s.GetAny(ctx, id, workspaceID)
 }
 
 // MarkScanResult applies a Scanner verdict to a row's scan_status (RD-PARAM-5).
@@ -196,7 +196,7 @@ func (s *AttachmentStore) Archive(ctx context.Context, id, workspaceID string) (
 // endpoint, so it writes no audit_log row (not a create/update/archive
 // mutation the P12 convention covers).
 func (s *AttachmentStore) MarkScanResult(ctx context.Context, id, workspaceID string, scanner ports.Scanner) (domain.Attachment, error) {
-	row, err := s.getAny(ctx, id, workspaceID)
+	row, err := s.GetAny(ctx, id, workspaceID)
 	if err != nil {
 		return domain.Attachment{}, err
 	}
@@ -216,10 +216,16 @@ func (s *AttachmentStore) MarkScanResult(ctx context.Context, id, workspaceID st
 	if err != nil {
 		return domain.Attachment{}, err
 	}
-	return s.getAny(ctx, id, workspaceID)
+	return s.GetAny(ctx, id, workspaceID)
 }
 
-func (s *AttachmentStore) getAny(ctx context.Context, id, workspaceID string) (domain.Attachment, error) {
+// GetAny returns one attachment by id, workspace-scoped, regardless of
+// archived_at status (no archived_at IS NULL filter). Used by Archive/
+// MarkScanResult to re-fetch the post-mutation row, and by the transport
+// single-item GET handler so an archived attachment stays retrievable
+// (disclosed-locked 200, matching organizations/GetAny precedent) instead of
+// 404ing — archived rows are soft-deleted, not gone.
+func (s *AttachmentStore) GetAny(ctx context.Context, id, workspaceID string) (domain.Attachment, error) {
 	var a domain.Attachment
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		row := tx.QueryRowContext(ctx, attachmentGetAnyQuery, id, workspaceID)

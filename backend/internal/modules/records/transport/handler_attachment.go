@@ -23,6 +23,9 @@ import (
 type attachmentStoreSeam interface {
 	Create(ctx context.Context, a domain.Attachment) (domain.Attachment, error)
 	Get(ctx context.Context, id, workspaceID string) (domain.Attachment, error)
+	// GetAny returns the row regardless of archived_at status — used by the
+	// single-item GET handler so archived attachments stay retrievable.
+	GetAny(ctx context.Context, id, workspaceID string) (domain.Attachment, error)
 	List(ctx context.Context, workspaceID, entityType, entityID, cursor string, limit int, includeArchived bool) ([]domain.Attachment, string, error)
 	Archive(ctx context.Context, id, workspaceID string) (domain.Attachment, error)
 }
@@ -95,7 +98,7 @@ type attachmentResponse struct {
 	Source      string     `json:"source"`
 	CapturedBy  string     `json:"captured_by"`
 	CreatedAt   time.Time  `json:"created_at"`
-	ArchivedAt  *time.Time `json:"archived_at,omitempty"`
+	ArchivedAt  *time.Time `json:"archived_at"`
 	UploadURL   *string    `json:"upload_url,omitempty"`
 	DownloadURL *string    `json:"download_url,omitempty"`
 }
@@ -198,7 +201,9 @@ func (h *AttachmentHandler) create(w http.ResponseWriter, r *http.Request) {
 
 func (h *AttachmentHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	wsID := httpkit.WorkspaceID(r)
-	a, err := h.store.Get(r.Context(), id, wsID)
+	// GetAny (not Get): an archived attachment must stay retrievable via a
+	// plain GET — soft-delete convention, matching GET /organizations/{id}.
+	a, err := h.store.GetAny(r.Context(), id, wsID)
 	if errors.Is(err, errs.ErrNotFound) {
 		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
 		return
@@ -239,10 +244,11 @@ func (h *AttachmentHandler) list(w http.ResponseWriter, r *http.Request) {
 	httpkit.JSONOK(w, httpkit.PageResponse(resps, next))
 }
 
-// withURLs applies the visibility gate (Constraint 6) and scan-status gate
-// (Constraint 5) to a single attachment row. Returns a "disclosed-locked" row
-// (both URLs nil, no audit write) when the bound record is not visible or the
-// attachment is not yet scan_status='clean'. Never drops the row or returns 404.
+// withURLs applies the visibility gate (Constraint 6), the archived gate, and
+// the scan-status gate (Constraint 5) to a single attachment row. Returns a
+// "disclosed-locked" row (both URLs nil, no audit write) when the bound
+// record is not visible, the attachment is archived, or it is not yet
+// scan_status='clean'. Never drops the row or returns 404.
 func (h *AttachmentHandler) withURLs(r *http.Request, wsID string, a domain.Attachment) (attachmentResponse, error) {
 	if h.isVisible != nil {
 		principal, _ := crmctx.From(r.Context())
@@ -253,6 +259,13 @@ func (h *AttachmentHandler) withURLs(r *http.Request, wsID string, a domain.Atta
 		if !visible {
 			return toResponse(a, nil, nil), nil
 		}
+	}
+
+	// Archived = soft-deleted: never downloadable, regardless of scan_status
+	// (matches archiveAttachment's own response and the "no bytes access
+	// implied" convention).
+	if a.ArchivedAt != nil {
+		return toResponse(a, nil, nil), nil
 	}
 
 	if a.ScanStatus != domain.ScanStatusClean {
