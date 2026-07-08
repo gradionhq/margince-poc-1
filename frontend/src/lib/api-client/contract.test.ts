@@ -380,6 +380,45 @@ describe("Offer contract compliance (OFFER-WIRE-3/4)", () => {
   });
 });
 
+describe("Offer FX/snapshot fields contract compliance (OFFER-WIRE-8 completion)", () => {
+  it("fx_rate_to_base/fx_rate_date/buyer_snapshot/issuer_snapshot are optional and nullable", () => {
+    const offer: components["schemas"]["Offer"] = {
+      id: "00000000-0000-0000-0000-000000000070",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      deal_id: "00000000-0000-0000-0000-000000000080",
+      offer_number: "ANG-2026-0001",
+      revision: 1,
+      status: "sent",
+      currency: "EUR",
+      net_minor: 0,
+      tax_minor: 0,
+      gross_minor: 0,
+      fx_rate_to_base: "1.0812340000",
+      fx_rate_date: "2026-07-08",
+      buyer_snapshot: { name: "ACME GmbH", vat_id: "DE123456789" },
+      issuer_snapshot: { name: "Margince GmbH" },
+      source: "test",
+      captured_by: "human:test",
+      version: 1,
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+    };
+    expect(offer.fx_rate_to_base).toBe("1.0812340000");
+    expect(offer.buyer_snapshot?.name).toBe("ACME GmbH");
+
+    const draftOffer: components["schemas"]["Offer"] = {
+      ...offer,
+      status: "draft",
+      fx_rate_to_base: null,
+      fx_rate_date: null,
+      buyer_snapshot: null,
+      issuer_snapshot: null,
+    };
+    expect(draftOffer.fx_rate_to_base).toBeNull();
+    expect(draftOffer.buyer_snapshot).toBeNull();
+  });
+});
+
 describe("UpdateOfferRequest contract compliance (OFFER-WIRE-4)", () => {
   it("never carries status, revision, or money totals — draft-only editable fields", () => {
     const updateBody: components["schemas"]["UpdateOfferRequest"] = {
