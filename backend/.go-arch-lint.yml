@@ -256,7 +256,7 @@ deps:
   offersports:
     mayDependOn: [offersdomain]
   offersadapters:
-    mayDependOn: [offersdomain, errs, ids, database, audit, sqlutil]
+    mayDependOn: [offersdomain, errs, ids, database, audit, sqlutil, organizations, deals]
     canUse: [pq]
   offers:
     mayDependOn: [offersdomain, offersadapters, offerstransport]

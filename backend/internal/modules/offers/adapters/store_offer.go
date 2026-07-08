@@ -7,9 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"time"
 
+	"github.com/gradionhq/margince/backend/internal/modules/deals"
 	"github.com/gradionhq/margince/backend/internal/modules/offers/domain"
+	"github.com/gradionhq/margince/backend/internal/modules/organizations"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
@@ -120,6 +123,30 @@ func requireSent(status string) error {
 		return ErrOfferNotSent
 	}
 	return nil
+}
+
+// loadWorkspaceNameAndBaseCurrency returns workspace.name and workspace.base_currency.
+func loadWorkspaceNameAndBaseCurrency(ctx context.Context, tx *sql.Tx, workspaceID string) (name, baseCurrency string, err error) {
+	err = tx.QueryRowContext(ctx, `
+		SELECT name, base_currency FROM workspace WHERE id=$1::uuid`,
+		workspaceID).Scan(&name, &baseCurrency)
+	return name, baseCurrency, err
+}
+
+// buildBuyerSnapshot returns a stable buyer snapshot for send/render flows.
+func (s *OfferStore) buildBuyerSnapshot(ctx context.Context, buyerOrgID *string, workspaceID string) (map[string]any, error) {
+	if buyerOrgID == nil {
+		return map[string]any{}, nil
+	}
+	org, err := organizations.NewOrgStore(s.db).Get(ctx, *buyerOrgID, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"organization_id": org.ID,
+		"display_name":    org.DisplayName,
+		"address":         org.Address,
+	}, nil
 }
 
 // OfferStore executes parameterized SQL against the offer table.
@@ -362,6 +389,86 @@ func (s *OfferStore) Update(ctx context.Context, id, workspaceID string, updates
 		e.WorkspaceID = workspaceID
 		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
 			return fmt.Errorf("offer update audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.Offer{}, err
+	}
+	return s.Get(ctx, id, workspaceID)
+}
+
+// Send freezes the offer's FX metadata and buyer/issuer snapshots and marks it sent.
+func (s *OfferStore) Send(ctx context.Context, id, workspaceID string) (domain.Offer, error) {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		status, _, err := lockOfferForMutation(ctx, tx, id, workspaceID)
+		if err != nil {
+			return err
+		}
+		if err := requireDraft(status); err != nil {
+			return err
+		}
+
+		var currency, dealID string
+		var buyerOrgID sql.NullString
+		if err := tx.QueryRowContext(ctx, `
+			SELECT currency, deal_id, buyer_org_id FROM offer
+			WHERE id=$1::uuid AND workspace_id=$2::uuid`,
+			id, workspaceID).Scan(&currency, &dealID, &buyerOrgID); err != nil {
+			return err
+		}
+
+		workspaceName, baseCurrency, err := loadWorkspaceNameAndBaseCurrency(ctx, tx, workspaceID)
+		if err != nil {
+			return err
+		}
+
+		now := time.Now().UTC()
+		rate := 1.0
+		if currency != baseCurrency {
+			rate, err = deals.AsOfFXRate(ctx, tx, workspaceID, currency, baseCurrency, now)
+			if err != nil {
+				return err
+			}
+		}
+
+		var buyerOrgPtr *string
+		if buyerOrgID.Valid {
+			buyerOrgPtr = &buyerOrgID.String
+		}
+		buyerSnap, err := s.buildBuyerSnapshot(ctx, buyerOrgPtr, workspaceID)
+		if err != nil {
+			return err
+		}
+
+		buyerJSON, err := json.Marshal(buyerSnap)
+		if err != nil {
+			return err
+		}
+		issuerJSON, err := json.Marshal(map[string]any{"workspace_id": workspaceID, "name": workspaceName})
+		if err != nil {
+			return err
+		}
+		rateStr := strconv.FormatFloat(rate, 'f', 10, 64)
+
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE offer SET status=$1, fx_rate_to_base=$2, fx_rate_date=$3,
+			    buyer_snapshot=$4, issuer_snapshot=$5
+			WHERE id=$6::uuid AND workspace_id=$7::uuid`,
+			domain.OfferStatusSent, rateStr, now, buyerJSON, issuerJSON, id, workspaceID); err != nil {
+			return fmt.Errorf("offer send: %w", err)
+		}
+		payload, _ := json.Marshal(map[string]any{"offer_id": id, "deal_id": dealID})
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload)
+			 VALUES ($1,$2,$3::uuid,$4)`,
+			workspaceID, "offer.sent", id, payload); err != nil {
+			return fmt.Errorf("offer send event: %w", err)
+		}
+		e := crmaudit.EntryFromPrincipal(ctx, "update", entityTypeOffer, &id, nil, nil)
+		e.WorkspaceID = workspaceID
+		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+			return fmt.Errorf("offer send audit: %w", err)
 		}
 		return nil
 	})
