@@ -105,6 +105,11 @@ components:
   activitiesadapters:      { in: internal/modules/activities/adapters }
   activitiesapp:           { in: internal/modules/activities/app }
   activitiestransport:     { in: internal/modules/activities/transport }
+  offers:                  { in: internal/modules/offers }
+  offersdomain:            { in: internal/modules/offers/domain }
+  offersports:             { in: internal/modules/offers/ports }
+  offersadapters:          { in: internal/modules/offers/adapters }
+  offerstransport:         { in: internal/modules/offers/transport }
   relationships:           { in: internal/modules/relationships }
   relsdomain:              { in: internal/modules/relationships/domain }
   relsports:               { in: internal/modules/relationships/ports }
@@ -238,6 +243,17 @@ deps:
     mayDependOn: [activitiesdomain, activitiesadapters, activitiesapp, activitiestransport]
   activitiestransport:
     mayDependOn: [activities, activitiesadapters, activitiesdomain, crmctx, errs, httpkit]
+  offersdomain:
+    mayDependOn: [prov, ids]
+  offersports:
+    mayDependOn: [offersdomain]
+  offersadapters:
+    mayDependOn: [offersdomain, errs, ids, database, audit, sqlutil]
+    canUse: [pq]
+  offers:
+    mayDependOn: [offersdomain, offersadapters, offerstransport]
+  offerstransport:
+    mayDependOn: [offers, offersadapters, offersdomain, crmctx, errs, httpkit, prov]
   relsdomain:
     mayDependOn: [prov, ids]
   relsports:

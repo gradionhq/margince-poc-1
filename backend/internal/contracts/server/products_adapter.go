@@ -1,39 +1,41 @@
-//nolint:dupl // adapter boilerplate is structurally identical to OfferTemplatesAdapter by design
+//nolint:dupl // parallel per-tag delegation adapter: every method is a one-line ServeHTTP delegation, identical in shape to every sibling adapter by design (relationships/activities/people all follow this exact shape) -- there is no shared logic to extract, only the wired handler type differs
 package server
 
 import (
 	"net/http"
 
 	"github.com/gradionhq/margince/backend/internal/contracts/types"
+	offerstransport "github.com/gradionhq/margince/backend/internal/modules/offers/transport"
 )
 
-// ProductsAdapter implements the Products tag's slice of types.ServerInterface.
-// Products has no wired handler in this pruned skeleton tree (AC-D3/D10 scope: interface
-// conformance, not a live-routing cutover) — every method returns 501 via the same
-// shape oapi-codegen's own generated types.Unimplemented stub uses.
-type ProductsAdapter struct{}
-
-// ListProducts is unimplemented; see ProductsAdapter's doc comment.
-func (ProductsAdapter) ListProducts(w http.ResponseWriter, r *http.Request, params types.ListProductsParams) {
-	w.WriteHeader(http.StatusNotImplemented)
+// ProductsAdapter implements the Products tag's slice of types.ServerInterface
+// by delegating to the real ProductHandler cmd/api/routes.go wires for
+// /products.
+type ProductsAdapter struct {
+	H *offerstransport.ProductHandler
 }
 
-// CreateProduct is unimplemented; see ProductsAdapter's doc comment.
-func (ProductsAdapter) CreateProduct(w http.ResponseWriter, r *http.Request, params types.CreateProductParams) {
-	w.WriteHeader(http.StatusNotImplemented)
+// ListProducts delegates to the wired handler; see the struct doc comment above.
+func (a *ProductsAdapter) ListProducts(w http.ResponseWriter, r *http.Request, params types.ListProductsParams) {
+	a.H.ServeHTTP(w, r)
 }
 
-// GetProduct is unimplemented; see ProductsAdapter's doc comment.
-func (ProductsAdapter) GetProduct(w http.ResponseWriter, r *http.Request, idParam types.IdParam) {
-	w.WriteHeader(http.StatusNotImplemented)
+// CreateProduct delegates to the wired handler; see the struct doc comment above.
+func (a *ProductsAdapter) CreateProduct(w http.ResponseWriter, r *http.Request, params types.CreateProductParams) {
+	a.H.ServeHTTP(w, r)
 }
 
-// UpdateProduct is unimplemented; see ProductsAdapter's doc comment.
-func (ProductsAdapter) UpdateProduct(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.UpdateProductParams) {
-	w.WriteHeader(http.StatusNotImplemented)
+// GetProduct delegates to the wired handler; see the struct doc comment above.
+func (a *ProductsAdapter) GetProduct(w http.ResponseWriter, r *http.Request, idParam types.IdParam) {
+	a.H.ServeHTTP(w, r)
 }
 
-// ArchiveProduct is unimplemented; see ProductsAdapter's doc comment.
-func (ProductsAdapter) ArchiveProduct(w http.ResponseWriter, r *http.Request, idParam types.IdParam) {
-	w.WriteHeader(http.StatusNotImplemented)
+// UpdateProduct delegates to the wired handler; see the struct doc comment above.
+func (a *ProductsAdapter) UpdateProduct(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.UpdateProductParams) {
+	a.H.ServeHTTP(w, r)
+}
+
+// ArchiveProduct delegates to the wired handler; see the struct doc comment above.
+func (a *ProductsAdapter) ArchiveProduct(w http.ResponseWriter, r *http.Request, idParam types.IdParam) {
+	a.H.ServeHTTP(w, r)
 }

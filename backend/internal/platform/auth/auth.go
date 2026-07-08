@@ -95,16 +95,18 @@ const (
 
 // Canonical RBAC object names.
 const (
-	ObjPerson       = "person"
-	ObjDeal         = "deal"
-	ObjOrganization = "organization"
-	ObjPipeline     = "pipeline"
-	ObjStage        = "stage"
-	ObjPartner      = "partner"
-	ObjRelationship = "relationship"
-	ObjActivity     = "activity"
-	ObjRecordGrant  = "record_grant"
-	ObjCustomField  = "custom_field"
+	ObjPerson        = "person"
+	ObjDeal          = "deal"
+	ObjOrganization  = "organization"
+	ObjPipeline      = "pipeline"
+	ObjStage         = "stage"
+	ObjPartner       = "partner"
+	ObjRelationship  = "relationship"
+	ObjActivity      = "activity"
+	ObjRecordGrant   = "record_grant"
+	ObjCustomField   = "custom_field"
+	ObjProduct       = "product"
+	ObjOfferTemplate = "offer_template"
 )
 
 // MethodToAction maps an HTTP method to the canonical RBAC action name.

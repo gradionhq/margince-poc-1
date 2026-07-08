@@ -10,6 +10,8 @@ import (
 	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	dealstransport "github.com/gradionhq/margince/backend/internal/modules/deals/transport"
 	crmauth "github.com/gradionhq/margince/backend/internal/modules/identity"
+	offers "github.com/gradionhq/margince/backend/internal/modules/offers"
+	offerstransport "github.com/gradionhq/margince/backend/internal/modules/offers/transport"
 	organizations "github.com/gradionhq/margince/backend/internal/modules/organizations"
 	orgstransport "github.com/gradionhq/margince/backend/internal/modules/organizations/transport"
 	partners "github.com/gradionhq/margince/backend/internal/modules/partners"
@@ -53,5 +55,7 @@ func buildAllOperations(k *routeKit) *server.AllOperations {
 		server.AuditAdapter{H: audithistory.New(k.db, historyAuthz).Handler},
 		*server.NewIdentityAdapter(k.db, k.sessionStore, k.passportStore),
 		server.CustomFieldsAdapter{H: customfields.NewHandler(k.db, k.verifier)},
+		server.ProductsAdapter{H: offerstransport.NewProductHandler(offers.NewProductStore(k.db))},
+		server.OfferTemplatesAdapter{H: offerstransport.NewOfferTemplateHandler(offers.NewOfferTemplateStore(k.db))},
 	)
 }
