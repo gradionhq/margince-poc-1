@@ -229,7 +229,7 @@ deps:
   organizations:
     mayDependOn: [orgsdomain, orgsadapters]
   orgstransport:
-    mayDependOn: [orgsadapters, orgsdomain, relationships, relsadapters, relsdomain, deals, dealsadapters, dealsdomain, activities, activitiesadapters, activitiesdomain, approvalsport, toolgate, mcp, crmctx, errs, httpkit]
+    mayDependOn: [orgsadapters, orgsdomain, relationships, relsadapters, relsdomain, deals, dealsadapters, dealsdomain, activities, activitiesadapters, activitiesdomain, records, approvalsport, toolgate, mcp, crmctx, errs, httpkit]
   activitiesdomain:
     mayDependOn: [prov, ids]
   activitiesports:

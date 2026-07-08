@@ -77,6 +77,7 @@ func orgHandlerForTest(db *sql.DB, store *orgAdapters.OrgStore) *OrganizationHan
 		relationships.NewRelationshipStore(db),
 		deals.NewDealStore(db),
 		activities.NewActivityStore(db),
+		nil, // rollupStore: not exercised by these tests
 		&crmapprovals.DBVerifier{DB: db},
 	)
 }

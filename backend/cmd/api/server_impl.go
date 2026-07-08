@@ -18,6 +18,7 @@ import (
 	partnerstransport "github.com/gradionhq/margince/backend/internal/modules/partners/transport"
 	people "github.com/gradionhq/margince/backend/internal/modules/people"
 	peopletransport "github.com/gradionhq/margince/backend/internal/modules/people/transport"
+	"github.com/gradionhq/margince/backend/internal/modules/records"
 	relationships "github.com/gradionhq/margince/backend/internal/modules/relationships"
 	relstransport "github.com/gradionhq/margince/backend/internal/modules/relationships/transport"
 	platformauth "github.com/gradionhq/margince/backend/internal/platform/auth"
@@ -42,7 +43,7 @@ func buildAllOperations(k *routeKit) *server.AllOperations {
 
 	return server.NewAllOperations(
 		server.PeopleAdapter{H: peopletransport.NewPersonHandler(people.NewPersonStore(k.db), relationships.NewRelationshipStore(k.db), deals.NewDealStore(k.db), activities.NewActivityStore(k.db), k.verifier)},
-		server.OrganizationsAdapter{H: orgstransport.NewOrganizationHandler(organizations.NewOrgStore(k.db), relationships.NewRelationshipStore(k.db), deals.NewDealStore(k.db), activities.NewActivityStore(k.db), k.verifier)},
+		server.OrganizationsAdapter{H: orgstransport.NewOrganizationHandler(organizations.NewOrgStore(k.db), relationships.NewRelationshipStore(k.db), deals.NewDealStore(k.db), activities.NewActivityStore(k.db), records.NewRollupStore(k.db), k.verifier)},
 		server.DealsAdapter{H: dealstransport.NewDealHandler(deals.NewDealStore(k.db), relationships.NewRelationshipStore(k.db), activities.NewActivityStore(k.db), k.verifier)},
 		server.PipelinesAdapter{
 			P: dealstransport.NewPipelineHandler(deals.NewPipelineStore(k.db), deals.NewStageStore(k.db), deals.NewRollupStore(k.db)),
