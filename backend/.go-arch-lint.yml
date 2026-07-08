@@ -244,7 +244,7 @@ deps:
   activitiesports:
     mayDependOn: [activitiesdomain]
   activitiesadapters:
-    mayDependOn: [activitiesdomain, errs, ids, database, sqlutil]
+    mayDependOn: [activitiesdomain, errs, ids, database, sqlutil, audit]
     canUse: [pq]
   activitiesapp:
     mayDependOn: [activitiesdomain, activitiesports]

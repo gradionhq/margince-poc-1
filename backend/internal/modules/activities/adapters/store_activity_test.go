@@ -435,3 +435,117 @@ func TestActivityStore_ProvenanceRatio_MixedFixture(t *testing.T) {
 		t.Fatalf("expected agent=2 human=3, got agent=%d human=%d", agent, human)
 	}
 }
+
+func countActivityAuditAndEvent(t *testing.T, db *sql.DB, activityID, action, topic string) (auditCount, eventCount int) {
+	t.Helper()
+	if err := db.QueryRow(
+		`SELECT count(*) FROM audit_log WHERE entity_type='activity' AND entity_id=$1::uuid AND action=$2`,
+		activityID, action,
+	).Scan(&auditCount); err != nil {
+		t.Fatalf("count audit_log: %v", err)
+	}
+	if err := db.QueryRow(
+		`SELECT count(*) FROM event_outbox WHERE topic=$1 AND entity_id=$2::uuid`,
+		topic, activityID,
+	).Scan(&eventCount); err != nil {
+		t.Fatalf("count event_outbox: %v", err)
+	}
+	return auditCount, eventCount
+}
+
+func TestActivityStore_Update_PlainFieldChange_WritesOneAuditAndOneEvent(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "updauditevt")
+	s := NewActivityStore(db)
+
+	created, _, err := s.Create(context.Background(), domain.Activity{
+		WorkspaceID: wsID, Kind: "note", OccurredAt: time.Now(), Source: "ui", CapturedBy: "human:test",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if _, err := s.Update(context.Background(), created.ID, wsID, map[string]any{"subject": "corrected"}, 0); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	auditCount, eventCount := countActivityAuditAndEvent(t, db, created.ID, "update", "activity.updated")
+	if auditCount != 1 {
+		t.Fatalf("want 1 audit_log update row, got %d", auditCount)
+	}
+	if eventCount != 1 {
+		t.Fatalf("want 1 activity.updated event_outbox row, got %d", eventCount)
+	}
+}
+
+func TestActivityStore_Update_DoneTransition_EmitsActivityUpdatedNeverTaskCompleted(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "upddoneevt")
+	s := NewActivityStore(db)
+
+	created, _, err := s.Create(context.Background(), domain.Activity{
+		WorkspaceID: wsID, Kind: "task", OccurredAt: time.Now(), Source: "ui", CapturedBy: "human:test",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// One request touching is_done AND another field — still one logical mutation.
+	if _, err := s.Update(context.Background(), created.ID, wsID, map[string]any{"is_done": true, "subject": "done now"}, 0); err != nil {
+		t.Fatalf("update (done transition): %v", err)
+	}
+
+	auditCount, eventCount := countActivityAuditAndEvent(t, db, created.ID, "update", "activity.updated")
+	if auditCount != 1 {
+		t.Fatalf("want 1 audit_log update row for done transition, got %d", auditCount)
+	}
+	if eventCount != 1 {
+		t.Fatalf("want exactly 1 activity.updated event for done transition (never a separate event), got %d", eventCount)
+	}
+
+	var phantomCount int
+	if err := db.QueryRow(`SELECT count(*) FROM event_outbox WHERE topic='task.completed'`).Scan(&phantomCount); err != nil {
+		t.Fatalf("count task.completed: %v", err)
+	}
+	if phantomCount != 0 {
+		t.Fatalf("ACT-EVT-N-1: expected zero 'task.completed' rows ever, got %d", phantomCount)
+	}
+}
+
+func TestActivityStore_Archive_WritesOneAuditAndOneEvent(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "archauditevt")
+	s := NewActivityStore(db)
+
+	created, _, err := s.Create(context.Background(), domain.Activity{
+		WorkspaceID: wsID, Kind: "note", OccurredAt: time.Now(), Source: "ui", CapturedBy: "human:test",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	archived, err := s.Archive(context.Background(), created.ID, wsID)
+	if err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	if archived.ArchivedAt == nil {
+		t.Fatal("expected archived_at set")
+	}
+
+	auditCount, eventCount := countActivityAuditAndEvent(t, db, created.ID, "archive", "activity.archived")
+	if auditCount != 1 {
+		t.Fatalf("want 1 audit_log archive row, got %d", auditCount)
+	}
+	if eventCount != 1 {
+		t.Fatalf("want 1 activity.archived event_outbox row, got %d", eventCount)
+	}
+
+	// Repeat archive is idempotent — still exactly one of each, never a second pair.
+	if _, err := s.Archive(context.Background(), created.ID, wsID); err != nil {
+		t.Fatalf("second archive (idempotent): %v", err)
+	}
+	auditCount, eventCount = countActivityAuditAndEvent(t, db, created.ID, "archive", "activity.archived")
+	if auditCount != 1 || eventCount != 1 {
+		t.Fatalf("repeat archive must not double-fire: want 1/1, got audit=%d event=%d", auditCount, eventCount)
+	}
+}

@@ -138,6 +138,7 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 	crud("/custom-fields", platformauth.ObjCustomField, customfields.NewHandler(k.db, k.verifier))
 	crud("/products", platformauth.ObjProduct, offerstransport.NewProductHandler(offers.NewProductStore(k.db)))
 	crud("/offer-templates", platformauth.ObjOfferTemplate, offerstransport.NewOfferTemplateHandler(offers.NewOfferTemplateStore(k.db)))
+	crud("/quotas", platformauth.ObjQuota, recordstransport.NewQuotaHandler(records.NewQuotaStore(k.db)))
 	activityStore := activities.NewActivityStore(k.db)
 	crud("/attachments", platformauth.ObjAttachment, recordstransport.NewAttachmentHandler(records.NewAttachmentStore(k.db), k.blob, recordsadapters.NewDownloadAuditWriter(activityStore), k.db))
 	offerHandler := offerstransport.NewOfferHandler(offers.NewOfferStore(k.db), offers.NewOfferLineItemStore(k.db, offers.NewProductStore(k.db)), k.verifier, k.blob)

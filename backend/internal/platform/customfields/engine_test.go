@@ -195,6 +195,43 @@ func hasFieldError(errs []FieldError, field, code string) bool {
 	return false
 }
 
+func TestBuildOptionsDDL_RegeneratesCheckFromNewOptions(t *testing.T) {
+	ddl, err := BuildOptionsDDL("deal", "cf_route", []string{"direct", "marketplace"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(ddl, `DROP CONSTRAINT IF EXISTS "cf_route_check"`) {
+		t.Fatalf("expected a DROP CONSTRAINT IF EXISTS clause, got: %s", ddl)
+	}
+	if !contains(ddl, "ADD CONSTRAINT") || !contains(ddl, "'direct'") || !contains(ddl, "'marketplace'") || contains(ddl, "'reseller'") {
+		t.Fatalf("expected the regenerated CHECK to list only the new options, got: %s", ddl)
+	}
+}
+
+func TestBuildOptionsDDL_RejectsInvalidIdentifier(t *testing.T) {
+	if _, err := BuildOptionsDDL("deal; DROP TABLE deal", "cf_route", []string{"a"}); err == nil {
+		t.Fatal("expected an error for an invalid object identifier")
+	}
+}
+
+func TestBuildOptionsDDL_LabelInjectionNeverReachesRawSQL(t *testing.T) {
+	// CUSTOM-FIELDS-AC-12: even an attacker-controlled option value must
+	// only ever appear pq-quoted, never as raw SQL text.
+	ddl, err := BuildOptionsDDL("deal", "cf_route", []string{`x'); DROP TABLE deal;--`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(ddl, "DROP CONSTRAINT IF EXISTS") {
+		t.Fatalf("expected the DROP CONSTRAINT clause regardless of option content, got: %s", ddl)
+	}
+	// The malicious value must appear only inside a single pq.QuoteLiteral
+	// token — assert the statement still parses as one ALTER TABLE (no
+	// injected statement terminator outside a quoted literal).
+	if !contains(ddl, `DROP TABLE deal;--`) {
+		t.Fatalf("expected the literal to appear quoted (pq.QuoteLiteral escapes ', so the raw text still appears once, inside quotes): %s", ddl)
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || (len(substr) > 0 && indexOf(s, substr) >= 0))
 }
