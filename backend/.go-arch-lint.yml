@@ -108,7 +108,6 @@ components:
   offersdomain:            { in: internal/modules/offers/domain }
   offersports:             { in: internal/modules/offers/ports }
   offersadapters:          { in: internal/modules/offers/adapters }
-  offersapp:               { in: internal/modules/offers/app }
   offerstransport:         { in: internal/modules/offers/transport }
   relationships:           { in: internal/modules/relationships }
   relsdomain:              { in: internal/modules/relationships/domain }
@@ -250,10 +249,8 @@ deps:
   offersadapters:
     mayDependOn: [offersdomain, errs, ids, database, audit, sqlutil]
     canUse: [pq]
-  offersapp:
-    mayDependOn: [offersdomain, offersports]
   offers:
-    mayDependOn: [offersdomain, offersadapters, offersapp, offerstransport]
+    mayDependOn: [offersdomain, offersadapters, offerstransport]
   offerstransport:
     mayDependOn: [offers, offersadapters, offersdomain, crmctx, errs, httpkit, prov]
   relsdomain:
