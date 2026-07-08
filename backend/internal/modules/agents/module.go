@@ -91,3 +91,8 @@ type DecidedEventPayload = app.DecidedEventPayload
 func HandleDecided(ctx context.Context, tx DBExec, repo crmapprovals.Repository, effector Effector, emitter EventEmitter, payload DecidedEventPayload) error {
 	return app.HandleDecided(ctx, tx, repo, effector, emitter, payload)
 }
+
+// BuildBatch groups routed proposals by ActionType, ranked by confidence.
+func BuildBatch(in []RoutedProposal, producerErr error) RunResult {
+	return app.BuildBatch(in, producerErr)
+}
