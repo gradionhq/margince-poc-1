@@ -2131,7 +2131,22 @@ export interface paths {
          */
         get: operations["listCustomFields"];
         put?: never;
-        post?: never;
+        /**
+         * Define a new custom field on an existing core object (🟡 — a schema change).
+         * @description CUSTOM-FIELDS-WIRE-2. Stages the governed engine's single-transaction add (schema
+         *     change + catalog row + one audit entry, custom-fields.md). Always 🟡 — schema
+         *     changes are never 🟢 — so an agent caller must supply `X-Approval-Token`, exactly
+         *     like `mergePerson` and `advanceDeal`'s closed-won transition; a human's direct call
+         *     is itself the approval (API-CONV-10). `column_name` is server-derived and never
+         *     client-supplied. When the validated `label`/`type`/`object` combination is judged
+         *     structural — a new object, a relationship, or logic, never one of the six closed
+         *     types on one of the five closed objects — the request is refused with a
+         *     `structural_change_refused` 422 (see the example below). The actual
+         *     structural-detection judgment (parsing the label for words like
+         *     "object"/"relationship"/"link to") is a handler concern **out of this ticket's
+         *     scope** — this contract only names and shapes the refusal.
+         */
+        post: operations["createCustomField"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4743,6 +4758,27 @@ export interface components {
         CustomFieldListResponse: {
             data: components["schemas"]["CustomField"][];
             page: components["schemas"]["PageInfo"];
+        };
+        /**
+         * @description 🟡 always (a schema change is never 🟢) — see `createCustomField`. `currency` is
+         *     required when `type=currency` (pattern `^[A-Z]{3}$`); `options` is required
+         *     non-empty when `type=picklist` (CUSTOM-FIELDS-PARAM-5). Neither conditional
+         *     requirement is expressed as an OpenAPI 3.1 `oneOf`/`if`-`then` here — a prose note
+         *     plus a 422 on mismatch is sufficient, matching how Offer/Product money fields are
+         *     documented elsewhere in this contract.
+         */
+        CreateCustomFieldRequest: {
+            /** @enum {string} */
+            object: "person" | "organization" | "deal" | "lead" | "activity";
+            label: string;
+            /** @enum {string} */
+            type: "text" | "number" | "date" | "currency" | "picklist" | "boolean";
+            currency?: string | null;
+            options?: string[] | null;
+            source: string;
+            captured_by: string;
+        } & {
+            [key: string]: unknown;
         };
     };
     responses: {
@@ -9467,6 +9503,70 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    createCustomField: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+                 *     `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+                 *     returns the original status + body. Reusing the same key with a *different* request body
+                 *     returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+                 *     **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+                 *     retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+                 *     (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description A signed, single-use approval token (see schema `ApprovalToken`) minted by
+                 *     POST /approvals/{id}/approve, authorizing exactly one 🟡 confirm-first operation. It is a
+                 *     compact JWS whose claims **bind** the token to a specific approval, effect, tenant and
+                 *     principal — it is NOT a bare opaque string (ADR-0036). The server rejects a token that is
+                 *     expired, already consumed, or whose `diff_hash`/`workspace_id`/`passport_id`/`tool` does not
+                 *     match the operation being executed (`403 code: approval_token_invalid`). Required when an
+                 *     AGENT principal invokes a 🟡 operation; a human's direct call is itself the approval.
+                 */
+                "X-Approval-Token"?: components["parameters"]["ApprovalToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCustomFieldRequest"];
+            };
+        };
+        responses: {
+            /** @description The newly created custom field. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomField"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description RBAC denied, or a 🟡 create attempted without an approval token. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Field definition failed validation, or is judged structural (`structural_change_refused`). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
 }

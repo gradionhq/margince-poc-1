@@ -848,6 +848,63 @@ func (e CreateConversationLinkRequestEntityType) Valid() bool {
 	}
 }
 
+// Defines values for CreateCustomFieldRequestObject.
+const (
+	CreateCustomFieldRequestObjectActivity     CreateCustomFieldRequestObject = "activity"
+	CreateCustomFieldRequestObjectDeal         CreateCustomFieldRequestObject = "deal"
+	CreateCustomFieldRequestObjectLead         CreateCustomFieldRequestObject = "lead"
+	CreateCustomFieldRequestObjectOrganization CreateCustomFieldRequestObject = "organization"
+	CreateCustomFieldRequestObjectPerson       CreateCustomFieldRequestObject = "person"
+)
+
+// Valid indicates whether the value is a known member of the CreateCustomFieldRequestObject enum.
+func (e CreateCustomFieldRequestObject) Valid() bool {
+	switch e {
+	case CreateCustomFieldRequestObjectActivity:
+		return true
+	case CreateCustomFieldRequestObjectDeal:
+		return true
+	case CreateCustomFieldRequestObjectLead:
+		return true
+	case CreateCustomFieldRequestObjectOrganization:
+		return true
+	case CreateCustomFieldRequestObjectPerson:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateCustomFieldRequestType.
+const (
+	CreateCustomFieldRequestTypeBoolean  CreateCustomFieldRequestType = "boolean"
+	CreateCustomFieldRequestTypeCurrency CreateCustomFieldRequestType = "currency"
+	CreateCustomFieldRequestTypeDate     CreateCustomFieldRequestType = "date"
+	CreateCustomFieldRequestTypeNumber   CreateCustomFieldRequestType = "number"
+	CreateCustomFieldRequestTypePicklist CreateCustomFieldRequestType = "picklist"
+	CreateCustomFieldRequestTypeText     CreateCustomFieldRequestType = "text"
+)
+
+// Valid indicates whether the value is a known member of the CreateCustomFieldRequestType enum.
+func (e CreateCustomFieldRequestType) Valid() bool {
+	switch e {
+	case CreateCustomFieldRequestTypeBoolean:
+		return true
+	case CreateCustomFieldRequestTypeCurrency:
+		return true
+	case CreateCustomFieldRequestTypeDate:
+		return true
+	case CreateCustomFieldRequestTypeNumber:
+		return true
+	case CreateCustomFieldRequestTypePicklist:
+		return true
+	case CreateCustomFieldRequestTypeText:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreateImportRequestMappingObjectKind.
 const (
 	CreateImportRequestMappingObjectKindLead         CreateImportRequestMappingObjectKind = "lead"
@@ -1192,28 +1249,28 @@ func (e CustomFieldStatus) Valid() bool {
 
 // Defines values for CustomFieldType.
 const (
-	Boolean  CustomFieldType = "boolean"
-	Currency CustomFieldType = "currency"
-	Date     CustomFieldType = "date"
-	Number   CustomFieldType = "number"
-	Picklist CustomFieldType = "picklist"
-	Text     CustomFieldType = "text"
+	CustomFieldTypeBoolean  CustomFieldType = "boolean"
+	CustomFieldTypeCurrency CustomFieldType = "currency"
+	CustomFieldTypeDate     CustomFieldType = "date"
+	CustomFieldTypeNumber   CustomFieldType = "number"
+	CustomFieldTypePicklist CustomFieldType = "picklist"
+	CustomFieldTypeText     CustomFieldType = "text"
 )
 
 // Valid indicates whether the value is a known member of the CustomFieldType enum.
 func (e CustomFieldType) Valid() bool {
 	switch e {
-	case Boolean:
+	case CustomFieldTypeBoolean:
 		return true
-	case Currency:
+	case CustomFieldTypeCurrency:
 		return true
-	case Date:
+	case CustomFieldTypeDate:
 		return true
-	case Number:
+	case CustomFieldTypeNumber:
 		return true
-	case Picklist:
+	case CustomFieldTypePicklist:
 		return true
-	case Text:
+	case CustomFieldTypeText:
 		return true
 	default:
 		return false
@@ -3331,6 +3388,29 @@ type CreateConversationLinkRequestConversationSystem string
 
 // CreateConversationLinkRequestEntityType defines model for CreateConversationLinkRequest.EntityType.
 type CreateConversationLinkRequestEntityType string
+
+// CreateCustomFieldRequest 🟡 always (a schema change is never 🟢) — see `createCustomField`. `currency` is
+// required when `type=currency` (pattern `^[A-Z]{3}$`); `options` is required
+// non-empty when `type=picklist` (CUSTOM-FIELDS-PARAM-5). Neither conditional
+// requirement is expressed as an OpenAPI 3.1 `oneOf`/`if`-`then` here — a prose note
+// plus a 422 on mismatch is sufficient, matching how Offer/Product money fields are
+// documented elsewhere in this contract.
+type CreateCustomFieldRequest struct {
+	CapturedBy           string                         `json:"captured_by"`
+	Currency             *string                        `json:"currency,omitempty"`
+	Label                string                         `json:"label"`
+	Object               CreateCustomFieldRequestObject `json:"object"`
+	Options              *[]string                      `json:"options,omitempty"`
+	Source               string                         `json:"source"`
+	Type                 CreateCustomFieldRequestType   `json:"type"`
+	AdditionalProperties map[string]interface{}         `json:"-"`
+}
+
+// CreateCustomFieldRequestObject defines model for CreateCustomFieldRequest.Object.
+type CreateCustomFieldRequestObject string
+
+// CreateCustomFieldRequestType defines model for CreateCustomFieldRequest.Type.
+type CreateCustomFieldRequestType string
 
 // CreateDealRequest defines model for CreateDealRequest.
 type CreateDealRequest struct {
@@ -5555,6 +5635,27 @@ type ListCustomFieldsParamsObject string
 // ListCustomFieldsParamsStatus defines parameters for ListCustomFields.
 type ListCustomFieldsParamsStatus string
 
+// CreateCustomFieldParams defines parameters for CreateCustomField.
+type CreateCustomFieldParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+
+	// ApprovalTokenParam A signed, single-use approval token (see schema `ApprovalToken`) minted by
+	// POST /approvals/{id}/approve, authorizing exactly one 🟡 confirm-first operation. It is a
+	// compact JWS whose claims **bind** the token to a specific approval, effect, tenant and
+	// principal — it is NOT a bare opaque string (ADR-0036). The server rejects a token that is
+	// expired, already consumed, or whose `diff_hash`/`workspace_id`/`passport_id`/`tool` does not
+	// match the operation being executed (`403 code: approval_token_invalid`). Required when an
+	// AGENT principal invokes a 🟡 operation; a human's direct call is itself the approval.
+	ApprovalTokenParam *ApprovalTokenParam `json:"X-Approval-Token,omitempty"`
+}
+
 // ResolveDealRoomByTokenParams defines parameters for ResolveDealRoomByToken.
 type ResolveDealRoomByTokenParams struct {
 	// Token The access_token for the deal room.
@@ -6398,6 +6499,9 @@ type CreateConsentPurposeJSONRequestBody = CreateConsentPurposeRequest
 // LinkConversationJSONRequestBody defines body for LinkConversation for application/json ContentType.
 type LinkConversationJSONRequestBody = CreateConversationLinkRequest
 
+// CreateCustomFieldJSONRequestBody defines body for CreateCustomField for application/json ContentType.
+type CreateCustomFieldJSONRequestBody = CreateCustomFieldRequest
+
 // CreateDealJSONRequestBody defines body for CreateDeal for application/json ContentType.
 type CreateDealJSONRequestBody = CreateDealRequest
 
@@ -6647,6 +6751,154 @@ func (a Address) MarshalJSON() ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'region': %w", err)
 		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for CreateCustomFieldRequest. Returns the specified
+// element and whether it was found
+func (a CreateCustomFieldRequest) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for CreateCustomFieldRequest
+func (a *CreateCustomFieldRequest) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for CreateCustomFieldRequest to handle AdditionalProperties
+func (a *CreateCustomFieldRequest) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["captured_by"]; found {
+		err = json.Unmarshal(raw, &a.CapturedBy)
+		if err != nil {
+			return fmt.Errorf("error reading 'captured_by': %w", err)
+		}
+		delete(object, "captured_by")
+	}
+
+	if raw, found := object["currency"]; found {
+		err = json.Unmarshal(raw, &a.Currency)
+		if err != nil {
+			return fmt.Errorf("error reading 'currency': %w", err)
+		}
+		delete(object, "currency")
+	}
+
+	if raw, found := object["label"]; found {
+		err = json.Unmarshal(raw, &a.Label)
+		if err != nil {
+			return fmt.Errorf("error reading 'label': %w", err)
+		}
+		delete(object, "label")
+	}
+
+	if raw, found := object["object"]; found {
+		err = json.Unmarshal(raw, &a.Object)
+		if err != nil {
+			return fmt.Errorf("error reading 'object': %w", err)
+		}
+		delete(object, "object")
+	}
+
+	if raw, found := object["options"]; found {
+		err = json.Unmarshal(raw, &a.Options)
+		if err != nil {
+			return fmt.Errorf("error reading 'options': %w", err)
+		}
+		delete(object, "options")
+	}
+
+	if raw, found := object["source"]; found {
+		err = json.Unmarshal(raw, &a.Source)
+		if err != nil {
+			return fmt.Errorf("error reading 'source': %w", err)
+		}
+		delete(object, "source")
+	}
+
+	if raw, found := object["type"]; found {
+		err = json.Unmarshal(raw, &a.Type)
+		if err != nil {
+			return fmt.Errorf("error reading 'type': %w", err)
+		}
+		delete(object, "type")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for CreateCustomFieldRequest to handle AdditionalProperties
+func (a CreateCustomFieldRequest) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	object["captured_by"], err = json.Marshal(a.CapturedBy)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'captured_by': %w", err)
+	}
+
+	if a.Currency != nil {
+		object["currency"], err = json.Marshal(a.Currency)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'currency': %w", err)
+		}
+	}
+
+	object["label"], err = json.Marshal(a.Label)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'label': %w", err)
+	}
+
+	object["object"], err = json.Marshal(a.Object)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'object': %w", err)
+	}
+
+	if a.Options != nil {
+		object["options"], err = json.Marshal(a.Options)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'options': %w", err)
+		}
+	}
+
+	object["source"], err = json.Marshal(a.Source)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'source': %w", err)
+	}
+
+	object["type"], err = json.Marshal(a.Type)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'type': %w", err)
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
@@ -9797,6 +10049,9 @@ type ServerInterface interface {
 	// List custom fields for an object (admin read; includes retired by default).
 	// (GET /custom-fields)
 	ListCustomFields(w http.ResponseWriter, r *http.Request, params ListCustomFieldsParams)
+	// Define a new custom field on an existing core object (🟡 — a schema change).
+	// (POST /custom-fields)
+	CreateCustomField(w http.ResponseWriter, r *http.Request, params CreateCustomFieldParams)
 	// Resolve a published deal room by its access token (unauthenticated public accessor).
 	// (GET /deal-rooms/by-token)
 	ResolveDealRoomByToken(w http.ResponseWriter, r *http.Request, params ResolveDealRoomByTokenParams)
@@ -10274,6 +10529,12 @@ func (_ Unimplemented) UnlinkConversation(w http.ResponseWriter, r *http.Request
 // List custom fields for an object (admin read; includes retired by default).
 // (GET /custom-fields)
 func (_ Unimplemented) ListCustomFields(w http.ResponseWriter, r *http.Request, params ListCustomFieldsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Define a new custom field on an existing core object (🟡 — a schema change).
+// (POST /custom-fields)
+func (_ Unimplemented) CreateCustomField(w http.ResponseWriter, r *http.Request, params CreateCustomFieldParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -11990,6 +12251,71 @@ func (siw *ServerInterfaceWrapper) ListCustomFields(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListCustomFields(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateCustomField operation middleware
+func (siw *ServerInterfaceWrapper) CreateCustomField(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateCustomFieldParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "X-Approval-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Approval-Token")]; found {
+		var ApprovalTokenParam ApprovalTokenParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Approval-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Approval-Token", valueList[0], &ApprovalTokenParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Approval-Token", Err: err})
+			return
+		}
+
+		params.ApprovalTokenParam = &ApprovalTokenParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateCustomField(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -17197,6 +17523,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/custom-fields", wrapper.ListCustomFields)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/custom-fields", wrapper.CreateCustomField)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/deal-rooms/by-token", wrapper.ResolveDealRoomByToken)

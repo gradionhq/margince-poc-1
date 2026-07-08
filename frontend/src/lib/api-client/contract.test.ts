@@ -360,3 +360,39 @@ describe("CustomField / CustomFieldListResponse contract compliance (CUSTOM-FIEL
     expect(Array.isArray(resp.data)).toBe(true);
   });
 });
+
+describe("CreateCustomFieldRequest + structural-refusal shape contract compliance (CUSTOM-FIELDS-WIRE-2/5)", () => {
+  it("accepts a picklist field with options and provenance", () => {
+    const req: components["schemas"]["CreateCustomFieldRequest"] = {
+      object: "deal",
+      label: "Procurement route",
+      type: "picklist",
+      options: ["direct", "reseller", "marketplace"],
+      source: "ui",
+      captured_by: "human:00000000-0000-0000-0000-000000000001",
+    };
+    expect(req.options).toHaveLength(3);
+  });
+
+  it("accepts a currency field requiring an ISO-4217 code", () => {
+    const req: components["schemas"]["CreateCustomFieldRequest"] = {
+      object: "deal",
+      label: "Budget ceiling",
+      type: "currency",
+      currency: "USD",
+      source: "ui",
+      captured_by: "human:00000000-0000-0000-0000-000000000001",
+    };
+    expect(req.currency).toBe("USD");
+  });
+
+  it("Problem carries a machine-branchable details.route for the structural-refusal shape", () => {
+    const refusal: components["schemas"]["Problem"] = {
+      status: 422,
+      code: "structural_change_refused",
+      details: { route: "source_development_path" },
+    };
+    expect(refusal.code).toBe("structural_change_refused");
+    expect(refusal.details?.route).toBe("source_development_path");
+  });
+});
