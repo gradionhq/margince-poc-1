@@ -287,6 +287,32 @@ describe("DealDetail contract compliance (DEAL-EXT-3)", () => {
   });
 });
 
+describe("Product.description contract compliance (OFFER-WIRE-1 completion)", () => {
+  it("carries an optional nullable description", () => {
+    const withDescription: components["schemas"]["Product"] = {
+      id: "00000000-0000-0000-0000-000000000001",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      name: "Consulting Day",
+      description: "One day of on-site consulting.",
+      unit_price_minor: 150000,
+      currency: "EUR",
+      active: true,
+      source: "test",
+      captured_by: "human:test",
+      version: 1,
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+    };
+    expect(withDescription.description).toBe("One day of on-site consulting.");
+
+    const withoutDescription: components["schemas"]["Product"] = {
+      ...withDescription,
+      description: undefined,
+    };
+    expect(withoutDescription.description).toBeUndefined();
+  });
+});
+
 describe("PipelineRollup contract compliance (DEAL-EXT-1)", () => {
   it("matches DEAL-FORM-2's shape plus per-stage and per-deal breakdowns", () => {
     const rollup: components["schemas"]["PipelineRollup"] = {

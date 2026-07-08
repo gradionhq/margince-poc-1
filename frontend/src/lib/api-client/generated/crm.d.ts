@@ -3445,6 +3445,7 @@ export interface components {
             name: string;
             /** @description Optional stock-keeping unit; unique per workspace when supplied. */
             sku?: string | null;
+            description?: string | null;
             /**
              * Format: int64
              * @description Unit price in smallest currency unit (e.g. cents). 150000 EUR-cents = €1,500.00. Never a float.
@@ -3478,6 +3479,7 @@ export interface components {
         CreateProductRequest: {
             name: string;
             sku?: string | null;
+            description?: string | null;
             /**
              * Format: int64
              * @description Unit price in smallest currency unit. Never a float.
@@ -3495,6 +3497,7 @@ export interface components {
         UpdateProductRequest: {
             name?: string;
             sku?: string | null;
+            description?: string | null;
             /**
              * Format: int64
              * @description Unit price in smallest currency unit. Never a float.

@@ -3358,6 +3358,7 @@ type CreateProductRequest struct {
 	CapturedBy     string   `json:"captured_by"`
 	Currency       string   `json:"currency"`
 	DefaultTaxRate *float32 `json:"default_tax_rate,omitempty"`
+	Description    *string  `json:"description,omitempty"`
 	Name           string   `json:"name"`
 	Sku            *string  `json:"sku,omitempty"`
 	Source         string   `json:"source"`
@@ -4595,6 +4596,7 @@ type Product struct {
 
 	// DefaultTaxRate Default VAT/tax rate as a decimal (e.g. 0.19 = 19%). Nullable — rate varies by customer/country.
 	DefaultTaxRate *float32           `json:"default_tax_rate,omitempty"`
+	Description    *string            `json:"description,omitempty"`
 	Id             openapi_types.UUID `json:"id"`
 	Name           string             `json:"name"`
 
@@ -5044,6 +5046,7 @@ type UpdateProductRequest struct {
 	CapturedBy     *string  `json:"captured_by,omitempty"`
 	Currency       *string  `json:"currency,omitempty"`
 	DefaultTaxRate *float32 `json:"default_tax_rate,omitempty"`
+	Description    *string  `json:"description,omitempty"`
 	Name           *string  `json:"name,omitempty"`
 	Sku            *string  `json:"sku,omitempty"`
 	Source         *string  `json:"source,omitempty"`

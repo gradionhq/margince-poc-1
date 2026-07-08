@@ -4944,6 +4944,7 @@ components:
         workspace_id: { type: string, format: uuid }
         name: { type: string }
         sku: { type: [string, 'null'], description: Optional stock-keeping unit; unique per workspace when supplied. }
+        description: { type: [string, 'null'] }
         unit_price_minor: { type: integer, format: int64, description: 'Unit price in smallest currency unit (e.g. cents). 150000 EUR-cents = €1,500.00. Never a float.' }
         currency: { type: string, pattern: '^[A-Z]{3}$', description: ISO-4217 uppercase (e.g. EUR, USD). }
         default_tax_rate: { type: [number, 'null'], description: 'Default VAT/tax rate as a decimal (e.g. 0.19 = 19%). Nullable — rate varies by customer/country.' }
@@ -4962,6 +4963,7 @@ components:
       properties:
         name: { type: string }
         sku: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
         unit_price_minor: { type: integer, format: int64, description: 'Unit price in smallest currency unit. Never a float.' }
         currency: { type: string, pattern: '^[A-Z]{3}$' }
         default_tax_rate: { type: [number, 'null'] }
@@ -4976,6 +4978,7 @@ components:
       properties:
         name: { type: string }
         sku: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
         unit_price_minor: { type: integer, format: int64, description: 'Unit price in smallest currency unit. Never a float.' }
         currency: { type: string, pattern: '^[A-Z]{3}$' }
         default_tax_rate: { type: [number, 'null'] }
