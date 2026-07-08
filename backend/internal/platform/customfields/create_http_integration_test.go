@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // registers the "postgres" database/sql driver
 
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	customfields "github.com/gradionhq/margince/backend/internal/platform/customfields"
@@ -46,6 +46,62 @@ func postCF(h *customfields.Handler, wsID, userID string, isAgent bool, token st
 	return w
 }
 
+// cfTypeCase is one row of TestCreateCustomField_AllSixTypes_EndToEnd's
+// type-to-column table.
+type cfTypeCase struct {
+	name    string
+	fType   string
+	object  string
+	extra   map[string]any
+	wantSQL string
+}
+
+// assertCreateCustomFieldCase runs a single cfTypeCase end to end: POST the
+// field, then assert the resulting pg column type, the ISO-4217 currency
+// catalog row (currency type only), and the catalog+audit row counts.
+// Extracted out of TestCreateCustomField_AllSixTypes_EndToEnd's t.Run
+// closure to keep the parent test's cognitive complexity under the lint
+// threshold — every assertion below is unchanged from the inline version.
+func assertCreateCustomFieldCase(t *testing.T, h *customfields.Handler, db *sql.DB, wsID, humanID string, c cfTypeCase) {
+	t.Helper()
+	body := map[string]any{"object": c.object, "label": c.name, "type": c.fType, "source": "ui", "captured_by": "human:" + humanID}
+	for k, v := range c.extra {
+		body[k] = v
+	}
+	w := postCF(h, wsID, humanID, false, "", body)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	var created map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	colName := created["column_name"].(string)
+
+	var pgType string
+	mustQueryScalar(t, db, &pgType, `SELECT data_type FROM information_schema.columns WHERE table_name=$1 AND column_name=$2`, c.object, colName)
+	if pgType != c.wantSQL {
+		t.Errorf("type=%s: pg column type = %q, want %q", c.fType, pgType, c.wantSQL)
+	}
+
+	// CUSTOM-FIELDS-AC-11 explicitly requires the ISO-4217 code land
+	// in the catalog row (the column itself is bare bigint minor-units).
+	if c.fType == "currency" {
+		var storedCurrency string
+		mustQueryScalar(t, db, &storedCurrency, `SELECT currency FROM custom_field WHERE id=$1::uuid`, created["id"])
+		if storedCurrency != "USD" {
+			t.Errorf("currency: catalog row currency = %q, want USD", storedCurrency)
+		}
+	}
+
+	var catalogCount, auditCount int
+	mustQueryScalar(t, db, &catalogCount, `SELECT count(*) FROM custom_field WHERE id=$1::uuid`, created["id"])
+	mustQueryScalar(t, db, &auditCount, `SELECT count(*) FROM audit_log WHERE entity_id=$1::uuid AND action='create' AND entity_type='custom_field'`, created["id"])
+	if catalogCount != 1 || auditCount != 1 {
+		t.Errorf("type=%s: catalog=%d audit=%d, want 1/1", c.fType, catalogCount, auditCount)
+	}
+}
+
 // TestCreateCustomField_AllSixTypes_EndToEnd proves CUSTOM-FIELDS-AC-11: the
 // six types map exactly per PARAM-4, and each creates a real, queryable
 // column plus matching catalog + audit rows.
@@ -55,13 +111,7 @@ func TestCreateCustomField_AllSixTypes_EndToEnd(t *testing.T) {
 	wsID, humanID, _ := seedCFHTTPWorkspaceAndUsers(t, db)
 	tag := time.Now().Format("150405.000000000")
 
-	cases := []struct {
-		name    string
-		fType   string
-		object  string
-		extra   map[string]any
-		wantSQL string
-	}{
+	cases := []cfTypeCase{
 		{"Text field " + tag, "text", "person", nil, "text"},
 		{"Number field " + tag, "number", "person", nil, "numeric"},
 		{"Date field " + tag, "date", "deal", nil, "date"},
@@ -71,42 +121,7 @@ func TestCreateCustomField_AllSixTypes_EndToEnd(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.fType, func(t *testing.T) {
-			body := map[string]any{"object": c.object, "label": c.name, "type": c.fType, "source": "ui", "captured_by": "human:" + humanID}
-			for k, v := range c.extra {
-				body[k] = v
-			}
-			w := postCF(h, wsID, humanID, false, "", body)
-			if w.Code != http.StatusCreated {
-				t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
-			}
-			var created map[string]any
-			if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
-				t.Fatalf("decode: %v", err)
-			}
-			colName := created["column_name"].(string)
-
-			var pgType string
-			mustQueryScalar(t, db, &pgType, `SELECT data_type FROM information_schema.columns WHERE table_name=$1 AND column_name=$2`, c.object, colName)
-			if pgType != c.wantSQL {
-				t.Errorf("type=%s: pg column type = %q, want %q", c.fType, pgType, c.wantSQL)
-			}
-
-			// CUSTOM-FIELDS-AC-11 explicitly requires the ISO-4217 code land
-			// in the catalog row (the column itself is bare bigint minor-units).
-			if c.fType == "currency" {
-				var storedCurrency string
-				mustQueryScalar(t, db, &storedCurrency, `SELECT currency FROM custom_field WHERE id=$1::uuid`, created["id"])
-				if storedCurrency != "USD" {
-					t.Errorf("currency: catalog row currency = %q, want USD", storedCurrency)
-				}
-			}
-
-			var catalogCount, auditCount int
-			mustQueryScalar(t, db, &catalogCount, `SELECT count(*) FROM custom_field WHERE id=$1::uuid`, created["id"])
-			mustQueryScalar(t, db, &auditCount, `SELECT count(*) FROM audit_log WHERE entity_id=$1::uuid AND action='create' AND entity_type='custom_field'`, created["id"])
-			if catalogCount != 1 || auditCount != 1 {
-				t.Errorf("type=%s: catalog=%d audit=%d, want 1/1", c.fType, catalogCount, auditCount)
-			}
+			assertCreateCustomFieldCase(t, h, db, wsID, humanID, c)
 		})
 	}
 }

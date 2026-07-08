@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // registers the "postgres" database/sql driver
 )
 
 func testDB(t *testing.T) *sql.DB {

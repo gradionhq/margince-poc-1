@@ -104,32 +104,39 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 // — extracted to satisfy golangci-lint's goconst rule (each literal repeats
 // 3+ times). Named jsonKeyStatus (not status) to avoid shadowing the status
 // int parameter these functions already take.
+//
+// headerContentType / contentTypeProblemJSON follow the same pattern: the
+// "Content-Type" header name and the "application/problem+json" media type
+// each repeat across these same response writers.
 const (
 	jsonKeyStatus = "status"
 	jsonKeyCode   = "code"
 	jsonKeyDetail = "detail"
+
+	headerContentType      = "Content-Type"
+	contentTypeProblemJSON = "application/problem+json"
 )
 
 func jsonCreated(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(headerContentType, "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(v) //nolint:errcheck,gosec
 }
 
 func jsonProblem(w http.ResponseWriter, status int, code, detail string) {
-	w.Header().Set("Content-Type", "application/problem+json")
+	w.Header().Set(headerContentType, contentTypeProblemJSON)
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]any{jsonKeyStatus: status, jsonKeyCode: code, jsonKeyDetail: detail}) //nolint:errcheck,gosec
 }
 
 func jsonProblemDetails(w http.ResponseWriter, status int, code, detail string, details map[string]any) {
-	w.Header().Set("Content-Type", "application/problem+json")
+	w.Header().Set(headerContentType, contentTypeProblemJSON)
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]any{jsonKeyStatus: status, jsonKeyCode: code, jsonKeyDetail: detail, "details": details}) //nolint:errcheck,gosec
 }
 
 func jsonValidationError(w http.ResponseWriter, detail string, errs []FieldError) {
-	w.Header().Set("Content-Type", "application/problem+json")
+	w.Header().Set(headerContentType, contentTypeProblemJSON)
 	w.WriteHeader(http.StatusUnprocessableEntity)
 	json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 		jsonKeyStatus: http.StatusUnprocessableEntity, jsonKeyCode: "validation_error",
