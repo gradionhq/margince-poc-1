@@ -180,6 +180,12 @@ func (s *DealStore) Archive(ctx context.Context, id, workspaceID string) (domain
 			return fmt.Errorf("deal archive rows affected: %w", err)
 		}
 		if n > 0 {
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE attachment SET archived_at=now()
+				 WHERE entity_type='deal' AND entity_id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
+				id, workspaceID); err != nil {
+				return fmt.Errorf("deal archive attachment cascade: %w", err)
+			}
 			payload, _ := json.Marshal(map[string]string{colDealID: id})
 			if _, err := tx.ExecContext(ctx,
 				`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload)
