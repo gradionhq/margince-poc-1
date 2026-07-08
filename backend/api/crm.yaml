@@ -1114,6 +1114,78 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  /deals/{id}/offers:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Offers]
+      operationId: listDealOffers
+      summary: List offers under a deal (all revisions; most recent first).
+      x-mcp-tool: { verb: search_records, record_type: offer, tier: green }
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/IncludeArchived'
+      responses:
+        '200':
+          description: A page of offers for this deal.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfferListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Offers]
+      operationId: createDealOffer
+      summary: Create a draft offer under this deal.
+      description: |
+        Starts as revision 1, status=draft. offer_number must be unique per (workspace,
+        offer_number, revision) (409 on collision). Money totals (net/tax/gross_minor) are
+        server-computed from line items, never accepted on this request (API-ERR-15) — a
+        newly created offer has zero lines and zero totals until line items are added
+        (OFFER-WIRE-5).
+      x-mcp-tool: { verb: create_record, record_type: offer, tier: green }
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOfferRequest' }
+            examples:
+              minimal:
+                value:
+                  offer_number: 'ANG-2026-0001'
+                  currency: EUR
+                  source: ui
+                  captured_by: 'human:018f3a1b-0000-7000-8000-000000000001'
+      responses:
+        '201':
+          description: Created offer.
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Offer' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: An offer with this offer_number + revision already exists in the workspace.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                offer_number_duplicate:
+                  value:
+                    type: 'https://errors.margince.com/offer_number_duplicate'
+                    title: Duplicate offer number
+                    status: 409
+                    code: offer_number_duplicate
+                    detail: An offer with this offer_number and revision already exists.
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   # ---------------------------- /pipelines ----------------------------------
   /pipelines:
     get:
@@ -5170,6 +5242,64 @@ components:
       required: [data, page]
       properties:
         data: { type: array, items: { $ref: '#/components/schemas/OfferTemplate' } }
+        page: { $ref: '#/components/schemas/PageInfo' }
+
+    # ---- Offer (OFFER-WIRE-3/4) ----
+    Offer:
+      type: object
+      description: |
+        A versioned Angebot (offer) bound to one deal. Money totals (net/tax/gross) are
+        DERIVED server-side from its line items (OFFER-PARAM-4) — never accepted on
+        request (API-ERR-15). Mirrors the offer table.
+      required: [id, workspace_id, deal_id, offer_number, revision, status, currency, net_minor, tax_minor, gross_minor, source, captured_by, version, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        workspace_id: { type: string, format: uuid }
+        deal_id: { type: string, format: uuid, description: The deal this offer is bound to. }
+        offer_number: { type: string, description: Human-facing "Angebot" number; unique per (workspace, offer_number, revision). }
+        revision: { type: integer, readOnly: true, description: 'Bumped when a sent offer is regenerated into a new draft (OFFER-PARAM-6); starts at 1.' }
+        status: { type: string, enum: [draft, sent, accepted, rejected, expired, superseded], default: draft, readOnly: true, description: 'Editable only while draft (OFFER-WIRE-4); the transition verbs (regenerate/send/accept) are a later ticket (OFFER-WIRE-6..9).' }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        buyer_org_id: { type: [string, 'null'], format: uuid }
+        valid_until: { type: [string, 'null'], format: date, description: Drives the expired status (OFFER-PARAM-3). }
+        intro_text: { type: [string, 'null'] }
+        terms_text: { type: [string, 'null'] }
+        net_minor: { type: integer, format: int64, readOnly: true, description: 'Derived from line items (OFFER-PARAM-4); never accepted on request (API-ERR-15).' }
+        tax_minor: { type: integer, format: int64, readOnly: true, description: 'Derived from line items; never accepted on request (API-ERR-15).' }
+        gross_minor: { type: integer, format: int64, readOnly: true, description: 'Derived from line items; never accepted on request (API-ERR-15).' }
+        template_id: { type: [string, 'null'], format: uuid }
+        pdf_asset_ref: { type: [string, 'null'], readOnly: true, description: Rendered PDF ref — set by the render action (OFFER-WIRE-7, later ticket). }
+        accepted_at: { type: [string, 'null'], format: date-time, readOnly: true }
+        source: { type: string }
+        captured_by: { type: string }
+        version: { $ref: '#/components/schemas/RowVersion' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        archived_at: { type: [string, 'null'], format: date-time }
+      additionalProperties: true
+      x-extension: true
+
+    CreateOfferRequest:
+      type: object
+      required: [offer_number, currency, source, captured_by]
+      properties:
+        offer_number: { type: string }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        buyer_org_id: { type: [string, 'null'], format: uuid }
+        valid_until: { type: [string, 'null'], format: date }
+        intro_text: { type: [string, 'null'] }
+        terms_text: { type: [string, 'null'] }
+        template_id: { type: [string, 'null'], format: uuid }
+        source: { type: string }
+        captured_by: { type: string }
+      additionalProperties: true
+      x-extension: true
+
+    OfferListResponse:
+      type: object
+      required: [data, page]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/Offer' } }
         page: { $ref: '#/components/schemas/PageInfo' }
 
     # ---- DraftingAsset ----

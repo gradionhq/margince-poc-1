@@ -589,6 +589,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/deals/{id}/offers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        /** List offers under a deal (all revisions; most recent first). */
+        get: operations["listDealOffers"];
+        put?: never;
+        /**
+         * Create a draft offer under this deal.
+         * @description Starts as revision 1, status=draft. offer_number must be unique per (workspace,
+         *     offer_number, revision) (409 on collision). Money totals (net/tax/gross_minor) are
+         *     server-computed from line items, never accepted on this request (API-ERR-15) — a
+         *     newly created offer has zero lines and zero totals until line items are added
+         *     (OFFER-WIRE-5).
+         */
+        post: operations["createDealOffer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pipelines": {
         parameters: {
             query?: never;
@@ -3626,6 +3654,94 @@ export interface components {
             data: components["schemas"]["OfferTemplate"][];
             page: components["schemas"]["PageInfo"];
         };
+        /**
+         * @description A versioned Angebot (offer) bound to one deal. Money totals (net/tax/gross) are
+         *     DERIVED server-side from its line items (OFFER-PARAM-4) — never accepted on
+         *     request (API-ERR-15). Mirrors the offer table.
+         */
+        Offer: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            workspace_id: string;
+            /**
+             * Format: uuid
+             * @description The deal this offer is bound to.
+             */
+            deal_id: string;
+            /** @description Human-facing "Angebot" number; unique per (workspace */
+            offer_number: string;
+            /** @description Bumped when a sent offer is regenerated into a new draft (OFFER-PARAM-6); starts at 1. */
+            readonly revision: number;
+            /**
+             * @description Editable only while draft (OFFER-WIRE-4); the transition verbs (regenerate/send/accept) are a later ticket (OFFER-WIRE-6..9).
+             * @default draft
+             * @enum {string}
+             */
+            readonly status: "draft" | "sent" | "accepted" | "rejected" | "expired" | "superseded";
+            currency: string;
+            /** Format: uuid */
+            buyer_org_id?: string | null;
+            /**
+             * Format: date
+             * @description Drives the expired status (OFFER-PARAM-3).
+             */
+            valid_until?: string | null;
+            intro_text?: string | null;
+            terms_text?: string | null;
+            /**
+             * Format: int64
+             * @description Derived from line items (OFFER-PARAM-4); never accepted on request (API-ERR-15).
+             */
+            readonly net_minor: number;
+            /**
+             * Format: int64
+             * @description Derived from line items; never accepted on request (API-ERR-15).
+             */
+            readonly tax_minor: number;
+            /**
+             * Format: int64
+             * @description Derived from line items; never accepted on request (API-ERR-15).
+             */
+            readonly gross_minor: number;
+            /** Format: uuid */
+            template_id?: string | null;
+            /** @description Rendered PDF ref — set by the render action (OFFER-WIRE-7 */
+            readonly pdf_asset_ref?: string | null;
+            /** Format: date-time */
+            readonly accepted_at?: string | null;
+            source: string;
+            captured_by: string;
+            version: components["schemas"]["RowVersion"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            archived_at?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        CreateOfferRequest: {
+            offer_number: string;
+            currency: string;
+            /** Format: uuid */
+            buyer_org_id?: string | null;
+            /** Format: date */
+            valid_until?: string | null;
+            intro_text?: string | null;
+            terms_text?: string | null;
+            /** Format: uuid */
+            template_id?: string | null;
+            source: string;
+            captured_by: string;
+        } & {
+            [key: string]: unknown;
+        };
+        OfferListResponse: {
+            data: components["schemas"]["Offer"][];
+            page: components["schemas"]["PageInfo"];
+        };
         /** @description A governed drafting asset (template, copy fragment, or reusable content) in the retrieval store. */
         DraftingAsset: {
             /** Format: uuid */
@@ -6153,6 +6269,98 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    listDealOffers: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Opaque keyset cursor from a prior response's `page.next_cursor`. The cursor encodes the
+                 *     effective `sort` and `filter` of the originating request plus the last row's keyset
+                 *     (sort-key tuple + `id` tie-breaker). **Stability:** results are stable under concurrent
+                 *     inserts/updates (keyset pagination, not offset). Supplying `cursor` together with a `sort`
+                 *     or filter that differs from the one the cursor was minted under returns
+                 *     `422 code: cursor_param_mismatch` — re-issue the query without the cursor.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Max items in the page. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Include soft-deleted (archived) rows. Default false. */
+                include_archived?: components["parameters"]["IncludeArchived"];
+            };
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of offers for this deal. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferListResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createDealOffer: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+                 *     `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+                 *     returns the original status + body. Reusing the same key with a *different* request body
+                 *     returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+                 *     **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+                 *     retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+                 *     (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOfferRequest"];
+            };
+        };
+        responses: {
+            /** @description Created offer. */
+            201: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Offer"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description An offer with this offer_number + revision already exists in the workspace. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             422: components["responses"]["ValidationError"];
         };
     };

@@ -343,6 +343,43 @@ describe("OfferTemplateListResponse contract compliance (OFFER-WIRE-2)", () => {
   });
 });
 
+describe("Offer contract compliance (OFFER-WIRE-3/4)", () => {
+  it("carries deal_id/offer_number/revision/status/currency; net/tax/gross are readonly-shaped", () => {
+    const offer: components["schemas"]["Offer"] = {
+      id: "00000000-0000-0000-0000-000000000070",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      deal_id: "00000000-0000-0000-0000-000000000080",
+      offer_number: "ANG-2026-0001",
+      revision: 1,
+      status: "draft",
+      currency: "EUR",
+      net_minor: 0,
+      tax_minor: 0,
+      gross_minor: 0,
+      source: "test",
+      captured_by: "human:test",
+      version: 1,
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+    };
+    expect(offer.status).toBe("draft");
+    expect(offer.revision).toBe(1);
+    expect(offer.gross_minor).toBe(0);
+  });
+
+  it("CreateOfferRequest never carries deal_id, status, revision, or money totals", () => {
+    const createBody: components["schemas"]["CreateOfferRequest"] = {
+      offer_number: "ANG-2026-0002",
+      currency: "EUR",
+      source: "ui",
+      captured_by: "human:test",
+    };
+    expect("deal_id" in createBody).toBe(false);
+    expect("status" in createBody).toBe(false);
+    expect("net_minor" in createBody).toBe(false);
+  });
+});
+
 describe("PipelineRollup contract compliance (DEAL-EXT-1)", () => {
   it("matches DEAL-FORM-2's shape plus per-stage and per-deal breakdowns", () => {
     const rollup: components["schemas"]["PipelineRollup"] = {
