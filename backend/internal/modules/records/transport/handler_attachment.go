@@ -124,6 +124,10 @@ type createAttachmentRequest struct {
 
 const presignExpiry = 15 * time.Minute
 
+// fieldRequired is the FieldError code used for every "missing required
+// field" validation failure in this handler.
+const fieldRequired = "required"
+
 func (h *AttachmentHandler) create(w http.ResponseWriter, r *http.Request) {
 	wsID, ok := httpkit.RequireWorkspace(w, r)
 	if !ok {
@@ -137,25 +141,25 @@ func (h *AttachmentHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	var ferrs []httpkit.FieldError
 	if body.EntityType == "" {
-		ferrs = append(ferrs, httpkit.FieldError{Field: "entity_type", Code: "required"})
+		ferrs = append(ferrs, httpkit.FieldError{Field: "entity_type", Code: fieldRequired})
 	}
 	if body.EntityID == "" {
-		ferrs = append(ferrs, httpkit.FieldError{Field: "entity_id", Code: "required"})
+		ferrs = append(ferrs, httpkit.FieldError{Field: "entity_id", Code: fieldRequired})
 	}
 	if body.Filename == "" {
-		ferrs = append(ferrs, httpkit.FieldError{Field: "filename", Code: "required"})
+		ferrs = append(ferrs, httpkit.FieldError{Field: "filename", Code: fieldRequired})
 	}
 	if body.ContentType == "" {
-		ferrs = append(ferrs, httpkit.FieldError{Field: "content_type", Code: "required"})
+		ferrs = append(ferrs, httpkit.FieldError{Field: "content_type", Code: fieldRequired})
 	}
 	if body.ByteSize <= 0 {
-		ferrs = append(ferrs, httpkit.FieldError{Field: "byte_size", Code: "required"})
+		ferrs = append(ferrs, httpkit.FieldError{Field: "byte_size", Code: fieldRequired})
 	}
 	if body.Source == "" {
-		ferrs = append(ferrs, httpkit.FieldError{Field: "source", Code: "required"})
+		ferrs = append(ferrs, httpkit.FieldError{Field: "source", Code: fieldRequired})
 	}
 	if body.CapturedBy == "" {
-		ferrs = append(ferrs, httpkit.FieldError{Field: "captured_by", Code: "required"})
+		ferrs = append(ferrs, httpkit.FieldError{Field: "captured_by", Code: fieldRequired})
 	}
 	if len(ferrs) > 0 {
 		httpkit.JSONValidationError(w, "entity_type, entity_id, filename, content_type, byte_size, source, and captured_by are required.", ferrs)
@@ -175,7 +179,7 @@ func (h *AttachmentHandler) create(w http.ResponseWriter, r *http.Request) {
 	created, err := h.store.Create(r.Context(), a)
 	if errors.Is(err, errs.ErrNullProvenance) {
 		httpkit.JSONValidationError(w, "source and captured_by are required.",
-			[]httpkit.FieldError{{Field: "source", Code: "required"}, {Field: "captured_by", Code: "required"}})
+			[]httpkit.FieldError{{Field: "source", Code: fieldRequired}, {Field: "captured_by", Code: fieldRequired}})
 		return
 	}
 	if err != nil {

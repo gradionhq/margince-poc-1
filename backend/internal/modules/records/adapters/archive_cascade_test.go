@@ -130,7 +130,7 @@ func TestArchiveCascade_Organization_ArchivesAttachment(t *testing.T) {
 
 // ─── Deal ────────────────────────────────────────────────────────────────────
 
-func seedDealFixture(t *testing.T, db *sql.DB, ws string, ctx context.Context) (pipelineID, stageID string) {
+func seedDealFixture(ctx context.Context, t *testing.T, db *sql.DB, ws string) (pipelineID, stageID string) {
 	t.Helper()
 	if err := db.QueryRowContext(ctx,
 		`INSERT INTO pipeline (workspace_id, name) VALUES ($1,'Cascade Pipeline') RETURNING id`, ws).Scan(&pipelineID); err != nil {
@@ -150,7 +150,7 @@ func TestArchiveCascade_Deal_ArchivesAttachment(t *testing.T) {
 	pgtest.SetRLS(t, db, ws)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:cascade-test", TenantID: ws})
 
-	pipelineID, stageID := seedDealFixture(t, db, ws, ctx)
+	pipelineID, stageID := seedDealFixture(ctx, t, db, ws)
 
 	var dealID string
 	if err := db.QueryRowContext(ctx,

@@ -55,7 +55,7 @@ func RecordVisible(ctx context.Context, db *sql.DB, workspaceID, entityType, ent
 	}
 	var ownerID sql.NullString
 	err := db.QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT owner_id FROM %s WHERE id=$1 AND workspace_id=$2`, table), //nolint:gosec
+		fmt.Sprintf(`SELECT owner_id FROM %s WHERE id=$1 AND workspace_id=$2`, table),
 		entityID, workspaceID).Scan(&ownerID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil

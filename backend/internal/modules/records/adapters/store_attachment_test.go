@@ -35,9 +35,9 @@ func seedAttachmentWorkspace(t *testing.T, db *sql.DB) (context.Context, string,
 	return ctx, ws, personID
 }
 
-func newAttachmentFixture(ws, entityType, entityID string) domain.Attachment {
+func newAttachmentFixture(ws, entityID string) domain.Attachment {
 	p := prov.Provenance{Source: "test", CapturedBy: "human:rd-t05-test"}
-	a := domain.NewAttachment(entityType, entityID, "doc.pdf", "application/pdf", 2048,
+	a := domain.NewAttachment(domain.EntityTypePerson, entityID, "doc.pdf", "application/pdf", 2048,
 		"attachments/"+ws+"/"+entityID+"/doc.pdf", p)
 	a.WorkspaceID = ws
 	return a
@@ -48,7 +48,7 @@ func TestAttachmentStore_CreateGetArchive_RoundTrip(t *testing.T) {
 	ctx, ws, personID := seedAttachmentWorkspace(t, db)
 	s := adapters.NewAttachmentStore(db)
 
-	created, err := s.Create(ctx, newAttachmentFixture(ws, domain.EntityTypePerson, personID))
+	created, err := s.Create(ctx, newAttachmentFixture(ws, personID))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestAttachmentStore_Create_MissingProvenance_Rejected(t *testing.T) {
 	ctx, ws, personID := seedAttachmentWorkspace(t, db)
 	s := adapters.NewAttachmentStore(db)
 
-	a := newAttachmentFixture(ws, domain.EntityTypePerson, personID)
+	a := newAttachmentFixture(ws, personID)
 	a.Source = ""
 	a.CapturedBy = ""
 	if _, err := s.Create(ctx, a); !errors.Is(err, errs.ErrNullProvenance) {
@@ -101,7 +101,7 @@ func TestAttachmentStore_Create_WritesExactlyOneAuditLogRow(t *testing.T) {
 	ctx, ws, personID := seedAttachmentWorkspace(t, db)
 	s := adapters.NewAttachmentStore(db)
 
-	created, err := s.Create(ctx, newAttachmentFixture(ws, domain.EntityTypePerson, personID))
+	created, err := s.Create(ctx, newAttachmentFixture(ws, personID))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestAttachmentStore_Archive_WritesExactlyOneAuditLogRow(t *testing.T) {
 	ctx, ws, personID := seedAttachmentWorkspace(t, db)
 	s := adapters.NewAttachmentStore(db)
 
-	created, err := s.Create(ctx, newAttachmentFixture(ws, domain.EntityTypePerson, personID))
+	created, err := s.Create(ctx, newAttachmentFixture(ws, personID))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -152,11 +152,11 @@ func TestAttachmentStore_List_FiltersByEntityTypeAndID(t *testing.T) {
 		t.Fatalf("seed other person: %v", err)
 	}
 
-	want, err := s.Create(ctx, newAttachmentFixture(ws, domain.EntityTypePerson, personID))
+	want, err := s.Create(ctx, newAttachmentFixture(ws, personID))
 	if err != nil {
 		t.Fatalf("create want: %v", err)
 	}
-	if _, err := s.Create(ctx, newAttachmentFixture(ws, domain.EntityTypePerson, otherPersonID)); err != nil {
+	if _, err := s.Create(ctx, newAttachmentFixture(ws, otherPersonID)); err != nil {
 		t.Fatalf("create other: %v", err)
 	}
 
@@ -191,7 +191,7 @@ func TestAttachmentStore_MarkScanResult_TransitionsToCleanOrBlocked(t *testing.T
 	ctx, ws, personID := seedAttachmentWorkspace(t, db)
 	s := adapters.NewAttachmentStore(db)
 
-	created, err := s.Create(ctx, newAttachmentFixture(ws, domain.EntityTypePerson, personID))
+	created, err := s.Create(ctx, newAttachmentFixture(ws, personID))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestAttachmentStore_MarkScanResult_RejectsInvalidStatus(t *testing.T) {
 	ctx, ws, personID := seedAttachmentWorkspace(t, db)
 	s := adapters.NewAttachmentStore(db)
 
-	created, err := s.Create(ctx, newAttachmentFixture(ws, domain.EntityTypePerson, personID))
+	created, err := s.Create(ctx, newAttachmentFixture(ws, personID))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

@@ -18,7 +18,7 @@ import (
 )
 
 // seedDealForAudit seeds the minimum deal hierarchy (pipeline + stage + deal) and returns the dealID.
-func seedDealForAudit(t *testing.T, db *sql.DB, ctx context.Context, ws string) string {
+func seedDealForAudit(ctx context.Context, t *testing.T, db *sql.DB, ws string) string {
 	t.Helper()
 	var pipelineID, stageID, dealID string
 	if err := db.QueryRowContext(ctx,
@@ -45,7 +45,7 @@ func TestWriteDownloadAudit_DealBound_AppearsOnTimeline(t *testing.T) {
 	pgtest.SetRLS(t, db, ws)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:audit-test", TenantID: ws})
 
-	dealID := seedDealForAudit(t, db, ctx, ws)
+	dealID := seedDealForAudit(ctx, t, db, ws)
 	actStore := activities.NewActivityStore(db)
 
 	if err := adapters.WriteDownloadAudit(ctx, actStore, ws, domain.EntityTypeDeal, dealID, "report.pdf"); err != nil {

@@ -41,7 +41,7 @@ func seedUser(t *testing.T, db *sql.DB, wsID string) string {
 }
 
 // seedPerson inserts a person with the given ownerID (may be empty for NULL owner_id) and returns the person id.
-func seedPersonWithOwner(t *testing.T, db *sql.DB, ctx context.Context, wsID, ownerID string) string {
+func seedPersonWithOwner(ctx context.Context, t *testing.T, db *sql.DB, wsID, ownerID string) string {
 	t.Helper()
 	var id string
 	var err error
@@ -61,7 +61,7 @@ func seedPersonWithOwner(t *testing.T, db *sql.DB, ctx context.Context, wsID, ow
 }
 
 // seedActivity inserts a bare activity row (no owner_id column) and returns its id.
-func seedActivityRow(t *testing.T, db *sql.DB, ctx context.Context, wsID string) string {
+func seedActivityRow(ctx context.Context, t *testing.T, db *sql.DB, wsID string) string {
 	t.Helper()
 	var id string
 	if err := db.QueryRowContext(ctx,
@@ -79,7 +79,7 @@ func TestRecordVisible_RowScopeAll_VisibleRegardlessOfOwner(t *testing.T) {
 	pgtest.SetRLS(t, db, ws)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:vis-test", TenantID: ws})
 
-	personID := seedPersonWithOwner(t, db, ctx, ws, "")
+	personID := seedPersonWithOwner(ctx, t, db, ws, "")
 
 	// Any principal can see a row when row_scope is "all".
 	principal := crmctx.Principal{UserID: "some-other-user", TenantID: ws}
@@ -101,7 +101,7 @@ func TestRecordVisible_RowScopeOwn_MatchingOwner_Visible(t *testing.T) {
 	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:vis-test", TenantID: ws})
 
 	ownerID := seedUser(t, db, ws)
-	personID := seedPersonWithOwner(t, db, ctx, ws, ownerID)
+	personID := seedPersonWithOwner(ctx, t, db, ws, ownerID)
 
 	principal := crmctx.Principal{UserID: ownerID, TenantID: ws}
 	perms := ownerPerms(domain.EntityTypePerson, "own")
@@ -123,7 +123,7 @@ func TestRecordVisible_RowScopeOwn_DifferentOwner_NoGrant_NotVisible(t *testing.
 
 	ownerID := seedUser(t, db, ws)
 	otherID := seedUser(t, db, ws)
-	personID := seedPersonWithOwner(t, db, ctx, ws, ownerID)
+	personID := seedPersonWithOwner(ctx, t, db, ws, ownerID)
 
 	principal := crmctx.Principal{UserID: otherID, TenantID: ws}
 	perms := ownerPerms(domain.EntityTypePerson, "own")
@@ -145,7 +145,7 @@ func TestRecordVisible_RowScopeOwn_DifferentOwner_WithLiveGrant_Visible(t *testi
 
 	ownerID := seedUser(t, db, ws)
 	granteeID := seedUser(t, db, ws)
-	personID := seedPersonWithOwner(t, db, ctx, ws, ownerID)
+	personID := seedPersonWithOwner(ctx, t, db, ws, ownerID)
 
 	// Grant granteeID access via record_grant (no expiry = permanent grant).
 	if _, err := db.ExecContext(ctx,
@@ -175,7 +175,7 @@ func TestRecordVisible_RowScopeOwn_ExpiredGrant_NotVisible(t *testing.T) {
 
 	ownerID := seedUser(t, db, ws)
 	granteeID := seedUser(t, db, ws)
-	personID := seedPersonWithOwner(t, db, ctx, ws, ownerID)
+	personID := seedPersonWithOwner(ctx, t, db, ws, ownerID)
 
 	expiredAt := time.Now().Add(-24 * time.Hour)
 	if _, err := db.ExecContext(ctx,
@@ -203,7 +203,7 @@ func TestRecordVisible_Activity_AnyRowScope_Visible(t *testing.T) {
 	pgtest.SetRLS(t, db, ws)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:vis-test", TenantID: ws})
 
-	activityID := seedActivityRow(t, db, ctx, ws)
+	activityID := seedActivityRow(ctx, t, db, ws)
 
 	// activity has no owner_id column; any row_scope that passed the
 	// object-level gate is treated as visible (Constraint 6).
@@ -226,7 +226,7 @@ func TestRecordVisible_AbsentObjectEntry_NotVisible(t *testing.T) {
 	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:vis-test", TenantID: ws})
 
 	ownerID := seedUser(t, db, ws)
-	personID := seedPersonWithOwner(t, db, ctx, ws, ownerID)
+	personID := seedPersonWithOwner(ctx, t, db, ws, ownerID)
 
 	// perms does not contain an entry for "person" at all.
 	perms := session.RolePermissions{}

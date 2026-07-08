@@ -63,6 +63,8 @@ func (s *MinIOStore) Get(ctx context.Context, ref string) (io.ReadCloser, error)
 	return obj, nil
 }
 
+// PresignedPutURL returns a time-limited URL the caller can PUT the object
+// bytes to directly, bypassing this process.
 func (s *MinIOStore) PresignedPutURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
 	u, err := s.client.PresignedPutObject(ctx, s.bucket, key, expiry)
 	if err != nil {
@@ -71,6 +73,8 @@ func (s *MinIOStore) PresignedPutURL(ctx context.Context, key string, expiry tim
 	return u.String(), nil
 }
 
+// PresignedGetURL returns a time-limited URL the caller can GET the object
+// bytes from directly, bypassing this process.
 func (s *MinIOStore) PresignedGetURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
 	u, err := s.client.PresignedGetObject(ctx, s.bucket, key, expiry, url.Values{})
 	if err != nil {

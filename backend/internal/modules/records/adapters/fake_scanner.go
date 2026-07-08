@@ -19,6 +19,8 @@ func NewFakeScanner(result string) *FakeScanner { return &FakeScanner{Result: re
 
 var _ ports.Scanner = (*FakeScanner)(nil)
 
+// Scan always returns f.Result, ignoring ctx and storageKey — see
+// FakeScanner's own doc comment.
 func (f *FakeScanner) Scan(_ context.Context, _ string) (string, error) {
 	return f.Result, nil
 }

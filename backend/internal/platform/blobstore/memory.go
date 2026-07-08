@@ -49,6 +49,11 @@ func (m *MemoryStore) PresignedPutURL(_ context.Context, key string, expiry time
 	return fmt.Sprintf("memory://%s?op=put&expires=%d", key, time.Now().Add(expiry).Unix()), nil
 }
 
+// PresignedGetURL returns a synthetic memory:// URL — MemoryStore is a
+// dev/test fake with no real HTTP server behind it, so this has no live
+// download semantics; it exists only so callers exercising the Store
+// interface (e.g. handler tests) get a stable, inspectable value instead of
+// an error.
 func (m *MemoryStore) PresignedGetURL(_ context.Context, key string, expiry time.Duration) (string, error) {
 	return fmt.Sprintf("memory://%s?op=get&expires=%d", key, time.Now().Add(expiry).Unix()), nil
 }
