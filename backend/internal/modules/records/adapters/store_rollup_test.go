@@ -1,4 +1,4 @@
-package records
+package adapters
 
 import (
 	"database/sql"

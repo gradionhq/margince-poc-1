@@ -7,6 +7,7 @@ package blobstore
 import (
 	"context"
 	"io"
+	"time"
 )
 
 // Store persists opaque blobs. Put stores r under key and returns a stable ref
@@ -15,4 +16,11 @@ import (
 type Store interface {
 	Put(ctx context.Context, key string, r io.Reader) (ref string, err error)
 	Get(ctx context.Context, ref string) (io.ReadCloser, error)
+	// PresignedPutURL returns a time-limited URL the caller can PUT bytes to
+	// directly against the backend, bypassing this process (ADR-0051's
+	// two-phase-upload model — bytes never ride the Go process).
+	PresignedPutURL(ctx context.Context, key string, expiry time.Duration) (string, error)
+	// PresignedGetURL returns a time-limited URL the caller can GET bytes
+	// from directly against the backend.
+	PresignedGetURL(ctx context.Context, key string, expiry time.Duration) (string, error)
 }

@@ -255,6 +255,12 @@ func (s *OrgStore) Archive(ctx context.Context, id, workspaceID string) (domain.
 			return err
 		}
 		if n, _ := res.RowsAffected(); n > 0 {
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE attachment SET archived_at=now()
+				 WHERE entity_type='organization' AND entity_id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
+				id, workspaceID); err != nil {
+				return fmt.Errorf("org archive attachment cascade: %w", err)
+			}
 			payload, _ := json.Marshal(map[string]any{fieldOrganizationID: id})
 			if _, err := tx.ExecContext(ctx,
 				`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,

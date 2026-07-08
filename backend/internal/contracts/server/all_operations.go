@@ -66,6 +66,7 @@ func NewAllOperations(
 	customFields CustomFieldsAdapter,
 	products ProductsAdapter,
 	offerTemplates OfferTemplatesAdapter,
+	offers OffersAdapter,
 ) *AllOperations {
 	return &AllOperations{
 		PeopleAdapter:         people,
@@ -80,5 +81,6 @@ func NewAllOperations(
 		CustomFieldsAdapter:   customFields,
 		ProductsAdapter:       products,
 		OfferTemplatesAdapter: offerTemplates,
+		OffersAdapter:         offers,
 	}
 }
