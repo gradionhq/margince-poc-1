@@ -18,10 +18,13 @@ import (
 	partnerstransport "github.com/gradionhq/margince/backend/internal/modules/partners/transport"
 	people "github.com/gradionhq/margince/backend/internal/modules/people"
 	peopletransport "github.com/gradionhq/margince/backend/internal/modules/people/transport"
-	"github.com/gradionhq/margince/backend/internal/modules/records"
+	records "github.com/gradionhq/margince/backend/internal/modules/records"
+	recordsadapters "github.com/gradionhq/margince/backend/internal/modules/records/adapters"
+	recordstransport "github.com/gradionhq/margince/backend/internal/modules/records/transport"
 	relationships "github.com/gradionhq/margince/backend/internal/modules/relationships"
 	relstransport "github.com/gradionhq/margince/backend/internal/modules/relationships/transport"
 	platformauth "github.com/gradionhq/margince/backend/internal/platform/auth"
+	customfields "github.com/gradionhq/margince/backend/internal/platform/customfields"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/authz"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
@@ -41,7 +44,7 @@ func buildAllOperations(k *routeKit) *server.AllOperations {
 		return crmauth.AuthorizePerms(perms, object, action)
 	})
 
-	return server.NewAllOperations(
+	ops := server.NewAllOperations(
 		server.PeopleAdapter{H: peopletransport.NewPersonHandler(people.NewPersonStore(k.db), relationships.NewRelationshipStore(k.db), deals.NewDealStore(k.db), activities.NewActivityStore(k.db), k.verifier)},
 		server.OrganizationsAdapter{H: orgstransport.NewOrganizationHandler(organizations.NewOrgStore(k.db), relationships.NewRelationshipStore(k.db), deals.NewDealStore(k.db), activities.NewActivityStore(k.db), records.NewRollupStore(k.db), k.verifier)},
 		server.DealsAdapter{H: dealstransport.NewDealHandler(deals.NewDealStore(k.db), relationships.NewRelationshipStore(k.db), activities.NewActivityStore(k.db), k.verifier)},
@@ -54,7 +57,11 @@ func buildAllOperations(k *routeKit) *server.AllOperations {
 		server.ActivitiesAdapter{H: actstransport.NewActivityHandler(activities.NewActivityStore(k.db))},
 		server.AuditAdapter{H: audithistory.New(k.db, historyAuthz).Handler},
 		*server.NewIdentityAdapter(k.db, k.sessionStore, k.passportStore),
+		server.CustomFieldsAdapter{H: customfields.NewHandler(k.db, k.verifier)},
 		server.ProductsAdapter{H: offerstransport.NewProductHandler(offers.NewProductStore(k.db))},
 		server.OfferTemplatesAdapter{H: offerstransport.NewOfferTemplateHandler(offers.NewOfferTemplateStore(k.db))},
+		server.OffersAdapter{H: offerstransport.NewOfferHandler(offers.NewOfferStore(k.db), offers.NewOfferLineItemStore(k.db, offers.NewProductStore(k.db)))},
 	)
+	ops.AttachmentsAdapter = server.AttachmentsAdapter{H: recordstransport.NewAttachmentHandler(records.NewAttachmentStore(k.db), k.blob, recordsadapters.NewDownloadAuditWriter(activities.NewActivityStore(k.db)), k.db)}
+	return ops
 }

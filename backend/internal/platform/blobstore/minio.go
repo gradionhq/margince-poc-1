@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -59,4 +61,24 @@ func (s *MinIOStore) Get(ctx context.Context, ref string) (io.ReadCloser, error)
 		return nil, fmt.Errorf("blobstore: stat %q: %w", ref, err)
 	}
 	return obj, nil
+}
+
+// PresignedPutURL returns a time-limited URL the caller can PUT the object
+// bytes to directly, bypassing this process.
+func (s *MinIOStore) PresignedPutURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	u, err := s.client.PresignedPutObject(ctx, s.bucket, key, expiry)
+	if err != nil {
+		return "", fmt.Errorf("blobstore: presigned put %s: %w", key, err)
+	}
+	return u.String(), nil
+}
+
+// PresignedGetURL returns a time-limited URL the caller can GET the object
+// bytes from directly, bypassing this process.
+func (s *MinIOStore) PresignedGetURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	u, err := s.client.PresignedGetObject(ctx, s.bucket, key, expiry, url.Values{})
+	if err != nil {
+		return "", fmt.Errorf("blobstore: presigned get %s: %w", key, err)
+	}
+	return u.String(), nil
 }

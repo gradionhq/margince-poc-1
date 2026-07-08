@@ -88,6 +88,7 @@ components:
   database:     { in: internal/platform/database }
   httpserver:   { in: internal/platform/httpserver }
   toolgate:     { in: internal/platform/toolgate }
+  customfields: { in: internal/platform/customfields }
   # Tier-1 / Tier-2 domain modules
   identity:          { in: internal/modules/identity }
   identitytransport: { in: internal/modules/identity/transport }
@@ -109,6 +110,14 @@ components:
   offersports:             { in: internal/modules/offers/ports }
   offersadapters:          { in: internal/modules/offers/adapters }
   offerstransport:         { in: internal/modules/offers/transport }
+  records:                 { in: internal/modules/records }
+  recordsdomain:           { in: internal/modules/records/domain }
+  recordsports:            { in: internal/modules/records/ports }
+  recordsadapters:         { in: internal/modules/records/adapters }
+  recordstransport:        { in: internal/modules/records/transport }
+  # recordsfieldhistory is the field-level change history projection over audit_log
+  # before/after diffs (RD-WIRE-5 / RD-AC-5 / RD-AC-11).
+  recordsfieldhistory:     { in: internal/modules/records/fieldhistory }
   relationships:           { in: internal/modules/relationships }
   relsdomain:              { in: internal/modules/relationships/domain }
   relsports:               { in: internal/modules/relationships/ports }
@@ -144,9 +153,6 @@ components:
   dealsports:        { in: internal/modules/deals/ports }
   dealsadapters:     { in: internal/modules/deals/adapters }
   dealsapp:          { in: internal/modules/deals/app }
-  records:           { in: internal/modules/records }
-  recordsadapters:   { in: internal/modules/records/adapters }
-  recordstransport:  { in: internal/modules/records/transport }
   people:            { in: internal/modules/people }
   peopledomain:      { in: internal/modules/people/domain }
   peopleports:       { in: internal/modules/people/ports }
@@ -237,7 +243,7 @@ deps:
   activitiesports:
     mayDependOn: [activitiesdomain]
   activitiesadapters:
-    mayDependOn: [activitiesdomain, errs, ids, database, sqlutil]
+    mayDependOn: [activitiesdomain, errs, ids, database, sqlutil, audit]
     canUse: [pq]
   activitiesapp:
     mayDependOn: [activitiesdomain, activitiesports]
@@ -256,6 +262,28 @@ deps:
     mayDependOn: [offersdomain, offersadapters, offerstransport]
   offerstransport:
     mayDependOn: [offers, offersadapters, offersdomain, crmctx, errs, httpkit, prov]
+  recordsdomain:
+    mayDependOn: [prov, ids]
+  recordsports:
+    mayDependOn: [recordsdomain]
+  # recordsadapters also holds RollupStore (RD-T04, RD-FORM-1), the records-depth read side's
+  # hierarchy roll-up: it reuses deals' FX/weighting funcs and auth.LoadRolePermissions for the
+  # row_scope RBAC lookup.
+  recordsadapters:
+    mayDependOn: [recordsdomain, recordsports, errs, ids, database, audit, sqlutil, activities, activitiesdomain, crmctx, session, deals, auth]
+    canUse: [pq]
+  # records is the records domain module: it covers attachment metadata/presigned blob-store
+  # access (RD-DDL-1) AND re-exports the records-depth read side (RollupStore et al.) whose
+  # implementation lives in recordsadapters.
+  records:
+    mayDependOn: [recordsdomain, recordsadapters, recordstransport, blobstore]
+    canUse: [pq]
+  recordstransport:
+    mayDependOn: [records, recordsadapters, recordsdomain, recordsports, crmctx, errs, httpkit, prov, blobstore, auth]
+  # recordsfieldhistory is the field-level change history projection over audit_log
+  # before/after diffs (RD-WIRE-5 / RD-AC-5 / RD-AC-11).
+  recordsfieldhistory:
+    mayDependOn: [audithistorydomain, database, httpkit, authzkern, crmctx]
   relsdomain:
     mayDependOn: [prov, ids]
   relsports:
@@ -328,17 +356,6 @@ deps:
   # dealstransport now owns pipeline/stage AND deal-entity handlers (WS-E-b).
   dealstransport:
     mayDependOn: [deals, dealsadapters, dealsdomain, mcp, approvalsport, toolgate, crmctx, errs, prov, activitiesdomain, relsdomain]
-  # records is the records-depth read module (RD-T04): the hierarchy roll-up engine reuses
-  # deals' FX/weighting funcs, database.WithWorkspaceTx, and auth.LoadRolePermissions +
-  # session types for the row_scope RBAC lookup (self-contained tree-walk + aggregation).
-  records:
-    mayDependOn: [deals, dealsdomain, errs, database, auth, session, recordsadapters]
-    canUse: [pq]
-  recordsadapters:
-    mayDependOn: [deals, errs, database, audit, sqlutil]
-    canUse: [pq]
-  recordstransport:
-    mayDependOn: [records, crmctx, errs, httpkit]
   # people domain uses strengthkern for PersonStrengthFrom; peopledomain composes
   # ActivityRef/deal/relationship refs (intentional cross-module composite-reference sharing).
   peopledomain:
@@ -382,5 +399,8 @@ deps:
     mayDependOn: [agentsdomain, agentsports, approvals, audit, database, mcp, errs]
   toolgate:
     mayDependOn: [mcp, approvalsport, crmctx, ids]
+  customfields:
+    mayDependOn: [crmctx, database, audit, toolgate, mcp, approvalsport]
+    canUse: [pq]
   contracts:
     canUse: [oapi, chi]
