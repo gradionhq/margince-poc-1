@@ -1,4 +1,3 @@
-//nolint:dupl // parallel per-tag delegation adapter: every method is a one-line ServeHTTP delegation, identical in shape to every sibling adapter by design (relationships/activities/people all follow this exact shape) -- there is no shared logic to extract, only the wired handler type differs
 package server
 
 import (
