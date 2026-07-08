@@ -144,7 +144,7 @@ Verification of migration 000073 (attachment, quota, bulk_operation tables) agai
 
 - **Expected:**
   - Before rollback: `73`
-  - After rollback: `71`
+  - After rollback: `72` (not `71` — `072_custom_field_catalog`, a sibling ticket's migration, merged in below this one)
   - After forward: `73`
   - All migrations show non-dirty state (no `dirty` output)
 
