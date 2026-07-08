@@ -358,16 +358,8 @@ func (s *ActivityStore) Archive(ctx context.Context, id, workspaceID string) (do
 				id, workspaceID); err != nil {
 				return fmt.Errorf("activity archive attachment cascade: %w", err)
 			}
-			payload, _ := json.Marshal(map[string]any{"activity_id": id})
-			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
-				workspaceID, "activity.archived", id, payload); err != nil {
-				return fmt.Errorf("activity archive event: %w", err)
-			}
-			e := crmaudit.EntryFromPrincipal(ctx, "archive", entityTypeActivity, &id, nil, nil)
-			e.WorkspaceID = workspaceID
-			if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
-				return fmt.Errorf("activity archive audit: %w", err)
+			if err := writeActivityAuditAndEvent(ctx, tx, "archive", "activity.archived", id, workspaceID); err != nil {
+				return err
 			}
 		}
 		return nil
@@ -376,6 +368,25 @@ func (s *ActivityStore) Archive(ctx context.Context, id, workspaceID string) (do
 		return domain.Activity{}, err
 	}
 	return s.getAny(ctx, id, workspaceID)
+}
+
+// writeActivityAuditAndEvent writes one audit_log row (action) and one
+// event_outbox row (topic) for a single-activity mutation, in the caller's
+// tx. Shared by Update and Archive so their audit+event side-effects are not
+// duplicated (SonarCloud new-code duplication gate).
+func writeActivityAuditAndEvent(ctx context.Context, tx *sql.Tx, action, topic, id, workspaceID string) error {
+	payload, _ := json.Marshal(map[string]any{"activity_id": id})
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
+		workspaceID, topic, id, payload); err != nil {
+		return fmt.Errorf("activity %s event: %w", action, err)
+	}
+	e := crmaudit.EntryFromPrincipal(ctx, action, entityTypeActivity, &id, nil, nil)
+	e.WorkspaceID = workspaceID
+	if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+		return fmt.Errorf("activity %s audit: %w", action, err)
+	}
+	return nil
 }
 
 // getAny fetches an activity by id regardless of archived_at status.

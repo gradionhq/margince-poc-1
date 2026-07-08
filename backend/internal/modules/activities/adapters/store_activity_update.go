@@ -3,13 +3,10 @@ package adapters
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/gradionhq/margince/backend/internal/modules/activities/domain"
-	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
@@ -127,16 +124,5 @@ func (s *ActivityStore) applyUpdate(ctx context.Context, tx *sql.Tx, id, workspa
 // activity.updated event, never a distinct "task.completed" topic — there is
 // no branch here for is_done, deliberately.
 func (s *ActivityStore) writeUpdateAuditAndEvent(ctx context.Context, tx *sql.Tx, id, workspaceID string) error {
-	payload, _ := json.Marshal(map[string]any{"activity_id": id})
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
-		workspaceID, "activity.updated", id, payload); err != nil {
-		return fmt.Errorf("activity update event: %w", err)
-	}
-	e := crmaudit.EntryFromPrincipal(ctx, "update", entityTypeActivity, &id, nil, nil)
-	e.WorkspaceID = workspaceID
-	if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
-		return fmt.Errorf("activity update audit: %w", err)
-	}
-	return nil
+	return writeActivityAuditAndEvent(ctx, tx, "update", "activity.updated", id, workspaceID)
 }
