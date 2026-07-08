@@ -32,7 +32,7 @@ make migrate-up
 **Then verify each table structure:**
 
 ```bash
-psql "$DATABASE_URL" -c '\d product'
+PGPASSWORD=margince psql -h localhost -U margince -d margince -c '\d product'
 ```
 
 **Expected:**
@@ -46,7 +46,7 @@ psql "$DATABASE_URL" -c '\d product'
 - Trigger: `trg_product_touch` (BEFORE UPDATE, EXECUTE FUNCTION touch_versioned())
 
 ```bash
-psql "$DATABASE_URL" -c '\d offer'
+PGPASSWORD=margince psql -h localhost -U margince -d margince -c '\d offer'
 ```
 
 **Expected:**
@@ -60,7 +60,7 @@ psql "$DATABASE_URL" -c '\d offer'
 - Trigger: `trg_offer_touch` (BEFORE UPDATE, EXECUTE FUNCTION touch_versioned())
 
 ```bash
-psql "$DATABASE_URL" -c '\d offer_line_item'
+PGPASSWORD=margince psql -h localhost -U margince -d margince -c '\d offer_line_item'
 ```
 
 **Expected:**
@@ -74,7 +74,7 @@ psql "$DATABASE_URL" -c '\d offer_line_item'
 - Trigger: `trg_offer_line_item_updated` (BEFORE UPDATE, EXECUTE FUNCTION set_updated_at())
 
 ```bash
-psql "$DATABASE_URL" -c '\d offer_template'
+PGPASSWORD=margince psql -h localhost -U margince -d margince -c '\d offer_template'
 ```
 
 **Expected:**
@@ -121,8 +121,7 @@ SELECT id FROM workspace LIMIT 1 \gset ws_
 
 -- Archive the first product
 UPDATE product SET archived_at = now() 
-WHERE workspace_id = :'ws_id' AND sku = 'TEST-SKU-001' AND archived_at IS NULL 
-LIMIT 1;
+WHERE workspace_id = :'ws_id' AND sku = 'TEST-SKU-001' AND archived_at IS NULL;
 
 -- Now insert product with same SKU - should succeed
 INSERT INTO product (workspace_id, name, sku, unit_price_minor, currency, source, captured_by)
