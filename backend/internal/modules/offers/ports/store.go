@@ -24,3 +24,19 @@ type OfferTemplateStore interface {
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (domain.OfferTemplate, error)
 	Archive(ctx context.Context, id, workspaceID string) (domain.OfferTemplate, error)
 }
+
+// OfferStore is the offer repository seam.
+type OfferStore interface {
+	Create(ctx context.Context, o domain.Offer) (domain.Offer, error)
+	Get(ctx context.Context, id, workspaceID string) (domain.Offer, error)
+	List(ctx context.Context, workspaceID, dealID, cursor string, limit int, includeArchived bool) ([]domain.Offer, string, error)
+	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (domain.Offer, error)
+}
+
+// OfferLineItemStore is the offer_line_item repository seam.
+type OfferLineItemStore interface {
+	Create(ctx context.Context, li domain.OfferLineItem, explicitTaxRate *float64) (domain.OfferLineItem, error)
+	List(ctx context.Context, offerID, workspaceID string) ([]domain.OfferLineItem, error)
+	Update(ctx context.Context, id, offerID, workspaceID string, updates map[string]any) (domain.OfferLineItem, error)
+	Delete(ctx context.Context, id, offerID, workspaceID string) error
+}
