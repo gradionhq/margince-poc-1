@@ -420,3 +420,19 @@ func (s *ActivityStore) getAny(ctx context.Context, id, workspaceID string) (dom
 	}
 	return a, err
 }
+
+// ProvenanceRatio reports the count of live (non-archived) activities in
+// workspaceID captured by an agent vs. a human — the manual-entry-smell ratio
+// (ACT-AC-7). Keys on the "agent:"/"human:" captured_by prefix convention
+// (crm.yaml logActivity examples).
+func (s *ActivityStore) ProvenanceRatio(ctx context.Context, workspaceID string) (agentCount, humanCount int, err error) {
+	err = database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `
+			SELECT
+			    count(*) FILTER (WHERE captured_by LIKE 'agent:%'),
+			    count(*) FILTER (WHERE captured_by LIKE 'human:%')
+			FROM activity WHERE workspace_id=$1::uuid AND archived_at IS NULL`,
+			workspaceID).Scan(&agentCount, &humanCount)
+	})
+	return agentCount, humanCount, err
+}

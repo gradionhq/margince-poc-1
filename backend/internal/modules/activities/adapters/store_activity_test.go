@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -349,5 +350,30 @@ func TestActivityStore_Update_TaskKind_AllowsIsDone(t *testing.T) {
 	}
 	if !updated.IsDone {
 		t.Fatal("expected is_done=true after update")
+	}
+}
+
+func TestActivityStore_ProvenanceRatio_MixedFixture(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "ratio")
+	s := NewActivityStore(db)
+
+	// 2 agent-captured, 3 human-captured.
+	capturedBys := []string{"agent:capture", "agent:capture", "human:u1", "human:u2", "human:u1"}
+	for i, cb := range capturedBys {
+		if _, _, err := s.Create(context.Background(), domain.Activity{
+			WorkspaceID: wsID, Kind: "note", OccurredAt: time.Now(),
+			Source: "test", CapturedBy: cb, Subject: strPtr(fmt.Sprintf("n-%d", i)),
+		}); err != nil {
+			t.Fatalf("seed activity %d: %v", i, err)
+		}
+	}
+
+	agent, human, err := s.ProvenanceRatio(context.Background(), wsID)
+	if err != nil {
+		t.Fatalf("ProvenanceRatio: %v", err)
+	}
+	if agent != 2 || human != 3 {
+		t.Fatalf("expected agent=2 human=3, got agent=%d human=%d", agent, human)
 	}
 }
