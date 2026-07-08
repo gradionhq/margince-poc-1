@@ -17,15 +17,6 @@ func withWorkspaceTx(ctx context.Context, db *sql.DB, workspaceID string, fn fun
 	return database.WithWorkspaceTx(ctx, db, workspaceID, fn)
 }
 
-func nullStr(m map[string]any, key string) *string {
-	if v, ok := m[key]; ok {
-		if s, ok := v.(string); ok {
-			return &s
-		}
-	}
-	return nil
-}
-
 func nullInt(m map[string]any, key string) *int64 {
 	if v, ok := m[key]; ok {
 		switch n := v.(type) {

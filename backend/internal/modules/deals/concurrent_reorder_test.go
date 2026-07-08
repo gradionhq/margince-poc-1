@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	apperrors "github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 )
 
 const wsConcurrentReorder = "00000000-0000-0000-0000-000000000021"
@@ -24,13 +25,13 @@ const wsConcurrentReorder = "00000000-0000-0000-0000-000000000021"
 // guarantees, but which cleanly-translated errors must not defeat by
 // leaving the transaction half-applied).
 func TestStageStore_Update_ConcurrentSwap_NoUniquenessViolationWindow(t *testing.T) {
-	db := openTestDB(t)
-	setRLS(t, db, wsConcurrentReorder)
-	seedWorkspace(t, db, wsConcurrentReorder)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsConcurrentReorder)
+	pgtest.SeedWorkspace(t, db, wsConcurrentReorder)
 	ctx := context.Background()
 
 	pstore := NewPipelineStore(db)
-	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsConcurrentReorder, Name: "Reorder " + uniq()})
+	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsConcurrentReorder, Name: "Reorder " + pgtest.Uniq()})
 	if err != nil {
 		t.Fatal("create pipeline:", err)
 	}

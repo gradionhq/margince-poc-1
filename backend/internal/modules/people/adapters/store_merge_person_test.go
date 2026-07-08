@@ -13,6 +13,7 @@ import (
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
@@ -55,9 +56,9 @@ func mkDealForMergeTest(t *testing.T, db *sql.DB, ws string) string {
 
 // PO-AC-17: relink zero orphaned FKs, archive loser, one audit tx.
 func TestPersonMergeRelinksEmailsPhonesRelationshipsAndActivityLinks(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := mergeTestCtx(ws)
 	store := adapters.NewPersonStore(db)
 
@@ -96,9 +97,9 @@ func TestPersonMergeRelinksEmailsPhonesRelationshipsAndActivityLinks(t *testing.
 		t.Fatalf("loser merged_into_id=%s archived=%v, want %s/true", loserMergedInto, archived, target.ID)
 	}
 
-	assertNoRows(t, db, `SELECT 1 FROM person_email WHERE person_id=$1::uuid`, loser.ID)
-	assertNoRows(t, db, `SELECT 1 FROM person_phone WHERE person_id=$1::uuid`, loser.ID)
-	assertNoRows(t, db, `SELECT 1 FROM relationship WHERE person_id=$1::uuid AND archived_at IS NULL`, loser.ID)
+	pgtest.AssertNoRows(t, db, `SELECT 1 FROM person_email WHERE person_id=$1::uuid`, loser.ID)
+	pgtest.AssertNoRows(t, db, `SELECT 1 FROM person_phone WHERE person_id=$1::uuid`, loser.ID)
+	pgtest.AssertNoRows(t, db, `SELECT 1 FROM relationship WHERE person_id=$1::uuid AND archived_at IS NULL`, loser.ID)
 
 	var emailCount, phoneCount, relCount int
 	db.QueryRow(`SELECT count(*) FROM person_email WHERE person_id=$1::uuid`, target.ID).Scan(&emailCount)
@@ -133,9 +134,9 @@ func TestPersonMergeRelinksEmailsPhonesRelationshipsAndActivityLinks(t *testing.
 
 // PO-AC-M1: survivor's primary phone wins; loser's conflicting primary demoted, not deleted.
 func TestPersonMergePrimaryPhoneConflictSurvivorWins(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := mergeTestCtx(ws)
 	store := adapters.NewPersonStore(db)
 	loser := mkPerson(ctx, t, store, ws, "Loser")
@@ -163,9 +164,9 @@ func TestPersonMergePrimaryPhoneConflictSurvivorWins(t *testing.T) {
 
 // PO-AC-M1: survivor's primary email wins; loser's conflicting primary demoted, not deleted.
 func TestPersonMergePrimaryEmailConflictSurvivorWins(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := mergeTestCtx(ws)
 	store := adapters.NewPersonStore(db)
 	loser := mkPerson(ctx, t, store, ws, "Loser")
@@ -194,9 +195,9 @@ func TestPersonMergePrimaryEmailConflictSurvivorWins(t *testing.T) {
 // PO-AC-M1: survivor's current-primary employer relationship wins; loser's conflicting
 // primary employment row is demoted (is_primary=false), not deleted or archived.
 func TestPersonMergeCurrentPrimaryEmployerConflictSurvivorWins(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := mergeTestCtx(ws)
 	store := adapters.NewPersonStore(db)
 	loser := mkPerson(ctx, t, store, ws, "Loser")
@@ -226,9 +227,9 @@ func TestPersonMergeCurrentPrimaryEmployerConflictSurvivorWins(t *testing.T) {
 
 // PO-AC-M2: duplicate deal-stakeholder rows collapse instead of violating uq_rel_deal_person_role.
 func TestPersonMergeStakeholderDuplicateCollapses(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := mergeTestCtx(ws)
 	store := adapters.NewPersonStore(db)
 	loser := mkPerson(ctx, t, store, ws, "Loser")
@@ -252,9 +253,9 @@ func TestPersonMergeStakeholderDuplicateCollapses(t *testing.T) {
 
 // PO-AC-M3: self-merge is rejected.
 func TestPersonMergeSelfMergeRejected(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := mergeTestCtx(ws)
 	store := adapters.NewPersonStore(db)
 	p := mkPerson(ctx, t, store, ws, "Solo")
@@ -266,9 +267,9 @@ func TestPersonMergeSelfMergeRejected(t *testing.T) {
 // PO-AC-M4: merging an already-merged loser (or into an already-merged target) 422s
 // with a pointer to the actual survivor, following the chain.
 func TestPersonMergeAlreadyMergedFollowsChain(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := mergeTestCtx(ws)
 	store := adapters.NewPersonStore(db)
 	a := mkPerson(ctx, t, store, ws, "A")
@@ -299,9 +300,9 @@ func TestPersonMergeAlreadyMergedFollowsChain(t *testing.T) {
 // blocked UPDATE re-evaluates its WHERE version=$readVersion clause against the
 // already-committed row once unblocked and finds no match.
 func TestPersonMergeConcurrentLoses409VersionSkew(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := mergeTestCtx(ws)
 	store := adapters.NewPersonStore(db)
 	loser := mkPerson(ctx, t, store, ws, "Loser")

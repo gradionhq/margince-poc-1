@@ -1,17 +1,5 @@
 // Package adapters contains the partners module's PostgreSQL storage adapters.
+//
+// Generic, domain-free store helpers (e.g. the provenance guard) live in the
+// Tier-0 shared/kernel/sqlutil package.
 package adapters
-
-import (
-	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
-)
-
-// requireProvenance rejects an empty source or captured_by with a typed sentinel
-// (data-model §1.6 provenance). HTTP handlers already reject empties at the edge, but
-// non-HTTP callers (import/Datasource/direct store use) must not be able to insert
-// source="" or captured_by="" — provenance is a load-bearing invariant, not a nicety.
-func requireProvenance(source, capturedBy string) error {
-	if source == "" || capturedBy == "" {
-		return errs.ErrNullProvenance
-	}
-	return nil
-}

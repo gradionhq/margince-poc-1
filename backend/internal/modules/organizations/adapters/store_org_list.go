@@ -11,6 +11,7 @@ import (
 
 	"github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
 	database "github.com/gradionhq/margince/backend/internal/platform/database"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
 )
 
 func buildOrgListWhere(f domain.OrgListFilter, args []any, n int) (string, []any) {
@@ -92,7 +93,7 @@ func (s *OrgStore) listByOrgID(ctx context.Context, workspaceID, cursor string, 
 				return err
 			}
 			o.Social = map[string]any{}
-			unmarshalJSON(socialRaw, &o.Social)
+			sqlutil.UnmarshalJSON(socialRaw, &o.Social)
 			out = append(out, o)
 		}
 		if err := rows.Err(); err != nil {
@@ -116,7 +117,7 @@ func (s *OrgStore) listByOrgID(ctx context.Context, workspaceID, cursor string, 
 }
 
 func (s *OrgStore) listByOrgStrength(ctx context.Context, workspaceID, cursor string, limit int, descending bool, filter domain.OrgListFilter) ([]domain.Organization, string, error) {
-	offset := decodeOffsetCursor(cursor)
+	offset := sqlutil.DecodeOffsetCursor(cursor)
 	all := []domain.Organization{}
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		args := []any{workspaceID}
@@ -142,7 +143,7 @@ func (s *OrgStore) listByOrgStrength(ctx context.Context, workspaceID, cursor st
 				return err
 			}
 			o.Social = map[string]any{}
-			unmarshalJSON(socialRaw, &o.Social)
+			sqlutil.UnmarshalJSON(socialRaw, &o.Social)
 			all = append(all, o)
 		}
 		if err := rows.Err(); err != nil {
@@ -182,7 +183,7 @@ func (s *OrgStore) listByOrgStrength(ctx context.Context, workspaceID, cursor st
 	end := offset + limit
 	var next string
 	if end < len(all) {
-		next = encodeOffsetCursor(end)
+		next = sqlutil.EncodeOffsetCursor(end)
 	} else {
 		end = len(all)
 	}

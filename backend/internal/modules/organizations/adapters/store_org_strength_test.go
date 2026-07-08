@@ -15,15 +15,16 @@ import (
 	people "github.com/gradionhq/margince/backend/internal/modules/people"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
 const orgAggTestWS = "00000000-0000-0000-0000-000000000021"
 
 func TestOrgStore_List_AttachesAggregates(t *testing.T) {
-	db := openTestDB(t)
-	seedWorkspace(t, db, orgAggTestWS)
-	setRLS(t, db, orgAggTestWS)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SeedWorkspace(t, db, orgAggTestWS)
+	pgtest.SetRLS(t, db, orgAggTestWS)
 
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: orgAggTestWS, UserID: "human:test"})
 	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
@@ -32,7 +33,7 @@ func TestOrgStore_List_AttachesAggregates(t *testing.T) {
 	personStore := people.NewPersonStore(db)
 
 	orgWithContactsSeed := orgDomain.Organization{
-		WorkspaceID: orgAggTestWS, DisplayName: "OrgWithContacts-" + uniq(),
+		WorkspaceID: orgAggTestWS, DisplayName: "OrgWithContacts-" + pgtest.Uniq(),
 		Source: "test", CapturedBy: "human:test",
 	}
 	orgWithContacts, err := orgStore.Create(ctx, orgWithContactsSeed)
@@ -41,7 +42,7 @@ func TestOrgStore_List_AttachesAggregates(t *testing.T) {
 	}
 
 	emptyOrgSeed := orgDomain.Organization{
-		WorkspaceID: orgAggTestWS, DisplayName: "EmptyOrg-" + uniq(),
+		WorkspaceID: orgAggTestWS, DisplayName: "EmptyOrg-" + pgtest.Uniq(),
 		Source: "test", CapturedBy: "human:test",
 	}
 	emptyOrg, err := orgStore.Create(ctx, emptyOrgSeed)
@@ -49,14 +50,14 @@ func TestOrgStore_List_AttachesAggregates(t *testing.T) {
 		t.Fatalf("create emptyOrg: %v", err)
 	}
 
-	strongSeed := people.NewPerson("Strong-"+uniq(), p0)
+	strongSeed := people.NewPerson("Strong-"+pgtest.Uniq(), p0)
 	strongSeed.WorkspaceID = orgAggTestWS
 	strongPerson, err := personStore.Create(ctx, strongSeed, nil)
 	if err != nil {
 		t.Fatalf("create strongPerson: %v", err)
 	}
 
-	weakSeed := people.NewPerson("Weak-"+uniq(), p0)
+	weakSeed := people.NewPerson("Weak-"+pgtest.Uniq(), p0)
 	weakSeed.WorkspaceID = orgAggTestWS
 	_, err = personStore.Create(ctx, weakSeed, nil)
 	if err != nil {
@@ -64,7 +65,7 @@ func TestOrgStore_List_AttachesAggregates(t *testing.T) {
 	}
 	// employ both at orgWithContacts — we only need the ID from weak2, create a second weak person
 	weakPerson, err := personStore.Create(ctx, func() people.Person {
-		s := people.NewPerson("Weak2-"+uniq(), p0)
+		s := people.NewPerson("Weak2-"+pgtest.Uniq(), p0)
 		s.WorkspaceID = orgAggTestWS
 		return s
 	}(), nil)
@@ -102,24 +103,24 @@ func TestOrgStore_List_AttachesAggregates(t *testing.T) {
 	var pipeID, stageID string
 	if err := db.QueryRowContext(ctx,
 		`INSERT INTO pipeline (id, workspace_id, name) VALUES (uuidv7(), $1, $2) RETURNING id`,
-		orgAggTestWS, "pipe-"+uniq()).Scan(&pipeID); err != nil {
+		orgAggTestWS, "pipe-"+pgtest.Uniq()).Scan(&pipeID); err != nil {
 		t.Fatalf("seed pipeline: %v", err)
 	}
 	if err := db.QueryRowContext(ctx,
 		`INSERT INTO stage (id, workspace_id, pipeline_id, name, position) VALUES (uuidv7(), $1, $2, $3, 1) RETURNING id`,
-		orgAggTestWS, pipeID, "stage-"+uniq()).Scan(&stageID); err != nil {
+		orgAggTestWS, pipeID, "stage-"+pgtest.Uniq()).Scan(&stageID); err != nil {
 		t.Fatalf("seed stage: %v", err)
 	}
 	if _, err := db.ExecContext(ctx,
 		`INSERT INTO deal (id, workspace_id, name, pipeline_id, stage_id, organization_id, status, source, captured_by, version)
 		 VALUES (uuidv7(), $1, $2, $3::uuid, $4::uuid, $5::uuid, 'open', 'test', 'human:test', 1)`,
-		orgAggTestWS, "OpenDeal-"+uniq(), pipeID, stageID, orgWithContacts.ID); err != nil {
+		orgAggTestWS, "OpenDeal-"+pgtest.Uniq(), pipeID, stageID, orgWithContacts.ID); err != nil {
 		t.Fatalf("seed open deal: %v", err)
 	}
 	if _, err := db.ExecContext(ctx,
 		`INSERT INTO deal (id, workspace_id, name, pipeline_id, stage_id, organization_id, status, closed_at, source, captured_by, version)
 		 VALUES (uuidv7(), $1, $2, $3::uuid, $4::uuid, $5::uuid, 'won', NOW(), 'test', 'human:test', 1)`,
-		orgAggTestWS, "WonDeal-"+uniq(), pipeID, stageID, orgWithContacts.ID); err != nil {
+		orgAggTestWS, "WonDeal-"+pgtest.Uniq(), pipeID, stageID, orgWithContacts.ID); err != nil {
 		t.Fatalf("seed won deal: %v", err)
 	}
 

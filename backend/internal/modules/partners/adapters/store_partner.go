@@ -13,6 +13,7 @@ import (
 	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
 )
 
 const (
@@ -64,7 +65,7 @@ func scanPartnerRow(row partnerRowScanner) (domain.Partner, error) {
 // Upsert creates or updates the 1:1 partner row for p.OrganizationID and
 // keeps the owning organization classified as partner in the same transaction.
 func (s *PartnerStore) Upsert(ctx context.Context, p domain.Partner) (domain.Partner, error) {
-	if err := requireProvenance(p.Source, p.CapturedBy); err != nil {
+	if err := sqlutil.RequireProvenance(p.Source, p.CapturedBy); err != nil {
 		return domain.Partner{}, err
 	}
 	if p.ID == "" {

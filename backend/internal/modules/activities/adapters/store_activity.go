@@ -5,16 +5,15 @@ package adapters
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/gradionhq/margince/backend/internal/modules/activities/domain"
 	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
 )
 
 // entity-type constants used in the List activity_link JOIN.
@@ -28,54 +27,8 @@ const (
 	fieldIsDone            = "is_done"
 )
 
-// requireProvenance rejects an empty source or captured_by with a typed
-// sentinel. HTTP handlers already reject empties at the edge, but non-HTTP
-// callers (import/Datasource/direct store use) must not bypass the invariant.
-func requireProvenance(source, capturedBy string) error {
-	if source == "" || capturedBy == "" {
-		return errs.ErrNullProvenance
-	}
-	return nil
-}
-
-// encodeKeysetCursor packs (sortVal, id) into one opaque, URL-safe token.
-func encodeKeysetCursor(sortVal, id string) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(sortVal + "\x00" + id))
-}
-
-// decodeKeysetCursor unpacks a token from encodeKeysetCursor. ok=false for an
-// empty or malformed token — the caller treats it as "first page".
-func decodeKeysetCursor(cursor string) (sortVal, id string, ok bool) {
-	if cursor == "" {
-		return "", "", false
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(cursor)
-	if err != nil {
-		return "", "", false
-	}
-	parts := strings.SplitN(string(raw), "\x00", 2)
-	if len(parts) != 2 {
-		return "", "", false
-	}
-	return parts[0], parts[1], true
-}
-
-// nullStrParam binds s as a SQL value, or NULL when s is empty.
-func nullStrParam(s string) any {
-	if s == "" {
-		return nil
-	}
-	return s
-}
-
-func nullStr(m map[string]any, key string) *string {
-	if v, ok := m[key]; ok {
-		if s, ok := v.(string); ok {
-			return &s
-		}
-	}
-	return nil
-}
+// Generic, domain-free store helpers (provenance guard, keyset/offset cursors,
+// bounded-update field readers) live in the Tier-0 shared/kernel/sqlutil package.
 
 func nullTime(m map[string]any, key string) *time.Time {
 	if v, ok := m[key]; ok {
@@ -113,7 +66,7 @@ func NewActivityStore(db *sql.DB) *ActivityStore { return &ActivityStore{db: db}
 
 // Create inserts an activity in one workspace-scoped tx.
 func (s *ActivityStore) Create(ctx context.Context, a domain.Activity) (domain.Activity, error) {
-	if err := requireProvenance(a.Source, a.CapturedBy); err != nil {
+	if err := sqlutil.RequireProvenance(a.Source, a.CapturedBy); err != nil {
 		return domain.Activity{}, err
 	}
 	a.ID = ids.New()
@@ -169,7 +122,7 @@ func (s *ActivityStore) List(ctx context.Context, workspaceID, entityType, entit
 	// ORDER BY occurred_at DESC, id — the seek must compare the FULL key, so a
 	// page boundary mid-timestamp neither skips nor repeats rows. The opaque cursor
 	// carries (occurred_at, id); the row-comparison predicate matches the ordering.
-	curOccurred, curID, hasCursor := decodeKeysetCursor(cursor)
+	curOccurred, curID, hasCursor := sqlutil.DecodeKeysetCursor(cursor)
 
 	out := []domain.Activity{}
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
@@ -196,7 +149,7 @@ func (s *ActivityStore) List(ctx context.Context, workspaceID, entityType, entit
 				  AND a.archived_at IS NULL
 				  AND (NOT $3 OR (a.occurred_at, a.id) < ($4::timestamptz, $5::uuid))
 				ORDER BY a.occurred_at DESC, a.id DESC LIMIT $6`, colName),
-				workspaceID, entityID, hasCursor, nullStrParam(curOccurred), nullStrParam(curID), limit+1)
+				workspaceID, entityID, hasCursor, sqlutil.NullStrParam(curOccurred), sqlutil.NullStrParam(curID), limit+1)
 		} else {
 			rows, err = tx.QueryContext(ctx, `
 				SELECT id, workspace_id, kind, subject, body,
@@ -207,7 +160,7 @@ func (s *ActivityStore) List(ctx context.Context, workspaceID, entityType, entit
 				WHERE workspace_id=$1::uuid AND archived_at IS NULL
 				  AND (NOT $2 OR (occurred_at, id) < ($3::timestamptz, $4::uuid))
 				ORDER BY occurred_at DESC, id DESC LIMIT $5`,
-				workspaceID, hasCursor, nullStrParam(curOccurred), nullStrParam(curID), limit+1)
+				workspaceID, hasCursor, sqlutil.NullStrParam(curOccurred), sqlutil.NullStrParam(curID), limit+1)
 		}
 		if err != nil {
 			return err
@@ -232,7 +185,7 @@ func (s *ActivityStore) List(ctx context.Context, workspaceID, entityType, entit
 	var next string
 	if len(out) > limit {
 		last := out[limit-1]
-		next = encodeKeysetCursor(last.OccurredAt.UTC().Format(time.RFC3339Nano), last.ID)
+		next = sqlutil.EncodeKeysetCursor(last.OccurredAt.UTC().Format(time.RFC3339Nano), last.ID)
 		out = out[:limit]
 	}
 	return out, next, nil
@@ -250,7 +203,7 @@ func (s *ActivityStore) Update(ctx context.Context, id, workspaceID string, upda
 
 	remindAt := nullTime(updates, "remind_at")
 	dueAt := nullTime(updates, "due_at")
-	assigneeID := nullStr(updates, "assignee_id")
+	assigneeID := sqlutil.NullStr(updates, "assignee_id")
 
 	// Resolve is_done value (JSON numbers come as float64).
 	var isDoneVal *bool
@@ -280,8 +233,8 @@ func (s *ActivityStore) Update(ctx context.Context, id, workspaceID string, upda
 				WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL
 				  AND ($13 = 0 OR version = $13)`,
 			id, workspaceID,
-			nullStr(updates, "subject"),
-			nullStr(updates, "body"),
+			sqlutil.NullStr(updates, "subject"),
+			sqlutil.NullStr(updates, "body"),
 			hasRemindAt, remindAt,
 			hasDueAt, dueAt,
 			hasAssigneeID, assigneeID,

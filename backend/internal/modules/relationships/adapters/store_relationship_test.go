@@ -18,6 +18,7 @@ import (
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
@@ -69,7 +70,7 @@ func seedRelPersonOrg(t *testing.T, db *sql.DB) (personID, orgID string) {
 }
 
 func TestRelationshipStore_CreateEmployment_ThenGet(t *testing.T) {
-	db := sqlDB(t)
+	db := pgtest.OpenTestDB(t)
 	seedRelWorkspace(t, db)
 	setRelRLS(t, db)
 	personID, orgID := seedRelPersonOrg(t, db)
@@ -105,7 +106,7 @@ func TestRelationshipStore_CreateEmployment_ThenGet(t *testing.T) {
 // TestRelationshipStore_CreateEmployment_NullProvenanceRejected covers P5 —
 // no relationship row can be captured without source+captured_by.
 func TestRelationshipStore_CreateEmployment_NullProvenanceRejected(t *testing.T) {
-	db := sqlDB(t)
+	db := pgtest.OpenTestDB(t)
 	seedRelWorkspace(t, db)
 	setRelRLS(t, db)
 	personID, orgID := seedRelPersonOrg(t, db)
@@ -128,7 +129,7 @@ func TestRelationshipStore_CreateEmployment_NullProvenanceRejected(t *testing.T)
 // Historical (non-current) rows are additive: the first row must still be
 // readable afterward.
 func TestRelationshipStore_SecondCurrentPrimaryEmployment_Conflicts(t *testing.T) {
-	db := sqlDB(t)
+	db := pgtest.OpenTestDB(t)
 	seedRelWorkspace(t, db)
 	setRelRLS(t, db)
 	personID, orgA := seedRelPersonOrg(t, db)
@@ -171,7 +172,7 @@ func TestRelationshipStore_SecondCurrentPrimaryEmployment_Conflicts(t *testing.T
 // TestRelationshipStore_CreateDealStakeholder_DuplicateRoleConflicts covers
 // DEAL-AC-9 (uq_rel_deal_person_role).
 func TestRelationshipStore_CreateDealStakeholder_DuplicateRoleConflicts(t *testing.T) {
-	db := sqlDB(t)
+	db := pgtest.OpenTestDB(t)
 	seedRelWorkspace(t, db)
 	setRelRLS(t, db)
 	personID, _ := seedRelPersonOrg(t, db)
@@ -228,7 +229,7 @@ func TestRelationshipStore_CreateDealStakeholder_DuplicateRoleConflicts(t *testi
 // (a DB CHECK constraint violation, code 23514) — propagated as a wrapped
 // error, never a panic.
 func TestRelationshipStore_Create_ShapeViolation_RejectedNotPanicked(t *testing.T) {
-	db := sqlDB(t)
+	db := pgtest.OpenTestDB(t)
 	seedRelWorkspace(t, db)
 	setRelRLS(t, db)
 	personID, _ := seedRelPersonOrg(t, db)
@@ -252,7 +253,7 @@ func TestRelationshipStore_Create_ShapeViolation_RejectedNotPanicked(t *testing.
 // deal stream, not a "relationship" stream), complementing the employment
 // case in TestRelationshipStore_Create_AuditAndEventOnOwningStream below.
 func TestRelationshipStore_Create_DealStakeholder_AuditAndEventOnOwningStream(t *testing.T) {
-	db := sqlDB(t)
+	db := pgtest.OpenTestDB(t)
 	seedRelWorkspace(t, db)
 	setRelRLS(t, db)
 	personID, _ := seedRelPersonOrg(t, db)
@@ -320,7 +321,7 @@ func TestRelationshipStore_Create_DealStakeholder_AuditAndEventOnOwningStream(t 
 // one audit row + one outbox event on the owning stream (person for employment,
 // deal for stakeholder), not on a "relationship" stream.
 func TestRelationshipStore_Create_AuditAndEventOnOwningStream(t *testing.T) {
-	db := sqlDB(t)
+	db := pgtest.OpenTestDB(t)
 	seedRelWorkspace(t, db)
 	setRelRLS(t, db)
 	personID, orgID := seedRelPersonOrg(t, db)
@@ -365,7 +366,7 @@ func TestRelationshipStore_Create_AuditAndEventOnOwningStream(t *testing.T) {
 }
 
 func TestRelationshipStore_List_FiltersByKindAndOrg(t *testing.T) {
-	db := sqlDB(t)
+	db := pgtest.OpenTestDB(t)
 	seedRelWorkspace(t, db)
 	setRelRLS(t, db)
 	personID, orgID := seedRelPersonOrg(t, db)
@@ -405,7 +406,7 @@ func TestRelationshipStore_List_FiltersByKindAndOrg(t *testing.T) {
 // TestRelationshipStore_Update_StaleIfMatchVersionSkews covers the standard
 // If-Match/version convention (409 version_skew on a stale token).
 func TestRelationshipStore_Update_StaleIfMatchVersionSkews(t *testing.T) {
-	db := sqlDB(t)
+	db := pgtest.OpenTestDB(t)
 	seedRelWorkspace(t, db)
 	setRelRLS(t, db)
 	personID, orgID := seedRelPersonOrg(t, db)
@@ -440,7 +441,7 @@ func TestRelationshipStore_Update_StaleIfMatchVersionSkews(t *testing.T) {
 }
 
 func TestRelationshipStore_Archive_ExcludedFromDefaultList_VisibleWithIncludeArchived(t *testing.T) {
-	db := sqlDB(t)
+	db := pgtest.OpenTestDB(t)
 	seedRelWorkspace(t, db)
 	setRelRLS(t, db)
 	personID, orgID := seedRelPersonOrg(t, db)

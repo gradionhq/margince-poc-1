@@ -13,6 +13,7 @@ import (
 	organizations "github.com/gradionhq/margince/backend/internal/modules/organizations"
 	orgdomain "github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
 	adapters "github.com/gradionhq/margince/backend/internal/modules/people/adapters"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
@@ -147,9 +148,9 @@ func seedGrantTestDeal(ctx context.Context, t *testing.T, db *sql.DB, ws, ownerA
 // a deal cannot see it via the owner-filtered list; once granted, they can;
 // once revoked, they can't again; a write grant satisfies a read check.
 func TestRecordGrant_WidensThenRevokes(t *testing.T) {
-	db := sqlDB(t)
+	db := pgtest.OpenTestDB(t)
 	ctx := context.Background()
-	ws := newWorkspaceSQL(t, db)
+	ws := pgtest.NewWorkspaceSQL(t, db)
 	nonce := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	// Create two users: ownerA and subjectB.
@@ -214,9 +215,9 @@ func TestRecordGrant_WidensThenRevokes(t *testing.T) {
 // identical twin for organization (also app-layer-widened in Task 6 Step 5) — same
 // 4-step grant/revoke shape, against store_org_list's List(OwnerID: ...) instead of deal's.
 func TestRecordGrant_OrganizationWidensThenRevokes(t *testing.T) {
-	db := sqlDB(t)
+	db := pgtest.OpenTestDB(t)
 	ctx := context.Background()
-	ws := newWorkspaceSQL(t, db)
+	ws := pgtest.NewWorkspaceSQL(t, db)
 	nonce := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	// Create two users: ownerA and subjectB.
@@ -295,9 +296,9 @@ func TestRecordGrant_OrganizationWidensThenRevokes(t *testing.T) {
 // 000069 wired into person_tenant_isolation/lead_tenant_isolation is correct
 // in isolation.
 func TestRecordGrant_PersonLeadCRUDOnly(t *testing.T) {
-	db := sqlDB(t)
+	db := pgtest.OpenTestDB(t)
 	ctx := context.Background()
-	ws := newWorkspaceSQL(t, db)
+	ws := pgtest.NewWorkspaceSQL(t, db)
 	nonce := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	// Create two users: ownerA and subjectB.
@@ -391,9 +392,9 @@ func TestRecordGrant_PersonLeadCRUDOnly(t *testing.T) {
 // visibility check, still counts as satisfying it. This proves the app-layer
 // access ranking where "write" >= "read".
 func TestRecordGrant_WriteSatisfiesRead(t *testing.T) {
-	db := sqlDB(t)
+	db := pgtest.OpenTestDB(t)
 	ctx := context.Background()
-	ws := newWorkspaceSQL(t, db)
+	ws := pgtest.NewWorkspaceSQL(t, db)
 	nonce := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	// Create two users.

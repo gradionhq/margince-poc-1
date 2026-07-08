@@ -15,6 +15,7 @@ import (
 	orgadapters "github.com/gradionhq/margince/backend/internal/modules/organizations/adapters"
 	orgdomain "github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
@@ -41,9 +42,9 @@ type filterTestFixtures struct {
 
 func seedFilterFixture(t *testing.T) filterTestFixtures {
 	t.Helper()
-	db := openTestDB(t)
-	setRLS(t, db, wsFilterTest)
-	seedWorkspace(t, db, wsFilterTest)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsFilterTest)
+	pgtest.SeedWorkspace(t, db, wsFilterTest)
 
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsFilterTest})
 	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
@@ -57,17 +58,17 @@ func seedFilterFixture(t *testing.T) filterTestFixtures {
 
 	// Seed two organizations for organization_id FK.
 	ostore := orgadapters.NewOrgStore(db)
-	o1, err := ostore.Create(ctx, orgdomain.Organization{WorkspaceID: wsFilterTest, DisplayName: "Org1 " + uniq(), Source: "test", CapturedBy: "human:test"})
+	o1, err := ostore.Create(ctx, orgdomain.Organization{WorkspaceID: wsFilterTest, DisplayName: "Org1 " + pgtest.Uniq(), Source: "test", CapturedBy: "human:test"})
 	if err != nil {
 		t.Fatal("seed org1:", err)
 	}
-	o2, err := ostore.Create(ctx, orgdomain.Organization{WorkspaceID: wsFilterTest, DisplayName: "Org2 " + uniq(), Source: "test", CapturedBy: "human:test"})
+	o2, err := ostore.Create(ctx, orgdomain.Organization{WorkspaceID: wsFilterTest, DisplayName: "Org2 " + pgtest.Uniq(), Source: "test", CapturedBy: "human:test"})
 	if err != nil {
 		t.Fatal("seed org2:", err)
 	}
 
 	pstore := deals.NewPipelineStore(db)
-	pl, err := pstore.Create(ctx, deals.Pipeline{WorkspaceID: wsFilterTest, Name: "FilterTest " + uniq()})
+	pl, err := pstore.Create(ctx, deals.Pipeline{WorkspaceID: wsFilterTest, Name: "FilterTest " + pgtest.Uniq()})
 	if err != nil {
 		t.Fatal("seed pipeline:", err)
 	}
@@ -92,7 +93,7 @@ func seedFilterFixture(t *testing.T) filterTestFixtures {
 
 	// Every deal is seeded "open"; the won/lost cases below advance via Update.
 	mk := func(name, stageID, ownerID, orgID string) domain.Deal {
-		d := domain.NewDeal(name+" "+uniq(), pl.ID, stageID, p0)
+		d := domain.NewDeal(name+" "+pgtest.Uniq(), pl.ID, stageID, p0)
 		d.WorkspaceID = wsFilterTest
 		d.OwnerID = &ownerID
 		d.OrganizationID = &orgID
@@ -159,8 +160,8 @@ func seedFilterFixture(t *testing.T) filterTestFixtures {
 // TestDealListFilter exercises all DealListFilter predicates against a known fixture.
 func TestDealListFilter(t *testing.T) {
 	fix := seedFilterFixture(t)
-	db := openTestDB(t)
-	setRLS(t, db, wsFilterTest)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsFilterTest)
 	ds := adapters.NewDealStore(db)
 	ctx := context.Background()
 
@@ -358,13 +359,13 @@ func TestDealListFilter(t *testing.T) {
 
 func TestDealStore_ListFiltered_ForecastCategoryPartnerOrgSort(t *testing.T) {
 	fix := seedFilterFixture(t)
-	db := openTestDB(t)
-	setRLS(t, db, wsFilterTest)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsFilterTest)
 	ds := adapters.NewDealStore(db)
 	ctx := context.Background()
 
 	fc := "commit"
-	d1 := domain.NewDeal("Forecast A "+uniq(), fix.pipelineID, fix.stageA, prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	d1 := domain.NewDeal("Forecast A "+pgtest.Uniq(), fix.pipelineID, fix.stageA, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	d1.WorkspaceID = wsFilterTest
 	d1.ForecastCategory = &fc
 	amt1 := int64(1000)
@@ -376,7 +377,7 @@ func TestDealStore_ListFiltered_ForecastCategoryPartnerOrgSort(t *testing.T) {
 		t.Fatalf("create d1: %v", err)
 	}
 
-	d2 := domain.NewDeal("Forecast B "+uniq(), fix.pipelineID, fix.stageA, prov.Provenance{Source: "test", CapturedBy: "human:test"})
+	d2 := domain.NewDeal("Forecast B "+pgtest.Uniq(), fix.pipelineID, fix.stageA, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	d2.WorkspaceID = wsFilterTest
 	amt2 := int64(2000)
 	d2.AmountMinor = &amt2
@@ -422,8 +423,8 @@ func TestDealStore_ListFiltered_ForecastCategoryPartnerOrgSort(t *testing.T) {
 
 func TestDealStalledFlag(t *testing.T) {
 	fix := seedFilterFixture(t)
-	db := openTestDB(t)
-	setRLS(t, db, wsFilterTest)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsFilterTest)
 	ds := adapters.NewDealStore(db)
 	ctx := context.Background()
 
@@ -561,15 +562,15 @@ const wsKanbanP95 = "00000000-0000-0000-0000-000000000011"
 // forces the planner to find the cheapest available index and reveals whether
 // one covers the predicate.
 func TestDealListFilter_P95AndExplain(t *testing.T) {
-	db := openTestDB(t)
-	setRLS(t, db, wsKanbanP95)
-	seedWorkspace(t, db, wsKanbanP95)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsKanbanP95)
+	pgtest.SeedWorkspace(t, db, wsKanbanP95)
 
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsKanbanP95})
 	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
 
 	pstore := deals.NewPipelineStore(db)
-	pl, err := pstore.Create(ctx, deals.Pipeline{WorkspaceID: wsKanbanP95, Name: "P95 " + uniq()})
+	pl, err := pstore.Create(ctx, deals.Pipeline{WorkspaceID: wsKanbanP95, Name: "P95 " + pgtest.Uniq()})
 	if err != nil {
 		t.Fatal("seed pipeline:", err)
 	}
@@ -584,7 +585,7 @@ func TestDealListFilter_P95AndExplain(t *testing.T) {
 
 	ds := adapters.NewDealStore(db)
 	for i := 0; i < 50; i++ {
-		d := domain.NewDeal("Card "+uniq(), pl.ID, st.ID, p0)
+		d := domain.NewDeal("Card "+pgtest.Uniq(), pl.ID, st.ID, p0)
 		d.WorkspaceID = wsKanbanP95
 		if _, err := ds.Create(ctx, d, ""); err != nil {
 			t.Fatalf("seed deal %d: %v", i, err)

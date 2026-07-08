@@ -3,16 +3,15 @@
 package adapters_test
 
 import (
-	"context"
 	"database/sql"
-	"fmt"
 	"os"
 	"testing"
-	"time"
 
 	_ "github.com/lib/pq"
 )
 
+// The generic fresh-workspace helper lives in the Tier-0 shared/kernel/pgtest
+// package; mustSQLDB is kept local because it pings the DB before returning.
 func mustSQLDB(t *testing.T) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
@@ -28,17 +27,4 @@ func mustSQLDB(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 	return db
-}
-
-func newWorkspaceSQL(t *testing.T, db *sql.DB) string {
-	t.Helper()
-	nonce := fmt.Sprintf("datasource-%d", time.Now().UnixNano())
-	var id string
-	err := db.QueryRowContext(context.Background(),
-		`INSERT INTO workspace(name, slug, base_currency) VALUES ($1, $2, 'EUR') RETURNING id`,
-		"ws-"+nonce, "slug-"+nonce).Scan(&id)
-	if err != nil {
-		t.Fatalf("create workspace: %v", err)
-	}
-	return id
 }

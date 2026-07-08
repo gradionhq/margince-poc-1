@@ -16,6 +16,7 @@ import (
 	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
 )
 
 // relKindEmployment and relKindDealStakeholder are the only two `kind` values
@@ -34,15 +35,6 @@ const (
 	entityTypeDeal   = "deal"
 	entityTypePerson = "person"
 )
-
-// requireProvenance rejects an empty source or captured_by with a typed sentinel
-// (data-model §1.6 provenance).
-func requireProvenance(source, capturedBy string) error {
-	if source == "" || capturedBy == "" {
-		return errs.ErrNullProvenance
-	}
-	return nil
-}
 
 // RelationshipStore executes parameterized SQL against the relationship table
 // (PO-DDL-7): employment (person<->org) and deal_stakeholder (deal<->person)
@@ -126,7 +118,7 @@ const relationshipSelectCols = `
 // chosen PO-AC-12 behavior: historical employment rows are additive, never
 // auto-demoted.
 func (s *RelationshipStore) Create(ctx context.Context, rel domain.Relationship) (domain.Relationship, error) {
-	if err := requireProvenance(rel.Source, rel.CapturedBy); err != nil {
+	if err := sqlutil.RequireProvenance(rel.Source, rel.CapturedBy); err != nil {
 		return domain.Relationship{}, err
 	}
 	rel.ID = ids.New()
@@ -265,7 +257,7 @@ func (s *RelationshipStore) Update(ctx context.Context, id, workspaceID string, 
 			  AND ($7 = 0 OR version = $7)
 			RETURNING kind, person_id, deal_id`,
 			id, workspaceID,
-			nullStr(updates, "role"),
+			sqlutil.NullStr(updates, "role"),
 			nullBool(updates, "is_current_primary"),
 			nullTime(updates, "started_at"),
 			nullTime(updates, "ended_at"),
@@ -366,16 +358,6 @@ func (s *RelationshipStore) getAny(ctx context.Context, id, workspaceID string) 
 		return rel, errs.ErrNotFound
 	}
 	return rel, err
-}
-
-// nullStr reads a string pointer from updates map.
-func nullStr(m map[string]any, key string) *string {
-	if v, ok := m[key]; ok {
-		if s, ok := v.(string); ok {
-			return &s
-		}
-	}
-	return nil
 }
 
 // nullBool reads a bool from updates map.

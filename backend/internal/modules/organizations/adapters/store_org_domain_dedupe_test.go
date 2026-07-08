@@ -14,12 +14,13 @@ import (
 	orgDomain "github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 )
 
 func TestOrgStoreCreateDomainDuplicateRejected(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:t", TenantID: ws})
 	store := orgAdapters.NewOrgStore(db)
 

@@ -18,6 +18,7 @@ import (
 	orgDomain "github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 )
 
 const orgRestoreWS = "00000000-0000-0000-0000-000000000051"
@@ -37,7 +38,7 @@ func orgRestoreCtx() context.Context {
 }
 
 func TestOrgStore_Restore_ArchivedOrgWritesEventAndAudit(t *testing.T) {
-	db := sqlDB(t)
+	db := pgtest.OpenTestDB(t)
 	seedOrgRestoreWorkspace(t, db)
 
 	store := orgAdapters.NewOrgStore(db)
@@ -97,7 +98,7 @@ func TestOrgStore_Restore_ArchivedOrgWritesEventAndAudit(t *testing.T) {
 }
 
 func TestOrgStore_Restore_RefusesLiveAndMergedRecords(t *testing.T) {
-	db := sqlDB(t)
+	db := pgtest.OpenTestDB(t)
 	seedOrgRestoreWorkspace(t, db)
 
 	store := orgAdapters.NewOrgStore(db)

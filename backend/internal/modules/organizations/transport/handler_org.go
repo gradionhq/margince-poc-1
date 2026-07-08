@@ -21,6 +21,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/httpkit"
 	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
 	"github.com/gradionhq/margince/backend/internal/shared/ports/mcp"
 )
@@ -70,7 +71,7 @@ func (h *OrganizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	if h.serveSuffixRoutes(w, r) {
 		return
 	}
-	id := pathID(r.URL.Path, "/organizations")
+	id := httpkit.PathID(r.URL.Path, "/organizations")
 	switch {
 	case r.Method == http.MethodGet && id == "":
 		h.list(w, r)
@@ -92,12 +93,12 @@ func (h *OrganizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 // people/transport's handler_person.go serveSuffixRoutes).
 func (h *OrganizationHandler) serveSuffixRoutes(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/restore") {
-		id := pathID(strings.TrimSuffix(r.URL.Path, "/restore"), "/organizations")
+		id := httpkit.PathID(strings.TrimSuffix(r.URL.Path, "/restore"), "/organizations")
 		h.restore(w, r, id)
 		return true
 	}
 	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/merge") {
-		id := pathID(strings.TrimSuffix(r.URL.Path, "/merge"), "/organizations")
+		id := httpkit.PathID(strings.TrimSuffix(r.URL.Path, "/merge"), "/organizations")
 		h.merge(w, r, id)
 		return true
 	}
@@ -111,58 +112,60 @@ func (h *OrganizationHandler) serveSuffixRoutes(w http.ResponseWriter, r *http.R
 // principal must present a single-use X-Approval-Token bound to this exact
 // (workspace, tool, diff).
 func (h *OrganizationHandler) merge(w http.ResponseWriter, r *http.Request, id string) {
-	wsID := workspaceID(r)
+	wsID := httpkit.WorkspaceID(r)
 	var body struct {
 		TargetID string `json:"target_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.TargetID == "" {
-		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
+		httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
 		return
 	}
 	p, _ := crmctx.From(r.Context())
 	diffFields := map[string]any{"organization_id": id, "target_id": body.TargetID}
 	if err := toolgate.Enforce(r.Context(), p, h.verifier, mergeOrgTool, wsID, diffFields, nil, r.Header.Get("X-Approval-Token")); err != nil {
 		if errors.Is(err, toolgate.ErrApprovalRequired) {
-			jsonProblem(w, http.StatusForbidden, "approval_required")
+			httpkit.JSONProblem(w, http.StatusForbidden, "approval_required")
 		} else {
-			jsonProblem(w, http.StatusForbidden, "approval_token_invalid")
+			httpkit.JSONProblem(w, http.StatusForbidden, "approval_token_invalid")
 		}
 		return
 	}
 	merged, err := h.store.Merge(r.Context(), id, body.TargetID, wsID)
 	if errors.Is(err, adapters.ErrSelfMerge) {
-		jsonValidationError(w, "target_id must not equal id.", []fieldError{{Field: "target_id", Code: "self_merge"}})
+		httpkit.JSONValidationError(w, "target_id must not equal id.", []fieldError{{Field: "target_id", Code: "self_merge"}})
 		return
 	}
 	var already *adapters.ErrAlreadyMerged
 	if errors.As(err, &already) {
-		jsonProblemDetails(w, http.StatusUnprocessableEntity, "already_merged",
+		httpkit.JSONProblemDetails(w, http.StatusUnprocessableEntity, "already_merged",
 			"This record was already merged.", map[string]any{fieldExistingID: already.SurvivorID})
+
 		return
 	}
 	var targetInvalid *adapters.ErrMergeTargetInvalid
 	if errors.As(err, &targetInvalid) {
-		jsonProblemDetails(w, http.StatusUnprocessableEntity, "merge_target_invalid",
+		httpkit.JSONProblemDetails(w, http.StatusUnprocessableEntity, "merge_target_invalid",
 			"The merge target is archived or itself already merged.", map[string]any{fieldExistingID: targetInvalid.SurvivorID})
+
 		return
 	}
 	if errors.Is(err, errs.ErrVersionSkew) {
-		jsonProblem(w, http.StatusConflict, "version_skew")
+		httpkit.JSONProblem(w, http.StatusConflict, "version_skew")
 		return
 	}
 	if errors.Is(err, errs.ErrNotFound) {
-		jsonProblem(w, http.StatusNotFound, "not_found")
+		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
 		return
 	}
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonOK(w, merged)
+	httpkit.JSONOK(w, merged)
 }
 
 func (h *OrganizationHandler) create(w http.ResponseWriter, r *http.Request) {
-	wsID := workspaceID(r)
+	wsID := httpkit.WorkspaceID(r)
 	var body struct {
 		DisplayName    string  `json:"display_name"`
 		Website        *string `json:"website,omitempty"`
@@ -177,11 +180,11 @@ func (h *OrganizationHandler) create(w http.ResponseWriter, r *http.Request) {
 		} `json:"domains,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
+		httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
 		return
 	}
 	if body.DisplayName == "" || body.Source == "" || body.CapturedBy == "" {
-		jsonProblem(w, http.StatusBadRequest, "missing_required_fields")
+		httpkit.JSONProblem(w, http.StatusBadRequest, "missing_required_fields")
 		return
 	}
 
@@ -211,20 +214,22 @@ func (h *OrganizationHandler) create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var dup *adapters.ErrDuplicateDomain
 		if errors.As(err, &dup) {
-			jsonProblemDetails(w, http.StatusConflict, "duplicate_domain",
+			httpkit.JSONProblemDetails(w, http.StatusConflict, "duplicate_domain",
 				"An active organization already owns this domain.",
 				map[string]any{fieldExistingID: dup.ExistingID, "field": dup.Field})
+
 			return
 		}
 		if errors.Is(err, errs.ErrNullProvenance) {
-			jsonValidationError(w, "source and captured_by are required.",
+			httpkit.JSONValidationError(w, "source and captured_by are required.",
 				[]fieldError{{Field: fieldSource, Code: codeRequired}, {Field: fieldCapturedBy, Code: codeRequired}})
+
 			return
 		}
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonCreatedAt(w, created, "/organizations/"+created.ID)
+	httpkit.JSONCreatedAt(w, created, "/organizations/"+created.ID)
 }
 
 // organizationDetailResponse is the organization-360 composite read — the
@@ -240,22 +245,22 @@ type organizationDetailResponse struct {
 }
 
 func (h *OrganizationHandler) get(w http.ResponseWriter, r *http.Request, id string) {
-	wsID := workspaceID(r)
+	wsID := httpkit.WorkspaceID(r)
 	o, err := h.store.GetAny(r.Context(), id, wsID)
 	if errors.Is(err, errs.ErrNotFound) {
-		jsonProblem(w, http.StatusNotFound, "not_found")
+		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
 		return
 	}
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
 	rels, deals, acts, err := h.assembleComposite(r.Context(), wsID, o.ID)
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonOK(w, organizationDetailResponse{
+	httpkit.JSONOK(w, organizationDetailResponse{
 		Organization:  o,
 		Relationships: rels,
 		Deals:         deals,
@@ -345,78 +350,79 @@ func (h *OrganizationHandler) assembleComposite(ctx context.Context, wsID, orgID
 }
 
 func (h *OrganizationHandler) update(w http.ResponseWriter, r *http.Request, id string) {
-	wsID := workspaceID(r)
-	ifMatch, malformed := parseIfMatch(r)
+	wsID := httpkit.WorkspaceID(r)
+	ifMatch, malformed := httpkit.ParseIfMatch(r)
 	if malformed {
-		jsonProblem(w, http.StatusBadRequest, "bad_if_match")
+		httpkit.JSONProblem(w, http.StatusBadRequest, "bad_if_match")
 		return
 	}
 
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
+		httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
 		return
 	}
 
 	o, err := h.store.Update(r.Context(), id, wsID, body, ifMatch)
 	if errors.Is(err, errs.ErrVersionSkew) {
-		jsonProblem(w, http.StatusConflict, "version_skew")
+		httpkit.JSONProblem(w, http.StatusConflict, "version_skew")
 		return
 	}
 	if errors.Is(err, errs.ErrNotFound) {
-		jsonProblem(w, http.StatusNotFound, "not_found")
+		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
 		return
 	}
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonOK(w, o)
+	httpkit.JSONOK(w, o)
 }
 
 func (h *OrganizationHandler) archive(w http.ResponseWriter, r *http.Request, id string) {
-	wsID := workspaceID(r)
+	wsID := httpkit.WorkspaceID(r)
 	archived, err := h.store.Archive(r.Context(), id, wsID)
 	if errors.Is(err, errs.ErrNotFound) {
-		jsonProblem(w, http.StatusNotFound, "not_found")
+		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
 		return
 	}
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonOK(w, archived)
+	httpkit.JSONOK(w, archived)
 }
 
 func (h *OrganizationHandler) restore(w http.ResponseWriter, r *http.Request, id string) {
-	wsID := workspaceID(r)
+	wsID := httpkit.WorkspaceID(r)
 	restored, err := h.store.Restore(r.Context(), id, wsID)
 	if errors.Is(err, errs.ErrNotFound) {
-		jsonProblem(w, http.StatusNotFound, "not_found")
+		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
 		return
 	}
 	var dup *adapters.ErrDuplicateDomain
 	if errors.As(err, &dup) {
-		jsonProblemDetails(w, http.StatusConflict, "duplicate_domain",
+		httpkit.JSONProblemDetails(w, http.StatusConflict, "duplicate_domain",
 			"An active organization already owns this domain.",
 			map[string]any{"existing_id": dup.ExistingID, "field": dup.Field})
+
 		return
 	}
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonOK(w, restored)
+	httpkit.JSONOK(w, restored)
 }
 
 func (h *OrganizationHandler) list(w http.ResponseWriter, r *http.Request) {
-	wsID, ok := requireWorkspace(w, r)
+	wsID, ok := httpkit.RequireWorkspace(w, r)
 	if !ok {
 		return
 	}
 	sortVal := r.URL.Query().Get("sort")
 	if !orgSortAllowed[sortVal] {
-		jsonProblem(w, http.StatusUnprocessableEntity, "sort_field_not_allowed")
+		httpkit.JSONProblem(w, http.StatusUnprocessableEntity, "sort_field_not_allowed")
 		return
 	}
 	q := r.URL.Query()
@@ -431,11 +437,11 @@ func (h *OrganizationHandler) list(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	cursor := r.URL.Query().Get("cursor")
-	limit := queryLimit(r)
+	limit := httpkit.QueryLimit(r, 20)
 	items, next, err := h.store.List(r.Context(), wsID, cursor, limit, sortVal, filter)
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonOK(w, pageResponse(items, next))
+	httpkit.JSONOK(w, httpkit.PageResponse(items, next))
 }

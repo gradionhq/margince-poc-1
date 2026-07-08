@@ -5,6 +5,8 @@ package deals
 import (
 	"context"
 	"testing"
+
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 )
 
 // wsDevSeed is the fixed workspace id backend/seed/dev.sql seeds into.
@@ -56,8 +58,8 @@ ON CONFLICT (id) DO NOTHING;
 // bare migrated `margince_test` DB — it no longer depends on an out-of-band
 // `make seed-reset` having been run first.
 func TestDevSeed_DefaultPipeline_HasSevenPinnedStages(t *testing.T) {
-	db := openTestDB(t)
-	setRLS(t, db, wsDevSeed)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsDevSeed)
 	ctx := context.Background()
 
 	if _, err := db.ExecContext(ctx, devSeedPipelineStagesSQL); err != nil {

@@ -17,6 +17,7 @@ import (
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/dedupe"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
 )
 
 // OrgStore executes parameterized SQL against the organization table.
@@ -42,12 +43,12 @@ func (e *ErrDuplicateDomain) Error() string {
 
 // Create inserts an organization and its domains in one workspace-scoped tx.
 func (s *OrgStore) Create(ctx context.Context, o domain.Organization) (domain.Organization, error) {
-	if err := requireProvenance(o.Source, o.CapturedBy); err != nil {
+	if err := sqlutil.RequireProvenance(o.Source, o.CapturedBy); err != nil {
 		return domain.Organization{}, err
 	}
 	o.ID = ids.New()
-	social := marshalJSON(o.Social)
-	address := marshalJSON(o.Address)
+	social := sqlutil.MarshalJSON(o.Social)
+	address := sqlutil.MarshalJSON(o.Address)
 	classification := o.Classification
 	if classification == nil {
 		def := "prospect"
@@ -173,10 +174,10 @@ func (s *OrgStore) Get(ctx context.Context, id, workspaceID string) (domain.Orga
 		return o, err
 	}
 	o.Social = map[string]any{}
-	unmarshalJSON(socialRaw, &o.Social)
+	sqlutil.UnmarshalJSON(socialRaw, &o.Social)
 	if addrRaw != nil {
 		o.Address = map[string]any{}
-		unmarshalJSON(addrRaw, &o.Address)
+		sqlutil.UnmarshalJSON(addrRaw, &o.Address)
 	}
 	return o, nil
 }
@@ -197,9 +198,9 @@ func (s *OrgStore) Update(ctx context.Context, id, workspaceID string, updates m
 				    updated_at = now()
 				WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
 				id, workspaceID,
-				nullStr(updates, "display_name"),
-				nullStr(updates, "website"),
-				nullStr(updates, "owner_id"))
+				sqlutil.NullStr(updates, "display_name"),
+				sqlutil.NullStr(updates, "website"),
+				sqlutil.NullStr(updates, "owner_id"))
 		} else {
 			res, err = tx.ExecContext(ctx, `
 				UPDATE organization
@@ -209,9 +210,9 @@ func (s *OrgStore) Update(ctx context.Context, id, workspaceID string, updates m
 				    updated_at = now()
 				WHERE id=$1::uuid AND workspace_id=$2::uuid AND version=$6 AND archived_at IS NULL`,
 				id, workspaceID,
-				nullStr(updates, "display_name"),
-				nullStr(updates, "website"),
-				nullStr(updates, "owner_id"),
+				sqlutil.NullStr(updates, "display_name"),
+				sqlutil.NullStr(updates, "website"),
+				sqlutil.NullStr(updates, "owner_id"),
 				ifMatch)
 		}
 		if err != nil {
@@ -373,10 +374,10 @@ func (s *OrgStore) GetAny(ctx context.Context, id, workspaceID string) (domain.O
 		return o, err
 	}
 	o.Social = map[string]any{}
-	unmarshalJSON(socialRaw, &o.Social)
+	sqlutil.UnmarshalJSON(socialRaw, &o.Social)
 	if addrRaw != nil {
 		o.Address = map[string]any{}
-		unmarshalJSON(addrRaw, &o.Address)
+		sqlutil.UnmarshalJSON(addrRaw, &o.Address)
 	}
 	return o, nil
 }

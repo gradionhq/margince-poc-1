@@ -10,6 +10,7 @@ import (
 
 	actdomain "github.com/gradionhq/margince/backend/internal/modules/activities/domain"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/httpkit"
 )
 
 // activityStoreSeam is the subset of *adapters.ActivityStore this handler needs.
@@ -34,7 +35,7 @@ func NewActivityHandler(store activityStoreSeam) *ActivityHandler {
 }
 
 func (h *ActivityHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	id := pathID(r.URL.Path, "/activities")
+	id := httpkit.PathID(r.URL.Path, "/activities")
 	switch {
 	case r.Method == http.MethodGet && id == "":
 		h.list(w, r)
@@ -50,60 +51,60 @@ func (h *ActivityHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ActivityHandler) list(w http.ResponseWriter, r *http.Request) {
-	wsID, ok := requireWorkspace(w, r)
+	wsID, ok := httpkit.RequireWorkspace(w, r)
 	if !ok {
 		return
 	}
 	q := r.URL.Query()
-	items, next, err := h.store.List(r.Context(), wsID, q.Get("entity_type"), q.Get("entity_id"), q.Get("cursor"), queryLimit(r))
+	items, next, err := h.store.List(r.Context(), wsID, q.Get("entity_type"), q.Get("entity_id"), q.Get("cursor"), httpkit.QueryLimit(r, 20))
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonOK(w, pageResponse(items, next))
+	httpkit.JSONOK(w, httpkit.PageResponse(items, next))
 }
 
 func (h *ActivityHandler) get(w http.ResponseWriter, r *http.Request, id string) {
-	wsID := workspaceID(r)
+	wsID := httpkit.WorkspaceID(r)
 	a, err := h.store.Get(r.Context(), id, wsID)
 	if errors.Is(err, errs.ErrNotFound) {
-		jsonProblem(w, http.StatusNotFound, "not_found")
+		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
 		return
 	}
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonOK(w, a)
+	httpkit.JSONOK(w, a)
 }
 
 func (h *ActivityHandler) update(w http.ResponseWriter, r *http.Request, id string) {
-	wsID := workspaceID(r)
-	ifMatch, malformed := parseIfMatch(r)
+	wsID := httpkit.WorkspaceID(r)
+	ifMatch, malformed := httpkit.ParseIfMatch(r)
 	if malformed {
-		jsonProblem(w, http.StatusBadRequest, "bad_if_match")
+		httpkit.JSONProblem(w, http.StatusBadRequest, "bad_if_match")
 		return
 	}
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
+		httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
 		return
 	}
 	a, err := h.store.Update(r.Context(), id, wsID, body, ifMatch)
-	writeUpdateResult(w, a, err)
+	httpkit.WriteUpdateResult(w, a, err)
 }
 
 // archive is intentionally If-Match-free, mirroring RelationshipHandler.archive.
 func (h *ActivityHandler) archive(w http.ResponseWriter, r *http.Request, id string) {
-	wsID := workspaceID(r)
+	wsID := httpkit.WorkspaceID(r)
 	a, err := h.store.Archive(r.Context(), id, wsID)
 	if errors.Is(err, errs.ErrNotFound) {
-		jsonProblem(w, http.StatusNotFound, "not_found")
+		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
 		return
 	}
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonOK(w, a)
+	httpkit.JSONOK(w, a)
 }

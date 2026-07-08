@@ -10,6 +10,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/modules/partners/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/partners/domain"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/httpkit"
 )
 
 // PartnerHandler routes /organizations/{id}/partner and /partners requests to
@@ -36,7 +37,7 @@ func (h *PartnerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PartnerHandler) upsert(w http.ResponseWriter, r *http.Request, orgID string) {
-	wsID := workspaceID(r)
+	wsID := httpkit.WorkspaceID(r)
 	var body struct {
 		PartnerRole    *string        `json:"partner_role"`
 		CertStatus     string         `json:"cert_status"`
@@ -50,12 +51,13 @@ func (h *PartnerHandler) upsert(w http.ResponseWriter, r *http.Request, orgID st
 		CapturedBy     string         `json:"captured_by"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
+		httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
 		return
 	}
 	if body.Source == "" || body.CapturedBy == "" {
-		jsonValidationError(w, "source and captured_by are required.",
+		httpkit.JSONValidationError(w, "source and captured_by are required.",
 			[]fieldError{{Field: fieldSource, Code: codeRequired}, {Field: fieldCapturedBy, Code: codeRequired}})
+
 		return
 	}
 
@@ -74,7 +76,7 @@ func (h *PartnerHandler) upsert(w http.ResponseWriter, r *http.Request, orgID st
 	if body.JoinedAt != nil {
 		t, err := parsePartnerDateField(*body.JoinedAt)
 		if err != nil {
-			jsonProblem(w, http.StatusBadRequest, "bad_joined_at")
+			httpkit.JSONProblem(w, http.StatusBadRequest, "bad_joined_at")
 			return
 		}
 		p.JoinedAt = &t
@@ -82,7 +84,7 @@ func (h *PartnerHandler) upsert(w http.ResponseWriter, r *http.Request, orgID st
 	if body.RenewsAt != nil {
 		t, err := parsePartnerDateField(*body.RenewsAt)
 		if err != nil {
-			jsonProblem(w, http.StatusBadRequest, "bad_renews_at")
+			httpkit.JSONProblem(w, http.StatusBadRequest, "bad_renews_at")
 			return
 		}
 		p.RenewsAt = &t
@@ -90,33 +92,34 @@ func (h *PartnerHandler) upsert(w http.ResponseWriter, r *http.Request, orgID st
 
 	created, err := h.store.Upsert(r.Context(), p)
 	if errors.Is(err, errs.ErrNullProvenance) {
-		jsonValidationError(w, "source and captured_by are required.",
+		httpkit.JSONValidationError(w, "source and captured_by are required.",
 			[]fieldError{{Field: fieldSource, Code: codeRequired}, {Field: fieldCapturedBy, Code: codeRequired}})
+
 		return
 	}
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonOK(w, created)
+	httpkit.JSONOK(w, created)
 }
 
 func (h *PartnerHandler) get(w http.ResponseWriter, r *http.Request, orgID string) {
-	wsID := workspaceID(r)
+	wsID := httpkit.WorkspaceID(r)
 	p, err := h.store.Get(r.Context(), orgID, wsID)
 	if errors.Is(err, errs.ErrNotFound) {
-		jsonProblem(w, http.StatusNotFound, "not_found")
+		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
 		return
 	}
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonOK(w, p)
+	httpkit.JSONOK(w, p)
 }
 
 func (h *PartnerHandler) list(w http.ResponseWriter, r *http.Request) {
-	wsID, ok := requireWorkspace(w, r)
+	wsID, ok := httpkit.RequireWorkspace(w, r)
 	if !ok {
 		return
 	}
@@ -125,12 +128,12 @@ func (h *PartnerHandler) list(w http.ResponseWriter, r *http.Request) {
 		PartnerRole: q.Get("partner_role"),
 		CertStatus:  q.Get("cert_status"),
 	}
-	items, next, err := h.store.List(r.Context(), wsID, q.Get("cursor"), queryLimit(r), filter)
+	items, next, err := h.store.List(r.Context(), wsID, q.Get("cursor"), httpkit.QueryLimit(r, 20), filter)
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonOK(w, pageResponse(items, next))
+	httpkit.JSONOK(w, httpkit.PageResponse(items, next))
 }
 
 func parsePartnerDateField(s string) (time.Time, error) {

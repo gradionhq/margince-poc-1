@@ -12,6 +12,7 @@ import (
 	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/httpkit"
 	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
 	"github.com/gradionhq/margince/backend/internal/shared/ports/mcp"
 )
@@ -53,12 +54,12 @@ func (h *RecordGrantHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodDelete:
 		h.revoke(w, r)
 	default:
-		jsonProblem(w, http.StatusMethodNotAllowed, "method_not_allowed")
+		httpkit.JSONProblem(w, http.StatusMethodNotAllowed, "method_not_allowed")
 	}
 }
 
 func (h *RecordGrantHandler) list(w http.ResponseWriter, r *http.Request) {
-	wsID := workspaceID(r)
+	wsID := httpkit.WorkspaceID(r)
 	q := r.URL.Query()
 	filter := peopleadapters.RecordGrantListFilter{
 		RecordType:  q.Get("record_type"),
@@ -69,14 +70,14 @@ func (h *RecordGrantHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	grants, next, err := h.store.List(r.Context(), wsID, filter, 20)
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonOK(w, pageResponse(grants, next))
+	httpkit.JSONOK(w, httpkit.PageResponse(grants, next))
 }
 
 func (h *RecordGrantHandler) create(w http.ResponseWriter, r *http.Request) {
-	wsID := workspaceID(r)
+	wsID := httpkit.WorkspaceID(r)
 	var body struct {
 		RecordType  string  `json:"record_type"`
 		RecordID    string  `json:"record_id"`
@@ -86,7 +87,7 @@ func (h *RecordGrantHandler) create(w http.ResponseWriter, r *http.Request) {
 		Reason      *string `json:"reason"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
+		httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
 		return
 	}
 
@@ -97,16 +98,16 @@ func (h *RecordGrantHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := toolgate.Enforce(r.Context(), p, h.verifier, createRecordGrantTool, wsID, diffFields, nil, r.Header.Get("X-Approval-Token")); err != nil {
 		if errors.Is(err, toolgate.ErrApprovalRequired) {
-			jsonProblem(w, http.StatusForbidden, "approval_required")
+			httpkit.JSONProblem(w, http.StatusForbidden, "approval_required")
 		} else {
-			jsonProblem(w, http.StatusForbidden, "approval_token_invalid")
+			httpkit.JSONProblem(w, http.StatusForbidden, "approval_token_invalid")
 		}
 		return
 	}
 
 	grantorAccess, err := h.resolveGrantorOwnAccess(r.Context(), wsID, p.UserID, body.RecordType, body.RecordID)
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
 
@@ -116,11 +117,11 @@ func (h *RecordGrantHandler) create(w http.ResponseWriter, r *http.Request) {
 		GrantedBy: p.UserID, Reason: body.Reason, GrantorOwnAccess: grantorAccess,
 	})
 	if errors.Is(err, peopleadapters.ErrGrantExceedsGrantorAccess) {
-		jsonProblem(w, http.StatusForbidden, "scope_exceeded")
+		httpkit.JSONProblem(w, http.StatusForbidden, "scope_exceeded")
 		return
 	}
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -128,22 +129,22 @@ func (h *RecordGrantHandler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RecordGrantHandler) revoke(w http.ResponseWriter, r *http.Request) {
-	wsID := workspaceID(r)
-	id := pathID(r.URL.Path, recordGrantsPath)
+	wsID := httpkit.WorkspaceID(r)
+	id := httpkit.PathID(r.URL.Path, recordGrantsPath)
 
 	p, _ := crmctx.From(r.Context())
 	diffFields := map[string]any{"id": id}
 	if err := toolgate.Enforce(r.Context(), p, h.verifier, revokeRecordGrantTool, wsID, diffFields, nil, r.Header.Get("X-Approval-Token")); err != nil {
 		if errors.Is(err, toolgate.ErrApprovalRequired) {
-			jsonProblem(w, http.StatusForbidden, "approval_required")
+			httpkit.JSONProblem(w, http.StatusForbidden, "approval_required")
 		} else {
-			jsonProblem(w, http.StatusForbidden, "approval_token_invalid")
+			httpkit.JSONProblem(w, http.StatusForbidden, "approval_token_invalid")
 		}
 		return
 	}
 
 	if err := h.store.Revoke(r.Context(), id, wsID); err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

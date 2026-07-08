@@ -11,14 +11,15 @@ import (
 
 	orgAdapters "github.com/gradionhq/margince/backend/internal/modules/organizations/adapters"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 )
 
 // PO-AC-18: relink domains/deals/relationships/activity links/partner, zero
 // orphaned FKs, one audit tx, one organization.merged event.
 func TestOrgMergeRelinksDomainsDealsAndPartner(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := mergeTestCtx(ws)
 	orgStore := orgAdapters.NewOrgStore(db)
 	loser := mkOrg(ctx, t, orgStore, ws, "Loser Co")
@@ -43,7 +44,7 @@ func TestOrgMergeRelinksDomainsDealsAndPartner(t *testing.T) {
 	if loserMergedInto != target.ID || !archived {
 		t.Fatalf("loser org merged_into_id=%s archived=%v, want %s/true", loserMergedInto, archived, target.ID)
 	}
-	assertNoRows(t, db, `SELECT 1 FROM organization_domain WHERE organization_id=$1::uuid AND archived_at IS NULL`, loser.ID)
+	pgtest.AssertNoRows(t, db, `SELECT 1 FROM organization_domain WHERE organization_id=$1::uuid AND archived_at IS NULL`, loser.ID)
 
 	var dealOrg string
 	db.QueryRow(`SELECT organization_id::text FROM deal WHERE id=$1::uuid`, dealID).Scan(&dealOrg)
@@ -66,9 +67,9 @@ func TestOrgMergeRelinksDomainsDealsAndPartner(t *testing.T) {
 
 // PO-AC-M1 (org side): survivor's primary domain wins; loser's is demoted, not deleted.
 func TestOrgMergePrimaryDomainConflictSurvivorWins(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := mergeTestCtx(ws)
 	orgStore := orgAdapters.NewOrgStore(db)
 	loser := mkOrg(ctx, t, orgStore, ws, "Loser Co")
@@ -92,9 +93,9 @@ func TestOrgMergePrimaryDomainConflictSurvivorWins(t *testing.T) {
 }
 
 func TestOrgMergeSelfMergeRejected(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := mergeTestCtx(ws)
 	orgStore := orgAdapters.NewOrgStore(db)
 	o := mkOrg(ctx, t, orgStore, ws, "Solo Co")
@@ -107,8 +108,8 @@ func TestOrgMergeSelfMergeRejected(t *testing.T) {
 // helpers_shared_test.go): every live FK into organization(id) is either
 // relinked or a documented exception.
 func TestOrgMergeFKWalkExhaustive(t *testing.T) {
-	db := openTestDB(t)
-	fks := fkIntoTable(t, db, "organization")
+	db := pgtest.OpenTestDB(t)
+	fks := pgtest.FKIntoTable(t, db, "organization")
 	relinked := map[string]bool{
 		"organization_domain": true, "deal": true, "activity_link": true,
 		"relationship": true, "partner": true,
@@ -120,7 +121,7 @@ func TestOrgMergeFKWalkExhaustive(t *testing.T) {
 		}
 	}
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := mergeTestCtx(ws)
 	orgStore := orgAdapters.NewOrgStore(db)
 	loser := mkOrg(ctx, t, orgStore, ws, "FKWalkLoserCo")

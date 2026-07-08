@@ -12,6 +12,7 @@ import (
 	orgAdapters "github.com/gradionhq/margince/backend/internal/modules/organizations/adapters"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 )
 
 // PO-AC-M6: cross-workspace org merge is impossible by construction — RLS (not
@@ -20,10 +21,10 @@ import (
 // "not found" — the row is invisible under RLS, never a leak or a different
 // error class.
 func TestOrgMergeCrossWorkspaceBlockedByRLS(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	wsA, wsB := ids.New(), ids.New()
-	seedWorkspace(t, db, wsA)
-	seedWorkspace(t, db, wsB)
+	pgtest.SeedWorkspace(t, db, wsA)
+	pgtest.SeedWorkspace(t, db, wsB)
 	orgStore := orgAdapters.NewOrgStore(db)
 	inA := mkOrg(mergeTestCtx(wsA), t, orgStore, wsA, "InA Co")
 	inB := mkOrg(mergeTestCtx(wsB), t, orgStore, wsB, "InB Co")

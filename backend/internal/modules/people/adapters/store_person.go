@@ -11,7 +11,6 @@ package adapters
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -22,6 +21,7 @@ import (
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/dedupe"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
 )
 
 // ---------------------------------------------------------------------------
@@ -34,44 +34,8 @@ const (
 	fieldMergedIntoID = "merged_into_id"
 )
 
-// ---------------------------------------------------------------------------
-// shared helpers (used across adapters files in this package)
-// ---------------------------------------------------------------------------
-
-// requireProvenance rejects an empty source or captured_by with a typed
-// sentinel (data-model §1.6 provenance). HTTP handlers already reject empties
-// at the edge, but non-HTTP callers must not be able to insert source="" or
-// captured_by="" — provenance is a load-bearing invariant, not a nicety.
-func requireProvenance(source, capturedBy string) error {
-	if source == "" || capturedBy == "" {
-		return errs.ErrNullProvenance
-	}
-	return nil
-}
-
-func marshalJSON(v any) []byte {
-	if v == nil {
-		return []byte("{}")
-	}
-	b, _ := json.Marshal(v)
-	return b
-}
-
-func unmarshalJSON(raw []byte, dst *map[string]any) {
-	if raw == nil {
-		return
-	}
-	_ = json.Unmarshal(raw, dst)
-}
-
-func nullStr(m map[string]any, key string) *string {
-	if v, ok := m[key]; ok {
-		if s, ok := v.(string); ok {
-			return &s
-		}
-	}
-	return nil
-}
+// Generic, domain-free store helpers (provenance guard, JSON (un)marshalling,
+// bounded-update field readers) live in the Tier-0 shared/kernel/sqlutil package.
 
 // ---------------------------------------------------------------------------
 // ErrDuplicateEmail
@@ -104,14 +68,14 @@ func NewPersonStore(db *sql.DB) *PersonStore { return &PersonStore{db: db} }
 // atomically under RLS. Pass nil for emails when the caller does not supply
 // any (PO-AC-16).
 func (s *PersonStore) Create(ctx context.Context, p domain.Person, emails []domain.PersonEmailInput) (domain.Person, error) {
-	if err := requireProvenance(p.Source, p.CapturedBy); err != nil {
+	if err := sqlutil.RequireProvenance(p.Source, p.CapturedBy); err != nil {
 		return domain.Person{}, err
 	}
 	if p.ID == "" {
 		p.ID = ids.New()
 	}
-	social := marshalJSON(p.Social)
-	address := marshalJSON(p.Address)
+	social := sqlutil.MarshalJSON(p.Social)
+	address := sqlutil.MarshalJSON(p.Address)
 	var reviewFlag *dedupe.ReviewFlag
 	err := database.WithWorkspaceTx(ctx, s.db, p.WorkspaceID, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `
@@ -218,10 +182,10 @@ func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (domain.P
 		return p, err
 	}
 	p.Social = map[string]any{}
-	unmarshalJSON(socialRaw, &p.Social)
+	sqlutil.UnmarshalJSON(socialRaw, &p.Social)
 	if addrRaw != nil {
 		p.Address = map[string]any{}
-		unmarshalJSON(addrRaw, &p.Address)
+		sqlutil.UnmarshalJSON(addrRaw, &p.Address)
 	}
 	return p, nil
 }
@@ -262,10 +226,10 @@ func (s *PersonStore) GetAny(ctx context.Context, id, workspaceID string) (domai
 		return p, err
 	}
 	p.Social = map[string]any{}
-	unmarshalJSON(socialRaw, &p.Social)
+	sqlutil.UnmarshalJSON(socialRaw, &p.Social)
 	if addrRaw != nil {
 		p.Address = map[string]any{}
-		unmarshalJSON(addrRaw, &p.Address)
+		sqlutil.UnmarshalJSON(addrRaw, &p.Address)
 	}
 	return p, nil
 }
@@ -312,7 +276,7 @@ func (s *PersonStore) listByID(ctx context.Context, workspaceID, cursor string, 
 				return err
 			}
 			p.Social = map[string]any{}
-			unmarshalJSON(socialRaw, &p.Social)
+			sqlutil.UnmarshalJSON(socialRaw, &p.Social)
 			out = append(out, p)
 		}
 		if err := rows.Err(); err != nil {
@@ -353,9 +317,9 @@ func (s *PersonStore) Update(ctx context.Context, id, workspaceID string, update
 				    updated_at = now()
 				WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
 				id, workspaceID,
-				nullStr(updates, "full_name"),
-				nullStr(updates, "title"),
-				nullStr(updates, "owner_id"))
+				sqlutil.NullStr(updates, "full_name"),
+				sqlutil.NullStr(updates, "title"),
+				sqlutil.NullStr(updates, "owner_id"))
 		} else {
 			res, err = tx.ExecContext(ctx, `
 				UPDATE person
@@ -365,9 +329,9 @@ func (s *PersonStore) Update(ctx context.Context, id, workspaceID string, update
 				    updated_at = now()
 				WHERE id=$1::uuid AND workspace_id=$2::uuid AND version=$6 AND archived_at IS NULL`,
 				id, workspaceID,
-				nullStr(updates, "full_name"),
-				nullStr(updates, "title"),
-				nullStr(updates, "owner_id"),
+				sqlutil.NullStr(updates, "full_name"),
+				sqlutil.NullStr(updates, "title"),
+				sqlutil.NullStr(updates, "owner_id"),
 				ifMatch)
 		}
 		if err != nil {

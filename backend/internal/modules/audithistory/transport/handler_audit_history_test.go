@@ -21,6 +21,7 @@ import (
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/authz"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 )
 
 // seedAuditRow writes a raw audit_log row for a given entity, bypassing the RLS GUC
@@ -66,7 +67,7 @@ func denyAuthz(_ context.Context, _, _ string) error { return errors.New("forbid
 // TestHistoryHandler_AC1_ActorAndAuthorityRender covers AC1: every returned row has a
 // non-empty actor; agent rows carry their on_behalf_of authority.
 func TestHistoryHandler_AC1_ActorAndAuthorityRender(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 
 	const wsID = "00000000-0000-0000-0000-000000000101"
 	const humanUserID = "00000000-0000-0000-0000-000000000201"
@@ -86,7 +87,7 @@ func TestHistoryHandler_AC1_ActorAndAuthorityRender(t *testing.T) {
 	seedAppUserForHistory(t, db, oboUserID, wsID, "Devin Authority")
 
 	// Set RLS for audit writes
-	setRLS(t, db, wsID)
+	pgtest.SetRLS(t, db, wsID)
 
 	// Seed a human mutation
 	seedAuditRow(t, db, wsID, entityType, entityID, "human", humanUserID, nil, "update")
@@ -161,7 +162,7 @@ func TestHistoryHandler_AC1_ActorAndAuthorityRender(t *testing.T) {
 //   - masked field is absent from before/after
 //   - viewer lacking read on the entity type gets 403
 func TestHistoryHandler_AC2_FieldMaskingAndObjectLevelDeny(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 
 	const wsID = "00000000-0000-0000-0000-000000000102"
 	const humanUserID = "00000000-0000-0000-0000-000000000204"
@@ -172,7 +173,7 @@ func TestHistoryHandler_AC2_FieldMaskingAndObjectLevelDeny(t *testing.T) {
 		`INSERT INTO workspace(id, name, slug, base_currency) VALUES($1,'hist102','hist-102','EUR') ON CONFLICT DO NOTHING`,
 		wsID)
 	seedAppUserForHistory(t, db, humanUserID, wsID, "Bob Viewer")
-	setRLS(t, db, wsID)
+	pgtest.SetRLS(t, db, wsID)
 
 	seedAuditRow(t, db, wsID, entityType, entityID, "human", humanUserID, nil, "update")
 

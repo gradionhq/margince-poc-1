@@ -14,6 +14,7 @@ import (
 
 	"github.com/gradionhq/margince/backend/internal/modules/deals/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
@@ -59,7 +60,7 @@ func seedDealPartnerFixtures(t *testing.T, db *sql.DB, tag string) (pipelineID, 
 }
 
 func TestDealStore_Update_PersistsPartnerOrgIDChangeWithAudit(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	pipelineID, stageID, orgA, orgB := seedDealPartnerFixtures(t, db, "update")
 	store := adapters.NewDealStore(db)
 

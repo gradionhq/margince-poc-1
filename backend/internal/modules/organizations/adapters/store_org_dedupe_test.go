@@ -10,6 +10,7 @@ import (
 
 	orgAdapters "github.com/gradionhq/margince/backend/internal/modules/organizations/adapters"
 	orgDomain "github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
@@ -17,20 +18,20 @@ import (
 // Inc" vs an existing "Acme GmbH" both normalize to "acme" -> name_sim=1.0,
 // clears the review threshold, create still succeeds with the flag.
 func TestOrgCreate_FuzzyReview_LegalSuffixNormalizedEqual(t *testing.T) {
-	db := sqlDB(t)
-	ws := newWorkspaceSQL(t, db)
+	db := pgtest.OpenTestDB(t)
+	ws := pgtest.NewWorkspaceSQL(t, db)
 	orgs := orgAdapters.NewOrgStore(db)
 
 	existing := orgDomain.NewOrganization("Acme GmbH", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	existing.WorkspaceID = ws
-	createdExisting, err := orgs.Create(appCtx(ws), existing)
+	createdExisting, err := orgs.Create(pgtest.AppCtx(ws), existing)
 	if err != nil {
 		t.Fatalf("create existing org: %v", err)
 	}
 
 	candidate := orgDomain.NewOrganization("Acme Inc", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	candidate.WorkspaceID = ws
-	created, err := orgs.Create(appCtx(ws), candidate)
+	created, err := orgs.Create(pgtest.AppCtx(ws), candidate)
 	if err != nil {
 		t.Fatalf("create candidate org: %v", err)
 	}
@@ -49,19 +50,19 @@ func TestOrgCreate_FuzzyReview_LegalSuffixNormalizedEqual(t *testing.T) {
 // TestOrgCreate_NoReviewFlag_UnrelatedName proves an unrelated org name
 // creates plainly with no review flag.
 func TestOrgCreate_NoReviewFlag_UnrelatedName(t *testing.T) {
-	db := sqlDB(t)
-	ws := newWorkspaceSQL(t, db)
+	db := pgtest.OpenTestDB(t)
+	ws := pgtest.NewWorkspaceSQL(t, db)
 	orgs := orgAdapters.NewOrgStore(db)
 
 	existing := orgDomain.NewOrganization("Acme GmbH", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	existing.WorkspaceID = ws
-	if _, err := orgs.Create(appCtx(ws), existing); err != nil {
+	if _, err := orgs.Create(pgtest.AppCtx(ws), existing); err != nil {
 		t.Fatalf("create existing org: %v", err)
 	}
 
 	unrelated := orgDomain.NewOrganization("Zephyr Robotics", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	unrelated.WorkspaceID = ws
-	created, err := orgs.Create(appCtx(ws), unrelated)
+	created, err := orgs.Create(pgtest.AppCtx(ws), unrelated)
 	if err != nil {
 		t.Fatalf("create unrelated org: %v", err)
 	}

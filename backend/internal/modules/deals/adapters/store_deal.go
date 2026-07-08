@@ -12,6 +12,7 @@ import (
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
 )
 
 // ---------------------------------------------------------------------------
@@ -26,17 +27,6 @@ const (
 	colDealID         = "deal_id"
 	fieldPartnerOrgID = "partner_org_id"
 )
-
-// requireProvenance rejects an empty source or captured_by with a typed sentinel
-// (data-model §1.6 provenance). HTTP handlers already reject empties at the edge, but
-// non-HTTP callers (import/Datasource/direct store use) must not be able to insert source=""
-// or captured_by="" — provenance is a load-bearing invariant, not a nicety.
-func requireProvenance(source, capturedBy string) error {
-	if source == "" || capturedBy == "" {
-		return errs.ErrNullProvenance
-	}
-	return nil
-}
 
 // ---------------------------------------------------------------------------
 // DealStore
@@ -53,7 +43,7 @@ func NewDealStore(db *sql.DB) *DealStore { return &DealStore{db: db} }
 // The stage pre-check keeps the error readable at the store boundary instead of
 // relying on the composite FK to surface a lower-level constraint violation.
 func (s *DealStore) Create(ctx context.Context, d domain.Deal, idempotencyKey string) (domain.Deal, error) {
-	if err := requireProvenance(d.Source, d.CapturedBy); err != nil {
+	if err := sqlutil.RequireProvenance(d.Source, d.CapturedBy); err != nil {
 		return domain.Deal{}, err
 	}
 	d.ID = ids.New()

@@ -11,6 +11,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
 )
 
 // ---------------------------------------------------------------------------
@@ -76,15 +77,15 @@ func (s *DealStore) applyUpdate(ctx context.Context, tx *sql.Tx, id, workspaceID
 		WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL
 		  AND ($12 = 0 OR version = $12)`,
 		id, workspaceID,
-		nullStr(updates, "name"),
-		nullStr(updates, "stage_id"),
-		nullStr(updates, "status"),
-		nullStr(updates, "lost_reason"),
+		sqlutil.NullStr(updates, "name"),
+		sqlutil.NullStr(updates, "stage_id"),
+		sqlutil.NullStr(updates, "status"),
+		sqlutil.NullStr(updates, "lost_reason"),
 		fxRate,
 		fxRateDate,
-		nullStr(updates, "expected_close_date"),
-		nullStr(updates, "owner_id"),
-		nullStr(updates, fieldPartnerOrgID),
+		sqlutil.NullStr(updates, "expected_close_date"),
+		sqlutil.NullStr(updates, "owner_id"),
+		sqlutil.NullStr(updates, fieldPartnerOrgID),
 		ifMatch)
 	if err != nil {
 		return err
@@ -100,7 +101,7 @@ func (s *DealStore) applyUpdate(ctx context.Context, tx *sql.Tx, id, workspaceID
 
 	// Only write the partner reassignment side effects when the supplied value
 	// actually changes. That keeps the audit/outbox noise aligned with the field.
-	if newPartnerOrgID := nullStr(updates, fieldPartnerOrgID); partnerOrgIDProvided && newPartnerOrgID != nil {
+	if newPartnerOrgID := sqlutil.NullStr(updates, fieldPartnerOrgID); partnerOrgIDProvided && newPartnerOrgID != nil {
 		if err := s.auditPartnerOrgIDChange(ctx, tx, id, workspaceID, priorPartnerOrgID, *newPartnerOrgID); err != nil {
 			return err
 		}
@@ -113,7 +114,7 @@ func (s *DealStore) applyUpdate(ctx context.Context, tx *sql.Tx, id, workspaceID
 // ran as from_stage_id. Best-effort: history-write failures do not fail the
 // surrounding update, matching the pre-refactor inline behavior.
 func (s *DealStore) writeStageHistoryOnChange(ctx context.Context, tx *sql.Tx, id, workspaceID string, updates map[string]any) {
-	stageID := nullStr(updates, "stage_id")
+	stageID := sqlutil.NullStr(updates, "stage_id")
 	if stageID == nil {
 		return
 	}

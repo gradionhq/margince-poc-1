@@ -9,6 +9,7 @@ import (
 	adapters "github.com/gradionhq/margince/backend/internal/modules/people/adapters"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 )
 
 // PO-AC-M6: cross-workspace merge is impossible by construction — RLS (not
@@ -17,10 +18,10 @@ import (
 // "not found" — the row is invisible under RLS, never a leak or a different
 // error class.
 func TestPersonMergeCrossWorkspaceBlockedByRLS(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	wsA, wsB := ids.New(), ids.New()
-	seedWorkspace(t, db, wsA)
-	seedWorkspace(t, db, wsB)
+	pgtest.SeedWorkspace(t, db, wsA)
+	pgtest.SeedWorkspace(t, db, wsB)
 	store := adapters.NewPersonStore(db)
 	inA := mkPerson(mergeTestCtx(wsA), t, store, wsA, "InA")
 	inB := mkPerson(mergeTestCtx(wsB), t, store, wsB, "InB")

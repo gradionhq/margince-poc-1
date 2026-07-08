@@ -11,6 +11,7 @@ import (
 	domain "github.com/gradionhq/margince/backend/internal/modules/people/domain"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 )
 
 func personRestoreCtx(wsID string) context.Context {
@@ -18,10 +19,10 @@ func personRestoreCtx(wsID string) context.Context {
 }
 
 func TestPersonStore_Restore_ArchivedPersonWritesEventAndAudit(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	const wsID = "00000000-0000-0000-0000-000000000031"
-	seedWorkspace(t, db, wsID)
-	setRLS(t, db, wsID)
+	pgtest.SeedWorkspace(t, db, wsID)
+	pgtest.SetRLS(t, db, wsID)
 
 	store := adapters.NewPersonStore(db)
 	ctx := personRestoreCtx(wsID)
@@ -81,10 +82,10 @@ func TestPersonStore_Restore_ArchivedPersonWritesEventAndAudit(t *testing.T) {
 }
 
 func TestPersonStore_Restore_RefusesLiveAndMergedRecords(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	const wsID = "00000000-0000-0000-0000-000000000032"
-	seedWorkspace(t, db, wsID)
-	setRLS(t, db, wsID)
+	pgtest.SeedWorkspace(t, db, wsID)
+	pgtest.SetRLS(t, db, wsID)
 
 	store := adapters.NewPersonStore(db)
 	ctx := personRestoreCtx(wsID)

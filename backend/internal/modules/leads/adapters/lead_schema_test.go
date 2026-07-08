@@ -9,11 +9,13 @@ import (
 	"testing"
 
 	_ "github.com/lib/pq"
+
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 )
 
 // TestLeadHasNoOrgFK asserts that lead has no foreign key into organization.
 func TestLeadHasNoOrgFK(t *testing.T) {
-	d := sqlDB(t)
+	d := pgtest.OpenTestDB(t)
 
 	var count int
 	err := d.QueryRow(`
@@ -37,7 +39,7 @@ func TestLeadHasNoOrgFK(t *testing.T) {
 
 // TestLeadPersonSegregation pins the lead/person FK directionality after 000030.
 func TestLeadPersonSegregation(t *testing.T) {
-	d := sqlDB(t)
+	d := pgtest.OpenTestDB(t)
 
 	var leadToPersonCount int
 	err := d.QueryRow(`
@@ -81,7 +83,7 @@ func TestLeadPersonSegregation(t *testing.T) {
 // TestLeadSourceExtUniqueConstraint proves the external-import uniqueness and
 // promoted lead round-trip on the live schema.
 func TestLeadSourceExtUniqueConstraint(t *testing.T) {
-	d := sqlDB(t)
+	d := pgtest.OpenTestDB(t)
 
 	nonce := fmt.Sprintf("lead-schema-%d", os.Getpid())
 	var wsID, personID string

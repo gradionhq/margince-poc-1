@@ -13,6 +13,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/modules/relationships/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/relationships/domain"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/httpkit"
 )
 
 const (
@@ -42,7 +43,7 @@ func NewRelationshipHandler(store *adapters.RelationshipStore) *RelationshipHand
 }
 
 func (h *RelationshipHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	id := pathID(r.URL.Path, "/relationships")
+	id := httpkit.PathID(r.URL.Path, "/relationships")
 	switch {
 	case r.Method == http.MethodGet && id == "":
 		h.list(w, r)
@@ -88,19 +89,20 @@ func (b createRelationshipBody) validate() (string, fieldError, bool) {
 }
 
 func (h *RelationshipHandler) create(w http.ResponseWriter, r *http.Request) {
-	wsID := workspaceID(r)
+	wsID := httpkit.WorkspaceID(r)
 	var body createRelationshipBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
+		httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
 		return
 	}
 	if detail, fe, bad := body.validate(); bad {
-		jsonValidationError(w, detail, []fieldError{fe})
+		httpkit.JSONValidationError(w, detail, []fieldError{fe})
 		return
 	}
 	if body.Source == "" || body.CapturedBy == "" {
-		jsonValidationError(w, "source and captured_by are required.",
+		httpkit.JSONValidationError(w, "source and captured_by are required.",
 			[]fieldError{{Field: fieldSource, Code: codeRequired}, {Field: fieldCapturedBy, Code: codeRequired}})
+
 		return
 	}
 
@@ -117,13 +119,13 @@ func (h *RelationshipHandler) create(w http.ResponseWriter, r *http.Request) {
 		CapturedBy:        body.CapturedBy,
 	}
 	if t, ok, err := parseDateField(body.StartedAt); err != nil {
-		jsonProblem(w, http.StatusBadRequest, "bad_started_at")
+		httpkit.JSONProblem(w, http.StatusBadRequest, "bad_started_at")
 		return
 	} else if ok {
 		rel.StartedAt = &t
 	}
 	if t, ok, err := parseDateField(body.EndedAt); err != nil {
-		jsonProblem(w, http.StatusBadRequest, "bad_ended_at")
+		httpkit.JSONProblem(w, http.StatusBadRequest, "bad_ended_at")
 		return
 	} else if ok {
 		rel.EndedAt = &t
@@ -131,56 +133,56 @@ func (h *RelationshipHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.store.Create(r.Context(), rel)
 	if errors.Is(err, errs.ErrConflict) {
-		jsonProblem(w, http.StatusConflict, "conflict")
+		httpkit.JSONProblem(w, http.StatusConflict, "conflict")
 		return
 	}
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonCreatedAt(w, created, "/relationships/"+created.ID)
+	httpkit.JSONCreatedAt(w, created, "/relationships/"+created.ID)
 }
 
 func (h *RelationshipHandler) update(w http.ResponseWriter, r *http.Request, id string) {
-	wsID := workspaceID(r)
-	ifMatch, malformed := parseIfMatch(r)
+	wsID := httpkit.WorkspaceID(r)
+	ifMatch, malformed := httpkit.ParseIfMatch(r)
 	if malformed {
-		jsonProblem(w, http.StatusBadRequest, "bad_if_match")
+		httpkit.JSONProblem(w, http.StatusBadRequest, "bad_if_match")
 		return
 	}
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
+		httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
 		return
 	}
 	rel, err := h.store.Update(r.Context(), id, wsID, body, ifMatch)
-	writeUpdateResult(w, rel, err)
+	httpkit.WriteUpdateResult(w, rel, err)
 }
 
 // archive is intentionally If-Match-free. The contract op carries no version
 // header and the store treats an already-archived row as a no-op.
 func (h *RelationshipHandler) archive(w http.ResponseWriter, r *http.Request, id string) {
-	wsID := workspaceID(r)
+	wsID := httpkit.WorkspaceID(r)
 	rel, err := h.store.Archive(r.Context(), id, wsID)
 	if errors.Is(err, errs.ErrNotFound) {
-		jsonProblem(w, http.StatusNotFound, "not_found")
+		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
 		return
 	}
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonOK(w, rel)
+	httpkit.JSONOK(w, rel)
 }
 
 func (h *RelationshipHandler) list(w http.ResponseWriter, r *http.Request) {
-	wsID, ok := requireWorkspace(w, r)
+	wsID, ok := httpkit.RequireWorkspace(w, r)
 	if !ok {
 		return
 	}
 	q := r.URL.Query()
 	includeArchived, _ := strconv.ParseBool(q.Get("include_archived"))
-	items, next, err := h.store.List(r.Context(), wsID, q.Get("cursor"), queryLimit(r), domain.RelationshipListFilter{
+	items, next, err := h.store.List(r.Context(), wsID, q.Get("cursor"), httpkit.QueryLimit(r, 20), domain.RelationshipListFilter{
 		Kind:            q.Get("kind"),
 		PersonID:        q.Get("person_id"),
 		OrganizationID:  q.Get("organization_id"),
@@ -188,10 +190,10 @@ func (h *RelationshipHandler) list(w http.ResponseWriter, r *http.Request) {
 		IncludeArchived: includeArchived,
 	})
 	if err != nil {
-		jsonErr(w, err)
+		httpkit.JSONError(w, err)
 		return
 	}
-	jsonOK(w, pageResponse(items, next))
+	httpkit.JSONOK(w, httpkit.PageResponse(items, next))
 }
 
 func parseDateField(raw *string) (time.Time, bool, error) {

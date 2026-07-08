@@ -12,6 +12,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
 )
 
 // ---------------------------------------------------------------------------
@@ -107,7 +108,7 @@ func (s *PipelineStore) Update(ctx context.Context, id, workspaceID string, upda
 			    is_default = COALESCE($5, is_default),
 			    updated_at = now()
 			WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
-			id, workspaceID, nullStr(updates, "name"), nullInt(updates, "position"), nullBool(updates, "is_default"))
+			id, workspaceID, sqlutil.NullStr(updates, "name"), nullInt(updates, "position"), nullBool(updates, "is_default"))
 		if err != nil {
 			var pgErr *pq.Error
 			if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.Constraint == "uq_pipeline_default" {
@@ -280,7 +281,7 @@ func (s *StageStore) Update(ctx context.Context, id, workspaceID string, updates
 	setClauses := []string{"updated_at = now()"}
 	args := []any{id, workspaceID}
 	i := 3
-	if name := nullStr(updates, "name"); name != nil {
+	if name := sqlutil.NullStr(updates, "name"); name != nil {
 		setClauses = append(setClauses, fmt.Sprintf("name = $%d", i))
 		args = append(args, *name)
 		i++

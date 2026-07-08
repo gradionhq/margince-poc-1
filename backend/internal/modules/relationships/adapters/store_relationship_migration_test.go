@@ -5,16 +5,18 @@ package adapters_test
 import (
 	"context"
 	"testing"
+
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 )
 
 // TestRelationshipVersionColumn_UpMigration confirms 000067 landed: version
 // defaults to 1 on insert and increments on UPDATE via trg_relationship_touch,
 // exactly like partner.version (store_partner_test.go's pattern).
 func TestRelationshipVersionColumn_UpMigration(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	wsID := "00000000-0000-0000-0000-0000000000a1"
-	setRLS(t, db, wsID)
-	seedWorkspace(t, db, wsID)
+	pgtest.SetRLS(t, db, wsID)
+	pgtest.SeedWorkspace(t, db, wsID)
 
 	var version int64
 	var relID string

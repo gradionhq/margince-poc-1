@@ -16,6 +16,7 @@ import (
 	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/ports/datasource"
 )
 
@@ -252,7 +253,7 @@ func newIntProvider(t *testing.T, db *sql.DB, wsID string) *adapters.DatasourceP
 
 func TestDatasourceIntegrationRoundTrip(t *testing.T) {
 	db := mustSQLDB(t)
-	wsID := newWorkspaceSQL(t, db)
+	wsID := pgtest.NewWorkspaceSQL(t, db)
 	ctx := context.Background()
 
 	// Set RLS GUC so RLS-enabled tables are writable.
@@ -314,7 +315,7 @@ func TestDatasourceIntegrationRoundTrip(t *testing.T) {
 
 func TestDatasourceIntegrationAdvanceDeal(t *testing.T) {
 	db := mustSQLDB(t)
-	wsID := newWorkspaceSQL(t, db)
+	wsID := pgtest.NewWorkspaceSQL(t, db)
 	ctx := context.Background()
 
 	// Set RLS GUC.
@@ -400,7 +401,7 @@ func TestDatasourceIntegrationAdvanceDeal(t *testing.T) {
 
 func TestDatasourceIntegrationNullProvenance(t *testing.T) {
 	db := mustSQLDB(t)
-	wsID := newWorkspaceSQL(t, db)
+	wsID := pgtest.NewWorkspaceSQL(t, db)
 	ctx := context.Background()
 
 	p := newIntProvider(t, db, wsID)

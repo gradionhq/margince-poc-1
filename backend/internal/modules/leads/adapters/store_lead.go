@@ -15,6 +15,7 @@ import (
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
 )
 
 // ---------------------------------------------------------------------------
@@ -51,7 +52,7 @@ func emitLeadEvent(ctx context.Context, tx *sql.Tx, workspaceID, topic, leadID s
 
 // Create inserts a lead in one workspace-scoped tx.
 func (s *LeadStore) Create(ctx context.Context, l domain.Lead) (domain.Lead, error) {
-	if err := requireProvenance(l.Source, l.CapturedBy); err != nil {
+	if err := sqlutil.RequireProvenance(l.Source, l.CapturedBy); err != nil {
 		return domain.Lead{}, err
 	}
 	l.ID = ids.New()
@@ -143,7 +144,7 @@ func (s *LeadStore) List(ctx context.Context, workspaceID, cursor string, limit 
 	}
 	// ORDER BY score DESC, id — seek the full (score, id) key so a page boundary
 	// between equal-score leads neither skips nor repeats rows.
-	curScore, curID, hasCursor := decodeKeysetCursor(cursor)
+	curScore, curID, hasCursor := sqlutil.DecodeKeysetCursor(cursor)
 
 	var out []domain.Lead
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
@@ -154,7 +155,7 @@ func (s *LeadStore) List(ctx context.Context, workspaceID, cursor string, limit 
 			WHERE workspace_id=$1::uuid AND archived_at IS NULL
 			  AND (NOT $2 OR (score, id) < ($3::int, $4::uuid))
 			ORDER BY score DESC, id DESC LIMIT $5`,
-			workspaceID, hasCursor, nullStrParam(curScore), nullStrParam(curID), limit+1)
+			workspaceID, hasCursor, sqlutil.NullStrParam(curScore), sqlutil.NullStrParam(curID), limit+1)
 		if err != nil {
 			return err
 		}
@@ -177,7 +178,7 @@ func (s *LeadStore) List(ctx context.Context, workspaceID, cursor string, limit 
 	var next string
 	if len(out) > limit {
 		last := out[limit-1]
-		next = encodeKeysetCursor(strconv.Itoa(last.Score), last.ID)
+		next = sqlutil.EncodeKeysetCursor(strconv.Itoa(last.Score), last.ID)
 		out = out[:limit]
 	}
 	return out, next, nil
@@ -208,8 +209,8 @@ func (s *LeadStore) Update(ctx context.Context, id, workspaceID string, updates 
 			    updated_at = now()
 			WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
 			id, workspaceID,
-			nullStr(updates, "status"),
-			nullStr(updates, "owner_id"))
+			sqlutil.NullStr(updates, "status"),
+			sqlutil.NullStr(updates, "owner_id"))
 	} else {
 		res, err = tx.ExecContext(ctx, `
 			UPDATE lead
@@ -218,8 +219,8 @@ func (s *LeadStore) Update(ctx context.Context, id, workspaceID string, updates 
 			    updated_at = now()
 			WHERE id=$1::uuid AND workspace_id=$2::uuid AND version=$5 AND archived_at IS NULL`,
 			id, workspaceID,
-			nullStr(updates, "status"),
-			nullStr(updates, "owner_id"),
+			sqlutil.NullStr(updates, "status"),
+			sqlutil.NullStr(updates, "owner_id"),
 			ifMatch)
 	}
 	if err != nil {

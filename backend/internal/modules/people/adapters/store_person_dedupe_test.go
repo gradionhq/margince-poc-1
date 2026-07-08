@@ -3,7 +3,6 @@
 package adapters_test
 
 import (
-	"context"
 	"testing"
 
 	organizations "github.com/gradionhq/margince/backend/internal/modules/organizations"
@@ -12,14 +11,9 @@ import (
 	domain "github.com/gradionhq/margince/backend/internal/modules/people/domain"
 	reladapters "github.com/gradionhq/margince/backend/internal/modules/relationships/adapters"
 	reldomain "github.com/gradionhq/margince/backend/internal/modules/relationships/domain"
-	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
-
-func appCtx(ws string) context.Context {
-	return crmctx.With(context.Background(),
-		crmctx.Principal{UserID: "human:store-rls-test", TenantID: ws})
-}
 
 // TestPersonCreate_FuzzyReview_SameOrg proves PO-AC-19's FUZZY_REVIEW path at
 // the ladder's headline 1.0 rung: a near-duplicate name whose domain-derived
@@ -29,8 +23,8 @@ func appCtx(ws string) context.Context {
 // and create still succeeds (no error) with the review flag naming the
 // existing candidate + its confidence.
 func TestPersonCreate_FuzzyReview_SameOrg(t *testing.T) {
-	db := sqlDB(t)
-	ws := newWorkspaceSQL(t, db)
+	db := pgtest.OpenTestDB(t)
+	ws := pgtest.NewWorkspaceSQL(t, db)
 	people := adapters.NewPersonStore(db)
 	orgs := organizations.NewOrgStore(db)
 	rels := reladapters.NewRelationshipStore(db)
@@ -38,14 +32,14 @@ func TestPersonCreate_FuzzyReview_SameOrg(t *testing.T) {
 	org := orgdomain.NewOrganization("Acme Corp", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	org.WorkspaceID = ws
 	org.Domains = []orgdomain.OrganizationDomain{{Domain: "acme.com", IsPrimary: true}}
-	createdOrg, err := orgs.Create(appCtx(ws), org)
+	createdOrg, err := orgs.Create(pgtest.AppCtx(ws), org)
 	if err != nil {
 		t.Fatalf("create org: %v", err)
 	}
 
 	existing := domain.NewPerson("John Doe", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	existing.WorkspaceID = ws
-	createdExisting, err := people.Create(appCtx(ws), existing, []domain.PersonEmailInput{
+	createdExisting, err := people.Create(pgtest.AppCtx(ws), existing, []domain.PersonEmailInput{
 		{Email: "john@acme.com", EmailType: "work", IsPrimary: true},
 	})
 	if err != nil {
@@ -62,13 +56,13 @@ func TestPersonCreate_FuzzyReview_SameOrg(t *testing.T) {
 		PersonID: &createdExisting.ID, OrganizationID: &createdOrg.ID,
 		IsCurrentPrimary: true, Source: "api", CapturedBy: "human:test",
 	}
-	if _, err := rels.Create(appCtx(ws), rel); err != nil {
+	if _, err := rels.Create(pgtest.AppCtx(ws), rel); err != nil {
 		t.Fatalf("create employment relationship: %v", err)
 	}
 
 	candidate := domain.NewPerson("Jon Doe", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	candidate.WorkspaceID = ws
-	created, err := people.Create(appCtx(ws), candidate, []domain.PersonEmailInput{
+	created, err := people.Create(pgtest.AppCtx(ws), candidate, []domain.PersonEmailInput{
 		{Email: "jon@acme.com", EmailType: "work", IsPrimary: true},
 	})
 	if err != nil {
@@ -92,21 +86,21 @@ func TestPersonCreate_FuzzyReview_SameOrg(t *testing.T) {
 // 0.55*0.9667 + 0.45*0.8 = 0.8917 — still clears the review threshold, but at
 // a visibly lower confidence than the current-primary-confirmed case.
 func TestPersonCreate_FuzzyReview_DomainOnly_NoEmploymentConfirmation(t *testing.T) {
-	db := sqlDB(t)
-	ws := newWorkspaceSQL(t, db)
+	db := pgtest.OpenTestDB(t)
+	ws := pgtest.NewWorkspaceSQL(t, db)
 	people := adapters.NewPersonStore(db)
 	orgs := organizations.NewOrgStore(db)
 
 	org := orgdomain.NewOrganization("Acme Corp", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	org.WorkspaceID = ws
 	org.Domains = []orgdomain.OrganizationDomain{{Domain: "acme.com", IsPrimary: true}}
-	if _, err := orgs.Create(appCtx(ws), org); err != nil {
+	if _, err := orgs.Create(pgtest.AppCtx(ws), org); err != nil {
 		t.Fatalf("create org: %v", err)
 	}
 
 	existing := domain.NewPerson("John Doe", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	existing.WorkspaceID = ws
-	createdExisting, err := people.Create(appCtx(ws), existing, []domain.PersonEmailInput{
+	createdExisting, err := people.Create(pgtest.AppCtx(ws), existing, []domain.PersonEmailInput{
 		{Email: "john@acme.com", EmailType: "work", IsPrimary: true},
 	})
 	if err != nil {
@@ -115,7 +109,7 @@ func TestPersonCreate_FuzzyReview_DomainOnly_NoEmploymentConfirmation(t *testing
 
 	candidate := domain.NewPerson("Jon Doe", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	candidate.WorkspaceID = ws
-	created, err := people.Create(appCtx(ws), candidate, []domain.PersonEmailInput{
+	created, err := people.Create(pgtest.AppCtx(ws), candidate, []domain.PersonEmailInput{
 		{Email: "jon@acme.com", EmailType: "work", IsPrimary: true},
 	})
 	if err != nil {
@@ -136,19 +130,19 @@ func TestPersonCreate_FuzzyReview_DomainOnly_NoEmploymentConfirmation(t *testing
 // TestPersonCreate_NoReviewFlag_BelowThreshold proves an unrelated name at a
 // different (or no) org creates plainly with no review flag.
 func TestPersonCreate_NoReviewFlag_BelowThreshold(t *testing.T) {
-	db := sqlDB(t)
-	ws := newWorkspaceSQL(t, db)
+	db := pgtest.OpenTestDB(t)
+	ws := pgtest.NewWorkspaceSQL(t, db)
 	people := adapters.NewPersonStore(db)
 
 	existing := domain.NewPerson("John Doe", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	existing.WorkspaceID = ws
-	if _, err := people.Create(appCtx(ws), existing, nil); err != nil {
+	if _, err := people.Create(pgtest.AppCtx(ws), existing, nil); err != nil {
 		t.Fatalf("create existing person: %v", err)
 	}
 
 	unrelated := domain.NewPerson("Zara Ng", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	unrelated.WorkspaceID = ws
-	created, err := people.Create(appCtx(ws), unrelated, nil)
+	created, err := people.Create(pgtest.AppCtx(ws), unrelated, nil)
 	if err != nil {
 		t.Fatalf("create unrelated person: %v", err)
 	}
@@ -161,13 +155,13 @@ func TestPersonCreate_NoReviewFlag_BelowThreshold(t *testing.T) {
 // empty full_name skips the fuzzy tier entirely (no panic, no flag), while
 // the pre-existing exact-email tier still runs unaffected.
 func TestPersonCreate_EmptyFullName_SkipsFuzzyTier(t *testing.T) {
-	db := sqlDB(t)
-	ws := newWorkspaceSQL(t, db)
+	db := pgtest.OpenTestDB(t)
+	ws := pgtest.NewWorkspaceSQL(t, db)
 	people := adapters.NewPersonStore(db)
 
 	p := domain.NewPerson("", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	p.WorkspaceID = ws
-	created, err := people.Create(appCtx(ws), p, nil)
+	created, err := people.Create(pgtest.AppCtx(ws), p, nil)
 	if err != nil {
 		t.Fatalf("create empty-name person: %v", err)
 	}
@@ -184,21 +178,21 @@ func TestPersonCreate_EmptyFullName_SkipsFuzzyTier(t *testing.T) {
 // 0.8-rung confidence (0.55*1.0 + 0.45*0.8 = 0.91, clears 0.72) — a real tie,
 // not a threshold miss.
 func TestPersonCreate_TieBreak_LowestID(t *testing.T) {
-	db := sqlDB(t)
-	ws := newWorkspaceSQL(t, db)
+	db := pgtest.OpenTestDB(t)
+	ws := pgtest.NewWorkspaceSQL(t, db)
 	people := adapters.NewPersonStore(db)
 	orgs := organizations.NewOrgStore(db)
 
 	org := orgdomain.NewOrganization("Acme Corp", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	org.WorkspaceID = ws
 	org.Domains = []orgdomain.OrganizationDomain{{Domain: "acme.com", IsPrimary: true}}
-	if _, err := orgs.Create(appCtx(ws), org); err != nil {
+	if _, err := orgs.Create(pgtest.AppCtx(ws), org); err != nil {
 		t.Fatalf("create org: %v", err)
 	}
 
 	first := domain.NewPerson("Pat Smith", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	first.WorkspaceID = ws
-	createdFirst, err := people.Create(appCtx(ws), first, []domain.PersonEmailInput{
+	createdFirst, err := people.Create(pgtest.AppCtx(ws), first, []domain.PersonEmailInput{
 		{Email: "pat1@acme.com", EmailType: "work", IsPrimary: true},
 	})
 	if err != nil {
@@ -207,7 +201,7 @@ func TestPersonCreate_TieBreak_LowestID(t *testing.T) {
 
 	second := domain.NewPerson("Pat Smith", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	second.WorkspaceID = ws
-	createdSecond, err := people.Create(appCtx(ws), second, []domain.PersonEmailInput{
+	createdSecond, err := people.Create(pgtest.AppCtx(ws), second, []domain.PersonEmailInput{
 		{Email: "pat2@acme.com", EmailType: "work", IsPrimary: true},
 	})
 	if err != nil {
@@ -223,7 +217,7 @@ func TestPersonCreate_TieBreak_LowestID(t *testing.T) {
 	// equal-scoring candidates — the winner must be the lower of the two ids.
 	third := domain.NewPerson("Pat Smith", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	third.WorkspaceID = ws
-	created, err := people.Create(appCtx(ws), third, []domain.PersonEmailInput{
+	created, err := people.Create(pgtest.AppCtx(ws), third, []domain.PersonEmailInput{
 		{Email: "pat3@acme.com", EmailType: "work", IsPrimary: true},
 	})
 	if err != nil {
@@ -246,8 +240,8 @@ func TestPersonCreate_TieBreak_LowestID(t *testing.T) {
 // never surfaces that lead as a review-flag candidate — the candidate SQL
 // selects only from `person`, never `lead`.
 func TestPersonDedupeCandidates_NeverQueriesLead(t *testing.T) {
-	db := sqlDB(t)
-	ws := newWorkspaceSQL(t, db)
+	db := pgtest.OpenTestDB(t)
+	ws := pgtest.NewWorkspaceSQL(t, db)
 	people := adapters.NewPersonStore(db)
 
 	// A lead with the exact same full_name as the person we're about to
@@ -264,7 +258,7 @@ func TestPersonDedupeCandidates_NeverQueriesLead(t *testing.T) {
 
 	p := domain.NewPerson("Casey Rivera", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	p.WorkspaceID = ws
-	created, err := people.Create(appCtx(ws), p, nil)
+	created, err := people.Create(pgtest.AppCtx(ws), p, nil)
 	if err != nil {
 		t.Fatalf("create person: %v", err)
 	}

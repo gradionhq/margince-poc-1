@@ -11,22 +11,23 @@ import (
 	domain "github.com/gradionhq/margince/backend/internal/modules/people/domain"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
 const strengthTestWS = "00000000-0000-0000-0000-000000000020"
 
 func TestPersonStore_List_AttachesLastActivityAt(t *testing.T) {
-	db := openTestDB(t)
-	seedWorkspace(t, db, strengthTestWS)
-	setRLS(t, db, strengthTestWS)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SeedWorkspace(t, db, strengthTestWS)
+	pgtest.SetRLS(t, db, strengthTestWS)
 
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: strengthTestWS, UserID: "human:test"})
 	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
 	store := adapters.NewPersonStore(db)
 
 	// person WITH activity
-	withSeed := domain.NewPerson("Alice-Activity-"+uniq(), p0)
+	withSeed := domain.NewPerson("Alice-Activity-"+pgtest.Uniq(), p0)
 	withSeed.WorkspaceID = strengthTestWS
 	personWith, err := store.Create(ctx, withSeed, nil)
 	if err != nil {
@@ -34,7 +35,7 @@ func TestPersonStore_List_AttachesLastActivityAt(t *testing.T) {
 	}
 
 	// person WITHOUT activity
-	withoutSeed := domain.NewPerson("Bob-NoActivity-"+uniq(), p0)
+	withoutSeed := domain.NewPerson("Bob-NoActivity-"+pgtest.Uniq(), p0)
 	withoutSeed.WorkspaceID = strengthTestWS
 	personWithout, err := store.Create(ctx, withoutSeed, nil)
 	if err != nil {

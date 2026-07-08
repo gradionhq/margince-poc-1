@@ -16,6 +16,7 @@ import (
 	adapters "github.com/gradionhq/margince/backend/internal/modules/relationships/adapters"
 	domain "github.com/gradionhq/margince/backend/internal/modules/relationships/domain"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
@@ -25,21 +26,21 @@ const wsRelPerf = "00000000-0000-0000-0000-0000000000d1"
 // organization's employment edges (idx_rel_org_people) must be index-served
 // and p95 < 150ms over 50 rows.
 func TestRelationshipList_OrgEmployment_P95AndExplain(t *testing.T) {
-	db := openTestDB(t)
-	setRLS(t, db, wsRelPerf)
-	seedWorkspace(t, db, wsRelPerf)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsRelPerf)
+	pgtest.SeedWorkspace(t, db, wsRelPerf)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsRelPerf})
 	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
 
 	os := orgadapters.NewOrgStore(db)
-	org, err := os.Create(ctx, orgdomain.Organization{WorkspaceID: wsRelPerf, DisplayName: "Perf Org " + uniq(), Classification: strPtr("prospect"), Source: p0.Source, CapturedBy: p0.CapturedBy})
+	org, err := os.Create(ctx, orgdomain.Organization{WorkspaceID: wsRelPerf, DisplayName: "Perf Org " + pgtest.Uniq(), Classification: strPtr("prospect"), Source: p0.Source, CapturedBy: p0.CapturedBy})
 	if err != nil {
 		t.Fatalf("seed org: %v", err)
 	}
 	ps := peopleadapters.NewPersonStore(db)
 	s := adapters.NewRelationshipStore(db)
 	for i := 0; i < 50; i++ {
-		p, err := ps.Create(ctx, peopledomain.Person{WorkspaceID: wsRelPerf, FullName: "Perf Person " + uniq(), Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
+		p, err := ps.Create(ctx, peopledomain.Person{WorkspaceID: wsRelPerf, FullName: "Perf Person " + pgtest.Uniq(), Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 		if err != nil {
 			t.Fatalf("seed person %d: %v", i, err)
 		}
@@ -122,14 +123,14 @@ func TestRelationshipList_OrgEmployment_P95AndExplain(t *testing.T) {
 // deal-side reverse lookup (idx_rel_deal_stakeholders) must be index-served
 // and p95 < 150ms over 50 rows.
 func TestRelationshipList_DealStakeholders_P95AndExplain(t *testing.T) {
-	db := openTestDB(t)
-	setRLS(t, db, wsRelPerf)
-	seedWorkspace(t, db, wsRelPerf)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsRelPerf)
+	pgtest.SeedWorkspace(t, db, wsRelPerf)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsRelPerf})
 	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
 
 	pstore := deals.NewPipelineStore(db)
-	pl, err := pstore.Create(ctx, deals.Pipeline{WorkspaceID: wsRelPerf, Name: "RelPerf " + uniq()})
+	pl, err := pstore.Create(ctx, deals.Pipeline{WorkspaceID: wsRelPerf, Name: "RelPerf " + pgtest.Uniq()})
 	if err != nil {
 		t.Fatalf("seed pipeline: %v", err)
 	}
@@ -139,7 +140,7 @@ func TestRelationshipList_DealStakeholders_P95AndExplain(t *testing.T) {
 		t.Fatalf("seed stage: %v", err)
 	}
 	ds := deals.NewDealStore(db)
-	dSeed := deals.NewDeal("RelPerf Deal "+uniq(), pl.ID, st.ID, p0)
+	dSeed := deals.NewDeal("RelPerf Deal "+pgtest.Uniq(), pl.ID, st.ID, p0)
 	dSeed.WorkspaceID = wsRelPerf
 	d, err := ds.Create(ctx, dSeed, "")
 	if err != nil {
@@ -150,7 +151,7 @@ func TestRelationshipList_DealStakeholders_P95AndExplain(t *testing.T) {
 	s := adapters.NewRelationshipStore(db)
 	roles := []string{"champion", "economic_buyer", "blocker", "influencer", "user"}
 	for i := 0; i < 50; i++ {
-		p, err := ps.Create(ctx, peopledomain.Person{WorkspaceID: wsRelPerf, FullName: "Stakeholder " + uniq(), Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
+		p, err := ps.Create(ctx, peopledomain.Person{WorkspaceID: wsRelPerf, FullName: "Stakeholder " + pgtest.Uniq(), Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 		if err != nil {
 			t.Fatalf("seed person %d: %v", i, err)
 		}

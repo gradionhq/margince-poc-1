@@ -62,6 +62,9 @@ components:
   authzkern:    { in: internal/shared/kernel/authz }
   strengthkern: { in: internal/shared/kernel/strength }
   dedupekern:   { in: internal/shared/kernel/dedupe }
+  sqlutil:      { in: internal/shared/kernel/sqlutil }
+  httpkit:      { in: internal/shared/kernel/httpkit }
+  pgtest:       { in: internal/shared/kernel/pgtest }
   # Tier-0 ports (cross-module seam interfaces)
   wellknown:    { in: internal/shared/ports/wellknown }
   datasource:   { in: internal/shared/ports/datasource }
@@ -171,6 +174,17 @@ deps:
   # Kernel utilities (Tier-0, no internal deps beyond shared primitives)
   dedupekern:
     canUse: [text]
+  # sqlutil aliases errs.ErrNullProvenance for RequireProvenance; both are Tier-0.
+  sqlutil:
+    mayDependOn: [errs]
+  # httpkit renders problem+json/pagination envelopes; both deps are Tier-0.
+  httpkit:
+    mayDependOn: [errs, crmctx]
+  # pgtest is a non-test integration-test support library (like httptest); it
+  # takes *testing.T and is imported only by (integration-tagged) _test.go files.
+  pgtest:
+    mayDependOn: [crmctx]
+    canUse: [pq]
   # Tier-1 platform
   # WS-E-d (Task 8, AC-E4) new platform components:
   config:
@@ -200,31 +214,31 @@ deps:
   orgsports:
     mayDependOn: [orgsdomain]
   orgsadapters:
-    mayDependOn: [orgsdomain, errs, ids, prov, database, audit, dedupekern, strengthkern]
+    mayDependOn: [orgsdomain, errs, ids, prov, database, audit, dedupekern, strengthkern, sqlutil]
     canUse: [pq]
   organizations:
     mayDependOn: [orgsdomain, orgsadapters]
   orgstransport:
-    mayDependOn: [orgsadapters, orgsdomain, relationships, relsadapters, relsdomain, deals, dealsadapters, dealsdomain, activities, activitiesadapters, activitiesdomain, approvalsport, toolgate, mcp, crmctx, errs]
+    mayDependOn: [orgsadapters, orgsdomain, relationships, relsadapters, relsdomain, deals, dealsadapters, dealsdomain, activities, activitiesadapters, activitiesdomain, approvalsport, toolgate, mcp, crmctx, errs, httpkit]
   activitiesdomain:
     mayDependOn: [prov, ids]
   activitiesports:
     mayDependOn: [activitiesdomain]
   activitiesadapters:
-    mayDependOn: [activitiesdomain, errs, ids, database]
+    mayDependOn: [activitiesdomain, errs, ids, database, sqlutil]
     canUse: [pq]
   activitiesapp:
     mayDependOn: [activitiesdomain, activitiesports]
   activities:
     mayDependOn: [activitiesdomain, activitiesadapters, activitiesapp, activitiestransport]
   activitiestransport:
-    mayDependOn: [activities, activitiesadapters, activitiesdomain, crmctx, errs]
+    mayDependOn: [activities, activitiesadapters, activitiesdomain, crmctx, errs, httpkit]
   relsdomain:
     mayDependOn: [prov, ids]
   relsports:
     mayDependOn: [relsdomain]
   relsadapters:
-    mayDependOn: [relsdomain, errs, ids, database, audit]
+    mayDependOn: [relsdomain, errs, ids, database, audit, sqlutil]
     canUse: [pq]
   relsapp:
     mayDependOn: [relsports]
@@ -235,13 +249,13 @@ deps:
   # its own resolveGrantorOwnAccess tx, toolgate/approvalsport/mcp for the 🟡
   # share_record approval gate.
   relstransport:
-    mayDependOn: [relationships, relsadapters, relsdomain, crmctx, errs, prov, peopleadapters, database, toolgate, approvalsport, mcp]
+    mayDependOn: [relationships, relsadapters, relsdomain, crmctx, errs, prov, peopleadapters, database, toolgate, approvalsport, mcp, httpkit]
   leadsdomain:
     mayDependOn: [prov, ids]
   leadsports:
     mayDependOn: [leadsdomain]
   leadsadapters:
-    mayDependOn: [leadsdomain, errs, ids, audit]
+    mayDependOn: [leadsdomain, errs, ids, audit, sqlutil]
     canUse: [pq]
   leads:
     mayDependOn: [leadsdomain, leadsadapters, prov]
@@ -250,12 +264,12 @@ deps:
   partnersports:
     mayDependOn: [partnersdomain]
   partnersadapters:
-    mayDependOn: [partnersdomain, errs, ids, database, audit]
+    mayDependOn: [partnersdomain, errs, ids, database, audit, sqlutil]
     canUse: [pq]
   partners:
     mayDependOn: [partnersdomain, partnersadapters, prov]
   partnerstransport:
-    mayDependOn: [partners, partnersadapters, partnersdomain, crmctx, errs, prov]
+    mayDependOn: [partners, partnersadapters, partnersdomain, crmctx, errs, prov, httpkit]
   audithistorydomain:
     mayDependOn: [ids]
   audithistoryports:
@@ -286,7 +300,7 @@ deps:
   dealsports:
     mayDependOn: [dealsdomain]
   dealsadapters:
-    mayDependOn: [dealsdomain, errs, ids, audit, database]
+    mayDependOn: [dealsdomain, errs, ids, audit, database, sqlutil]
     canUse: [pq]
   # dealstransport now owns pipeline/stage AND deal-entity handlers (WS-E-b).
   dealstransport:
@@ -298,7 +312,7 @@ deps:
   peopleports:
     mayDependOn: [peopledomain, strengthkern]
   peopleadapters:
-    mayDependOn: [peopledomain, errs, ids, prov, dedupekern, strengthkern, audit, database]
+    mayDependOn: [peopledomain, errs, ids, prov, dedupekern, strengthkern, audit, database, sqlutil]
     canUse: [pq]
   people:
     mayDependOn: [peopledomain, peopleadapters, prov]

@@ -12,13 +12,14 @@ import (
 	domain "github.com/gradionhq/margince/backend/internal/modules/people/domain"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
 func TestPersonStoreCreateEmailDuplicateRejected(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:t", TenantID: ws})
 	store := adapters.NewPersonStore(db)
 
@@ -42,9 +43,9 @@ func TestPersonStoreCreateEmailDuplicateRejected(t *testing.T) {
 }
 
 func TestPersonStoreCreateEmailStoresRow(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:t", TenantID: ws})
 	store := adapters.NewPersonStore(db)
 
@@ -70,9 +71,9 @@ func TestPersonStoreCreateEmailStoresRow(t *testing.T) {
 // follow-up), so a brand-new person can reuse the archived person's email
 // without a false 409 (PO-AC-16/PO-AC-6 live-scoped dedupe).
 func TestPersonStoreArchiveCascadesEmailArchivedAt(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:t", TenantID: ws})
 	store := adapters.NewPersonStore(db)
 
@@ -113,9 +114,9 @@ func TestPersonStoreArchiveCascadesEmailArchivedAt(t *testing.T) {
 // against a live person created while the original owner was archived (T23
 // UAT follow-up).
 func TestPersonStoreRestoreCascadesEmailArchivedAtAndDetectsCollision(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:t", TenantID: ws})
 	store := adapters.NewPersonStore(db)
 
@@ -150,9 +151,9 @@ func TestPersonStoreRestoreCascadesEmailArchivedAtAndDetectsCollision(t *testing
 // (with no live collision) clears person_email.archived_at back to NULL for
 // that person's own email rows.
 func TestPersonStoreRestoreClearsEmailArchivedAt(t *testing.T) {
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ws := ids.New()
-	seedWorkspace(t, db, ws)
+	pgtest.SeedWorkspace(t, db, ws)
 	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:t", TenantID: ws})
 	store := adapters.NewPersonStore(db)
 

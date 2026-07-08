@@ -14,6 +14,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/modules/deals/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
@@ -21,7 +22,7 @@ const dealArchiveWS = "00000000-0000-0000-0000-000000000062"
 
 func seedDealArchiveFixtures(t *testing.T) (pipelineID, stageID string) {
 	t.Helper()
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	tag := time.Now().Format("20060102150405.000000000")
 	if _, err := db.Exec(`SELECT set_config('app.workspace_id', $1, false)`, dealArchiveWS); err != nil {
 		t.Fatal("set rls guc:", err)
@@ -61,7 +62,7 @@ func createArchivableDeal(ctx context.Context, t *testing.T, store *adapters.Dea
 
 func assertDealArchiveEventAndAudit(t *testing.T, dealID string, wantCount int) {
 	t.Helper()
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	var eventCount int
 	if err := db.QueryRow(
 		`SELECT count(*) FROM event_outbox WHERE topic='deal.archived' AND entity_id=$1::uuid`,
@@ -86,7 +87,7 @@ func assertDealArchiveEventAndAudit(t *testing.T, dealID string, wantCount int) 
 
 func TestDealStore_Archive_WritesEventAndAudit(t *testing.T) {
 	pipelineID, stageID := seedDealArchiveFixtures(t)
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ctx := context.Background()
 	store := adapters.NewDealStore(db)
 
@@ -105,7 +106,7 @@ func TestDealStore_Archive_WritesEventAndAudit(t *testing.T) {
 
 func TestDealStore_Archive_NonExistentReturnsNotFound(t *testing.T) {
 	seedDealArchiveFixtures(t)
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ctx := context.Background()
 	store := adapters.NewDealStore(db)
 
@@ -117,7 +118,7 @@ func TestDealStore_Archive_NonExistentReturnsNotFound(t *testing.T) {
 
 func TestDealStore_Archive_AlreadyArchivedIsIdempotent(t *testing.T) {
 	pipelineID, stageID := seedDealArchiveFixtures(t)
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ctx := context.Background()
 	store := adapters.NewDealStore(db)
 

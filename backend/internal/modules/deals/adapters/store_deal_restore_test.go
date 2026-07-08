@@ -13,6 +13,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/modules/deals/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
@@ -20,7 +21,7 @@ const dealRestoreWS = "00000000-0000-0000-0000-000000000061"
 
 func seedDealRestoreFixtures(t *testing.T) (pipelineID, stageID string) {
 	t.Helper()
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	tag := time.Now().Format("20060102150405.000000000")
 	if _, err := db.Exec(`SELECT set_config('app.workspace_id', $1, false)`, dealRestoreWS); err != nil {
 		t.Fatal("set rls guc:", err)
@@ -49,7 +50,7 @@ func seedDealRestoreFixtures(t *testing.T) (pipelineID, stageID string) {
 
 func TestDealStore_Restore_HappyPath(t *testing.T) {
 	pipelineID, stageID := seedDealRestoreFixtures(t)
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ctx := context.Background()
 	store := adapters.NewDealStore(db)
 
@@ -73,7 +74,7 @@ func TestDealStore_Restore_HappyPath(t *testing.T) {
 		t.Fatalf("want archived_at nil after restore, got %v", restored.ArchivedAt)
 	}
 
-	db2 := openTestDB(t)
+	db2 := pgtest.OpenTestDB(t)
 	var eventCount int
 	if err := db2.QueryRow(
 		`SELECT count(*) FROM event_outbox WHERE topic='deal.restored' AND entity_id=$1::uuid`,
@@ -98,7 +99,7 @@ func TestDealStore_Restore_HappyPath(t *testing.T) {
 
 func TestDealStore_Restore_LiveRecordRefused(t *testing.T) {
 	pipelineID, stageID := seedDealRestoreFixtures(t)
-	db := openTestDB(t)
+	db := pgtest.OpenTestDB(t)
 	ctx := context.Background()
 	store := adapters.NewDealStore(db)
 

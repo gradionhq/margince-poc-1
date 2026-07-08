@@ -3,15 +3,14 @@ package adapters
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"sort"
-	"strconv"
 	"time"
 
 	"github.com/lib/pq"
 
 	"github.com/gradionhq/margince/backend/internal/modules/people/domain"
 	database "github.com/gradionhq/margince/backend/internal/platform/database"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/strength"
 )
 
@@ -19,29 +18,9 @@ import (
 // PersonStore — PO-F-3 relationship strength
 // ---------------------------------------------------------------------------
 
-// encodeOffsetCursor/decodeOffsetCursor page an in-memory-sorted list.
-func encodeOffsetCursor(n int) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(strconv.Itoa(n)))
-}
-
-func decodeOffsetCursor(cursor string) int {
-	if cursor == "" {
-		return 0
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(cursor)
-	if err != nil {
-		return 0
-	}
-	n, err := strconv.Atoi(string(raw))
-	if err != nil || n < 0 {
-		return 0
-	}
-	return n
-}
-
 //nolint:cyclop // per-person strength dispatch: one branch per sort direction plus the sort/nil comparisons; the switch is the routing surface
 func (s *PersonStore) listByStrength(ctx context.Context, workspaceID, cursor string, limit int, ascending bool) ([]domain.Person, string, error) {
-	offset := decodeOffsetCursor(cursor)
+	offset := sqlutil.DecodeOffsetCursor(cursor)
 	// Non-nil so an empty result marshals to a JSON array ([]), never null.
 	all := []domain.Person{}
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
@@ -65,7 +44,7 @@ func (s *PersonStore) listByStrength(ctx context.Context, workspaceID, cursor st
 				return err
 			}
 			p.Social = map[string]any{}
-			unmarshalJSON(socialRaw, &p.Social)
+			sqlutil.UnmarshalJSON(socialRaw, &p.Social)
 			all = append(all, p)
 		}
 		if err := rows.Err(); err != nil {
@@ -110,7 +89,7 @@ func (s *PersonStore) listByStrength(ctx context.Context, workspaceID, cursor st
 	end := offset + limit
 	var next string
 	if end < len(all) {
-		next = encodeOffsetCursor(end)
+		next = sqlutil.EncodeOffsetCursor(end)
 	} else {
 		end = len(all)
 	}

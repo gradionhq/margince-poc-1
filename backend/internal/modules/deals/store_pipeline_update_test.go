@@ -9,18 +9,19 @@ import (
 
 	apperrors "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
 func TestStageStore_Update_TerminalProbabilityPinned_Returns422(t *testing.T) {
 	wsID := ids.New()
-	db := openTestDB(t)
-	setRLS(t, db, wsID)
-	seedWorkspace(t, db, wsID)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsID)
+	pgtest.SeedWorkspace(t, db, wsID)
 	ctx := context.Background()
 
 	pstore := NewPipelineStore(db)
-	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "Update Test " + uniq()})
+	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "Update Test " + pgtest.Uniq()})
 	if err != nil {
 		t.Fatal("create pipeline:", err)
 	}
@@ -41,13 +42,13 @@ func TestStageStore_Update_TerminalProbabilityPinned_Returns422(t *testing.T) {
 
 func TestStageStore_Update_WinProbabilityOutOfRange_Returns422(t *testing.T) {
 	wsID := ids.New()
-	db := openTestDB(t)
-	setRLS(t, db, wsID)
-	seedWorkspace(t, db, wsID)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsID)
+	pgtest.SeedWorkspace(t, db, wsID)
 	ctx := context.Background()
 
 	pstore := NewPipelineStore(db)
-	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "Range Test " + uniq()})
+	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "Range Test " + pgtest.Uniq()})
 	if err != nil {
 		t.Fatal("create pipeline:", err)
 	}
@@ -68,17 +69,17 @@ func TestStageStore_Update_WinProbabilityOutOfRange_Returns422(t *testing.T) {
 
 func TestPipelineStore_Update_DefaultCollision_Returns409(t *testing.T) {
 	wsID := ids.New()
-	db := openTestDB(t)
-	setRLS(t, db, wsID)
-	seedWorkspace(t, db, wsID)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsID)
+	pgtest.SeedWorkspace(t, db, wsID)
 	ctx := context.Background()
 
 	pstore := NewPipelineStore(db)
-	a, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "A " + uniq(), IsDefault: true})
+	a, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "A " + pgtest.Uniq(), IsDefault: true})
 	if err != nil {
 		t.Fatal("create pipeline A:", err)
 	}
-	b, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "B " + uniq()})
+	b, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "B " + pgtest.Uniq()})
 	if err != nil {
 		t.Fatal("create pipeline B:", err)
 	}
@@ -92,13 +93,13 @@ func TestPipelineStore_Update_DefaultCollision_Returns409(t *testing.T) {
 
 func TestStageStore_Update_PositionCollision_Returns409(t *testing.T) {
 	wsID := ids.New()
-	db := openTestDB(t)
-	setRLS(t, db, wsID)
-	seedWorkspace(t, db, wsID)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsID)
+	pgtest.SeedWorkspace(t, db, wsID)
 	ctx := context.Background()
 
 	pstore := NewPipelineStore(db)
-	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "PosCollide " + uniq()})
+	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "PosCollide " + pgtest.Uniq()})
 	if err != nil {
 		t.Fatal("create pipeline:", err)
 	}
@@ -126,13 +127,13 @@ func TestStageStore_Update_PositionCollision_Returns409(t *testing.T) {
 // read path end to end.
 func TestStageStore_Update_WinProbabilitySuccess_ReflectsLiveOnDeal(t *testing.T) {
 	wsID := ids.New()
-	db := openTestDB(t)
-	setRLS(t, db, wsID)
-	seedWorkspace(t, db, wsID)
+	db := pgtest.OpenTestDB(t)
+	pgtest.SetRLS(t, db, wsID)
+	pgtest.SeedWorkspace(t, db, wsID)
 	ctx := context.Background()
 
 	pstore := NewPipelineStore(db)
-	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "Retune Test " + uniq()})
+	pl, err := pstore.Create(ctx, Pipeline{WorkspaceID: wsID, Name: "Retune Test " + pgtest.Uniq()})
 	if err != nil {
 		t.Fatal("create pipeline:", err)
 	}
@@ -146,7 +147,7 @@ func TestStageStore_Update_WinProbabilitySuccess_ReflectsLiveOnDeal(t *testing.T
 	}
 
 	dealStore := NewDealStore(db)
-	deal := NewDeal("Retune Deal "+uniq(), pl.ID, qualified.ID,
+	deal := NewDeal("Retune Deal "+pgtest.Uniq(), pl.ID, qualified.ID,
 		prov.Provenance{Source: "unit-test", CapturedBy: "unit-test"})
 	deal.WorkspaceID = wsID
 	created, err := dealStore.Create(ctx, deal, "")

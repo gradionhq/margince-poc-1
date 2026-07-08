@@ -16,6 +16,7 @@ import (
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
 )
 
 // ErrSelfMerge is returned when target_id == id (PO-AC-M3). Maps to 422.
@@ -139,7 +140,7 @@ func (s *OrgStore) Merge(ctx context.Context, loserID, targetID, workspaceID str
 		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
 			return fmt.Errorf("org merge audit: %w", err)
 		}
-		payload := marshalJSON(map[string]any{"organization_id": loserID, "merged_into_id": targetID})
+		payload := sqlutil.MarshalJSON(map[string]any{"organization_id": loserID, "merged_into_id": targetID})
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,'organization.merged',$2::uuid,$3)`,
 			workspaceID, loserID, payload); err != nil {

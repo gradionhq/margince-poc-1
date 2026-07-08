@@ -12,6 +12,7 @@ import (
 
 	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	adapters "github.com/gradionhq/margince/backend/internal/modules/people/adapters"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
@@ -60,8 +61,8 @@ func seedRecordGrantDealFixtures(ctx context.Context, t *testing.T, db *sql.DB, 
 // call with a different access/expires_at upgrades the existing row (upsert),
 // never creates a duplicate.
 func TestRecordGrantStore_CreateIdempotentUpsert(t *testing.T) {
-	db := sqlDB(t)
-	ws := newWorkspaceSQL(t, db)
+	db := pgtest.OpenTestDB(t)
+	ws := pgtest.NewWorkspaceSQL(t, db)
 	ctx := context.Background()
 
 	ownerID, subjectID, deal := seedRecordGrantDealFixtures(ctx, t, db, ws, "Grant Test Deal")
@@ -102,8 +103,8 @@ func TestRecordGrantStore_CreateIdempotentUpsert(t *testing.T) {
 // the granting principal's own access — a user with only "read" on a record
 // cannot grant "write" to someone else.
 func TestRecordGrantStore_RejectsScopeExceedingGrant(t *testing.T) {
-	db := sqlDB(t)
-	ws := newWorkspaceSQL(t, db)
+	db := pgtest.OpenTestDB(t)
+	ws := pgtest.NewWorkspaceSQL(t, db)
 	ctx := context.Background()
 
 	store := adapters.NewRecordGrantStore(db)
@@ -128,8 +129,8 @@ func TestRecordGrantStore_RejectsScopeExceedingGrant(t *testing.T) {
 // subsequent widened-visibility check (Task 7's integration test) no longer
 // sees the previously-granted record.
 func TestRecordGrantStore_RevokeRemovesRow(t *testing.T) {
-	db := sqlDB(t)
-	ws := newWorkspaceSQL(t, db)
+	db := pgtest.OpenTestDB(t)
+	ws := pgtest.NewWorkspaceSQL(t, db)
 	ctx := context.Background()
 
 	ownerID, subjectID, deal := seedRecordGrantDealFixtures(ctx, t, db, ws, "Revoke Test Deal")

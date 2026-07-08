@@ -13,12 +13,13 @@ import (
 	"github.com/gradionhq/margince/backend/internal/modules/deals/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
 func openCreateTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	return openTestDB(t)
+	return pgtest.OpenTestDB(t)
 }
 
 const createTestWorkspaceID = "00000000-0000-0000-0000-000000000002"
