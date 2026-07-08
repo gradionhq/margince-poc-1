@@ -588,6 +588,25 @@ describe("CustomField retire shape (CUSTOM-FIELDS-WIRE-4)", () => {
   });
 });
 
+describe("Quota archive shape (RD-WIRE-2)", () => {
+  it("200 + full archived entity — not the /automations/{id} 204 shape", () => {
+    const archived: components["schemas"]["Quota"] = {
+      id: "00000000-0000-0000-0000-000000000070",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      owner_id: "00000000-0000-0000-0000-000000000001",
+      team_id: null,
+      period_start: "2026-01-01",
+      period_end: "2026-03-31",
+      target_minor: 28000000,
+      currency: "EUR",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-02T00:00:00Z",
+      archived_at: "2025-01-02T00:00:00Z",
+    };
+    expect(archived.archived_at).not.toBeNull();
+  });
+});
+
 describe("UpdateQuotaRequest contract compliance (RD-WIRE-2)", () => {
   it("is a partial merge-PATCH — every field optional", () => {
     const req: components["schemas"]["UpdateQuotaRequest"] = {

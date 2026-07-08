@@ -12794,6 +12794,9 @@ type ServerInterface interface {
 	// Create a quota (owner XOR team revenue target for one period).
 	// (POST /quotas)
 	CreateQuota(w http.ResponseWriter, r *http.Request, params CreateQuotaParams)
+	// Archive (soft-delete) a quota.
+	// (DELETE /quotas/{id})
+	ArchiveQuota(w http.ResponseWriter, r *http.Request, idParam IdParam)
 	// Get a quota by id.
 	// (GET /quotas/{id})
 	GetQuota(w http.ResponseWriter, r *http.Request, idParam IdParam)
@@ -13685,6 +13688,12 @@ func (_ Unimplemented) ListQuotas(w http.ResponseWriter, r *http.Request, params
 // Create a quota (owner XOR team revenue target for one period).
 // (POST /quotas)
 func (_ Unimplemented) CreateQuota(w http.ResponseWriter, r *http.Request, params CreateQuotaParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Archive (soft-delete) a quota.
+// (DELETE /quotas/{id})
+func (_ Unimplemented) ArchiveQuota(w http.ResponseWriter, r *http.Request, idParam IdParam) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -20311,6 +20320,37 @@ func (siw *ServerInterfaceWrapper) CreateQuota(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// ArchiveQuota operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveQuota(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveQuota(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetQuota operation middleware
 func (siw *ServerInterfaceWrapper) GetQuota(w http.ResponseWriter, r *http.Request) {
 	var err error
@@ -21925,6 +21965,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/quotas", wrapper.CreateQuota)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/quotas/{id}", wrapper.ArchiveQuota)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/quotas/{id}", wrapper.GetQuota)

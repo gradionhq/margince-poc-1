@@ -2174,7 +2174,16 @@ export interface paths {
         get: operations["getQuota"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Archive (soft-delete) a quota.
+         * @description Archive semantics (API-CONV-2): sets archived_at, drops from default lists, stays
+         *     fetchable by id, and returns 200 + the full archived entity — never 204. This
+         *     deliberately does not follow /automations/{id}'s deleteAutomation 204-on-archive
+         *     shape, which predates/diverges from the standard convention every other archive
+         *     operation in this contract (archivePerson, archiveOrganization, archiveDeal,
+         *     archivePipeline) correctly follows.
+         */
+        delete: operations["archiveQuota"];
         options?: never;
         head?: never;
         /**
@@ -10623,6 +10632,32 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description The quota. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Quota"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    archiveQuota: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Archived quota (now carries a non-null archived_at). */
             200: {
                 headers: {
                     [name: string]: unknown;

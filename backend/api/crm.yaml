@@ -3874,6 +3874,27 @@ paths:
                     details:
                       errors:
                         - { field: owner_id, code: owner_xor_team_required, message: 'Supply exactly one of owner_id or team_id, not both.' }
+    delete:
+      tags: [Quotas]
+      operationId: archiveQuota
+      summary: Archive (soft-delete) a quota.
+      description: |
+        Archive semantics (API-CONV-2): sets archived_at, drops from default lists, stays
+        fetchable by id, and returns 200 + the full archived entity — never 204. This
+        deliberately does not follow /automations/{id}'s deleteAutomation 204-on-archive
+        shape, which predates/diverges from the standard convention every other archive
+        operation in this contract (archivePerson, archiveOrganization, archiveDeal,
+        archivePipeline) correctly follows.
+      x-mcp-tool: { verb: update_record, record_type: quota, tier: yellow }
+      responses:
+        '200':
+          description: Archived quota (now carries a non-null archived_at).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Quota' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # field_mask, deal_channel, gtm_module_install are config/
   # join tables surfaced through admin/parent endpoints, not standalone CRUD.
