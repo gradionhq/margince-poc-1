@@ -69,7 +69,7 @@ INSERT INTO role_assignment (workspace_id, role_id, user_id)
   VALUES ('00000000-0000-0000-0000-000000000026', '00000000-0000-0000-0026-000000000010', '00000000-0000-0000-0026-000000000001')
   ON CONFLICT (role_id, user_id, COALESCE(team_id, '00000000-0000-0000-0000-000000000000'::uuid)) DO NOTHING;
 
-INSERT INTO organization (id, workspace_id, display_name, source, captured_by)
+INSERT INTO organization (id, workspace_id, name, source, captured_by)
   VALUES ('00000000-0000-0000-0026-000000000030', '00000000-0000-0000-0000-000000000026', 'OP-T06 Buyer GmbH', 'uat', 'human:op-t06')
   ON CONFLICT (id) DO NOTHING;
 
