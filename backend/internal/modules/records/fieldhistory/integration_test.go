@@ -381,6 +381,65 @@ func TestStore_Pagination(t *testing.T) {
 	_ = r3
 }
 
+// TestStore_PaginationLastRowFillsPage covers the live-UAT-found bug (RD-T07 UAT fix):
+// when the true last (oldest) audit_log row's own diff alone produces >= limit entries,
+// the page it lands on must report genuine exhaustion (next_cursor == ""), not a
+// false-positive has_more=true. Mirrors workspace/manual-test/rd-t07.md Step 7's final
+// page: limit=1, and the last row (a 2-field "create" row) alone already meets the
+// limit, so the early stop that fills the page must not be conflated with "more data
+// exists" — a follow-up existence check is required to tell them apart.
+func TestStore_PaginationLastRowFillsPage(t *testing.T) {
+	db := pgtest.OpenTestDB(t)
+	ws := pgtest.NewWorkspaceSQL(t, db)
+	entityID := ids.New()
+	ctx := context.Background()
+
+	tOldest := time.Now().Add(-2 * time.Second).UTC().Truncate(time.Microsecond)
+	tNewest := time.Now().Add(-1 * time.Second).UTC().Truncate(time.Microsecond)
+
+	// Newest row: 1 field changed → 1 entry.
+	rNewest := seedFieldHistoryRow(t, db, ws, "organization", entityID, "human", "u1", nil, nil,
+		map[string]any{"phone": "555-1111"}, map[string]any{"phone": "555-2222"}, &tNewest)
+
+	// Oldest row (the true last row): a "create" row (before=NULL) with 2 keys → 2 entries,
+	// which already meets/exceeds limit=1 on its own — exactly the Step 7 repro shape.
+	rOldest := seedFieldHistoryRow(t, db, ws, "organization", entityID, "human", "u1", nil, nil,
+		nil, map[string]any{"industry": "Technology", "name": "Acme Corp"}, &tOldest)
+
+	store := fieldhistory.NewStore(db)
+
+	// Page 1 (limit=1): rNewest's single entry; more data (rOldest) genuinely follows.
+	page1, cur1, err := store.List(ctx, ws, "organization", entityID, nil, nil, "", 1)
+	if err != nil {
+		t.Fatalf("List page1: %v", err)
+	}
+	if len(page1) != 1 || page1[0].ID != rNewest {
+		t.Fatalf("page1: want 1 entry from rNewest, got %d: %+v", len(page1), page1)
+	}
+	if cur1 == "" {
+		t.Fatal("page1: want non-empty cursor (rOldest still follows), got empty")
+	}
+
+	// Page 2 (using cursor from page1, limit=1): rOldest's 2 entries fill/overflow the
+	// requested page, but rOldest is the true last row — no row follows it. The page must
+	// report genuine exhaustion, not a false-positive has_more=true.
+	page2, cur2, err := store.List(ctx, ws, "organization", entityID, nil, nil, cur1, 1)
+	if err != nil {
+		t.Fatalf("List page2: %v", err)
+	}
+	if len(page2) != 2 {
+		t.Fatalf("page2: want 2 entries from rOldest (industry, name), got %d: %+v", len(page2), page2)
+	}
+	for _, e := range page2 {
+		if e.ID != rOldest {
+			t.Errorf("page2 entry.ID = %q, want %q (rOldest)", e.ID, rOldest)
+		}
+	}
+	if cur2 != "" {
+		t.Errorf("page2: cursor want empty (genuine exhaustion — rOldest is the true last row), got %q", cur2)
+	}
+}
+
 // TestStore_NewestFirst proves entries are returned newest-first
 // even when rows are seeded out of temporal order.
 func TestStore_NewestFirst(t *testing.T) {

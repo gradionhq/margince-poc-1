@@ -306,12 +306,15 @@ happy path, honest-empty).
 make test-it DIR=backend/internal/modules/records
 ```
 
-**Expected:** All integration tests pass including:
-- `TestFieldHistory_DiffProjection` (RD-AC-11/RD-WIRE-5: multi-field row, unchanged field absent)
-- `TestFieldHistory_Attribution` (RD-AC-5: agent attribution + actor_type/field filters)
-- `TestFieldHistory_Masking` (RD-AC-5/RD-PARAM-6: masked field withheld, erasure tombstone → zero entries)
-- `TestFieldHistory_Empty` (RD-AC-5: nonexistent entity_id → honest empty, no error)
-- `TestFieldHistory_Pagination` (cursor pagination, no overlap/gap)
-- `TestFieldHistory_NewestFirst` (ordering)
+**Expected:** All integration tests pass including (all in
+`backend/internal/modules/records/fieldhistory/integration_test.go`):
+- `TestStore_DiffProjection` (RD-AC-11/RD-WIRE-5: multi-field row, unchanged field absent)
+- `TestStore_Attribution` (RD-AC-5: agent attribution + actor_type/field filters)
+- `TestStore_Masking` (RD-AC-5/RD-PARAM-6: masked field withheld, erasure tombstone → zero entries)
+- `TestStore_Empty` (RD-AC-5: nonexistent entity_id → honest empty, no error)
+- `TestStore_Pagination` (cursor pagination, no overlap/gap)
+- `TestStore_PaginationLastRowFillsPage` (RD-T07 UAT fix: has_more=false when the true last
+  row's own diff fills/overflows the requested page)
+- `TestStore_NewestFirst` (ordering)
 
-Output: `ok github.com/gradionhq/margince/backend/internal/modules/records (pass, 0 skips)`
+Output: `ok github.com/gradionhq/margince/backend/internal/modules/records/fieldhistory (pass, 0 skips)`

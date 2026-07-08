@@ -46,8 +46,25 @@ type listState struct {
 	entries    []Entry
 }
 
+// earlyStopReason distinguishes why scanBatch stopped mid-batch, since the two reasons
+// warrant different has_more handling in List:
+//   - earlyStopPageFull: the requested page is exactly full (len(entries) >= limit) after a
+//     whole audit_log row's entries were appended (row-boundary preservation — a row's
+//     entries are never split across pages). This does NOT by itself prove another row
+//     exists past the cursor; List must check.
+//   - earlyStopScanCap: the defensive fieldHistoryMaxScanRows cap was hit. The loop stopped
+//     without exhausting the underlying data and there's no cheap way to know whether more
+//     rows exist beyond the cap, so reporting has_more=true unconditionally is correct here.
+type earlyStopReason int
+
+const (
+	noEarlyStop earlyStopReason = iota
+	earlyStopPageFull
+	earlyStopScanCap
+)
+
 // scanBatch drains rows into state, respecting the actorType/field filters and limit.
-// Returns (batchCount, earlyStop, err). The rows are always closed before return.
+// Returns (batchCount, stop, err). The rows are always closed before return.
 func (s *Store) scanBatch(
 	rows *sql.Rows,
 	st *listState,
@@ -55,7 +72,7 @@ func (s *Store) scanBatch(
 	field, actorType *string,
 	mask audithistorydomain.EntityFieldMask,
 	limit int,
-) (batchCount int, earlyStop bool, err error) {
+) (batchCount int, stop earlyStopReason, err error) {
 	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
@@ -73,7 +90,7 @@ func (s *Store) scanBatch(
 			&rowID, &rowActorType, &rowActorID, &rowPassport, &evidenceJSON,
 			&rowOccurredAt, &beforeJSON, &afterJSON,
 		); err != nil {
-			return batchCount, false, err
+			return batchCount, noEarlyStop, err
 		}
 		batchCount++
 		st.scanned++
@@ -83,7 +100,7 @@ func (s *Store) scanBatch(
 
 		if actorType != nil && rowActorType != *actorType {
 			if st.scanned >= fieldHistoryMaxScanRows {
-				return batchCount, true, nil
+				return batchCount, earlyStopScanCap, nil
 			}
 			continue
 		}
@@ -98,11 +115,17 @@ func (s *Store) scanBatch(
 		}, rowPassport, evidenceJSON, beforeJSON, afterJSON), mask, field)
 		st.entries = append(st.entries, rowEntries...)
 
-		if len(st.entries) >= limit || st.scanned >= fieldHistoryMaxScanRows {
-			return batchCount, true, nil
+		// Scan-cap takes priority when both trigger on the same row: it's always safe to
+		// report has_more=true unconditionally (see earlyStopReason doc), so there's no
+		// need to pay for the extra existence check below.
+		if st.scanned >= fieldHistoryMaxScanRows {
+			return batchCount, earlyStopScanCap, nil
+		}
+		if len(st.entries) >= limit {
+			return batchCount, earlyStopPageFull, nil
 		}
 	}
-	return batchCount, false, rows.Err()
+	return batchCount, noEarlyStop, rows.Err()
 }
 
 // unmarshalRow fills the JSON-backed fields of an auditLogRow from the raw DB bytes.
@@ -165,13 +188,32 @@ func (s *Store) List(
 				return err
 			}
 
-			batchCount, earlyStop, err := s.scanBatch(rows, &st, entityType, entityID, field, actorType, mask, limit)
+			batchCount, stop, err := s.scanBatch(rows, &st, entityType, entityID, field, actorType, mask, limit)
 			if err != nil {
 				return err
 			}
 
-			if earlyStop {
+			switch stop {
+			case earlyStopScanCap:
+				// The loop stopped without exhausting the underlying data — no cheap way
+				// to know whether more rows exist beyond the cap, so has_more=true is the
+				// correct, honest answer here.
 				nextCursor = encodeCursor(st.cursorTime, st.cursorID)
+				return nil
+			case earlyStopPageFull:
+				// The requested page is exactly full, but that alone doesn't prove another
+				// row exists past the cursor — the row that filled the page may be the
+				// true last audit_log row for this entity (RD-T07 UAT fix). Disambiguate
+				// with one cheap existence check before claiming has_more=true.
+				more, err := s.hasFollowingRow(ctx, tx, workspaceID, entityType, entityID, st.cursorTime, st.cursorID)
+				if err != nil {
+					return err
+				}
+				if more {
+					nextCursor = encodeCursor(st.cursorTime, st.cursorID)
+				} else {
+					nextCursor = ""
+				}
 				return nil
 			}
 			if batchCount < fieldHistoryScanBatch {
@@ -215,4 +257,35 @@ func (s *Store) queryBatch(
 		ORDER BY occurred_at DESC, id DESC
 		LIMIT $4`,
 		workspaceID, entityType, entityID, fieldHistoryScanBatch)
+}
+
+// hasFollowingRow reports whether at least one audit_log row exists strictly past the
+// (cursorTime, cursorID) keyset position for this entity_type/entity_id — the cheap
+// follow-up check used only to disambiguate earlyStopPageFull from genuine exhaustion
+// (RD-T07 UAT fix). The predicate mirrors queryBatch's cursor branch, minus the LIMIT,
+// so it is served by the same idx_audit_entity composite index.
+//
+// Deliberately does NOT re-apply the actor_type filter: doing so would require carrying
+// it through as a third parameter and duplicating queryBatch's filter shape for a single
+// EXISTS check. Instead this accepts the same class of imprecision the earlyStopScanCap
+// path already accepts unconditionally — a following row that would itself be filtered
+// out by actor_type can produce a rare false-positive has_more=true (the client follows
+// the cursor and gets one further, genuinely-empty page), never a false negative that
+// would silently truncate real data.
+func (s *Store) hasFollowingRow(
+	ctx context.Context,
+	tx *sql.Tx,
+	workspaceID, entityType, entityID string,
+	cursorTime time.Time,
+	cursorID string,
+) (bool, error) {
+	var exists bool
+	err := tx.QueryRowContext(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM audit_log
+			WHERE workspace_id = $1::uuid AND entity_type = $2 AND entity_id = $3::uuid
+			  AND (occurred_at, id) < ($4, $5::uuid)
+		)`,
+		workspaceID, entityType, entityID, cursorTime, cursorID).Scan(&exists)
+	return exists, err
 }
