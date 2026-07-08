@@ -5,11 +5,13 @@ package adapters
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/gradionhq/margince/backend/internal/modules/activities/domain"
+	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
@@ -21,6 +23,7 @@ const (
 	entityTypePerson       = "person"
 	entityTypeOrganization = "organization"
 	entityTypeDeal         = "deal"
+	entityTypeActivity     = "activity"
 	fieldPersonID          = "person_id"
 	fieldOrganizationID    = "organization_id"
 	colDealID              = "deal_id"
@@ -364,8 +367,11 @@ func (s *ActivityStore) Update(ctx context.Context, id, workspaceID string, upda
 				return err
 			}
 		}
-		return s.applyUpdate(ctx, tx, id, workspaceID, updates, ifMatch,
-			hasRemindAt, remindAt, hasDueAt, dueAt, hasAssigneeID, assigneeID, hasIsDone, boolVal(isDoneVal))
+		if err := s.applyUpdate(ctx, tx, id, workspaceID, updates, ifMatch,
+			hasRemindAt, remindAt, hasDueAt, dueAt, hasAssigneeID, assigneeID, hasIsDone, boolVal(isDoneVal)); err != nil {
+			return err
+		}
+		return s.writeUpdateAuditAndEvent(ctx, tx, id, workspaceID)
 	})
 	if err != nil {
 		return domain.Activity{}, err
@@ -432,7 +438,31 @@ func (s *ActivityStore) applyUpdate(ctx context.Context, tx *sql.Tx, id, workspa
 	return nil
 }
 
-// Archive soft-deletes an activity (sets archived_at).
+// writeUpdateAuditAndEvent writes the one audit_log row (action=update) and
+// one activity.updated event_outbox row for a successful Update call — one
+// logical mutation, regardless of how many fields (including is_done) were
+// touched in this request. ACT-EVT-N-1: the done-transition rides this same
+// activity.updated event, never a distinct "task.completed" topic — there is
+// no branch here for is_done, deliberately.
+func (s *ActivityStore) writeUpdateAuditAndEvent(ctx context.Context, tx *sql.Tx, id, workspaceID string) error {
+	payload, _ := json.Marshal(map[string]any{"activity_id": id})
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
+		workspaceID, "activity.updated", id, payload); err != nil {
+		return fmt.Errorf("activity update event: %w", err)
+	}
+	e := crmaudit.EntryFromPrincipal(ctx, "update", entityTypeActivity, &id, nil, nil)
+	e.WorkspaceID = workspaceID
+	if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+		return fmt.Errorf("activity update audit: %w", err)
+	}
+	return nil
+}
+
+// Archive soft-deletes an activity (sets archived_at), writing one audit_log
+// row (action=archive) and one activity.archived event_outbox row — only when
+// a row actually changed (a repeat archive on an already-archived row is a
+// no-op, so it does not double-fire; mirrors store_deal.go's Archive).
 func (s *ActivityStore) Archive(ctx context.Context, id, workspaceID string) (domain.Activity, error) {
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,
@@ -447,6 +477,17 @@ func (s *ActivityStore) Archive(ctx context.Context, id, workspaceID string) (do
 				 WHERE entity_type='activity' AND entity_id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
 				id, workspaceID); err != nil {
 				return fmt.Errorf("activity archive attachment cascade: %w", err)
+			}
+			payload, _ := json.Marshal(map[string]any{"activity_id": id})
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
+				workspaceID, "activity.archived", id, payload); err != nil {
+				return fmt.Errorf("activity archive event: %w", err)
+			}
+			e := crmaudit.EntryFromPrincipal(ctx, "archive", entityTypeActivity, &id, nil, nil)
+			e.WorkspaceID = workspaceID
+			if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+				return fmt.Errorf("activity archive audit: %w", err)
 			}
 		}
 		return nil
