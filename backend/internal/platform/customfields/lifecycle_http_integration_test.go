@@ -177,6 +177,18 @@ func TestRetireCustomField_NonexistentID_404(t *testing.T) {
 	}
 }
 
+func TestSetCustomFieldOptions_NonexistentID_404(t *testing.T) {
+	db := testDB(t)
+	h := cfHandlerForTest(db)
+	wsID, humanID, _ := seedCFHTTPWorkspaceAndUsers2(t, db)
+	// Non-empty options so the request passes SetOptions' len(options)==0 ->
+	// ErrLastOption short-circuit and actually reaches the not-found lookup.
+	w := patchCF(h, "/custom-fields/018f3a1b-0000-7000-8000-0000000000ff/options", wsID, humanID, false, "", map[string]any{"options": []string{"a"}})
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 // TestSetCustomFieldOptions_AddRemoveKeepAtLeastOne proves the UAT step:
 // edit a picklist's options (add one, remove one, keep >=1) -> 200; a
 // removed-option write now fails; removing the last remaining option -> 422.
