@@ -6,70 +6,76 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/gradionhq/margince/backend/internal/contracts/types"
+	offerstransport "github.com/gradionhq/margince/backend/internal/modules/offers/transport"
 )
 
 // OffersAdapter implements the Offers tag's slice of types.ServerInterface.
-// Offers has no wired handler in this pruned skeleton tree (AC-D3/D10 scope: interface
-// conformance, not a live-routing cutover) — every method returns 501 via the same
-// shape oapi-codegen's own generated types.Unimplemented stub uses.
-type OffersAdapter struct{}
+// ListDealOffers/CreateDealOffer/GetOffer/UpdateOffer/ListOfferLineItems/
+// CreateOfferLineItem/UpdateOfferLineItem/DeleteOfferLineItem delegate to the
+// real OfferHandler cmd/api/routes.go wires (mirrors ProductsAdapter's
+// shape). RegenerateOffer/RenderOffer/SendOffer/AcceptOffer stay 501 stubs —
+// a separate ticket owns the sent->accepted transitions and ApprovalToken
+// gating.
+type OffersAdapter struct {
+	H *offerstransport.OfferHandler
+}
 
-// ListDealOffers is unimplemented; see OffersAdapter's doc comment.
-func (OffersAdapter) ListDealOffers(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.ListDealOffersParams) {
+// ListDealOffers delegates to the wired handler; see the struct doc comment above.
+func (a *OffersAdapter) ListDealOffers(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.ListDealOffersParams) {
+	a.H.ServeHTTP(w, r)
+}
+
+// CreateDealOffer delegates to the wired handler; see the struct doc comment above.
+func (a *OffersAdapter) CreateDealOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.CreateDealOfferParams) {
+	a.H.ServeHTTP(w, r)
+}
+
+// GetOffer delegates to the wired handler; see the struct doc comment above.
+func (a *OffersAdapter) GetOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam) {
+	a.H.ServeHTTP(w, r)
+}
+
+// UpdateOffer delegates to the wired handler; see the struct doc comment above.
+func (a *OffersAdapter) UpdateOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.UpdateOfferParams) {
+	a.H.ServeHTTP(w, r)
+}
+
+// ListOfferLineItems delegates to the wired handler; see the struct doc comment above.
+func (a *OffersAdapter) ListOfferLineItems(w http.ResponseWriter, r *http.Request, idParam types.IdParam) {
+	a.H.ServeHTTP(w, r)
+}
+
+// CreateOfferLineItem delegates to the wired handler; see the struct doc comment above.
+func (a *OffersAdapter) CreateOfferLineItem(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.CreateOfferLineItemParams) {
+	a.H.ServeHTTP(w, r)
+}
+
+// UpdateOfferLineItem delegates to the wired handler; see the struct doc comment above.
+func (a *OffersAdapter) UpdateOfferLineItem(w http.ResponseWriter, r *http.Request, idParam types.IdParam, lineID openapi_types.UUID, params types.UpdateOfferLineItemParams) {
+	a.H.ServeHTTP(w, r)
+}
+
+// DeleteOfferLineItem delegates to the wired handler; see the struct doc comment above.
+func (a *OffersAdapter) DeleteOfferLineItem(w http.ResponseWriter, r *http.Request, idParam types.IdParam, lineID openapi_types.UUID) {
+	a.H.ServeHTTP(w, r)
+}
+
+// RegenerateOffer is unimplemented; see the struct doc comment above — a separate ticket.
+func (a *OffersAdapter) RegenerateOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.RegenerateOfferParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// CreateDealOffer is unimplemented; see OffersAdapter's doc comment.
-func (OffersAdapter) CreateDealOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.CreateDealOfferParams) {
+// RenderOffer is unimplemented; see the struct doc comment above — a separate ticket.
+func (a *OffersAdapter) RenderOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.RenderOfferParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// GetOffer is unimplemented; see OffersAdapter's doc comment.
-func (OffersAdapter) GetOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam) {
+// SendOffer is unimplemented; see the struct doc comment above — a separate ticket.
+func (a *OffersAdapter) SendOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.SendOfferParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// UpdateOffer is unimplemented; see OffersAdapter's doc comment.
-func (OffersAdapter) UpdateOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.UpdateOfferParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// ListOfferLineItems is unimplemented; see OffersAdapter's doc comment.
-func (OffersAdapter) ListOfferLineItems(w http.ResponseWriter, r *http.Request, idParam types.IdParam) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// CreateOfferLineItem is unimplemented; see OffersAdapter's doc comment.
-func (OffersAdapter) CreateOfferLineItem(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.CreateOfferLineItemParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// UpdateOfferLineItem is unimplemented; see OffersAdapter's doc comment.
-func (OffersAdapter) UpdateOfferLineItem(w http.ResponseWriter, r *http.Request, idParam types.IdParam, lineID openapi_types.UUID, params types.UpdateOfferLineItemParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// DeleteOfferLineItem is unimplemented; see OffersAdapter's doc comment.
-func (OffersAdapter) DeleteOfferLineItem(w http.ResponseWriter, r *http.Request, idParam types.IdParam, lineID openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// RegenerateOffer is unimplemented; see OffersAdapter's doc comment.
-func (OffersAdapter) RegenerateOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.RegenerateOfferParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// RenderOffer is unimplemented; see OffersAdapter's doc comment.
-func (OffersAdapter) RenderOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.RenderOfferParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// SendOffer is unimplemented; see OffersAdapter's doc comment.
-func (OffersAdapter) SendOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.SendOfferParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// AcceptOffer is unimplemented; see OffersAdapter's doc comment.
-func (OffersAdapter) AcceptOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.AcceptOfferParams) {
+// AcceptOffer is unimplemented; see the struct doc comment above — a separate ticket.
+func (a *OffersAdapter) AcceptOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.AcceptOfferParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }

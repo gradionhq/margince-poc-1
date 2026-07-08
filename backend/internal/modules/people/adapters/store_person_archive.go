@@ -38,6 +38,12 @@ func (s *PersonStore) Archive(ctx context.Context, id, workspaceID string) (doma
 				id, workspaceID); err != nil {
 				return fmt.Errorf("person archive cascade person_phone: %w", err)
 			}
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE attachment SET archived_at=now()
+				 WHERE entity_type='person' AND entity_id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
+				id, workspaceID); err != nil {
+				return fmt.Errorf("person archive attachment cascade: %w", err)
+			}
 			ea := crmaudit.EntryFromPrincipal(ctx, "archive", entityTypePerson, &id, nil, nil)
 			ea.WorkspaceID = workspaceID
 			if _, err := crmaudit.WriteTx(ctx, tx, ea); err != nil {

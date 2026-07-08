@@ -13,6 +13,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/gradionhq/margince/backend/internal/platform/blobstore"
 	platformconfig "github.com/gradionhq/margince/backend/internal/platform/config"
 )
 
@@ -43,7 +44,8 @@ var servedResources = map[string]bool{
 	"relationships": true, "activities": true, "records": true,
 	"record-grants": true, "custom-fields": true,
 	"products": true, "offer-templates": true,
-	"field-history": true,
+	"field-history": true, "attachments": true,
+	"offers": true,
 }
 
 // TestEveryServedContractOpIsRouted asserts every crm.yaml operation under a
@@ -175,7 +177,7 @@ func concretePath(p string) string {
 func buildTestMux(t *testing.T) *http.ServeMux {
 	t.Helper()
 	var db *sql.DB
-	return buildMux(context.Background(), db, platformconfig.Config{}, nil)
+	return buildMux(context.Background(), db, platformconfig.Config{}, nil, blobstore.NewMemoryStore())
 }
 
 // loadContractOps returns every (method, path, operationId) from crm.yaml.
