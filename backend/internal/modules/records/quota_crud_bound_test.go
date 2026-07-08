@@ -53,35 +53,63 @@ func auditCount(t *testing.T, db *sql.DB, entityID, action string) int {
 	return n
 }
 
-func TestQuotaStore_CreateGetList(t *testing.T) {
+// quotaFixture bundles one workspace's worth of quota-test scaffolding (db, store, a seeded
+// owner + team, a fixed 2024 period) — shared by every TestQuotaStore_* test below, which
+// previously each wrote this exact setup sequence out inline (SonarCloud new-code duplication).
+type quotaFixture struct {
+	db                     *sql.DB
+	ws                     string
+	ctx                    context.Context
+	store                  *records.QuotaStore
+	userID, teamID         string
+	periodStart, periodEnd time.Time
+}
+
+func newQuotaFixture(t *testing.T, teamName string) quotaFixture {
+	t.Helper()
 	db := pgtest.OpenTestDB(t)
 	ws := pgtest.NewWorkspaceSQL(t, db)
 	pgtest.SetRLS(t, db, ws)
-	ctx := pgtest.AppCtx(ws)
-	store := records.NewQuotaStore(db)
+	return quotaFixture{
+		db:          db,
+		ws:          ws,
+		ctx:         pgtest.AppCtx(ws),
+		store:       records.NewQuotaStore(db),
+		userID:      seedUser(t, db, ws),
+		teamID:      seedTeam(t, db, ws, teamName),
+		periodStart: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		periodEnd:   time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC),
+	}
+}
 
-	userID := seedUser(t, db, ws)
-	teamID := seedTeam(t, db, ws, "sales")
-	periodStart := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
-	periodEnd := time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC)
+// mustCreateOwnerQuota creates an owner-scoped (f.userID) EUR quota for the given target,
+// failing the test on error. Shared by every subtest that just needs "some quota to exist".
+func (f quotaFixture) mustCreateOwnerQuota(t *testing.T, target int64) records.Quota {
+	t.Helper()
+	q, err := f.store.Create(f.ctx, records.Quota{
+		WorkspaceID: f.ws,
+		OwnerID:     &f.userID,
+		PeriodStart: f.periodStart,
+		PeriodEnd:   f.periodEnd,
+		TargetMinor: target,
+		Currency:    "EUR",
+	})
+	if err != nil {
+		t.Fatalf("Create owner quota: %v", err)
+	}
+	return q
+}
+
+func TestQuotaStore_CreateGetList(t *testing.T) {
+	f := newQuotaFixture(t, "sales")
 
 	t.Run("create owner-only succeeds", func(t *testing.T) {
-		q, err := store.Create(ctx, records.Quota{
-			WorkspaceID: ws,
-			OwnerID:     &userID,
-			PeriodStart: periodStart,
-			PeriodEnd:   periodEnd,
-			TargetMinor: 10000000,
-			Currency:    "EUR",
-		})
-		if err != nil {
-			t.Fatalf("Create owner-only: %v", err)
-		}
+		q := f.mustCreateOwnerQuota(t, 10000000)
 		if q.ID == "" {
 			t.Error("id is empty")
 		}
-		if q.OwnerID == nil || *q.OwnerID != userID {
-			t.Errorf("owner_id = %v, want %s", q.OwnerID, userID)
+		if q.OwnerID == nil || *q.OwnerID != f.userID {
+			t.Errorf("owner_id = %v, want %s", q.OwnerID, f.userID)
 		}
 		if q.TeamID != nil {
 			t.Errorf("team_id = %v, want nil", q.TeamID)
@@ -95,41 +123,41 @@ func TestQuotaStore_CreateGetList(t *testing.T) {
 		if q.ArchivedAt != nil {
 			t.Errorf("archived_at = %v, want nil", q.ArchivedAt)
 		}
-		if auditCount(t, db, q.ID, "create") != 1 {
+		if auditCount(t, f.db, q.ID, "create") != 1 {
 			t.Error("expected exactly 1 create audit_log row")
 		}
 	})
 
 	t.Run("create team-only succeeds", func(t *testing.T) {
-		q, err := store.Create(ctx, records.Quota{
-			WorkspaceID: ws,
-			TeamID:      &teamID,
-			PeriodStart: periodStart,
-			PeriodEnd:   periodEnd,
+		q, err := f.store.Create(f.ctx, records.Quota{
+			WorkspaceID: f.ws,
+			TeamID:      &f.teamID,
+			PeriodStart: f.periodStart,
+			PeriodEnd:   f.periodEnd,
 			TargetMinor: 5000000,
 			Currency:    "USD",
 		})
 		if err != nil {
 			t.Fatalf("Create team-only: %v", err)
 		}
-		if q.TeamID == nil || *q.TeamID != teamID {
-			t.Errorf("team_id = %v, want %s", q.TeamID, teamID)
+		if q.TeamID == nil || *q.TeamID != f.teamID {
+			t.Errorf("team_id = %v, want %s", q.TeamID, f.teamID)
 		}
 		if q.OwnerID != nil {
 			t.Errorf("owner_id = %v, want nil", q.OwnerID)
 		}
-		if auditCount(t, db, q.ID, "create") != 1 {
+		if auditCount(t, f.db, q.ID, "create") != 1 {
 			t.Error("expected exactly 1 create audit_log row")
 		}
 	})
 
 	t.Run("create both-set returns ErrOwnerXorTeamRequired", func(t *testing.T) {
-		_, err := store.Create(ctx, records.Quota{
-			WorkspaceID: ws,
-			OwnerID:     &userID,
-			TeamID:      &teamID,
-			PeriodStart: periodStart,
-			PeriodEnd:   periodEnd,
+		_, err := f.store.Create(f.ctx, records.Quota{
+			WorkspaceID: f.ws,
+			OwnerID:     &f.userID,
+			TeamID:      &f.teamID,
+			PeriodStart: f.periodStart,
+			PeriodEnd:   f.periodEnd,
 			TargetMinor: 1,
 			Currency:    "EUR",
 		})
@@ -139,10 +167,10 @@ func TestQuotaStore_CreateGetList(t *testing.T) {
 	})
 
 	t.Run("create neither-set returns ErrOwnerXorTeamRequired", func(t *testing.T) {
-		_, err := store.Create(ctx, records.Quota{
-			WorkspaceID: ws,
-			PeriodStart: periodStart,
-			PeriodEnd:   periodEnd,
+		_, err := f.store.Create(f.ctx, records.Quota{
+			WorkspaceID: f.ws,
+			PeriodStart: f.periodStart,
+			PeriodEnd:   f.periodEnd,
 			TargetMinor: 1,
 			Currency:    "EUR",
 		})
@@ -152,28 +180,18 @@ func TestQuotaStore_CreateGetList(t *testing.T) {
 	})
 
 	t.Run("Get round-trips every field", func(t *testing.T) {
-		created, err := store.Create(ctx, records.Quota{
-			WorkspaceID: ws,
-			OwnerID:     &userID,
-			PeriodStart: periodStart,
-			PeriodEnd:   periodEnd,
-			TargetMinor: 20000000,
-			Currency:    "EUR",
-		})
-		if err != nil {
-			t.Fatalf("Create for Get test: %v", err)
-		}
-		got, err := store.Get(ctx, created.ID, ws)
+		created := f.mustCreateOwnerQuota(t, 20000000)
+		got, err := f.store.Get(f.ctx, created.ID, f.ws)
 		if err != nil {
 			t.Fatalf("Get: %v", err)
 		}
 		if got.ID != created.ID {
 			t.Errorf("id mismatch: got %s, want %s", got.ID, created.ID)
 		}
-		if got.WorkspaceID != ws {
+		if got.WorkspaceID != f.ws {
 			t.Errorf("workspace_id mismatch")
 		}
-		if got.OwnerID == nil || *got.OwnerID != userID {
+		if got.OwnerID == nil || *got.OwnerID != f.userID {
 			t.Errorf("owner_id mismatch: got %v", got.OwnerID)
 		}
 		if got.TargetMinor != 20000000 {
@@ -185,28 +203,18 @@ func TestQuotaStore_CreateGetList(t *testing.T) {
 	})
 
 	t.Run("Get nonexistent returns ErrNotFound", func(t *testing.T) {
-		_, err := store.Get(ctx, "00000000-0000-0000-0000-000000000000", ws)
+		_, err := f.store.Get(f.ctx, "00000000-0000-0000-0000-000000000000", f.ws)
 		if !errors.Is(err, errs.ErrNotFound) {
 			t.Errorf("Get nonexistent: err = %v, want ErrNotFound", err)
 		}
 	})
 
 	t.Run("Get archived returns ErrNotFound", func(t *testing.T) {
-		q, err := store.Create(ctx, records.Quota{
-			WorkspaceID: ws,
-			OwnerID:     &userID,
-			PeriodStart: periodStart,
-			PeriodEnd:   periodEnd,
-			TargetMinor: 1,
-			Currency:    "EUR",
-		})
-		if err != nil {
-			t.Fatalf("Create for archived Get: %v", err)
-		}
-		if _, err := store.Archive(ctx, q.ID, ws); err != nil {
+		q := f.mustCreateOwnerQuota(t, 1)
+		if _, err := f.store.Archive(f.ctx, q.ID, f.ws); err != nil {
 			t.Fatalf("Archive: %v", err)
 		}
-		_, err = store.Get(ctx, q.ID, ws)
+		_, err := f.store.Get(f.ctx, q.ID, f.ws)
 		if !errors.Is(err, errs.ErrNotFound) {
 			t.Errorf("Get archived: err = %v, want ErrNotFound", err)
 		}
@@ -214,18 +222,14 @@ func TestQuotaStore_CreateGetList(t *testing.T) {
 
 	t.Run("List paginates and filters", func(t *testing.T) {
 		// Fresh workspace for isolation.
-		ws2 := pgtest.NewWorkspaceSQL(t, db)
-		pgtest.SetRLS(t, db, ws2)
-		ctx2 := pgtest.AppCtx(ws2)
-		u2 := seedUser(t, db, ws2)
-		tm2 := seedTeam(t, db, ws2, "listteam")
+		f2 := newQuotaFixture(t, "listteam")
 
 		for i := 0; i < 3; i++ {
-			if _, err := store.Create(ctx2, records.Quota{
-				WorkspaceID: ws2,
-				OwnerID:     &u2,
-				PeriodStart: periodStart,
-				PeriodEnd:   periodEnd,
+			if _, err := f2.store.Create(f2.ctx, records.Quota{
+				WorkspaceID: f2.ws,
+				OwnerID:     &f2.userID,
+				PeriodStart: f2.periodStart,
+				PeriodEnd:   f2.periodEnd,
 				TargetMinor: int64(i + 1),
 				Currency:    "EUR",
 			}); err != nil {
@@ -233,11 +237,11 @@ func TestQuotaStore_CreateGetList(t *testing.T) {
 			}
 		}
 		// One team-scoped quota.
-		if _, err := store.Create(ctx2, records.Quota{
-			WorkspaceID: ws2,
-			TeamID:      &tm2,
-			PeriodStart: periodStart,
-			PeriodEnd:   periodEnd,
+		if _, err := f2.store.Create(f2.ctx, records.Quota{
+			WorkspaceID: f2.ws,
+			TeamID:      &f2.teamID,
+			PeriodStart: f2.periodStart,
+			PeriodEnd:   f2.periodEnd,
 			TargetMinor: 999,
 			Currency:    "EUR",
 		}); err != nil {
@@ -245,7 +249,7 @@ func TestQuotaStore_CreateGetList(t *testing.T) {
 		}
 
 		// Default list (all 4).
-		all, next, err := store.List(ctx2, ws2, "", 10, false, records.QuotaListFilter{})
+		all, next, err := f2.store.List(f2.ctx, f2.ws, "", 10, false, records.QuotaListFilter{})
 		if err != nil {
 			t.Fatalf("List all: %v", err)
 		}
@@ -257,7 +261,7 @@ func TestQuotaStore_CreateGetList(t *testing.T) {
 		}
 
 		// Filter by owner.
-		byOwner, _, err := store.List(ctx2, ws2, "", 10, false, records.QuotaListFilter{OwnerID: u2})
+		byOwner, _, err := f2.store.List(f2.ctx, f2.ws, "", 10, false, records.QuotaListFilter{OwnerID: f2.userID})
 		if err != nil {
 			t.Fatalf("List by owner: %v", err)
 		}
@@ -266,7 +270,7 @@ func TestQuotaStore_CreateGetList(t *testing.T) {
 		}
 
 		// Filter by team.
-		byTeam, _, err := store.List(ctx2, ws2, "", 10, false, records.QuotaListFilter{TeamID: tm2})
+		byTeam, _, err := f2.store.List(f2.ctx, f2.ws, "", 10, false, records.QuotaListFilter{TeamID: f2.teamID})
 		if err != nil {
 			t.Fatalf("List by team: %v", err)
 		}
@@ -275,7 +279,7 @@ func TestQuotaStore_CreateGetList(t *testing.T) {
 		}
 
 		// Pagination: limit=2 on 4 items → next cursor set.
-		page1, cursor2, err := store.List(ctx2, ws2, "", 2, false, records.QuotaListFilter{})
+		page1, cursor2, err := f2.store.List(f2.ctx, f2.ws, "", 2, false, records.QuotaListFilter{})
 		if err != nil {
 			t.Fatalf("List page1: %v", err)
 		}
@@ -285,7 +289,7 @@ func TestQuotaStore_CreateGetList(t *testing.T) {
 		if cursor2 == "" {
 			t.Error("cursor2 is empty, expected a next-page cursor")
 		}
-		page2, cursor3, err := store.List(ctx2, ws2, cursor2, 2, false, records.QuotaListFilter{})
+		page2, cursor3, err := f2.store.List(f2.ctx, f2.ws, cursor2, 2, false, records.QuotaListFilter{})
 		if err != nil {
 			t.Fatalf("List page2: %v", err)
 		}
@@ -299,30 +303,11 @@ func TestQuotaStore_CreateGetList(t *testing.T) {
 }
 
 func TestQuotaStore_Update(t *testing.T) {
-	db := pgtest.OpenTestDB(t)
-	ws := pgtest.NewWorkspaceSQL(t, db)
-	pgtest.SetRLS(t, db, ws)
-	ctx := pgtest.AppCtx(ws)
-	store := records.NewQuotaStore(db)
-
-	userID := seedUser(t, db, ws)
-	teamID := seedTeam(t, db, ws, "updateteam")
-	periodStart := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
-	periodEnd := time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC)
+	f := newQuotaFixture(t, "updateteam")
 
 	t.Run("valid If-Match succeeds", func(t *testing.T) {
-		q, err := store.Create(ctx, records.Quota{
-			WorkspaceID: ws,
-			OwnerID:     &userID,
-			PeriodStart: periodStart,
-			PeriodEnd:   periodEnd,
-			TargetMinor: 10000000,
-			Currency:    "EUR",
-		})
-		if err != nil {
-			t.Fatalf("Create: %v", err)
-		}
-		updated, err := store.Update(ctx, q.ID, ws, map[string]any{
+		q := f.mustCreateOwnerQuota(t, 10000000)
+		updated, err := f.store.Update(f.ctx, q.ID, f.ws, map[string]any{
 			"target_minor": int64(20000000),
 		}, q.Version)
 		if err != nil {
@@ -334,52 +319,32 @@ func TestQuotaStore_Update(t *testing.T) {
 		if updated.Version <= q.Version {
 			t.Errorf("version did not increment: old=%d new=%d", q.Version, updated.Version)
 		}
-		if auditCount(t, db, q.ID, "update") != 1 {
+		if auditCount(t, f.db, q.ID, "update") != 1 {
 			t.Error("expected exactly 1 update audit_log row")
 		}
 	})
 
 	t.Run("stale If-Match returns ErrVersionSkew", func(t *testing.T) {
-		q, err := store.Create(ctx, records.Quota{
-			WorkspaceID: ws,
-			OwnerID:     &userID,
-			PeriodStart: periodStart,
-			PeriodEnd:   periodEnd,
-			TargetMinor: 1,
-			Currency:    "EUR",
-		})
-		if err != nil {
-			t.Fatalf("Create: %v", err)
-		}
-		_, err = store.Update(ctx, q.ID, ws, map[string]any{"target_minor": int64(2)}, q.Version+1)
+		q := f.mustCreateOwnerQuota(t, 1)
+		_, err := f.store.Update(f.ctx, q.ID, f.ws, map[string]any{"target_minor": int64(2)}, q.Version+1)
 		if !errors.Is(err, errs.ErrVersionSkew) {
 			t.Errorf("stale If-Match: err = %v, want ErrVersionSkew", err)
 		}
 	})
 
 	t.Run("patching owner-scoped into both-set returns ErrOwnerXorTeamRequired and leaves row unchanged", func(t *testing.T) {
-		q, err := store.Create(ctx, records.Quota{
-			WorkspaceID: ws,
-			OwnerID:     &userID,
-			PeriodStart: periodStart,
-			PeriodEnd:   periodEnd,
-			TargetMinor: 1,
-			Currency:    "EUR",
-		})
-		if err != nil {
-			t.Fatalf("Create: %v", err)
-		}
+		q := f.mustCreateOwnerQuota(t, 1)
 		// Patch team_id without clearing owner_id → both set → rejected.
-		_, err = store.Update(ctx, q.ID, ws, map[string]any{"team_id": teamID}, 0)
+		_, err := f.store.Update(f.ctx, q.ID, f.ws, map[string]any{"team_id": f.teamID}, 0)
 		if !errors.Is(err, records.ErrOwnerXorTeamRequired) {
 			t.Errorf("both-set patch: err = %v, want ErrOwnerXorTeamRequired", err)
 		}
 		// Row must be unchanged.
-		after, err := store.Get(context.Background(), q.ID, ws)
+		after, err := f.store.Get(context.Background(), q.ID, f.ws)
 		if err != nil {
 			t.Fatalf("Get after rejected update: %v", err)
 		}
-		if after.OwnerID == nil || *after.OwnerID != userID {
+		if after.OwnerID == nil || *after.OwnerID != f.userID {
 			t.Error("owner_id was modified by rejected update")
 		}
 		if after.TeamID != nil {
@@ -388,20 +353,10 @@ func TestQuotaStore_Update(t *testing.T) {
 	})
 
 	t.Run("switching scope (owner→team) by clearing owner_id + setting team_id", func(t *testing.T) {
-		q, err := store.Create(ctx, records.Quota{
-			WorkspaceID: ws,
-			OwnerID:     &userID,
-			PeriodStart: periodStart,
-			PeriodEnd:   periodEnd,
-			TargetMinor: 1,
-			Currency:    "EUR",
-		})
-		if err != nil {
-			t.Fatalf("Create: %v", err)
-		}
-		updated, err := store.Update(ctx, q.ID, ws, map[string]any{
+		q := f.mustCreateOwnerQuota(t, 1)
+		updated, err := f.store.Update(f.ctx, q.ID, f.ws, map[string]any{
 			"owner_id": nil,
-			"team_id":  teamID,
+			"team_id":  f.teamID,
 		}, 0)
 		if err != nil {
 			t.Fatalf("scope switch: %v", err)
@@ -409,13 +364,13 @@ func TestQuotaStore_Update(t *testing.T) {
 		if updated.OwnerID != nil {
 			t.Errorf("owner_id after switch = %v, want nil", updated.OwnerID)
 		}
-		if updated.TeamID == nil || *updated.TeamID != teamID {
-			t.Errorf("team_id after switch = %v, want %s", updated.TeamID, teamID)
+		if updated.TeamID == nil || *updated.TeamID != f.teamID {
+			t.Errorf("team_id after switch = %v, want %s", updated.TeamID, f.teamID)
 		}
 	})
 
 	t.Run("update nonexistent returns ErrNotFound", func(t *testing.T) {
-		_, err := store.Update(ctx, "00000000-0000-0000-0000-000000000000", ws,
+		_, err := f.store.Update(f.ctx, "00000000-0000-0000-0000-000000000000", f.ws,
 			map[string]any{"target_minor": int64(1)}, 0)
 		if !errors.Is(err, errs.ErrNotFound) {
 			t.Errorf("update nonexistent: err = %v, want ErrNotFound", err)
@@ -424,99 +379,48 @@ func TestQuotaStore_Update(t *testing.T) {
 }
 
 func TestQuotaStore_Archive(t *testing.T) {
-	db := pgtest.OpenTestDB(t)
-	ws := pgtest.NewWorkspaceSQL(t, db)
-	pgtest.SetRLS(t, db, ws)
-	ctx := pgtest.AppCtx(ws)
-	store := records.NewQuotaStore(db)
-
-	userID := seedUser(t, db, ws)
-	periodStart := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
-	periodEnd := time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC)
+	f := newQuotaFixture(t, "archiveteam")
 
 	t.Run("Archive sets archived_at and returns entity", func(t *testing.T) {
-		q, err := store.Create(ctx, records.Quota{
-			WorkspaceID: ws,
-			OwnerID:     &userID,
-			PeriodStart: periodStart,
-			PeriodEnd:   periodEnd,
-			TargetMinor: 1,
-			Currency:    "EUR",
-		})
-		if err != nil {
-			t.Fatalf("Create: %v", err)
-		}
-		archived, err := store.Archive(ctx, q.ID, ws)
+		q := f.mustCreateOwnerQuota(t, 1)
+		archived, err := f.store.Archive(f.ctx, q.ID, f.ws)
 		if err != nil {
 			t.Fatalf("Archive: %v", err)
 		}
 		if archived.ArchivedAt == nil {
 			t.Error("archived_at is nil after Archive")
 		}
-		if auditCount(t, db, q.ID, "archive") != 1 {
+		if auditCount(t, f.db, q.ID, "archive") != 1 {
 			t.Error("expected exactly 1 archive audit_log row")
 		}
 	})
 
 	t.Run("Archive is idempotent", func(t *testing.T) {
-		q, err := store.Create(ctx, records.Quota{
-			WorkspaceID: ws,
-			OwnerID:     &userID,
-			PeriodStart: periodStart,
-			PeriodEnd:   periodEnd,
-			TargetMinor: 1,
-			Currency:    "EUR",
-		})
-		if err != nil {
-			t.Fatalf("Create: %v", err)
-		}
-		if _, err := store.Archive(ctx, q.ID, ws); err != nil {
+		q := f.mustCreateOwnerQuota(t, 1)
+		if _, err := f.store.Archive(f.ctx, q.ID, f.ws); err != nil {
 			t.Fatalf("first Archive: %v", err)
 		}
 		// Second archive should not error.
-		if _, err := store.Archive(ctx, q.ID, ws); err != nil {
+		if _, err := f.store.Archive(f.ctx, q.ID, f.ws); err != nil {
 			t.Fatalf("second Archive (idempotent): %v", err)
 		}
 		// Only one audit row (first archive only).
-		if auditCount(t, db, q.ID, "archive") != 1 {
-			t.Errorf("archive audit count = %d, want 1 (idempotent)", auditCount(t, db, q.ID, "archive"))
+		if got := auditCount(t, f.db, q.ID, "archive"); got != 1 {
+			t.Errorf("archive audit count = %d, want 1 (idempotent)", got)
 		}
 	})
 
 	t.Run("archived row excluded from default List, visible with include_archived=true", func(t *testing.T) {
-		ws2 := pgtest.NewWorkspaceSQL(t, db)
-		pgtest.SetRLS(t, db, ws2)
-		ctx2 := pgtest.AppCtx(ws2)
-		u2 := seedUser(t, db, ws2)
+		f2 := newQuotaFixture(t, "archivelistteam")
 
-		live, err := store.Create(ctx2, records.Quota{
-			WorkspaceID: ws2,
-			OwnerID:     &u2,
-			PeriodStart: periodStart,
-			PeriodEnd:   periodEnd,
-			TargetMinor: 100,
-			Currency:    "EUR",
-		})
-		if err != nil {
-			t.Fatalf("Create live: %v", err)
-		}
-		toArchive, err := store.Create(ctx2, records.Quota{
-			WorkspaceID: ws2,
-			OwnerID:     &u2,
-			PeriodStart: periodStart,
-			PeriodEnd:   periodEnd,
-			TargetMinor: 200,
-			Currency:    "EUR",
-		})
-		if err != nil {
-			t.Fatalf("Create to archive: %v", err)
-		}
-		if _, err := store.Archive(ctx2, toArchive.ID, ws2); err != nil {
+		live := f2.mustCreateOwnerQuota(t, 100)
+		toArchive := f2.mustCreateOwnerQuota(t, 200)
+		if _, err := f2.store.Archive(f2.ctx, toArchive.ID, f2.ws); err != nil {
 			t.Fatalf("Archive: %v", err)
 		}
 
 		// Default list excludes archived.
-		def, _, err := store.List(ctx2, ws2, "", 10, false, records.QuotaListFilter{})
+		def, _, err := f2.store.List(f2.ctx, f2.ws, "", 10, false, records.QuotaListFilter{})
 		if err != nil {
 			t.Fatalf("List default: %v", err)
 		}
@@ -525,7 +429,7 @@ func TestQuotaStore_Archive(t *testing.T) {
 		}
 
 		// include_archived includes both.
-		all, _, err := store.List(ctx2, ws2, "", 10, true, records.QuotaListFilter{})
+		all, _, err := f2.store.List(f2.ctx, f2.ws, "", 10, true, records.QuotaListFilter{})
 		if err != nil {
 			t.Fatalf("List include_archived: %v", err)
 		}

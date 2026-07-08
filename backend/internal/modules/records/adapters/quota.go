@@ -109,10 +109,6 @@ func scanQuota(row interface{ Scan(dest ...any) error }) (Quota, error) {
 	return q, nil
 }
 
-const quotaColumns = `id, workspace_id, owner_id, team_id,
-	period_start, period_end, target_minor, currency,
-	version, created_at, updated_at, archived_at`
-
 // Create inserts a quota row and its create audit_log entry in one workspace-scoped tx.
 // Rejects an invalid owner-XOR-team state before the INSERT.
 func (s *QuotaStore) Create(ctx context.Context, q Quota) (Quota, error) {
@@ -145,8 +141,12 @@ func (s *QuotaStore) Create(ctx context.Context, q Quota) (Quota, error) {
 func (s *QuotaStore) Get(ctx context.Context, id, workspaceID string) (Quota, error) {
 	var q Quota
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		// query is a single literal string (no concatenation/formatting) — mirrors the
+		// records/adapters record_visibility.go precedent (SonarCloud go:S2077).
 		row := tx.QueryRowContext(ctx, `
-			SELECT `+quotaColumns+`
+			SELECT id, workspace_id, owner_id, team_id,
+			       period_start, period_end, target_minor, currency,
+			       version, created_at, updated_at, archived_at
 			FROM quota WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
 			id, workspaceID)
 		var scanErr error
@@ -164,7 +164,9 @@ func (s *QuotaStore) getAny(ctx context.Context, id, workspaceID string) (Quota,
 	var q Quota
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		row := tx.QueryRowContext(ctx, `
-			SELECT `+quotaColumns+`
+			SELECT id, workspace_id, owner_id, team_id,
+			       period_start, period_end, target_minor, currency,
+			       version, created_at, updated_at, archived_at
 			FROM quota WHERE id=$1::uuid AND workspace_id=$2::uuid`,
 			id, workspaceID)
 		var scanErr error
@@ -180,35 +182,28 @@ func (s *QuotaStore) getAny(ctx context.Context, id, workspaceID string) (Quota,
 // List returns a cursor-paginated slice of quotas. When filter.OwnerID or filter.TeamID is
 // non-empty, only quotas matching that owner/team are returned. includeArchived toggles archived-row
 // visibility.
+//
+// The query is a single static string; every optional filter is applied via an always-bound
+// empty-string/boolean guard on the parameter (mirrors people/adapters/store_record_grant.go's
+// List — no WHERE text built at runtime; SonarCloud go:S2077).
 func (s *QuotaStore) List(ctx context.Context, workspaceID, cursor string, limit int, includeArchived bool, filter QuotaListFilter) ([]Quota, string, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
 	out := []Quota{}
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		args := []any{workspaceID, cursor, limit + 1}
-		n := 3
-		extraWhere := ""
-		if filter.OwnerID != "" {
-			n++
-			args = append(args, filter.OwnerID)
-			extraWhere += fmt.Sprintf(` AND owner_id=$%d::uuid`, n)
-		}
-		if filter.TeamID != "" {
-			n++
-			args = append(args, filter.TeamID)
-			extraWhere += fmt.Sprintf(` AND team_id=$%d::uuid`, n)
-		}
-		archiveClause := " AND archived_at IS NULL"
-		if includeArchived {
-			archiveClause = ""
-		}
+		args := []any{workspaceID, cursor, includeArchived, filter.OwnerID, filter.TeamID, limit + 1}
 		rows, err := tx.QueryContext(ctx, `
-			SELECT `+quotaColumns+`
+			SELECT id, workspace_id, owner_id, team_id,
+			       period_start, period_end, target_minor, currency,
+			       version, created_at, updated_at, archived_at
 			FROM quota
 			WHERE workspace_id=$1::uuid
-			  AND ($2 = '' OR id::text > $2)`+extraWhere+archiveClause+`
-			ORDER BY id LIMIT $3`, args...)
+			  AND ($2 = '' OR id::text > $2)
+			  AND ($3 OR archived_at IS NULL)
+			  AND ($4 = '' OR owner_id=$4::uuid)
+			  AND ($5 = '' OR team_id=$5::uuid)
+			ORDER BY id LIMIT $6`, args...)
 		if err != nil {
 			return err
 		}

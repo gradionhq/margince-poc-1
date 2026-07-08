@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // registers the postgres driver for database/sql
 
 	identitytransport "github.com/gradionhq/margince/backend/internal/modules/identity/transport"
 	"github.com/gradionhq/margince/backend/internal/modules/records"
@@ -217,6 +217,30 @@ func qhDecodeProblem(t *testing.T, rec *httptest.ResponseRecorder) qhProblemWire
 		t.Fatalf("decode problem: %v (body=%s)", err, rec.Body)
 	}
 	return p
+}
+
+// qhCreateQuota POSTs body to /quotas and returns the created quota's id, failing the test on
+// any non-201 response. Shared by every attainment-422 subtest below (SonarCloud new-code dedupe).
+func qhCreateQuota(t *testing.T, h http.Handler, ws, userID, body string) string {
+	t.Helper()
+	rec := qhDo(t, h, http.MethodPost, "/quotas", body, ws, userID)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("seed quota: %d %s", rec.Code, rec.Body)
+	}
+	return qhDecodeQuota(t, rec).ID
+}
+
+// qhAssertAttainment422 GETs quotaID's attainment and asserts a 422 with the given problem code.
+func qhAssertAttainment422(t *testing.T, h http.Handler, ws, userID, quotaID, wantCode string) {
+	t.Helper()
+	rec := qhDo(t, h, http.MethodGet, "/quotas/"+quotaID+"/attainment", "", ws, userID)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422 got %d: %s", rec.Code, rec.Body)
+	}
+	p := qhDecodeProblem(t, rec)
+	if p.Code != wantCode {
+		t.Errorf("code = %q, want %s", p.Code, wantCode)
+	}
 }
 
 // ---------- tests ----------
@@ -590,39 +614,15 @@ func TestQuotaHTTP_Attainment(t *testing.T) {
 	t.Run("target_minor=0 → 422 attainment_target_zero", func(t *testing.T) {
 		// target_minor=0 is valid in the DB but refused by Attainment before any deal query.
 		body := fmt.Sprintf(`{"owner_id":%q,"period_start":"2024-01-01","period_end":"2024-12-31","target_minor":0,"currency":"EUR"}`, userID)
-		createRec := qhDo(t, h, http.MethodPost, "/quotas", body, ws, userID)
-		if createRec.Code != http.StatusCreated {
-			t.Fatalf("seed zero-target quota: %d %s", createRec.Code, createRec.Body)
-		}
-		qID := qhDecodeQuota(t, createRec).ID
-
-		rec := qhDo(t, h, http.MethodGet, "/quotas/"+qID+"/attainment", "", ws, userID)
-		if rec.Code != http.StatusUnprocessableEntity {
-			t.Fatalf("want 422 got %d: %s", rec.Code, rec.Body)
-		}
-		p := qhDecodeProblem(t, rec)
-		if p.Code != "attainment_target_zero" {
-			t.Errorf("code = %q, want attainment_target_zero", p.Code)
-		}
+		qID := qhCreateQuota(t, h, ws, userID, body)
+		qhAssertAttainment422(t, h, ws, userID, qID, "attainment_target_zero")
 	})
 
 	t.Run("missing FX rate → 422 attainment_computation_failed", func(t *testing.T) {
 		// USD quota, no USD→EUR fx_rate seeded → FX lookup fails → 422.
 		body := fmt.Sprintf(`{"owner_id":%q,"period_start":"2024-01-01","period_end":"2024-12-31","target_minor":10000000,"currency":"USD"}`, userID)
-		createRec := qhDo(t, h, http.MethodPost, "/quotas", body, ws, userID)
-		if createRec.Code != http.StatusCreated {
-			t.Fatalf("seed USD quota: %d %s", createRec.Code, createRec.Body)
-		}
-		qID := qhDecodeQuota(t, createRec).ID
-
-		rec := qhDo(t, h, http.MethodGet, "/quotas/"+qID+"/attainment", "", ws, userID)
-		if rec.Code != http.StatusUnprocessableEntity {
-			t.Fatalf("want 422 got %d: %s", rec.Code, rec.Body)
-		}
-		p := qhDecodeProblem(t, rec)
-		if p.Code != "attainment_computation_failed" {
-			t.Errorf("code = %q, want attainment_computation_failed", p.Code)
-		}
+		qID := qhCreateQuota(t, h, ws, userID, body)
+		qhAssertAttainment422(t, h, ws, userID, qID, "attainment_computation_failed")
 	})
 
 	t.Run("nonexistent quota → 404", func(t *testing.T) {

@@ -13,6 +13,11 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/httpkit"
 )
 
+// dateLayout is the request-body date format for period_start/period_end (mirrors
+// handler_deal.go's ExpectedCloseDate parsing). Named once — used on create and on every
+// updated date field — to avoid repeating the literal (SonarCloud go:S1192).
+const dateLayout = "2006-01-02"
+
 type quotaStoreSeam interface {
 	Create(ctx context.Context, q records.Quota) (records.Quota, error)
 	Get(ctx context.Context, id, workspaceID string) (records.Quota, error)
@@ -74,12 +79,12 @@ func (h *QuotaHandler) create(w http.ResponseWriter, r *http.Request) {
 		httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
 		return
 	}
-	periodStart, err := time.Parse("2006-01-02", body.PeriodStart)
+	periodStart, err := time.Parse(dateLayout, body.PeriodStart)
 	if err != nil {
 		httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
 		return
 	}
-	periodEnd, err := time.Parse("2006-01-02", body.PeriodEnd)
+	periodEnd, err := time.Parse(dateLayout, body.PeriodEnd)
 	if err != nil {
 		httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
 		return
@@ -160,7 +165,7 @@ func (h *QuotaHandler) update(w http.ResponseWriter, r *http.Request, id string)
 				httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
 				return
 			}
-			if _, err := time.Parse("2006-01-02", s); err != nil {
+			if _, err := time.Parse(dateLayout, s); err != nil {
 				httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
 				return
 			}
