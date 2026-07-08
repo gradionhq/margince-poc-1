@@ -95,7 +95,7 @@ var adminPermissionsJSON = func() string {
 		"approval":                    all(platformauth.ActionRead, "decide"),
 		"workspace":                   map[string]any{"manage_members": map[string]any{"row_scope": "all"}},
 		"record_grant":                all(platformauth.ActionRead, platformauth.ActionCreate, platformauth.ActionArchive),
-		"custom_field":                all(platformauth.ActionRead, platformauth.ActionCreate),
+		"custom_field":                all(platformauth.ActionRead, platformauth.ActionCreate, platformauth.ActionUpdate),
 	}
 	b, err := json.Marshal(perms)
 	if err != nil {

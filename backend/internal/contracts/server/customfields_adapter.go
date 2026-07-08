@@ -8,13 +8,15 @@ import (
 )
 
 // CustomFieldsAdapter implements the CustomFields tag's slice of
-// types.ServerInterface. CreateCustomField delegates to the real governed
-// add-field engine's HTTP handler — cmd/api/routes.go wires the identical
-// *customfields.Handler instance onto the live mux for POST /custom-fields
-// (CF-T03), the same delegation shape OrganizationsAdapter/IdentityAdapter
-// use for their wired operations. The other three operations (list, rename,
-// retire) stay 501: CF-T02 contracted them, wiring them is a future
-// ticket's job (spec Out of scope).
+// types.ServerInterface. CreateCustomField/RenameCustomField/RetireCustomField/
+// UpdateCustomFieldOptions all delegate to the same real governed engine's
+// HTTP handler — cmd/api/routes.go wires the identical *customfields.Handler
+// instance onto the live mux for /custom-fields (CF-T03/CF-T04), the same
+// delegation shape ActivitiesAdapter uses for its wired operations: the
+// wrapped Handler re-parses the id (and any /retire, /options suffix) from
+// r.URL.Path itself, so this adapter needs no id-plumbing. ListCustomFields
+// stays 501 — CF-T02 contracted it, wiring it is a separate future ticket
+// (spec Out of scope).
 type CustomFieldsAdapter struct {
 	H *customfields.Handler
 }
@@ -29,12 +31,17 @@ func (a CustomFieldsAdapter) CreateCustomField(w http.ResponseWriter, r *http.Re
 	a.H.ServeHTTP(w, r)
 }
 
-// RenameCustomField is unimplemented; see CustomFieldsAdapter's doc comment.
+// RenameCustomField delegates to the wired handler; see the struct doc comment above.
 func (a CustomFieldsAdapter) RenameCustomField(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.RenameCustomFieldParams) {
-	w.WriteHeader(http.StatusNotImplemented)
+	a.H.ServeHTTP(w, r)
 }
 
-// RetireCustomField is unimplemented; see CustomFieldsAdapter's doc comment.
+// RetireCustomField delegates to the wired handler; see the struct doc comment above.
 func (a CustomFieldsAdapter) RetireCustomField(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.RetireCustomFieldParams) {
-	w.WriteHeader(http.StatusNotImplemented)
+	a.H.ServeHTTP(w, r)
+}
+
+// UpdateCustomFieldOptions delegates to the wired handler; see the struct doc comment above.
+func (a CustomFieldsAdapter) UpdateCustomFieldOptions(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.UpdateCustomFieldOptionsParams) {
+	a.H.ServeHTTP(w, r)
 }

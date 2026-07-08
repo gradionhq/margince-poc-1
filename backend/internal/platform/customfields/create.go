@@ -29,20 +29,21 @@ func (e *ErrValidation) Error() string { return "customfields: validation failed
 // (the codebase-wide convention: domain structs carry contract-matching
 // json tags rather than being converted into the oapi-codegen types package).
 type Created struct {
-	ID          string    `json:"id"`
-	WorkspaceID string    `json:"workspace_id"`
-	Object      string    `json:"object"`
-	Label       string    `json:"label"`
-	Slug        string    `json:"slug"`
-	Type        string    `json:"type"`
-	Status      string    `json:"status"`
-	ColumnName  string    `json:"column_name"`
-	Currency    *string   `json:"currency"`
-	Options     []string  `json:"options,omitempty"`
-	CreatedBy   string    `json:"created_by"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	Version     int64     `json:"version"`
+	ID          string     `json:"id"`
+	WorkspaceID string     `json:"workspace_id"`
+	Object      string     `json:"object"`
+	Label       string     `json:"label"`
+	Slug        string     `json:"slug"`
+	Type        string     `json:"type"`
+	Status      string     `json:"status"`
+	ArchivedAt  *time.Time `json:"archived_at"`
+	ColumnName  string     `json:"column_name"`
+	Currency    *string    `json:"currency"`
+	Options     []string   `json:"options,omitempty"`
+	CreatedBy   string     `json:"created_by"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	Version     int64      `json:"version"`
 }
 
 // Create is the single chokepoint allowed to run a runtime ALTER TABLE
@@ -112,9 +113,9 @@ func Create(ctx context.Context, db *sql.DB, spec FieldSpec) (Created, error) {
 	row := tx.QueryRowContext(ctx, `
 		INSERT INTO custom_field (workspace_id, object, slug, label, type, column_name, currency, options, created_by)
 		VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9::uuid)
-		RETURNING id, workspace_id, object, slug, label, type, status, column_name, currency, options, created_by, created_at, updated_at, version`,
+		RETURNING id, workspace_id, object, slug, label, type, status, archived_at, column_name, currency, options, created_by, created_at, updated_at, version`,
 		p.TenantID, spec.Object, slug, spec.Label, spec.Type, columnName, currency, optionsJSON, p.UserID)
-	if err := row.Scan(&out.ID, &out.WorkspaceID, &out.Object, &out.Slug, &out.Label, &out.Type, &out.Status,
+	if err := row.Scan(&out.ID, &out.WorkspaceID, &out.Object, &out.Slug, &out.Label, &out.Type, &out.Status, &out.ArchivedAt,
 		&out.ColumnName, &out.Currency, &optionsRaw, &out.CreatedBy, &out.CreatedAt, &out.UpdatedAt, &out.Version); err != nil {
 		return Created{}, fmt.Errorf("customfields: insert catalog row: %w", err)
 	}

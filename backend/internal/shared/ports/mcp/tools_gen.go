@@ -80,6 +80,7 @@ var GeneratedTools = []GeneratedTool{
 	{OperationID: "sendOffer", Verb: "send_offer", RecordType: "offer", Tier: TierYellow, Resolver: ""},
 	{OperationID: "unlinkConversation", Verb: "unlink_conversation", RecordType: "", Tier: TierYellow, Resolver: ""},
 	{OperationID: "updateActivity", Verb: "update_record", RecordType: "activity", Tier: TierGreen, Resolver: ""},
+	{OperationID: "updateCustomFieldOptions", Verb: "update_record", RecordType: "custom_field", Tier: TierYellow, Resolver: ""},
 	{OperationID: "updateDeal", Verb: "update_record", RecordType: "deal", Tier: TierGreen, Resolver: ""},
 	{OperationID: "updateDraftingAsset", Verb: "update_record", RecordType: "drafting_asset", Tier: TierGreen, Resolver: ""},
 	{OperationID: "updateLead", Verb: "update_record", RecordType: "lead", Tier: TierGreen, Resolver: ""},
