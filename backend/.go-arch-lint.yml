@@ -262,15 +262,17 @@ deps:
     mayDependOn: [prov, ids]
   recordsports:
     mayDependOn: [recordsdomain]
+  # recordsadapters also holds RollupStore (RD-T04, RD-FORM-1), the records-depth read side's
+  # hierarchy roll-up: it reuses deals' FX/weighting funcs and auth.LoadRolePermissions for the
+  # row_scope RBAC lookup.
   recordsadapters:
-    mayDependOn: [recordsdomain, recordsports, errs, ids, database, audit, sqlutil, activities, activitiesdomain, crmctx, session]
+    mayDependOn: [recordsdomain, recordsports, errs, ids, database, audit, sqlutil, activities, activitiesdomain, crmctx, session, deals, auth]
     canUse: [pq]
   # records is the records domain module: it covers attachment metadata/presigned blob-store
-  # access (RD-DDL-1) AND the records-depth read side, the hierarchy roll-up (RD-T04's
-  # RollupStore), which reuses deals' FX/weighting funcs, database.WithWorkspaceTx, and
-  # auth.LoadRolePermissions + session types for the row_scope RBAC lookup.
+  # access (RD-DDL-1) AND re-exports the records-depth read side (RollupStore et al.) whose
+  # implementation lives in recordsadapters.
   records:
-    mayDependOn: [recordsdomain, recordsadapters, recordstransport, blobstore, deals, dealsdomain, errs, database, auth, session]
+    mayDependOn: [recordsdomain, recordsadapters, recordstransport, blobstore]
     canUse: [pq]
   recordstransport:
     mayDependOn: [records, recordsadapters, recordsdomain, recordsports, crmctx, errs, httpkit, prov, blobstore, auth]

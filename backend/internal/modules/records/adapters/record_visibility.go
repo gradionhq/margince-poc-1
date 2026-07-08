@@ -40,7 +40,7 @@ func RecordVisible(ctx context.Context, db *sql.DB, workspaceID, entityType, ent
 	if !ok {
 		return false, nil
 	}
-	if rule.RowScope == "all" {
+	if rule.RowScope == rowScopeAll {
 		return true, nil
 	}
 	// activity has no per-row ownership model anywhere in this codebase, and
