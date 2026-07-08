@@ -30,6 +30,8 @@ CREATE TABLE custom_field (
 
 CREATE UNIQUE INDEX idx_custom_field_slug ON custom_field (workspace_id, object, slug);
 CREATE UNIQUE INDEX idx_custom_field_col  ON custom_field (workspace_id, object, column_name);
+CREATE INDEX idx_custom_field_workspace  ON custom_field (workspace_id);
+CREATE INDEX idx_custom_field_created_by ON custom_field (created_by);
 
 CREATE TRIGGER trg_custom_field_touch BEFORE UPDATE ON custom_field
   FOR EACH ROW EXECUTE FUNCTION touch_versioned();
