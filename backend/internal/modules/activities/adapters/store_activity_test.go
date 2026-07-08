@@ -80,8 +80,10 @@ func TestActivityStore_Create_IdempotentReplay_SameSourceKey(t *testing.T) {
 	wsID, _, _ := seedActivityStoreFixtures(t, db, "idem")
 	s := NewActivityStore(db)
 
-	base := domain.Activity{WorkspaceID: wsID, Kind: "email", OccurredAt: time.Now(),
-		SourceSystem: strPtr("gmail"), SourceID: strPtr("msg-1"), Source: "email:msg-1", CapturedBy: "agent:capture"}
+	base := domain.Activity{
+		WorkspaceID: wsID, Kind: "email", OccurredAt: time.Now(),
+		SourceSystem: strPtr("gmail"), SourceID: strPtr("msg-1"), Source: "email:msg-1", CapturedBy: "agent:capture",
+	}
 
 	first, created1, err := s.Create(context.Background(), base)
 	if err != nil {
@@ -130,8 +132,10 @@ func TestActivityStore_Create_MultiEntityLinks(t *testing.T) {
 	wsID, personID, dealID := seedActivityStoreFixtures(t, db, "links")
 	s := NewActivityStore(db)
 
-	a := domain.Activity{WorkspaceID: wsID, Kind: "note", OccurredAt: time.Now(), Source: "ui", CapturedBy: "human:test",
-		Links: []domain.ActivityLink{{EntityType: "person", EntityID: personID}, {EntityType: "deal", EntityID: dealID}}}
+	a := domain.Activity{
+		WorkspaceID: wsID, Kind: "note", OccurredAt: time.Now(), Source: "ui", CapturedBy: "human:test",
+		Links: []domain.ActivityLink{{EntityType: "person", EntityID: personID}, {EntityType: "deal", EntityID: dealID}},
+	}
 	created, _, err := s.Create(context.Background(), a)
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -173,8 +177,10 @@ func TestActivityStore_Create_StoresRawOffHotPath(t *testing.T) {
 	wsID, _, _ := seedActivityStoreFixtures(t, db, "raw")
 	s := NewActivityStore(db)
 
-	a := domain.Activity{WorkspaceID: wsID, Kind: "email", OccurredAt: time.Now(), Source: "email:x", CapturedBy: "agent:capture",
-		Raw: map[string]any{"messageId": "abc123", "headers": map[string]any{"from": "a@b.com"}}}
+	a := domain.Activity{
+		WorkspaceID: wsID, Kind: "email", OccurredAt: time.Now(), Source: "email:x", CapturedBy: "agent:capture",
+		Raw: map[string]any{"messageId": "abc123", "headers": map[string]any{"from": "a@b.com"}},
+	}
 	created, _, err := s.Create(context.Background(), a)
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -217,7 +223,8 @@ func TestActivityStore_Create_TaskFieldOnNonTaskKind_Rejected(t *testing.T) {
 
 	due := time.Now().Add(24 * time.Hour)
 	_, _, err := s.Create(context.Background(), domain.Activity{
-		WorkspaceID: wsID, Kind: "note", OccurredAt: time.Now(), DueAt: &due, Source: "ui", CapturedBy: "human:test"})
+		WorkspaceID: wsID, Kind: "note", OccurredAt: time.Now(), DueAt: &due, Source: "ui", CapturedBy: "human:test",
+	})
 	if !errors.Is(err, errs.ErrFieldNotValidForKind) {
 		t.Fatalf("expected ErrFieldNotValidForKind, got %v", err)
 	}
@@ -237,7 +244,8 @@ func TestActivityStore_Create_TaskKind_AllowsTaskFields(t *testing.T) {
 
 	due := time.Now().Add(24 * time.Hour)
 	_, created, err := s.Create(context.Background(), domain.Activity{
-		WorkspaceID: wsID, Kind: "task", OccurredAt: time.Now(), DueAt: &due, Source: "ui", CapturedBy: "human:test"})
+		WorkspaceID: wsID, Kind: "task", OccurredAt: time.Now(), DueAt: &due, Source: "ui", CapturedBy: "human:test",
+	})
 	if err != nil || !created {
 		t.Fatalf("expected a task activity with due_at to succeed: created=%v err=%v", created, err)
 	}
@@ -323,7 +331,8 @@ func TestActivityStore_Update_TaskFieldOnNonTaskKind_Rejected(t *testing.T) {
 	s := NewActivityStore(db)
 
 	created, _, err := s.Create(context.Background(), domain.Activity{
-		WorkspaceID: wsID, Kind: "note", OccurredAt: time.Now(), Source: "ui", CapturedBy: "human:test"})
+		WorkspaceID: wsID, Kind: "note", OccurredAt: time.Now(), Source: "ui", CapturedBy: "human:test",
+	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -340,7 +349,8 @@ func TestActivityStore_Update_TaskKind_AllowsIsDone(t *testing.T) {
 	s := NewActivityStore(db)
 
 	created, _, err := s.Create(context.Background(), domain.Activity{
-		WorkspaceID: wsID, Kind: "task", OccurredAt: time.Now(), Source: "ui", CapturedBy: "human:test"})
+		WorkspaceID: wsID, Kind: "task", OccurredAt: time.Now(), Source: "ui", CapturedBy: "human:test",
+	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
