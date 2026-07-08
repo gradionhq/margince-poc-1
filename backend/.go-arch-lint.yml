@@ -266,9 +266,9 @@ deps:
     mayDependOn: [recordsdomain, recordsports, errs, ids, database, audit, sqlutil, activities, activitiesdomain, crmctx, session]
     canUse: [pq]
   records:
-    mayDependOn: [recordsdomain, recordsadapters, recordstransport]
+    mayDependOn: [recordsdomain, recordsadapters, recordstransport, blobstore]
   recordstransport:
-    mayDependOn: [records, recordsadapters, recordsdomain, recordsports, crmctx, errs, httpkit, prov, blobstore]
+    mayDependOn: [records, recordsadapters, recordsdomain, recordsports, crmctx, errs, httpkit, prov, blobstore, auth]
   relsdomain:
     mayDependOn: [prov, ids]
   relsports:
