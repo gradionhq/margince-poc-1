@@ -4,23 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 
 	"github.com/gradionhq/margince/backend/internal/modules/records/domain"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/ports/session"
 )
-
-// entityOwnerTable maps each owned entity type to its DB table name — a fixed
-// literal set, never interpolated from caller input (mirrors the discipline in
-// activities/adapters' insertLink switch). Only person/organization/deal/lead
-// have an owner_id column; activity is handled separately below.
-var entityOwnerTable = map[string]string{
-	domain.EntityTypePerson:       "person",
-	domain.EntityTypeOrganization: "organization",
-	domain.EntityTypeDeal:         "deal",
-	domain.EntityTypeLead:         "lead",
-}
 
 // RecordVisible reports whether principal can see the bound record
 // (entityType/entityID) per perms's row_scope for that object — Constraint
@@ -49,14 +37,24 @@ func RecordVisible(ctx context.Context, db *sql.DB, workspaceID, entityType, ent
 	if entityType == domain.EntityTypeActivity {
 		return true, nil
 	}
-	table, ok := entityOwnerTable[entityType]
-	if !ok {
+	// query is one of a fixed set of literal (non-interpolated) SELECTs, one
+	// per owned entity type — mirrors the discipline in activities/adapters'
+	// insertLink switch, so no query text is built from runtime data.
+	var query string
+	switch entityType {
+	case domain.EntityTypePerson:
+		query = `SELECT owner_id FROM person WHERE id=$1 AND workspace_id=$2`
+	case domain.EntityTypeOrganization:
+		query = `SELECT owner_id FROM organization WHERE id=$1 AND workspace_id=$2`
+	case domain.EntityTypeDeal:
+		query = `SELECT owner_id FROM deal WHERE id=$1 AND workspace_id=$2`
+	case domain.EntityTypeLead:
+		query = `SELECT owner_id FROM lead WHERE id=$1 AND workspace_id=$2`
+	default:
 		return false, nil
 	}
 	var ownerID sql.NullString
-	err := db.QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT owner_id FROM %s WHERE id=$1 AND workspace_id=$2`, table),
-		entityID, workspaceID).Scan(&ownerID)
+	err := db.QueryRowContext(ctx, query, entityID, workspaceID).Scan(&ownerID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
