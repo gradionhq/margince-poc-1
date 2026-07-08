@@ -331,7 +331,7 @@ deps:
   # deals' FX/weighting funcs, database.WithWorkspaceTx, and auth.LoadRolePermissions +
   # session types for the row_scope RBAC lookup (self-contained tree-walk + aggregation).
   records:
-    mayDependOn: [deals, dealsdomain, errs, database, auth, session]
+    mayDependOn: [deals, dealsdomain, errs, database, auth, session, audithistorydomain]
     canUse: [pq]
   # people domain uses strengthkern for PersonStrengthFrom; peopledomain composes
   # ActivityRef/deal/relationship refs (intentional cross-module composite-reference sharing).
