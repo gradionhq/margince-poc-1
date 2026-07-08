@@ -75,7 +75,7 @@ func TestDealHandler_Get_Composite360(t *testing.T) {
 	if _, err := relStore.Create(ctx, relationships.Relationship{WorkspaceID: dealGetTestWS, Kind: "deal_stakeholder", DealID: &created.ID, PersonID: &person.ID, Role: strPtrGet("champion"), Source: p0.Source, CapturedBy: p0.CapturedBy}); err != nil {
 		t.Fatalf("seed stakeholder: %v", err)
 	}
-	act, err := activityStore.Create(ctx, activities.Activity{WorkspaceID: dealGetTestWS, Kind: "call", OccurredAt: time.Now(), Source: p0.Source, CapturedBy: p0.CapturedBy})
+	act, _, err := activityStore.Create(ctx, activities.Activity{WorkspaceID: dealGetTestWS, Kind: "call", OccurredAt: time.Now(), Source: p0.Source, CapturedBy: p0.CapturedBy})
 	if err != nil {
 		t.Fatalf("seed activity: %v", err)
 	}
