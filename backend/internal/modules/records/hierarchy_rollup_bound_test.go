@@ -74,7 +74,7 @@ func seedActivity(t *testing.T, db *sql.DB, ws, orgID string, occurredAt time.Ti
 
 // seedFXRate inserts one fx_rate row (from->to on rateDate) backing the weighted-pipeline
 // AsOfFXRate lookup.
-func seedFXRate(t *testing.T, db *sql.DB, ws, from, to, rate string, rateDate time.Time) {
+func seedFXRate(t *testing.T, db *sql.DB, ws, from, to, rate string, rateDate time.Time) { //nolint:unparam // from is "USD" across current test suite; kept general for future pairs
 	t.Helper()
 	if _, err := db.Exec(
 		`INSERT INTO fx_rate (workspace_id, from_currency, to_currency, rate, rate_date)
