@@ -435,10 +435,21 @@ func (s *ActivityStore) applyUpdate(ctx context.Context, tx *sql.Tx, id, workspa
 // Archive soft-deletes an activity (sets archived_at).
 func (s *ActivityStore) Archive(ctx context.Context, id, workspaceID string) (domain.Activity, error) {
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx,
+		res, err := tx.ExecContext(ctx,
 			`UPDATE activity SET archived_at=now() WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
 			id, workspaceID)
-		return err
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE attachment SET archived_at=now()
+				 WHERE entity_type='activity' AND entity_id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
+				id, workspaceID); err != nil {
+				return fmt.Errorf("activity archive attachment cascade: %w", err)
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return domain.Activity{}, err

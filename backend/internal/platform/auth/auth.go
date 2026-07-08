@@ -107,6 +107,7 @@ const (
 	ObjCustomField   = "custom_field"
 	ObjProduct       = "product"
 	ObjOfferTemplate = "offer_template"
+	ObjAttachment    = "attachment"
 	ObjOffer         = "offer"
 )
 

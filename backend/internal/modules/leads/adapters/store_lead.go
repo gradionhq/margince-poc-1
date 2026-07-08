@@ -269,6 +269,12 @@ func (s *LeadStore) Archive(ctx context.Context, id, workspaceID string) (domain
 		if err := emitLeadEvent(ctx, tx, workspaceID, "lead.disqualified", id); err != nil {
 			return domain.Lead{}, err
 		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE attachment SET archived_at=now()
+			 WHERE entity_type='lead' AND entity_id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
+			id, workspaceID); err != nil {
+			return domain.Lead{}, fmt.Errorf("lead archive attachment cascade: %w", err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return domain.Lead{}, err

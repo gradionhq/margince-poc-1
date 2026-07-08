@@ -22,6 +22,7 @@ import (
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	crmgdpr "github.com/gradionhq/margince/backend/internal/modules/gdpr"
 	platformauth "github.com/gradionhq/margince/backend/internal/platform/auth"
+	"github.com/gradionhq/margince/backend/internal/platform/blobstore"
 	platformconfig "github.com/gradionhq/margince/backend/internal/platform/config"
 	"github.com/gradionhq/margince/backend/internal/platform/events"
 	platformlogger "github.com/gradionhq/margince/backend/internal/platform/logger"
@@ -118,7 +119,18 @@ func serve(cfg platformconfig.Config) error {
 
 	go sampleGauges(ctx, db)
 
-	mux := buildMux(ctx, db, cfg, riverClient)
+	var blob blobstore.Store
+	if cfg.BlobstoreEnabled {
+		bs, err := blobstore.NewMinIOStore(ctx, cfg.Blobstore)
+		if err != nil {
+			return fmt.Errorf("blobstore: %w", err)
+		}
+		blob = bs
+	} else {
+		blob = blobstore.NewMemoryStore()
+	}
+
+	mux := buildMux(ctx, db, cfg, riverClient, blob)
 
 	slog.Info("listening", "addr", cfg.Addr)
 	srv := &http.Server{
