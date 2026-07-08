@@ -38,6 +38,8 @@ type AllOperations struct {
 	InvoicesAdapter
 	LeadsAdapter
 	ListsAdapter
+	OfferTemplatesAdapter
+	OffersAdapter
 	ProductsAdapter
 	ReportsAdapter
 	SearchAdapter
