@@ -46,24 +46,6 @@ func seedWorkspace(t *testing.T, db *sql.DB) string {
 	return wsID
 }
 
-// withGUC runs fn inside a transaction with app.workspace_id set.
-func withGUC(t *testing.T, db *sql.DB, wsID string, fn func(*sql.Tx)) {
-	t.Helper()
-	tx, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("begin tx: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(context.Background(),
-		`SELECT set_config('app.workspace_id', $1, true)`, wsID); err != nil {
-		t.Fatalf("set guc: %v", err)
-	}
-	fn(tx)
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-}
-
 // seedDeal inserts one minimal valid deal row and returns its id — used to
 // prove GATE-AI-2 (zero domain-table writes pre-decision).
 func seedDeal(t *testing.T, db *sql.DB, wsID string) string {

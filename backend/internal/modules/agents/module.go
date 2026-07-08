@@ -96,3 +96,11 @@ func HandleDecided(ctx context.Context, tx DBExec, repo crmapprovals.Repository,
 func BuildBatch(in []RoutedProposal, producerErr error) RunResult {
 	return app.BuildBatch(in, producerErr)
 }
+
+// PassInput carries every seam a future runner injects into one pass.
+type PassInput = app.PassInput
+
+// RunPass is the pass a future agent-runner will call as a function.
+func RunPass(ctx context.Context, tx DBExec, in PassInput) (RunResult, error) {
+	return app.RunPass(ctx, tx, in)
+}

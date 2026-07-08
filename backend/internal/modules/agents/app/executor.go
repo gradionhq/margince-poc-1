@@ -67,12 +67,12 @@ func HandleDecided(ctx context.Context, tx ports.DBExec, repo crmapprovals.Repos
 		Action:      "update",
 		EntityType:  "approval_item",
 		EntityID:    &item.ID,
-		After:       map[string]any{"action_type": actionType, "decision": payload.Decision, "rollback_handle": rollbackHandle},
+		After:       map[string]any{keyActionType: actionType, "decision": payload.Decision, keyRollbackHandle: rollbackHandle},
 	}); err != nil {
 		return fmt.Errorf("agents handle decided: audit: %w", err)
 	}
 
-	out, _ := json.Marshal(map[string]any{"action_type": actionType, "item_id": item.ID, "rollback_handle": rollbackHandle})
+	out, _ := json.Marshal(map[string]any{keyActionType: actionType, "item_id": item.ID, keyRollbackHandle: rollbackHandle})
 	if err := emitter.Emit(ctx, tx, TopicOvernightApplied, item.WorkspaceID, item.ID, out); err != nil {
 		return fmt.Errorf("agents handle decided: emit: %w", err)
 	}

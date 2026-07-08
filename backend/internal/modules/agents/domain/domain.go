@@ -59,6 +59,7 @@ type AssembledView struct {
 // never padding, never a silently-partial pass.
 type RunState string
 
+// RunNormal/RunQuiet/RunDegraded distinguish the three honest pass outcomes.
 const (
 	RunNormal   RunState = "normal"   // a non-empty ranked, grouped batch
 	RunQuiet    RunState = "quiet"    // zero proposals survived the gate — an honest "nothing needed"

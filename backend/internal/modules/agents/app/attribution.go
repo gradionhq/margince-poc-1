@@ -12,6 +12,12 @@ const ActorOvernight = "agent:overnight"
 // module's own approval.requested/decided bookkeeping events.
 const TopicOvernightApplied = "overnight.applied"
 
+// keyActionType/keyRollbackHandle are JSON keys used in audit/event payloads.
+const (
+	keyActionType     = "action_type"
+	keyRollbackHandle = "rollback_handle"
+)
+
 // entityTypeFromTarget splits a "kind:id" TargetEntity into its entity type
 // (e.g. "deal:abc" -> "deal") for the audit_log entity_type column.
 func entityTypeFromTarget(target string) string {

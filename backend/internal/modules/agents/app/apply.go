@@ -40,12 +40,12 @@ func ApplyGreen(ctx context.Context, tx ports.DBExec, effector ports.Effector, e
 		ActorID:     ActorOvernight,
 		Action:      "update",
 		EntityType:  entityTypeFromTarget(p.TargetEntity),
-		After:       map[string]any{"action_type": p.ActionType, "target": p.TargetEntity, "rollback_handle": rollbackHandle, "tier": "green"},
+		After:       map[string]any{keyActionType: p.ActionType, "target": p.TargetEntity, keyRollbackHandle: rollbackHandle, "tier": "green"},
 	}); err != nil {
 		return "", fmt.Errorf("agents apply green: audit: %w", err)
 	}
 
-	payload, _ := json.Marshal(map[string]any{"action_type": p.ActionType, "target": p.TargetEntity, "rollback_handle": rollbackHandle})
+	payload, _ := json.Marshal(map[string]any{keyActionType: p.ActionType, "target": p.TargetEntity, keyRollbackHandle: rollbackHandle})
 	if err := emitter.Emit(ctx, tx, TopicOvernightApplied, p.WorkspaceID, entityIDFromTarget(p.TargetEntity), payload); err != nil {
 		return "", fmt.Errorf("agents apply green: emit: %w", err)
 	}

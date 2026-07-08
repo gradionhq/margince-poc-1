@@ -7,9 +7,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
-
 	"github.com/gradionhq/margince/backend/internal/modules/agents/app"
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 )
 
 func TestHandleDecided_ApprovedExecutesAndAudits(t *testing.T) {
