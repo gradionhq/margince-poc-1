@@ -141,14 +141,26 @@ func scanOfferTemplate(row interface{ Scan(dest ...any) error }) (domain.OfferTe
 	return t, nil
 }
 
+const offerTemplateGetQuery = `SELECT ` + offerTemplateSelectCols + `
+	FROM offer_template WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`
+
+const offerTemplateGetAnyQuery = `SELECT ` + offerTemplateSelectCols + `
+	FROM offer_template WHERE id=$1::uuid AND workspace_id=$2::uuid`
+
+const offerTemplateListQueryLive = `SELECT ` + offerTemplateSelectCols + `
+	FROM offer_template WHERE workspace_id=$1::uuid AND ($2 = '' OR id::text > $2) AND archived_at IS NULL
+	ORDER BY id LIMIT $3`
+
+const offerTemplateListQueryAll = `SELECT ` + offerTemplateSelectCols + `
+	FROM offer_template WHERE workspace_id=$1::uuid AND ($2 = '' OR id::text > $2)
+	ORDER BY id LIMIT $3`
+
 // Get returns one live offer_template by id, workspace-scoped; ErrNotFound if
 // absent or archived.
 func (s *OfferTemplateStore) Get(ctx context.Context, id, workspaceID string) (domain.OfferTemplate, error) {
 	var t domain.OfferTemplate
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		row := tx.QueryRowContext(ctx, `SELECT `+offerTemplateSelectCols+`
-			FROM offer_template WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
-			id, workspaceID)
+		row := tx.QueryRowContext(ctx, offerTemplateGetQuery, id, workspaceID)
 		var scanErr error
 		t, scanErr = scanOfferTemplate(row)
 		return scanErr
@@ -166,14 +178,11 @@ func (s *OfferTemplateStore) List(ctx context.Context, workspaceID, cursor strin
 	}
 	out := []domain.OfferTemplate{}
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		where := ""
+		query := offerTemplateListQueryAll
 		if !includeArchived {
-			where = " AND archived_at IS NULL"
+			query = offerTemplateListQueryLive
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT `+offerTemplateSelectCols+`
-			FROM offer_template WHERE workspace_id=$1::uuid AND ($2 = '' OR id::text > $2)`+where+`
-			ORDER BY id LIMIT $3`,
-			workspaceID, cursor, limit+1)
+		rows, err := tx.QueryContext(ctx, query, workspaceID, cursor, limit+1)
 		if err != nil {
 			return err
 		}
@@ -198,29 +207,47 @@ func (s *OfferTemplateStore) List(ctx context.Context, workspaceID, cursor strin
 	return out, next, nil
 }
 
+// resolveLocaleForUpdate returns the locale that will be in effect after the
+// update: the incoming "locale" field if present, otherwise the row's
+// current locale (looked up on demand).
+func (s *OfferTemplateStore) resolveLocaleForUpdate(ctx context.Context, tx *sql.Tx, workspaceID, id string, updates map[string]any) (string, error) {
+	if l, ok := updates["locale"].(string); ok {
+		return l, nil
+	}
+	var locale string
+	err := tx.QueryRowContext(ctx, `SELECT locale FROM offer_template WHERE id=$1::uuid AND workspace_id=$2::uuid`,
+		id, workspaceID).Scan(&locale)
+	return locale, err
+}
+
+// validateUpdateConflicts pre-checks Update's incoming fields for a live
+// name collision and, when the update sets is_default=true, a same-locale
+// default collision — both ahead of the UPDATE itself.
+func (s *OfferTemplateStore) validateUpdateConflicts(ctx context.Context, tx *sql.Tx, workspaceID, id string, updates map[string]any) error {
+	if nameVal, ok := updates["name"].(string); ok && nameVal != "" {
+		if err := s.checkNameConflict(ctx, tx, workspaceID, id, nameVal); err != nil {
+			return err
+		}
+	}
+	if isDefaultVal, ok := updates["is_default"].(bool); ok && isDefaultVal {
+		locale, err := s.resolveLocaleForUpdate(ctx, tx, workspaceID, id, updates)
+		if err != nil {
+			return err
+		}
+		if err := s.checkDefaultConflict(ctx, tx, workspaceID, id, locale, true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Update applies a bounded partial update (COALESCE) with standard If-Match
 // optimistic concurrency. Rejects a live name collision or same-locale
 // default collision (both pre-checked) before executing the UPDATE.
 func (s *OfferTemplateStore) Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (domain.OfferTemplate, error) {
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		if nameVal, ok := updates["name"].(string); ok && nameVal != "" {
-			if err := s.checkNameConflict(ctx, tx, workspaceID, id, nameVal); err != nil {
-				return err
-			}
-		}
-		if isDefaultVal, ok := updates["is_default"].(bool); ok && isDefaultVal {
-			locale := ""
-			if l, ok := updates["locale"].(string); ok {
-				locale = l
-			} else {
-				if err := tx.QueryRowContext(ctx, `SELECT locale FROM offer_template WHERE id=$1::uuid AND workspace_id=$2::uuid`,
-					id, workspaceID).Scan(&locale); err != nil {
-					return err
-				}
-			}
-			if err := s.checkDefaultConflict(ctx, tx, workspaceID, id, locale, true); err != nil {
-				return err
-			}
+		if err := s.validateUpdateConflicts(ctx, tx, workspaceID, id, updates); err != nil {
+			return err
 		}
 		var layoutParam any
 		if l, ok := updates["layout"]; ok {
@@ -291,8 +318,7 @@ func (s *OfferTemplateStore) Archive(ctx context.Context, id, workspaceID string
 func (s *OfferTemplateStore) getAny(ctx context.Context, id, workspaceID string) (domain.OfferTemplate, error) {
 	var t domain.OfferTemplate
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		row := tx.QueryRowContext(ctx, `SELECT `+offerTemplateSelectCols+`
-			FROM offer_template WHERE id=$1::uuid AND workspace_id=$2::uuid`, id, workspaceID)
+		row := tx.QueryRowContext(ctx, offerTemplateGetAnyQuery, id, workspaceID)
 		var scanErr error
 		t, scanErr = scanOfferTemplate(row)
 		return scanErr

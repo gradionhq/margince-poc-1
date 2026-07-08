@@ -146,6 +146,20 @@ func scanProduct(row interface{ Scan(dest ...any) error }) (domain.Product, erro
 	return p, err
 }
 
+const productGetQuery = `SELECT ` + productSelectCols + `
+	FROM product WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`
+
+const productGetAnyQuery = `SELECT ` + productSelectCols + `
+	FROM product WHERE id=$1::uuid AND workspace_id=$2::uuid`
+
+const productListQueryLive = `SELECT ` + productSelectCols + `
+	FROM product WHERE workspace_id=$1::uuid AND ($2 = '' OR id::text > $2) AND archived_at IS NULL
+	ORDER BY id LIMIT $3`
+
+const productListQueryAll = `SELECT ` + productSelectCols + `
+	FROM product WHERE workspace_id=$1::uuid AND ($2 = '' OR id::text > $2)
+	ORDER BY id LIMIT $3`
+
 // Get returns one live product by id, workspace-scoped; ErrNotFound if absent
 // or archived (archived rows stay reachable via List's include_archived=true,
 // not via Get — neither getProduct nor archiveProduct documents an
@@ -153,9 +167,7 @@ func scanProduct(row interface{ Scan(dest ...any) error }) (domain.Product, erro
 func (s *ProductStore) Get(ctx context.Context, id, workspaceID string) (domain.Product, error) {
 	var p domain.Product
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		row := tx.QueryRowContext(ctx, `SELECT `+productSelectCols+`
-			FROM product WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
-			id, workspaceID)
+		row := tx.QueryRowContext(ctx, productGetQuery, id, workspaceID)
 		var scanErr error
 		p, scanErr = scanProduct(row)
 		return scanErr
@@ -174,14 +186,11 @@ func (s *ProductStore) List(ctx context.Context, workspaceID, cursor string, lim
 	}
 	out := []domain.Product{}
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		where := ""
+		query := productListQueryAll
 		if !includeArchived {
-			where = " AND archived_at IS NULL"
+			query = productListQueryLive
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT `+productSelectCols+`
-			FROM product WHERE workspace_id=$1::uuid AND ($2 = '' OR id::text > $2)`+where+`
-			ORDER BY id LIMIT $3`,
-			workspaceID, cursor, limit+1)
+		rows, err := tx.QueryContext(ctx, query, workspaceID, cursor, limit+1)
 		if err != nil {
 			return err
 		}
@@ -206,18 +215,29 @@ func (s *ProductStore) List(ctx context.Context, workspaceID, cursor string, lim
 	return out, next, nil
 }
 
+// checkSKUConflictOnUpdate pre-checks Update's incoming "sku" field (if
+// present and non-empty) for a live collision with another row, ahead of the
+// UPDATE itself.
+func (s *ProductStore) checkSKUConflictOnUpdate(ctx context.Context, tx *sql.Tx, workspaceID, id string, updates map[string]any) error {
+	skuVal, ok := updates["sku"]
+	if !ok {
+		return nil
+	}
+	skuStr, ok := skuVal.(string)
+	if !ok || skuStr == "" {
+		return nil
+	}
+	return s.checkSKUConflict(ctx, tx, workspaceID, id, &skuStr)
+}
+
 // Update applies a bounded partial update (COALESCE — see plan's Global
 // Constraints on the crm.yaml PUT-semantics doc contradiction) using
 // standard If-Match optimistic concurrency. Rejects a live SKU collision
 // with another row (409, pre-checked) before executing the UPDATE.
 func (s *ProductStore) Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (domain.Product, error) {
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		if skuVal, ok := updates["sku"]; ok {
-			if skuStr, ok := skuVal.(string); ok && skuStr != "" {
-				if err := s.checkSKUConflict(ctx, tx, workspaceID, id, &skuStr); err != nil {
-					return err
-				}
-			}
+		if err := s.checkSKUConflictOnUpdate(ctx, tx, workspaceID, id, updates); err != nil {
+			return err
 		}
 		res, err := tx.ExecContext(ctx, `
 			UPDATE product
@@ -296,8 +316,7 @@ func (s *ProductStore) Archive(ctx context.Context, id, workspaceID string) (dom
 func (s *ProductStore) getAny(ctx context.Context, id, workspaceID string) (domain.Product, error) {
 	var p domain.Product
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		row := tx.QueryRowContext(ctx, `SELECT `+productSelectCols+`
-			FROM product WHERE id=$1::uuid AND workspace_id=$2::uuid`, id, workspaceID)
+		row := tx.QueryRowContext(ctx, productGetAnyQuery, id, workspaceID)
 		var scanErr error
 		p, scanErr = scanProduct(row)
 		return scanErr

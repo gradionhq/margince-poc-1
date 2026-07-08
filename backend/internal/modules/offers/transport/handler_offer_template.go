@@ -8,7 +8,6 @@ import (
 
 	"github.com/gradionhq/margince/backend/internal/modules/offers/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/offers/domain"
-	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/httpkit"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
@@ -30,21 +29,7 @@ func NewOfferTemplateHandler(store offerTemplateStoreSeam) *OfferTemplateHandler
 }
 
 func (h *OfferTemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	id := httpkit.PathID(r.URL.Path, "/offer-templates")
-	switch {
-	case r.Method == http.MethodGet && id == "":
-		h.list(w, r)
-	case r.Method == http.MethodPost && id == "":
-		h.create(w, r)
-	case r.Method == http.MethodGet && id != "":
-		h.get(w, r, id)
-	case r.Method == http.MethodPut && id != "":
-		h.update(w, r, id)
-	case r.Method == http.MethodDelete && id != "":
-		h.archive(w, r, id)
-	default:
-		http.NotFound(w, r)
-	}
+	dispatchCRUD(w, r, "/offer-templates", h.list, h.create, h.get, h.update, h.archive)
 }
 
 type createOfferTemplateBody struct {
@@ -108,32 +93,12 @@ func (h *OfferTemplateHandler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *OfferTemplateHandler) get(w http.ResponseWriter, r *http.Request, id string) {
-	wsID := httpkit.WorkspaceID(r)
-	t, err := h.store.Get(r.Context(), id, wsID)
-	if errors.Is(err, errs.ErrNotFound) {
-		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
-		return
-	}
-	if err != nil {
-		httpkit.JSONError(w, err)
-		return
-	}
-	httpkit.JSONOK(w, t)
+	t, err := h.store.Get(r.Context(), id, httpkit.WorkspaceID(r))
+	writeGetResult(w, t, err)
 }
 
 func (h *OfferTemplateHandler) list(w http.ResponseWriter, r *http.Request) {
-	wsID, ok := httpkit.RequireWorkspace(w, r)
-	if !ok {
-		return
-	}
-	q := r.URL.Query()
-	includeArchived := q.Get("include_archived") == "true"
-	items, next, err := h.store.List(r.Context(), wsID, q.Get("cursor"), httpkit.QueryLimit(r, 20), includeArchived)
-	if err != nil {
-		httpkit.JSONError(w, err)
-		return
-	}
-	httpkit.JSONOK(w, httpkit.PageResponse(items, next))
+	listResults(w, r, h.store.List)
 }
 
 func (h *OfferTemplateHandler) update(w http.ResponseWriter, r *http.Request, id string) {
@@ -156,15 +121,6 @@ func (h *OfferTemplateHandler) update(w http.ResponseWriter, r *http.Request, id
 }
 
 func (h *OfferTemplateHandler) archive(w http.ResponseWriter, r *http.Request, id string) {
-	wsID := httpkit.WorkspaceID(r)
-	t, err := h.store.Archive(r.Context(), id, wsID)
-	if errors.Is(err, errs.ErrNotFound) {
-		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
-		return
-	}
-	if err != nil {
-		httpkit.JSONError(w, err)
-		return
-	}
-	httpkit.JSONOK(w, t)
+	t, err := h.store.Archive(r.Context(), id, httpkit.WorkspaceID(r))
+	writeGetResult(w, t, err)
 }

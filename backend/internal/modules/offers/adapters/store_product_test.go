@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // registers the postgres driver for database/sql
 
 	"github.com/gradionhq/margince/backend/internal/modules/offers/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/offers/domain"

@@ -8,7 +8,6 @@ import (
 
 	"github.com/gradionhq/margince/backend/internal/modules/offers/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/offers/domain"
-	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/httpkit"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
@@ -30,21 +29,7 @@ func NewProductHandler(store productStoreSeam) *ProductHandler {
 }
 
 func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	id := httpkit.PathID(r.URL.Path, "/products")
-	switch {
-	case r.Method == http.MethodGet && id == "":
-		h.list(w, r)
-	case r.Method == http.MethodPost && id == "":
-		h.create(w, r)
-	case r.Method == http.MethodGet && id != "":
-		h.get(w, r, id)
-	case r.Method == http.MethodPut && id != "":
-		h.update(w, r, id)
-	case r.Method == http.MethodDelete && id != "":
-		h.archive(w, r, id)
-	default:
-		http.NotFound(w, r)
-	}
+	dispatchCRUD(w, r, "/products", h.list, h.create, h.get, h.update, h.archive)
 }
 
 type createProductBody struct {
@@ -102,32 +87,12 @@ func (h *ProductHandler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProductHandler) get(w http.ResponseWriter, r *http.Request, id string) {
-	wsID := httpkit.WorkspaceID(r)
-	p, err := h.store.Get(r.Context(), id, wsID)
-	if errors.Is(err, errs.ErrNotFound) {
-		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
-		return
-	}
-	if err != nil {
-		httpkit.JSONError(w, err)
-		return
-	}
-	httpkit.JSONOK(w, p)
+	p, err := h.store.Get(r.Context(), id, httpkit.WorkspaceID(r))
+	writeGetResult(w, p, err)
 }
 
 func (h *ProductHandler) list(w http.ResponseWriter, r *http.Request) {
-	wsID, ok := httpkit.RequireWorkspace(w, r)
-	if !ok {
-		return
-	}
-	q := r.URL.Query()
-	includeArchived := q.Get("include_archived") == "true"
-	items, next, err := h.store.List(r.Context(), wsID, q.Get("cursor"), httpkit.QueryLimit(r, 20), includeArchived)
-	if err != nil {
-		httpkit.JSONError(w, err)
-		return
-	}
-	httpkit.JSONOK(w, httpkit.PageResponse(items, next))
+	listResults(w, r, h.store.List)
 }
 
 func (h *ProductHandler) update(w http.ResponseWriter, r *http.Request, id string) {
@@ -156,15 +121,6 @@ func (h *ProductHandler) update(w http.ResponseWriter, r *http.Request, id strin
 }
 
 func (h *ProductHandler) archive(w http.ResponseWriter, r *http.Request, id string) {
-	wsID := httpkit.WorkspaceID(r)
-	p, err := h.store.Archive(r.Context(), id, wsID)
-	if errors.Is(err, errs.ErrNotFound) {
-		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
-		return
-	}
-	if err != nil {
-		httpkit.JSONError(w, err)
-		return
-	}
-	httpkit.JSONOK(w, p)
+	p, err := h.store.Archive(r.Context(), id, httpkit.WorkspaceID(r))
+	writeGetResult(w, p, err)
 }

@@ -92,9 +92,9 @@ func TestOfferTemplateHandler_Create_Valid_Returns201(t *testing.T) {
 	h := NewOfferTemplateHandler(store)
 
 	body := map[string]any{
-		"name":       "Standard DE",
-		"layout":     map[string]any{"logo_ref": nil},
-		"source":     "test",
+		"name":        "Standard DE",
+		"layout":      map[string]any{"logo_ref": nil},
+		"source":      "test",
 		"captured_by": "human:test",
 	}
 	bodyBytes, _ := json.Marshal(body)
@@ -106,7 +106,7 @@ func TestOfferTemplateHandler_Create_Valid_Returns201(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201, body=%s", w.Code, w.Body.String())
 	}
-	if loc := w.Header().Get("Location"); loc == "" {
+	if w.Header().Get("Location") == "" {
 		t.Fatal("expected Location header")
 	}
 }
@@ -130,10 +130,7 @@ func TestOfferTemplateHandler_Create_DuplicateName_Returns409(t *testing.T) {
 	if w.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409, body=%s", w.Code, w.Body.String())
 	}
-	var respBody map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &respBody); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
+	respBody := decodeJSONBody(t, w)
 	if code, ok := respBody["code"].(string); !ok || code != "offer_template_name_duplicate" {
 		t.Fatalf("expected code=offer_template_name_duplicate, got %v", respBody["code"])
 	}
@@ -159,10 +156,7 @@ func TestOfferTemplateHandler_Create_DefaultConflict_Returns409(t *testing.T) {
 	if w.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409, body=%s", w.Code, w.Body.String())
 	}
-	var respBody map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &respBody); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
+	respBody := decodeJSONBody(t, w)
 	if code, ok := respBody["code"].(string); !ok || code != "offer_template_default_conflict" {
 		t.Fatalf("expected code=offer_template_default_conflict, got %v", respBody["code"])
 	}
@@ -180,10 +174,7 @@ func TestOfferTemplateHandler_List_Empty_Returns200(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
-	var respBody map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &respBody); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
+	respBody := decodeJSONBody(t, w)
 	if data, ok := respBody["data"]; ok && data != nil {
 		if items, ok := data.([]any); !ok || len(items) != 0 {
 			t.Fatalf("expected empty data array, got %v", respBody["data"])
@@ -206,10 +197,7 @@ func TestOfferTemplateHandler_Archive_Returns200(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
-	var respBody map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &respBody); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
+	respBody := decodeJSONBody(t, w)
 	if archivedAt, ok := respBody["archived_at"]; !ok || archivedAt == nil {
 		t.Fatalf("expected archived_at set in response, got %v", respBody)
 	}

@@ -100,11 +100,11 @@ func TestProductHandler_Create_Valid_Returns201(t *testing.T) {
 	h := NewProductHandler(store)
 
 	body := map[string]any{
-		"name":               "Consulting Day",
-		"unit_price_minor":   150000,
-		"currency":           "EUR",
-		"source":             "test",
-		"captured_by":        "human:test",
+		"name":             "Consulting Day",
+		"unit_price_minor": 150000,
+		"currency":         "EUR",
+		"source":           "test",
+		"captured_by":      "human:test",
 	}
 	bodyBytes, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/products", bytes.NewReader(bodyBytes))
@@ -115,13 +115,10 @@ func TestProductHandler_Create_Valid_Returns201(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201, body=%s", w.Code, w.Body.String())
 	}
-	if loc := w.Header().Get("Location"); loc == "" {
+	if w.Header().Get("Location") == "" {
 		t.Fatal("expected Location header")
 	}
-	var respBody map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &respBody); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
+	respBody := decodeJSONBody(t, w)
 	if unitPrice, ok := respBody["unit_price_minor"].(float64); !ok || int64(unitPrice) != 150000 {
 		t.Fatalf("expected unit_price_minor=150000 as exact int64, got %v", respBody["unit_price_minor"])
 	}
@@ -170,10 +167,7 @@ func TestProductHandler_Create_DuplicateSKU_Returns409(t *testing.T) {
 	if w.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409, body=%s", w.Code, w.Body.String())
 	}
-	var respBody map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &respBody); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
+	respBody := decodeJSONBody(t, w)
 	if code, ok := respBody["code"].(string); !ok || code != "product_sku_duplicate" {
 		t.Fatalf("expected code=product_sku_duplicate, got %v", respBody["code"])
 	}
@@ -194,10 +188,7 @@ func TestProductHandler_List_Empty_Returns200(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
-	var respBody map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &respBody); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
+	respBody := decodeJSONBody(t, w)
 	if data, ok := respBody["data"]; ok && data != nil {
 		if items, ok := data.([]any); !ok || len(items) != 0 {
 			t.Fatalf("expected empty data array, got %v", respBody["data"])
@@ -223,10 +214,7 @@ func TestProductHandler_Update_VersionSkew_Returns409(t *testing.T) {
 	if w.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409, body=%s", w.Code, w.Body.String())
 	}
-	var respBody map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &respBody); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
+	respBody := decodeJSONBody(t, w)
 	if code, ok := respBody["code"].(string); !ok || code != "version_skew" {
 		t.Fatalf("expected code=version_skew, got %v", respBody["code"])
 	}
@@ -249,10 +237,7 @@ func TestProductHandler_Archive_Returns200(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
-	var respBody map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &respBody); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
+	respBody := decodeJSONBody(t, w)
 	if archivedAt, ok := respBody["archived_at"]; !ok || archivedAt == nil {
 		t.Fatalf("expected archived_at set in response, got %v", respBody)
 	}
