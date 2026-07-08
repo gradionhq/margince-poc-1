@@ -6,17 +6,19 @@ Verification of migration 000073 (attachment, quota, bulk_operation tables) agai
 
 - **Command (auto):**
   ```bash
-  ls backend/migrations/ | tail -3
+  ls backend/migrations/ | tail -4
   ```
 
 - **Expected:**
   ```
-  000071_offers_and_products.down.sql
-  000071_offers_and_products.up.sql
+  000072_custom_field_catalog.down.sql
+  000072_custom_field_catalog.up.sql
   000073_records_depth_schema.down.sql
   000073_records_depth_schema.up.sql
   ```
-  Exactly one migration pair numbered 000073 for records-depth schema; no migration 000072.
+  Exactly one migration pair numbered 000073 for records-depth schema. The 000072_custom_field_catalog
+  pair belongs to the sibling ticket cf-t02, not this one — RD-T03 is numbered 000073 precisely
+  because 000072 was already taken.
 
 ## Step 2: Apply migration and verify table structure
 
