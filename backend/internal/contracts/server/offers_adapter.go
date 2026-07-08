@@ -53,3 +53,23 @@ func (OffersAdapter) UpdateOfferLineItem(w http.ResponseWriter, r *http.Request,
 func (OffersAdapter) DeleteOfferLineItem(w http.ResponseWriter, r *http.Request, idParam types.IdParam, lineID openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
+
+// RegenerateOffer is unimplemented; see OffersAdapter's doc comment.
+func (OffersAdapter) RegenerateOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.RegenerateOfferParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RenderOffer is unimplemented; see OffersAdapter's doc comment.
+func (OffersAdapter) RenderOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.RenderOfferParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// SendOffer is unimplemented; see OffersAdapter's doc comment.
+func (OffersAdapter) SendOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.SendOfferParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// AcceptOffer is unimplemented; see OffersAdapter's doc comment.
+func (OffersAdapter) AcceptOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.AcceptOfferParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
