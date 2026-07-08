@@ -25,33 +25,29 @@ func seedRelinkPerson(t *testing.T, db *sql.DB, wsID, tag string) string {
 	return id
 }
 
-func countActivityRelinkAudit(t *testing.T, db *sql.DB, activityID string) int {
+// scalarCount runs a `SELECT count(*) ...` query and returns the scalar result,
+// failing the test on error; it backs the count* helpers below.
+func scalarCount(t *testing.T, db *sql.DB, label, query string, args ...any) int {
 	t.Helper()
 	var n int
-	if err := db.QueryRow(`SELECT count(*) FROM audit_log WHERE entity_type='activity' AND entity_id=$1::uuid AND action='activity_relink'`,
-		activityID).Scan(&n); err != nil {
-		t.Fatalf("count audit_log: %v", err)
+	if err := db.QueryRow(query, args...).Scan(&n); err != nil {
+		t.Fatalf("count %s: %v", label, err)
 	}
 	return n
+}
+
+func countActivityRelinkAudit(t *testing.T, db *sql.DB, activityID string) int {
+	return scalarCount(t, db, "audit_log",
+		`SELECT count(*) FROM audit_log WHERE entity_type='activity' AND entity_id=$1::uuid AND action='activity_relink'`, activityID)
 }
 
 func countActivityEventOutbox(t *testing.T, db *sql.DB, activityID string) int {
-	t.Helper()
-	var n int
-	if err := db.QueryRow(`SELECT count(*) FROM event_outbox WHERE entity_id=$1::uuid`, activityID).Scan(&n); err != nil {
-		t.Fatalf("count event_outbox: %v", err)
-	}
-	return n
+	return scalarCount(t, db, "event_outbox", `SELECT count(*) FROM event_outbox WHERE entity_id=$1::uuid`, activityID)
 }
 
 func countActivityLinksByType(t *testing.T, db *sql.DB, activityID, entityType string) int {
-	t.Helper()
-	var n int
-	if err := db.QueryRow(`SELECT count(*) FROM activity_link WHERE activity_id=$1::uuid AND entity_type=$2`,
-		activityID, entityType).Scan(&n); err != nil {
-		t.Fatalf("count activity_link: %v", err)
-	}
-	return n
+	return scalarCount(t, db, "activity_link",
+		`SELECT count(*) FROM activity_link WHERE activity_id=$1::uuid AND entity_type=$2`, activityID, entityType)
 }
 
 func TestActivityStore_Relink_AddsFreshLink(t *testing.T) {
