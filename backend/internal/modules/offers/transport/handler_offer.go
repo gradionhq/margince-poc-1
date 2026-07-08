@@ -14,6 +14,15 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
+// pathPrefixOffers and pathSegmentLineItems are the two path literals this
+// handler's suffix-routing repeatedly matches/strips (SonarCloud "define a
+// constant instead of duplicating this literal" finding) — extracted once
+// here rather than repeated inline at every routing call site.
+const (
+	pathPrefixOffers     = "/offers"
+	pathSegmentLineItems = "/line-items"
+)
+
 type offerStoreSeam interface {
 	Create(ctx context.Context, o domain.Offer) (domain.Offer, error)
 	Get(ctx context.Context, id, workspaceID string) (domain.Offer, error)
@@ -45,8 +54,8 @@ func NewOfferHandler(offers offerStoreSeam, lineItems offerLineItemStoreSeam) *O
 func (h *OfferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	switch {
-	case strings.HasPrefix(path, "/deals/") && strings.HasSuffix(path, "/offers"):
-		dealID := httpkit.PathID(strings.TrimSuffix(path, "/offers"), "/deals")
+	case strings.HasPrefix(path, "/deals/") && strings.HasSuffix(path, pathPrefixOffers):
+		dealID := httpkit.PathID(strings.TrimSuffix(path, pathPrefixOffers), "/deals")
 		switch r.Method {
 		case http.MethodGet:
 			h.listForDeal(w, r, dealID)
@@ -55,7 +64,7 @@ func (h *OfferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.NotFound(w, r)
 		}
-	case strings.Contains(path, "/line-items"):
+	case strings.Contains(path, pathSegmentLineItems):
 		h.serveLineItems(w, r, path)
 	default:
 		h.serveOffer(w, r, path)
@@ -63,7 +72,7 @@ func (h *OfferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *OfferHandler) serveOffer(w http.ResponseWriter, r *http.Request, path string) {
-	id := httpkit.PathID(path, "/offers")
+	id := httpkit.PathID(path, pathPrefixOffers)
 	switch {
 	case r.Method == http.MethodGet && id != "":
 		h.get(w, r, id)
@@ -75,9 +84,9 @@ func (h *OfferHandler) serveOffer(w http.ResponseWriter, r *http.Request, path s
 }
 
 func (h *OfferHandler) serveLineItems(w http.ResponseWriter, r *http.Request, path string) {
-	idx := strings.Index(path, "/line-items")
-	offerID := httpkit.PathID(path[:idx], "/offers")
-	rest := strings.TrimPrefix(strings.TrimPrefix(path[idx:], "/line-items"), "/")
+	idx := strings.Index(path, pathSegmentLineItems)
+	offerID := httpkit.PathID(path[:idx], pathPrefixOffers)
+	rest := strings.TrimPrefix(strings.TrimPrefix(path[idx:], pathSegmentLineItems), "/")
 	switch {
 	case rest == "" && r.Method == http.MethodGet:
 		h.listLineItems(w, r, offerID)

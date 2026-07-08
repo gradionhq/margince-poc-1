@@ -182,12 +182,36 @@ func (s *OfferStore) Create(ctx context.Context, o domain.Offer) (domain.Offer, 
 	return s.Get(ctx, o.ID, o.WorkspaceID)
 }
 
-const offerSelectCols = `
+// The queries below spell out the full offer column list literally (rather
+// than sharing it via a `+`-concatenated const) so SonarCloud's go:S2077
+// rule — which traces a global identifier back through its own declaration —
+// finds no concatenation to flag on any of these (see ProductStore's
+// analogous comment in store_product.go).
+const offerGetQuery = `SELECT
 	id, workspace_id, deal_id, offer_number, revision, status, currency, buyer_org_id,
 	buyer_snapshot, issuer_snapshot, valid_until, intro_text, terms_text,
 	net_minor, tax_minor, gross_minor, fx_rate_to_base, fx_rate_date,
 	template_id, pdf_asset_ref, accepted_at, version, source, captured_by,
-	created_at, updated_at, archived_at`
+	created_at, updated_at, archived_at
+	FROM offer WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`
+
+const offerListQueryAll = `SELECT
+	id, workspace_id, deal_id, offer_number, revision, status, currency, buyer_org_id,
+	buyer_snapshot, issuer_snapshot, valid_until, intro_text, terms_text,
+	net_minor, tax_minor, gross_minor, fx_rate_to_base, fx_rate_date,
+	template_id, pdf_asset_ref, accepted_at, version, source, captured_by,
+	created_at, updated_at, archived_at
+	FROM offer WHERE workspace_id=$1::uuid AND deal_id=$2::uuid AND ($3 = '' OR id::text < $3)
+	ORDER BY id DESC LIMIT $4`
+
+const offerListQueryLive = `SELECT
+	id, workspace_id, deal_id, offer_number, revision, status, currency, buyer_org_id,
+	buyer_snapshot, issuer_snapshot, valid_until, intro_text, terms_text,
+	net_minor, tax_minor, gross_minor, fx_rate_to_base, fx_rate_date,
+	template_id, pdf_asset_ref, accepted_at, version, source, captured_by,
+	created_at, updated_at, archived_at
+	FROM offer WHERE workspace_id=$1::uuid AND deal_id=$2::uuid AND ($3 = '' OR id::text < $3) AND archived_at IS NULL
+	ORDER BY id DESC LIMIT $4`
 
 func scanOffer(row interface{ Scan(dest ...any) error }) (domain.Offer, error) {
 	var o domain.Offer
@@ -210,9 +234,7 @@ func scanOffer(row interface{ Scan(dest ...any) error }) (domain.Offer, error) {
 func (s *OfferStore) Get(ctx context.Context, id, workspaceID string) (domain.Offer, error) {
 	var o domain.Offer
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		row := tx.QueryRowContext(ctx, `SELECT `+offerSelectCols+`
-			FROM offer WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
-			id, workspaceID)
+		row := tx.QueryRowContext(ctx, offerGetQuery, id, workspaceID)
 		var scanErr error
 		o, scanErr = scanOffer(row)
 		return scanErr
@@ -235,14 +257,11 @@ func (s *OfferStore) List(ctx context.Context, workspaceID, dealID, cursor strin
 	}
 	out := []domain.Offer{}
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		where := ""
+		query := offerListQueryAll
 		if !includeArchived {
-			where = " AND archived_at IS NULL"
+			query = offerListQueryLive
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT `+offerSelectCols+`
-			FROM offer WHERE workspace_id=$1::uuid AND deal_id=$2::uuid AND ($3 = '' OR id::text < $3)`+where+`
-			ORDER BY id DESC LIMIT $4`,
-			workspaceID, dealID, cursor, limit+1)
+		rows, err := tx.QueryContext(ctx, query, workspaceID, dealID, cursor, limit+1)
 		if err != nil {
 			return err
 		}
