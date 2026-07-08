@@ -11,8 +11,6 @@ import (
 
 	"github.com/gradionhq/margince/backend/internal/modules/records/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/records/domain"
-	"github.com/gradionhq/margince/backend/internal/modules/records/transport"
-	"github.com/gradionhq/margince/backend/internal/platform/blobstore"
 )
 
 // Attachment is a type alias for domain.Attachment, re-exported so callers can
@@ -25,25 +23,15 @@ type AttachmentStore = adapters.AttachmentStore
 // NewAttachmentStore returns an AttachmentStore backed by db.
 func NewAttachmentStore(db *sql.DB) *AttachmentStore { return adapters.NewAttachmentStore(db) }
 
-// Module is the records module's dependency-injection handle (D6 convenience
-// constructor — the actual composition root in Task 8 constructs pieces
-// individually, exactly like offers.New/activities.New today).
-type Module struct {
-	AttachmentStore   *adapters.AttachmentStore
-	AttachmentHandler *transport.AttachmentHandler
-}
-
-// New constructs the records Module. actStore must implement adapters.ActivityCreator
-// (i.e. *activities.ActivityStore satisfies this structurally). db is used for
-// both the AttachmentStore and the handler's visibility gate.
-func New(db *sql.DB, blob blobstore.Store, actStore adapters.ActivityCreator) *Module {
-	store := adapters.NewAttachmentStore(db)
-	audit := adapters.NewDownloadAuditWriter(actStore)
-	return &Module{
-		AttachmentStore:   store,
-		AttachmentHandler: transport.NewAttachmentHandler(store, blob, audit, db),
-	}
-}
+// Note: this package intentionally has no Module/New() convenience constructor. An earlier
+// version did (wiring transport.NewAttachmentHandler), but that made records depend on
+// records/transport while records/transport (RD-T06's QuotaHandler) depends back on records
+// for its Quota alias surface — an import cycle. records.New() was never actually called
+// (routes.go always constructs recordstransport handlers directly, e.g.
+// recordstransport.NewAttachmentHandler(records.NewAttachmentStore(db), ...) and
+// recordstransport.NewQuotaHandler(records.NewQuotaStore(db))), so removing the dead
+// convenience wrapper — rather than reversing recordstransport's established
+// depends-on-records seam (mirrors offerstransport -> offers) — is the non-breaking fix.
 
 // RollupStore is a type alias for adapters.RollupStore. It computes
 // GET /organizations/{id}/hierarchy-rollup (RD-FORM-1) over the
