@@ -328,3 +328,104 @@ describe("PipelineRollup contract compliance (DEAL-EXT-1)", () => {
     expect(problem.details?.as_of).toBe("2026-06-04");
   });
 });
+
+describe("CustomField / CustomFieldListResponse contract compliance (CUSTOM-FIELDS-WIRE-1)", () => {
+  it("CustomField carries the catalog shape; column_name is server-derived", () => {
+    const field: components["schemas"]["CustomField"] = {
+      id: "00000000-0000-0000-0000-000000000060",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      object: "deal",
+      label: "Renewal date",
+      slug: "renewal-date",
+      type: "date",
+      status: "active",
+      column_name: "cf_renewal_date",
+      currency: null,
+      options: null,
+      created_by: "00000000-0000-0000-0000-000000000001",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      archived_at: null,
+    };
+    expect(field.column_name).toBe("cf_renewal_date");
+    expect(field.status).toBe("active");
+    expect(field.archived_at).toBeNull();
+  });
+
+  it("CustomFieldListResponse envelope wraps CustomField[]", () => {
+    const resp: components["schemas"]["CustomFieldListResponse"] = {
+      data: [],
+      page: { has_more: false },
+    };
+    expect(Array.isArray(resp.data)).toBe(true);
+  });
+});
+
+describe("CreateCustomFieldRequest + structural-refusal shape contract compliance (CUSTOM-FIELDS-WIRE-2/5)", () => {
+  it("accepts a picklist field with options and provenance", () => {
+    const req: components["schemas"]["CreateCustomFieldRequest"] = {
+      object: "deal",
+      label: "Procurement route",
+      type: "picklist",
+      options: ["direct", "reseller", "marketplace"],
+      source: "ui",
+      captured_by: "human:00000000-0000-0000-0000-000000000001",
+    };
+    expect(req.options).toHaveLength(3);
+  });
+
+  it("accepts a currency field requiring an ISO-4217 code", () => {
+    const req: components["schemas"]["CreateCustomFieldRequest"] = {
+      object: "deal",
+      label: "Budget ceiling",
+      type: "currency",
+      currency: "USD",
+      source: "ui",
+      captured_by: "human:00000000-0000-0000-0000-000000000001",
+    };
+    expect(req.currency).toBe("USD");
+  });
+
+  it("Problem carries a machine-branchable details.route for the structural-refusal shape", () => {
+    const refusal: components["schemas"]["Problem"] = {
+      status: 422,
+      code: "structural_change_refused",
+      details: { route: "source_development_path" },
+    };
+    expect(refusal.code).toBe("structural_change_refused");
+    expect(refusal.details?.route).toBe("source_development_path");
+  });
+});
+
+describe("RenameCustomFieldRequest contract compliance (CUSTOM-FIELDS-WIRE-3)", () => {
+  it("carries label only — no column_name/object/type keys", () => {
+    const req: components["schemas"]["RenameCustomFieldRequest"] = {
+      label: "Contract end date",
+    };
+    expect(req.label).toBe("Contract end date");
+    expect(Object.keys(req)).toEqual(["label"]);
+  });
+});
+
+describe("CustomField retire shape (CUSTOM-FIELDS-WIRE-4)", () => {
+  it("status flips to retired while archived_at stays null — not the generic archive shape", () => {
+    const retired: components["schemas"]["CustomField"] = {
+      id: "00000000-0000-0000-0000-000000000060",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      object: "deal",
+      label: "Renewal date",
+      slug: "renewal-date",
+      type: "date",
+      status: "retired",
+      column_name: "cf_renewal_date",
+      currency: null,
+      options: null,
+      created_by: "00000000-0000-0000-0000-000000000001",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+      archived_at: null,
+    };
+    expect(retired.status).toBe("retired");
+    expect(retired.archived_at).toBeNull();
+  });
+});
