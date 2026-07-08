@@ -33,35 +33,41 @@ func NewActivityHandler(store activityStoreSeam) *ActivityHandler {
 	return &ActivityHandler{store: store}
 }
 
-func (h *ActivityHandler) create(w http.ResponseWriter, r *http.Request) {
-	wsID, ok := httpkit.RequireWorkspace(w, r)
-	if !ok {
-		return
-	}
-	var body struct {
-		Kind            string     `json:"kind"`
-		Subject         *string    `json:"subject,omitempty"`
-		Body            *string    `json:"body,omitempty"`
-		OccurredAt      *time.Time `json:"occurred_at,omitempty"`
-		DueAt           *time.Time `json:"due_at,omitempty"`
-		AssigneeID      *string    `json:"assignee_id,omitempty"`
-		RemindAt        *time.Time `json:"remind_at,omitempty"`
-		DurationSeconds *int       `json:"duration_seconds,omitempty"`
-		Direction       *string    `json:"direction,omitempty"`
-		MeetingStatus   *string    `json:"meeting_status,omitempty"`
-		SourceSystem    *string    `json:"source_system,omitempty"`
-		SourceID        *string    `json:"source_id,omitempty"`
-		Links           []struct {
-			EntityType string `json:"entity_type"`
-			EntityID   string `json:"entity_id"`
-		} `json:"links,omitempty"`
-		Source     string         `json:"source"`
-		CapturedBy string         `json:"captured_by"`
-		Raw        map[string]any `json:"raw,omitempty"`
-	}
+// createActivityLinkRequest is the wire shape of one links[] entry on the
+// create-activity request body.
+type createActivityLinkRequest struct {
+	EntityType string `json:"entity_type"`
+	EntityID   string `json:"entity_id"`
+}
+
+// createActivityRequest is the decoded /activities POST request body.
+type createActivityRequest struct {
+	Kind            string                      `json:"kind"`
+	Subject         *string                     `json:"subject,omitempty"`
+	Body            *string                     `json:"body,omitempty"`
+	OccurredAt      *time.Time                  `json:"occurred_at,omitempty"`
+	DueAt           *time.Time                  `json:"due_at,omitempty"`
+	AssigneeID      *string                     `json:"assignee_id,omitempty"`
+	RemindAt        *time.Time                  `json:"remind_at,omitempty"`
+	DurationSeconds *int                        `json:"duration_seconds,omitempty"`
+	Direction       *string                     `json:"direction,omitempty"`
+	MeetingStatus   *string                     `json:"meeting_status,omitempty"`
+	SourceSystem    *string                     `json:"source_system,omitempty"`
+	SourceID        *string                     `json:"source_id,omitempty"`
+	Links           []createActivityLinkRequest `json:"links,omitempty"`
+	Source          string                      `json:"source"`
+	CapturedBy      string                      `json:"captured_by"`
+	Raw             map[string]any              `json:"raw,omitempty"`
+}
+
+// decodeCreateActivityRequest decodes the request body and validates the
+// required top-level fields (kind, source, captured_by), writing the JSON
+// error response itself on failure. ok is false if the caller should return
+// immediately.
+func decodeCreateActivityRequest(w http.ResponseWriter, r *http.Request) (body createActivityRequest, ok bool) {
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
-		return
+		return createActivityRequest{}, false
 	}
 
 	var ferrs []fieldError
@@ -76,17 +82,39 @@ func (h *ActivityHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(ferrs) > 0 {
 		httpkit.JSONValidationError(w, "kind, source, and captured_by are required.", ferrs)
-		return
+		return createActivityRequest{}, false
 	}
+	return body, true
+}
 
-	links := make([]actdomain.ActivityLink, 0, len(body.Links))
-	for _, l := range body.Links {
+// activityLinksFromRequest validates and converts links[] entries into
+// domain links, writing the JSON error response itself on an invalid
+// entity_type. ok is false if the caller should return immediately.
+func activityLinksFromRequest(w http.ResponseWriter, reqLinks []createActivityLinkRequest) (links []actdomain.ActivityLink, ok bool) {
+	links = make([]actdomain.ActivityLink, 0, len(reqLinks))
+	for _, l := range reqLinks {
 		if !validLinkEntityTypes[l.EntityType] {
 			httpkit.JSONValidationError(w, "links[].entity_type must be person, organization, or deal.",
 				[]fieldError{{Field: "links", Code: "invalid_entity_type"}})
-			return
+			return nil, false
 		}
 		links = append(links, actdomain.ActivityLink{EntityType: l.EntityType, EntityID: l.EntityID})
+	}
+	return links, true
+}
+
+func (h *ActivityHandler) create(w http.ResponseWriter, r *http.Request) {
+	wsID, ok := httpkit.RequireWorkspace(w, r)
+	if !ok {
+		return
+	}
+	body, ok := decodeCreateActivityRequest(w, r)
+	if !ok {
+		return
+	}
+	links, ok := activityLinksFromRequest(w, body.Links)
+	if !ok {
+		return
 	}
 
 	occurredAt := time.Now().UTC()

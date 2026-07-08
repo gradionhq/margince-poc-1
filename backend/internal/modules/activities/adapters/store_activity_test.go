@@ -167,6 +167,9 @@ func TestActivityStore_Create_MultiEntityLinks(t *testing.T) {
 			t.Fatalf("unexpected entity_type %q", entityType)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate links: %v", err)
+	}
 	if count != 2 {
 		t.Fatalf("expected 2 activity_link rows, got %d", count)
 	}
