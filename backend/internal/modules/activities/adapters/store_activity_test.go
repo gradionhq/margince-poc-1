@@ -440,12 +440,14 @@ func countActivityAuditAndEvent(t *testing.T, db *sql.DB, activityID, action, to
 	t.Helper()
 	if err := db.QueryRow(
 		`SELECT count(*) FROM audit_log WHERE entity_type='activity' AND entity_id=$1::uuid AND action=$2`,
-		activityID, action).Scan(&auditCount); err != nil {
+		activityID, action,
+	).Scan(&auditCount); err != nil {
 		t.Fatalf("count audit_log: %v", err)
 	}
 	if err := db.QueryRow(
 		`SELECT count(*) FROM event_outbox WHERE topic=$1 AND entity_id=$2::uuid`,
-		topic, activityID).Scan(&eventCount); err != nil {
+		topic, activityID,
+	).Scan(&eventCount); err != nil {
 		t.Fatalf("count event_outbox: %v", err)
 	}
 	return auditCount, eventCount
