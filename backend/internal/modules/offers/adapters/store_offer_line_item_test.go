@@ -189,6 +189,51 @@ func TestOfferLineItemStore_Mutations_RejectedWhenOfferNotDraft(t *testing.T) {
 	}
 }
 
+// TestOfferLineItemStore_Update_RecomputesOfferTotals is OFFER-WIRE-5's real
+// assertion for the *successful* Update path (the only other Update call in
+// this file, TestOfferLineItemStore_Mutations_RejectedWhenOfferNotDraft,
+// only exercises the rejected offer-not-draft branch): a bounded partial
+// update that changes quantity must recompute the parent offer's
+// net_minor/tax_minor/gross_minor from the line's *new* quantity, not the
+// pre-update one.
+func TestOfferLineItemStore_Update_RecomputesOfferTotals(t *testing.T) {
+	db := pgtest.OpenTestDB(t)
+	wsID, dealID := seedOfferWorkspace(t, db)
+	lineStore := adapters.NewOfferLineItemStore(db, adapters.NewProductStore(db))
+	offer := newDraftOffer(t, db, wsID, dealID)
+
+	li := domain.OfferLineItem{
+		WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
+		Description: "A", Quantity: 2, UnitPriceMinor: 1000,
+		Source: "test", CapturedBy: "human:test",
+	}
+	created, err := lineStore.Create(context.Background(), li, f64Ptr(10))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	updated, err := lineStore.Update(context.Background(), created.ID, offer.ID, wsID, map[string]any{"quantity": float64(5)})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.Quantity != 5 {
+		t.Fatalf("expected updated line quantity=5, got %v", updated.Quantity)
+	}
+
+	// Independently compute expected totals with the same round-then-sum
+	// formula the store must use, using the line's post-update quantity.
+	wantNet, wantTax := roundThenSum(t, 5, 1000, 0, 10)
+
+	got, err := adapters.NewOfferStore(db).Get(context.Background(), offer.ID, wsID)
+	if err != nil {
+		t.Fatalf("get offer after update: %v", err)
+	}
+	if got.NetMinor != wantNet || got.TaxMinor != wantTax || got.GrossMinor != wantNet+wantTax {
+		t.Fatalf("expected offer totals recomputed from updated quantity: got net=%d tax=%d gross=%d, want net=%d tax=%d gross=%d",
+			got.NetMinor, got.TaxMinor, got.GrossMinor, wantNet, wantTax, wantNet+wantTax)
+	}
+}
+
 func TestOfferLineItemStore_Delete_HardDeletes_And_RecomputesTotals(t *testing.T) {
 	db := pgtest.OpenTestDB(t)
 	wsID, dealID := seedOfferWorkspace(t, db)
