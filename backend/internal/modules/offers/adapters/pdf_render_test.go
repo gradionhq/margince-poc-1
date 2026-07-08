@@ -10,18 +10,18 @@ import (
 
 func testOfferForPDF() domain.Offer {
 	return domain.Offer{
-		ID:           "offer-1",
-		WorkspaceID:  "workspace-1",
-		DealID:       "deal-1",
-		OfferNumber:  "ANG-001",
-		Revision:     2,
-		Status:       domain.OfferStatusDraft,
-		Currency:     "EUR",
-		NetMinor:     123456,
-		TaxMinor:     23456,
-		GrossMinor:   146912,
-		CreatedAt:    time.Date(2026, 7, 8, 9, 10, 11, 0, time.UTC),
-		UpdatedAt:    time.Date(2026, 7, 8, 9, 10, 11, 0, time.UTC),
+		ID:          "offer-1",
+		WorkspaceID: "workspace-1",
+		DealID:      "deal-1",
+		OfferNumber: "ANG-001",
+		Revision:    2,
+		Status:      domain.OfferStatusDraft,
+		Currency:    "EUR",
+		NetMinor:    123456,
+		TaxMinor:    23456,
+		GrossMinor:  146912,
+		CreatedAt:   time.Date(2026, 7, 8, 9, 10, 11, 0, time.UTC),
+		UpdatedAt:   time.Date(2026, 7, 8, 9, 10, 11, 0, time.UTC),
 	}
 }
 
