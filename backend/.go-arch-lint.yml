@@ -115,6 +115,9 @@ components:
   recordsports:            { in: internal/modules/records/ports }
   recordsadapters:         { in: internal/modules/records/adapters }
   recordstransport:        { in: internal/modules/records/transport }
+  # recordsfieldhistory is the field-level change history projection over audit_log
+  # before/after diffs (RD-WIRE-5 / RD-AC-5 / RD-AC-11).
+  recordsfieldhistory:     { in: internal/modules/records/fieldhistory }
   relationships:           { in: internal/modules/relationships }
   relsdomain:              { in: internal/modules/relationships/domain }
   relsports:               { in: internal/modules/relationships/ports }
@@ -277,6 +280,10 @@ deps:
     canUse: [pq]
   recordstransport:
     mayDependOn: [records, recordsadapters, recordsdomain, recordsports, crmctx, errs, httpkit, prov, blobstore, auth]
+  # recordsfieldhistory is the field-level change history projection over audit_log
+  # before/after diffs (RD-WIRE-5 / RD-AC-5 / RD-AC-11).
+  recordsfieldhistory:
+    mayDependOn: [audithistorydomain, database, httpkit, authzkern, crmctx]
   relsdomain:
     mayDependOn: [prov, ids]
   relsports:
