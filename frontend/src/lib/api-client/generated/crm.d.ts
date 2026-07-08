@@ -645,6 +645,63 @@ export interface paths {
         patch: operations["updateOffer"];
         trace?: never;
     };
+    "/offers/{id}/line-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        /** List an offer's line items, in position order. */
+        get: operations["listOfferLineItems"];
+        put?: never;
+        /**
+         * Add a line item to an offer. Allowed only while the offer is status=draft.
+         * @description Line net/tax/total are SERVER-COMPUTED from quantity/unit_price_minor/discount_pct/
+         *     tax_rate — a request that supplies line_net/line_tax/line_total is rejected as a
+         *     validation error (422; API-ERR-15). When product_id is set, its price and
+         *     description are copied onto the line as a snapshot (never re-read from product
+         *     later).
+         */
+        post: operations["createOfferLineItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/offers/{id}/line-items/{lineId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+                lineId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a line item from an offer. Allowed only while the parent offer is status=draft.
+         * @description Hard-deletes the offer_line_item row (mirrors unlinkConversation's hard-delete shape
+         *     — a draft-only child row, not an audited top-level record). Returns 204 on success.
+         */
+        delete: operations["deleteOfferLineItem"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a line item (partial). Allowed only while the parent offer is status=draft.
+         * @description Line net/tax/total remain server-computed and re-derive on every edit; never accepted on this request (API-ERR-15).
+         */
+        patch: operations["updateOfferLineItem"];
+        trace?: never;
+    };
     "/pipelines": {
         parameters: {
             query?: never;
@@ -3786,6 +3843,94 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * @description A typed line item on an offer; price is a snapshot copied from product (never
+         *     re-read after send). Mirrors the offer_line_item table. Line totals
+         *     (line_net/line_tax/line_total) are DERIVED — never wire fields (API-ERR-15).
+         */
+        OfferLineItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            workspace_id: string;
+            /** Format: uuid */
+            offer_id: string;
+            /** @description Display order; unique per offer. */
+            position: number;
+            /**
+             * Format: uuid
+             * @description Optional rate-card reference; price/description are copied onto the line as a snapshot on pick.
+             */
+            product_id?: string | null;
+            /** @description Snapshot — free-typed or copied from the referenced product. */
+            description: string;
+            /** @default unit */
+            unit: string;
+            /** @description numeric(14,3); must be > 0 (handler-enforced). */
+            quantity: number;
+            /**
+             * Format: int64
+             * @description Snapshot — never re-read from product after send. Never a float.
+             */
+            unit_price_minor: number;
+            /** @default 0 */
+            discount_pct: number;
+            /**
+             * @description Percent (e.g. 19.00 = DE USt.); defaults from the referenced product's default_tax_rate on pick, per-line override allowed.
+             * @default 0
+             */
+            tax_rate: number;
+            source: string;
+            captured_by: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            archived_at?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        CreateOfferLineItemRequest: {
+            position: number;
+            /** Format: uuid */
+            product_id?: string | null;
+            description: string;
+            /** @default unit */
+            unit: string;
+            quantity: number;
+            /** Format: int64 */
+            unit_price_minor: number;
+            /** @default 0 */
+            discount_pct: number;
+            /** @default 0 */
+            tax_rate: number;
+            source: string;
+            captured_by: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description Partial update via PATCH. Only fields present in the body are changed. */
+        UpdateOfferLineItemRequest: {
+            position?: number;
+            /** Format: uuid */
+            product_id?: string | null;
+            description?: string;
+            unit?: string;
+            quantity?: number;
+            /** Format: int64 */
+            unit_price_minor?: number;
+            discount_pct?: number;
+            tax_rate?: number;
+            source?: string;
+            captured_by?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        OfferLineItemListResponse: {
+            data: components["schemas"]["OfferLineItem"][];
+            page: components["schemas"]["PageInfo"];
+        };
         /** @description A governed drafting asset (template, copy fragment, or reusable content) in the retrieval store. */
         DraftingAsset: {
             /** Format: uuid */
@@ -6482,6 +6627,178 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             /** @description Optimistic-lock failure (version_skew), OR the offer is not in draft status (offer_not_draft) — both are state conflicts on this endpoint. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    listOfferLineItems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The offer's line items. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferLineItemListResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createOfferLineItem: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+                 *     `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+                 *     returns the original status + body. Reusing the same key with a *different* request body
+                 *     returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+                 *     **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+                 *     retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+                 *     (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOfferLineItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Created line item. */
+            201: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferLineItem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The parent offer is not in draft status (offer_not_draft). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation error, including a client-supplied line_net/line_tax/line_total (rejected — server-computed only, API-ERR-15). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteOfferLineItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+                lineId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Line item removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The parent offer is not in draft status (offer_not_draft). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateOfferLineItem: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+                 *     `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+                 *     returns the original status + body. Reusing the same key with a *different* request body
+                 *     returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+                 *     **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+                 *     retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+                 *     (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+                lineId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOfferLineItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated line item. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferLineItem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The parent offer is not in draft status (offer_not_draft). */
             409: {
                 headers: {
                     [name: string]: unknown;

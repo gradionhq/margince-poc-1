@@ -393,6 +393,58 @@ describe("UpdateOfferRequest contract compliance (OFFER-WIRE-4)", () => {
   });
 });
 
+describe("OfferLineItem contract compliance (OFFER-WIRE-5)", () => {
+  it("carries offer_id/position/description/quantity/unit_price_minor; no line_net/line_tax/line_total field exists", () => {
+    const line: components["schemas"]["OfferLineItem"] = {
+      id: "00000000-0000-0000-0000-000000000090",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      offer_id: "00000000-0000-0000-0000-000000000070",
+      position: 1,
+      description: "Consulting — Platform expansion",
+      unit: "day",
+      quantity: 5,
+      unit_price_minor: 150000,
+      discount_pct: 0,
+      tax_rate: 19,
+      source: "test",
+      captured_by: "human:test",
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+    };
+    expect(line.quantity).toBe(5);
+    expect("line_net" in line).toBe(false);
+    expect("line_tax" in line).toBe(false);
+    expect("line_total" in line).toBe(false);
+  });
+
+  it("CreateOfferLineItemRequest and UpdateOfferLineItemRequest never carry a line total field", () => {
+    const createBody: components["schemas"]["CreateOfferLineItemRequest"] = {
+      position: 1,
+      description: "Line",
+      quantity: 1,
+      unit_price_minor: 100,
+      source: "ui",
+      captured_by: "human:test",
+    };
+    const updateBody: components["schemas"]["UpdateOfferLineItemRequest"] = {
+      quantity: 2,
+    };
+    expect("line_total" in createBody).toBe(false);
+    expect("line_total" in updateBody).toBe(false);
+    expect("gross" in createBody).toBe(false);
+  });
+});
+
+describe("OfferLineItemListResponse contract compliance (OFFER-WIRE-5)", () => {
+  it("data is an array of OfferLineItem", () => {
+    const resp: components["schemas"]["OfferLineItemListResponse"] = {
+      data: [],
+      page: { has_more: false },
+    };
+    expect(Array.isArray(resp.data)).toBe(true);
+  });
+});
+
 describe("PipelineRollup contract compliance (DEAL-EXT-1)", () => {
   it("matches DEAL-FORM-2's shape plus per-stage and per-deal breakdowns", () => {
     const rollup: components["schemas"]["PipelineRollup"] = {
