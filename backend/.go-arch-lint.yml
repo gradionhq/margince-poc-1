@@ -354,7 +354,7 @@ deps:
   toolgate:
     mayDependOn: [mcp, approvalsport, crmctx, ids]
   customfields:
-    mayDependOn: [crmctx, database, audit]
+    mayDependOn: [crmctx, database, audit, toolgate, mcp, approvalsport]
     canUse: [pq]
   contracts:
     canUse: [oapi, chi]
