@@ -25,6 +25,7 @@ import (
 	peopletransport "github.com/gradionhq/margince/backend/internal/modules/people/transport"
 	records "github.com/gradionhq/margince/backend/internal/modules/records"
 	recordsadapters "github.com/gradionhq/margince/backend/internal/modules/records/adapters"
+	fieldhistory "github.com/gradionhq/margince/backend/internal/modules/records/fieldhistory"
 	recordstransport "github.com/gradionhq/margince/backend/internal/modules/records/transport"
 	relationships "github.com/gradionhq/margince/backend/internal/modules/relationships"
 	relstransport "github.com/gradionhq/margince/backend/internal/modules/relationships/transport"
@@ -155,4 +156,8 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 	historyHandler := audithistory.New(k.db, historyAuthz).Handler
 	mux.Handle("GET /records/{entity_type}/{id}/history",
 		instrument("/records/history", k.workspaceWrap(platformauth.RequireAuth(historyHandler))))
+
+	fieldHistoryHandler := fieldhistory.NewHandler(fieldhistory.NewStore(k.db), historyAuthz)
+	mux.Handle("GET /field-history",
+		instrument("/field-history", k.workspaceWrap(platformauth.RequireAuth(fieldHistoryHandler))))
 }
