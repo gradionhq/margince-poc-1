@@ -104,6 +104,7 @@ const (
 	ObjRelationship  = "relationship"
 	ObjActivity      = "activity"
 	ObjRecordGrant   = "record_grant"
+	ObjCustomField   = "custom_field"
 	ObjProduct       = "product"
 	ObjOfferTemplate = "offer_template"
 	ObjOffer         = "offer"

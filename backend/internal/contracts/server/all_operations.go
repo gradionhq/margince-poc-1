@@ -51,7 +51,8 @@ type AllOperations struct {
 // from the same handler instances cmd/api/routes.go's manual registration
 // uses) into one AllOperations. Tags with no wired handler in this pruned
 // skeleton tree need no adapter argument — their zero-value adapter already
-// stubs every operation 501.
+// stubs every operation 501. CustomFields (CF-T03) is no longer one of
+// those — its adapter now carries the real *customfields.Handler.
 func NewAllOperations(
 	people PeopleAdapter,
 	organizations OrganizationsAdapter,
@@ -62,6 +63,7 @@ func NewAllOperations(
 	activities ActivitiesAdapter,
 	audit AuditAdapter,
 	identity IdentityAdapter,
+	customFields CustomFieldsAdapter,
 	products ProductsAdapter,
 	offerTemplates OfferTemplatesAdapter,
 	offers OffersAdapter,
@@ -76,6 +78,7 @@ func NewAllOperations(
 		ActivitiesAdapter:     activities,
 		AuditAdapter:          audit,
 		IdentityAdapter:       identity,
+		CustomFieldsAdapter:   customFields,
 		ProductsAdapter:       products,
 		OfferTemplatesAdapter: offerTemplates,
 		OffersAdapter:         offers,
