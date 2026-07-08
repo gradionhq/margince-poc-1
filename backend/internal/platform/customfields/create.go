@@ -29,21 +29,21 @@ func (e *ErrValidation) Error() string { return "customfields: validation failed
 // (the codebase-wide convention: domain structs carry contract-matching
 // json tags rather than being converted into the oapi-codegen types package).
 type Created struct {
-	ID          string    `json:"id"`
-	WorkspaceID string    `json:"workspace_id"`
-	Object      string    `json:"object"`
-	Label       string    `json:"label"`
-	Slug        string    `json:"slug"`
-	Type        string    `json:"type"`
-	Status      string    `json:"status"`
+	ID          string     `json:"id"`
+	WorkspaceID string     `json:"workspace_id"`
+	Object      string     `json:"object"`
+	Label       string     `json:"label"`
+	Slug        string     `json:"slug"`
+	Type        string     `json:"type"`
+	Status      string     `json:"status"`
 	ArchivedAt  *time.Time `json:"archived_at"`
-	ColumnName  string    `json:"column_name"`
-	Currency    *string   `json:"currency"`
-	Options     []string  `json:"options,omitempty"`
-	CreatedBy   string    `json:"created_by"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	Version     int64     `json:"version"`
+	ColumnName  string     `json:"column_name"`
+	Currency    *string    `json:"currency"`
+	Options     []string   `json:"options,omitempty"`
+	CreatedBy   string     `json:"created_by"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	Version     int64      `json:"version"`
 }
 
 // Create is the single chokepoint allowed to run a runtime ALTER TABLE
