@@ -36,6 +36,7 @@ type Created struct {
 	Slug        string    `json:"slug"`
 	Type        string    `json:"type"`
 	Status      string    `json:"status"`
+	ArchivedAt  *time.Time `json:"archived_at"`
 	ColumnName  string    `json:"column_name"`
 	Currency    *string   `json:"currency"`
 	Options     []string  `json:"options,omitempty"`
@@ -112,9 +113,9 @@ func Create(ctx context.Context, db *sql.DB, spec FieldSpec) (Created, error) {
 	row := tx.QueryRowContext(ctx, `
 		INSERT INTO custom_field (workspace_id, object, slug, label, type, column_name, currency, options, created_by)
 		VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9::uuid)
-		RETURNING id, workspace_id, object, slug, label, type, status, column_name, currency, options, created_by, created_at, updated_at, version`,
+		RETURNING id, workspace_id, object, slug, label, type, status, archived_at, column_name, currency, options, created_by, created_at, updated_at, version`,
 		p.TenantID, spec.Object, slug, spec.Label, spec.Type, columnName, currency, optionsJSON, p.UserID)
-	if err := row.Scan(&out.ID, &out.WorkspaceID, &out.Object, &out.Slug, &out.Label, &out.Type, &out.Status,
+	if err := row.Scan(&out.ID, &out.WorkspaceID, &out.Object, &out.Slug, &out.Label, &out.Type, &out.Status, &out.ArchivedAt,
 		&out.ColumnName, &out.Currency, &optionsRaw, &out.CreatedBy, &out.CreatedAt, &out.UpdatedAt, &out.Version); err != nil {
 		return Created{}, fmt.Errorf("customfields: insert catalog row: %w", err)
 	}

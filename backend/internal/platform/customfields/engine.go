@@ -212,17 +212,53 @@ func BuildDDL(object, columnName string, spec FieldSpec) (string, error) {
 	stmt := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s NULL",
 		pq.QuoteIdentifier(object), pq.QuoteIdentifier(columnName), colType)
 	if spec.Type == TypePicklist {
-		checkName := columnName + "_check"
-		if !validIdentifier(checkName) {
-			return "", fmt.Errorf("customfields: invalid check-constraint identifier %q", checkName)
+		checkName, clause, err := checkConstraintClause(columnName, spec.Options)
+		if err != nil {
+			return "", err
 		}
-		quotedCol := pq.QuoteIdentifier(columnName)
-		var quotedOpts []string
-		for _, o := range spec.Options {
-			quotedOpts = append(quotedOpts, pq.QuoteLiteral(o))
-		}
-		stmt += fmt.Sprintf(", ADD CONSTRAINT %s CHECK (%s IS NULL OR %s IN (%s))",
-			pq.QuoteIdentifier(checkName), quotedCol, quotedCol, strings.Join(quotedOpts, ", "))
+		stmt += fmt.Sprintf(", ADD CONSTRAINT %s %s", pq.QuoteIdentifier(checkName), clause)
 	}
 	return stmt, nil
+}
+
+// checkConstraintClause builds the "<col>_check" identifier and its
+// "CHECK (<col> IS NULL OR <col> IN (...))" clause shared by a picklist's
+// initial CHECK (BuildDDL, at create time) and a picklist's regenerated
+// CHECK after an options edit (BuildOptionsDDL, CF-T04) — extracted so the
+// quoting logic lives in exactly one place (CUSTOM-FIELDS-PARAM-5). Every
+// token is pq-quoted; never raw text (CUSTOM-FIELDS-AC-12).
+func checkConstraintClause(columnName string, options []string) (checkName, clause string, err error) {
+	checkName = columnName + "_check"
+	if !validIdentifier(checkName) {
+		return "", "", fmt.Errorf("customfields: invalid check-constraint identifier %q", checkName)
+	}
+	quotedCol := pq.QuoteIdentifier(columnName)
+	var quotedOpts []string
+	for _, o := range options {
+		quotedOpts = append(quotedOpts, pq.QuoteLiteral(o))
+	}
+	clause = fmt.Sprintf("CHECK (%s IS NULL OR %s IN (%s))", quotedCol, quotedCol, strings.Join(quotedOpts, ", "))
+	return checkName, clause, nil
+}
+
+// BuildOptionsDDL returns the ALTER TABLE statement that regenerates an
+// existing picklist column's CHECK constraint from a new option set
+// (CUSTOM-FIELDS-PARAM-5, CF-T04): DROP CONSTRAINT IF EXISTS <col>_check,
+// then ADD CONSTRAINT rebuilt via checkConstraintClause — the same quoting
+// helper BuildDDL's picklist branch uses. object/columnName are always
+// server-derived (never client text) by the time this is called, but both
+// are re-validated defensively, matching BuildDDL's own posture.
+func BuildOptionsDDL(object, columnName string, options []string) (string, error) {
+	if !validIdentifier(object) {
+		return "", fmt.Errorf("customfields: invalid object identifier %q", object)
+	}
+	if !validIdentifier(columnName) {
+		return "", fmt.Errorf("customfields: invalid column identifier %q", columnName)
+	}
+	checkName, clause, err := checkConstraintClause(columnName, options)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT IF EXISTS %s, ADD CONSTRAINT %s %s",
+		pq.QuoteIdentifier(object), pq.QuoteIdentifier(checkName), pq.QuoteIdentifier(checkName), clause), nil
 }
