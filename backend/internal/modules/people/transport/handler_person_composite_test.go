@@ -73,7 +73,7 @@ func TestPersonHandler_Get_Composite360(t *testing.T) {
 		personCompositeWS, subject.ID, created.ID, stringPtr("champion"), p0.Source, p0.CapturedBy); err != nil {
 		t.Fatalf("seed deal stakeholder: %v", err)
 	}
-	act, err := activityStore.Create(ctx, activities.Activity{WorkspaceID: personCompositeWS, Kind: "call", OccurredAt: time.Now(), Source: p0.Source, CapturedBy: p0.CapturedBy})
+	act, _, err := activityStore.Create(ctx, activities.Activity{WorkspaceID: personCompositeWS, Kind: "call", OccurredAt: time.Now(), Source: p0.Source, CapturedBy: p0.CapturedBy})
 	if err != nil {
 		t.Fatalf("seed activity: %v", err)
 	}

@@ -43,3 +43,9 @@ func (a *ActivitiesAdapter) UpdateActivity(w http.ResponseWriter, r *http.Reques
 func (a *ActivitiesAdapter) ArchiveActivity(w http.ResponseWriter, r *http.Request, idParam types.IdParam) {
 	a.H.ServeHTTP(w, r)
 }
+
+// RelinkActivity is unimplemented — no route is mounted for it yet (contract-only;
+// AT-T05 wires the real activity_link mutation). Matches the AIAdapter stub convention.
+func (a *ActivitiesAdapter) RelinkActivity(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.RelinkActivityParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
