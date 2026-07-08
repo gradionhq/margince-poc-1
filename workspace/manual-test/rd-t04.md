@@ -1,11 +1,21 @@
 # RD-T04 Live-Stack UAT — Hierarchy Roll-Up Read (RD-FORM-1)
 
 Verification of `GET /organizations/{id}/hierarchy-rollup` against RD-FORM-1, RD-AC-1,
-RD-AC-8, RD-PARAM-1/2, and PO-AC-28. All steps are `[auto]` — literal commands with literal
-expected results. No `[live]`/visual-judgment step exists in this backend-only ticket.
+RD-AC-8, RD-PARAM-1/2, and PO-AC-28. Steps 1, 9, 10, 11 are `[auto]` (seed script / `go test` /
+`make` invocations). Steps 2–8 are `[live]` — real `curl` calls against the booted server
+(`make run` / `make uat_env`, default `http://localhost:8080`), using this app's dev-mode
+`X-Workspace-ID` / `X-User-ID` header auth (`backend/cmd/api/routes.go`'s `workspaceWrap`
+fallback — see `workspace/manual-test/t05.md` for the same header style). Every step has a
+literal command and a literal `Expected:`.
 
 Synthesized from: four `(verify: integration)` acceptance criteria in `workspace/specs/rd-t04.md`
 + Task 3 description in the implementation plan (see "Spec gap" note in the plan header).
+
+Variable mapping (captured from Step 1's `RAISE NOTICE` output): `$WS`=ws, `$ROOT`=root,
+`$CHILD_A`=childA, `$CHILD_B`=childB, `$VIEWER`=viewer, `$OTHER`=other. Steps 4–8 seed a few
+additional fixtures (record_grant, an FX-gap org, a second workspace, a 3-level decomposition
+tree, a no-permission user) immediately before the step that needs them, so the whole guide is
+self-contained and runnable top-to-bottom against a fresh workspace.
 
 ---
 
@@ -102,119 +112,302 @@ EOSQL
 
 ---
 
-## Step 2 [auto]: scope=tree — formula holds, restricted child disclosed
+## Step 2 [live]: scope=tree (default) — formula holds, restricted child disclosed
 
-Replace `$ROOT`, `$VIEWER`, `$WS` with values from Step 1.
+Replace `$ROOT`, `$VIEWER`, `$WS` with the values captured from Step 1.
 
 ```bash
-# Direct store-level verification (no live HTTP stack needed):
-psql "$TEST_DATABASE_URL" -c "
-  SELECT set_config('app.workspace_id', '$WS', false);
-" -c "
-  -- Verify via the roll-up store (Go integration test covers this end-to-end):
-  SELECT 'tree scope should aggregate root+childB only (childA restricted)' AS check;
-"
+curl -s -w '\n%{http_code}\n' "http://localhost:8080/organizations/$ROOT/hierarchy-rollup" \
+  -H "X-Workspace-ID: $WS" -H "X-User-ID: $VIEWER"
+```
 
-# Automated equivalent: the Go integration test suite covers this exact assertion:
-go test -tags=integration -run TestHierarchyRollupHTTP_TreeAndSelfScope \
-  ./backend/internal/modules/records/...
+**Expected:** `HTTP 200`. Body (scope omitted defaults to `"tree"`):
+- `root_id = "$ROOT"`, `scope = "tree"`
+- `weighted_pipeline = {"amount_minor": 1000000, "currency": "EUR"}` — root's own USD 1,000,000
+  minor deal converted at the seeded `USD→EUR` rate of 1.0 and weighted at the stage's 100%
+  win-probability (`1000000 × 1.0 × 100% = 1000000`); childA's 500000 is excluded because
+  childA is restricted (owned by `$OTHER`, viewer's `row_scope=own` can't read it, no grant
+  exists yet); childB has no deals so contributes 0.
+- `closed_won = {"amount_minor": 0, "currency": "EUR"}` (no `won` deals seeded)
+- `activity_count_30d = 1` (root's activity only; childA's activity is excluded along with the
+  restricted node; childB has none)
+- `aggregated_account_count = 2` (root + childB; childA is restricted and not counted)
+- `restricted_excluded = [{"id": "$CHILD_A", "display_name": "UAT-ChildA"}]`
+- `computed_at` is a non-null RFC3339 timestamp
+
+RD-FORM-1 formula check (cross-check against Step 3's output): `tree.weighted_pipeline (1000000)
+== root.self.weighted_pipeline (1000000) + childB.self.weighted_pipeline (0)` — holds.
+
+---
+
+## Step 3 [live]: scope=self — only root's own figures, aggregated_account_count=1
+
+```bash
+curl -s -w '\n%{http_code}\n' "http://localhost:8080/organizations/$ROOT/hierarchy-rollup?scope=self" \
+  -H "X-Workspace-ID: $WS" -H "X-User-ID: $VIEWER"
+```
+
+**Expected:** `HTTP 200`. Body:
+- `scope = "self"`
+- `aggregated_account_count = 1`
+- `weighted_pipeline = {"amount_minor": 1000000, "currency": "EUR"}` (root's own deal only)
+- `closed_won = {"amount_minor": 0, "currency": "EUR"}`
+- `activity_count_30d = 1`
+- `restricted_excluded = []` (self-scope never exposes subtree restriction)
+
+---
+
+## Step 4 [live]: record_grant override — restricted child flips into the included set
+
+First, grant `$VIEWER` read access on `$CHILD_A` (there is no `record_grant` seeded by Step 1):
+
+```bash
+psql "$TEST_DATABASE_URL" -c "
+INSERT INTO record_grant (workspace_id, record_type, record_id, subject_type, subject_id, access, granted_by)
+VALUES ('$WS', 'organization', '$CHILD_A', 'user', '$VIEWER', 'read', '$VIEWER');
+"
+```
+
+**Expected:** `INSERT 0 1`.
+
+Then re-request the tree-scope roll-up:
+
+```bash
+curl -s -w '\n%{http_code}\n' "http://localhost:8080/organizations/$ROOT/hierarchy-rollup" \
+  -H "X-Workspace-ID: $WS" -H "X-User-ID: $VIEWER"
+```
+
+**Expected:** `HTTP 200`. Body:
+- `restricted_excluded = []` (childA is no longer restricted)
+- `weighted_pipeline = {"amount_minor": 1500000, "currency": "EUR"}` — root's 1000000 + childA's
+  now-included 500000 (childB still contributes 0)
+- `closed_won = {"amount_minor": 0, "currency": "EUR"}`
+- `activity_count_30d = 2` (root's + childA's activity, now both readable)
+- `aggregated_account_count = 3` (root + childA + childB)
+
+---
+
+## Step 5 [live]: missing FX rate → 422 fx_rate_unavailable
+
+Step 1 only seeded a `USD→EUR` `fx_rate` row, so an open deal in a currency with no stored rate
+(e.g. GBP) triggers the 422 path. Seed a standalone org + GBP deal, isolated from `$ROOT`'s tree
+so it doesn't perturb Steps 2–4's totals:
+
+```bash
+psql "$TEST_DATABASE_URL" <<'EOSQL'
+DO $$
+DECLARE
+  ws     uuid := '$WS';
+  viewer uuid := '$VIEWER';
+  p      uuid;
+  s      uuid;
+  fxorg  uuid;
+BEGIN
+  SELECT id INTO p FROM pipeline WHERE workspace_id = ws LIMIT 1;
+  SELECT id INTO s FROM stage    WHERE workspace_id = ws LIMIT 1;
+
+  INSERT INTO organization(workspace_id, name, owner_id, source, captured_by)
+    VALUES (ws, 'UAT-FXGap', viewer, 'api', 'human:uat')
+    RETURNING id INTO fxorg;
+
+  -- GBP open deal — no fx_rate row exists for GBP->EUR.
+  INSERT INTO deal(workspace_id, name, pipeline_id, stage_id, organization_id,
+                   amount_minor, currency, fx_rate_to_base, status, source, captured_by)
+    VALUES (ws, 'UAT-FXGapDeal', p, s, fxorg, 300000, 'GBP', '1.0', 'open', 'api', 'human:uat');
+
+  RAISE NOTICE 'fxgap_org=%', fxorg;
+END$$;
+EOSQL
+```
+
+**Expected:** The block exits cleanly; `RAISE NOTICE` prints `fxgap_org=<uuid>`. Record it as
+`$FXGAP_ORG`.
+
+```bash
+curl -s -w '\n%{http_code}\n' "http://localhost:8080/organizations/$FXGAP_ORG/hierarchy-rollup" \
+  -H "X-Workspace-ID: $WS" -H "X-User-ID: $VIEWER"
+```
+
+**Expected:** `HTTP 422`. Body:
+- `code = "fx_rate_unavailable"`
+- `details.currency = "GBP"`
+- `details.as_of` equals today's UTC date in `YYYY-MM-DD` format (i.e. `$(date -u +%F)` — the
+  handler computes the FX lookup `asOf` as `time.Now().UTC()` at request time, not at seed time)
+
+---
+
+## Step 6 [live]: nonexistent / out-of-workspace org id → 404
+
+Seed a second workspace with one org in it, isolated from `$WS`:
+
+```bash
+psql "$TEST_DATABASE_URL" <<'EOSQL'
+DO $$
+DECLARE
+  ws2  uuid;
+  org2 uuid;
+BEGIN
+  INSERT INTO workspace(name, slug, base_currency)
+    VALUES ('UAT-RDT04-WS2', 'uat-rdt04-ws2', 'EUR')
+    RETURNING id INTO ws2;
+
+  INSERT INTO organization(workspace_id, name, source, captured_by)
+    VALUES (ws2, 'UAT-WS2-Org', 'api', 'human:uat')
+    RETURNING id INTO org2;
+
+  RAISE NOTICE 'ws2_org=%', org2;
+END$$;
+EOSQL
+```
+
+**Expected:** The block exits cleanly; `RAISE NOTICE` prints `ws2_org=<uuid>`. Record it as
+`$WS2_ORG`.
+
+```bash
+# Nonexistent UUID under workspace $WS:
+curl -s -w '\n%{http_code}\n' "http://localhost:8080/organizations/00000000-0000-0000-0000-000000000000/hierarchy-rollup" \
+  -H "X-Workspace-ID: $WS" -H "X-User-ID: $VIEWER"
+
+# Org that exists, but in a different workspace than the one in the request header:
+curl -s -w '\n%{http_code}\n' "http://localhost:8080/organizations/$WS2_ORG/hierarchy-rollup" \
+  -H "X-Workspace-ID: $WS" -H "X-User-ID: $VIEWER"
+```
+
+**Expected:** Both requests return `HTTP 404` with `body.code = "not_found"`. The second request
+404s because the roll-up CTE's `WHERE workspace_id = $2` filter (bound to `$WS`, the header's
+workspace) excludes `$WS2_ORG`, which belongs to `ws2` — never leaking cross-workspace existence.
+
+---
+
+## Step 7 [live]: RD-AC-8 decomposition — tree total = self + Σ children
+
+Seed a fresh 3-level tree (root → childA → grandchild), all owned by `$VIEWER` so every node is
+readable without needing another grant, isolated from `$ROOT`'s tree so it doesn't perturb
+Steps 2–4's totals:
+
+```bash
+psql "$TEST_DATABASE_URL" <<'EOSQL'
+DO $$
+DECLARE
+  ws     uuid := '$WS';
+  viewer uuid := '$VIEWER';
+  p      uuid;
+  s      uuid;
+  dr     uuid;
+  dca    uuid;
+  dgc    uuid;
+BEGIN
+  SELECT id INTO p FROM pipeline WHERE workspace_id = ws LIMIT 1;
+  SELECT id INTO s FROM stage    WHERE workspace_id = ws LIMIT 1;
+
+  INSERT INTO organization(workspace_id, name, owner_id, source, captured_by)
+    VALUES (ws, 'UAT-DecompRoot', viewer, 'api', 'human:uat')
+    RETURNING id INTO dr;
+  INSERT INTO organization(workspace_id, name, parent_org_id, owner_id, source, captured_by)
+    VALUES (ws, 'UAT-DecompChildA', dr, viewer, 'api', 'human:uat')
+    RETURNING id INTO dca;
+  INSERT INTO organization(workspace_id, name, parent_org_id, owner_id, source, captured_by)
+    VALUES (ws, 'UAT-DecompGrandchild', dca, viewer, 'api', 'human:uat')
+    RETURNING id INTO dgc;
+
+  -- win_probability=100 (same stage as Step 1) and USD->EUR fx=1.0 (seeded in Step 1), so
+  -- weighted_pipeline == amount_minor exactly, mirroring hierarchy_rollup_http_test.go's
+  -- TestHierarchyRollupHTTP_Decomposition fixture (3000 / 5000 / 7000).
+  INSERT INTO deal(workspace_id, name, pipeline_id, stage_id, organization_id,
+                   amount_minor, currency, fx_rate_to_base, status, source, captured_by)
+    VALUES (ws, 'UAT-DecompRootDeal', p, s, dr, 3000, 'USD', '1.0', 'open', 'api', 'human:uat');
+  INSERT INTO deal(workspace_id, name, pipeline_id, stage_id, organization_id,
+                   amount_minor, currency, fx_rate_to_base, status, source, captured_by)
+    VALUES (ws, 'UAT-DecompChildADeal', p, s, dca, 5000, 'USD', '1.0', 'open', 'api', 'human:uat');
+  INSERT INTO deal(workspace_id, name, pipeline_id, stage_id, organization_id,
+                   amount_minor, currency, fx_rate_to_base, status, source, captured_by)
+    VALUES (ws, 'UAT-DecompGrandchildDeal', p, s, dgc, 7000, 'USD', '1.0', 'open', 'api', 'human:uat');
+
+  INSERT INTO activity(workspace_id, kind, subject, occurred_at, source, captured_by)
+    VALUES (ws, 'note', 'UAT note', now() - interval '1 day', 'api', 'human:uat') RETURNING id INTO p;
+  INSERT INTO activity_link(workspace_id, activity_id, entity_type, organization_id) VALUES (ws, p, 'organization', dr);
+  INSERT INTO activity(workspace_id, kind, subject, occurred_at, source, captured_by)
+    VALUES (ws, 'note', 'UAT note', now() - interval '2 days', 'api', 'human:uat') RETURNING id INTO p;
+  INSERT INTO activity_link(workspace_id, activity_id, entity_type, organization_id) VALUES (ws, p, 'organization', dca);
+  INSERT INTO activity(workspace_id, kind, subject, occurred_at, source, captured_by)
+    VALUES (ws, 'note', 'UAT note', now() - interval '3 days', 'api', 'human:uat') RETURNING id INTO p;
+  INSERT INTO activity_link(workspace_id, activity_id, entity_type, organization_id) VALUES (ws, p, 'organization', dgc);
+
+  RAISE NOTICE 'decomp_root=%   decomp_childA=%   decomp_grandchild=%', dr, dca, dgc;
+END$$;
+EOSQL
+```
+
+**Expected:** The block exits cleanly; `RAISE NOTICE` prints the three UUIDs. Record them as
+`$DECOMP_ROOT`, `$DECOMP_CHILD_A`, `$DECOMP_GRANDCHILD`.
+
+```bash
+# root_tree (includes childA + grandchild):
+curl -s -w '\n%{http_code}\n' "http://localhost:8080/organizations/$DECOMP_ROOT/hierarchy-rollup" \
+  -H "X-Workspace-ID: $WS" -H "X-User-ID: $VIEWER"
+
+# root_self:
+curl -s -w '\n%{http_code}\n' "http://localhost:8080/organizations/$DECOMP_ROOT/hierarchy-rollup?scope=self" \
+  -H "X-Workspace-ID: $WS" -H "X-User-ID: $VIEWER"
+
+# childA_tree (includes grandchild):
+curl -s -w '\n%{http_code}\n' "http://localhost:8080/organizations/$DECOMP_CHILD_A/hierarchy-rollup" \
+  -H "X-Workspace-ID: $WS" -H "X-User-ID: $VIEWER"
+```
+
+**Expected:** All three return `HTTP 200`.
+- `root_self.weighted_pipeline.amount_minor = 3000`, `root_self.activity_count_30d = 1`
+- `childA_tree.weighted_pipeline.amount_minor = 12000` (5000 + 7000), `childA_tree.activity_count_30d = 2`
+- `root_tree.weighted_pipeline.amount_minor = 15000` (3000 + 5000 + 7000), matching
+  `root_self.weighted_pipeline (3000) + childA_tree.weighted_pipeline (12000) = 15000` —
+  RD-AC-8's decomposition claim holds
+- `root_tree.activity_count_30d = 3`, matching `root_self (1) + childA_tree (2) = 3`
+- `root_tree.aggregated_account_count = 3` (root + childA + grandchild)
+
+---
+
+## Step 8 [live]: 401 / 403 auth gates fire for the hierarchy-rollup sub-path
+
+Seed a user whose role has no `organization` permissions at all (only `deal.read`), to exercise
+the 403 path:
+
+```bash
+psql "$TEST_DATABASE_URL" <<'EOSQL'
+DO $$
+DECLARE
+  ws          uuid := '$WS';
+  noperm_user uuid;
+  noperm_role uuid;
+BEGIN
+  INSERT INTO app_user(workspace_id, email, display_name)
+    VALUES (ws, 'noperm@uat-rdt04.test', 'NoPerm')
+    RETURNING id INTO noperm_user;
+  INSERT INTO role(workspace_id, key, is_system, permissions)
+    VALUES (ws, 'uat-noperm', false, '{"deal":{"read":{"row_scope":"all"}}}'::jsonb)
+    RETURNING id INTO noperm_role;
+  INSERT INTO role_assignment(workspace_id, role_id, user_id) VALUES (ws, noperm_role, noperm_user);
+
+  RAISE NOTICE 'noperm=%', noperm_user;
+END$$;
+EOSQL
+```
+
+**Expected:** The block exits cleanly; `RAISE NOTICE` prints `noperm=<uuid>`. Record it as
+`$NOPERM`.
+
+```bash
+# 401: no X-Workspace-ID / X-User-ID header at all — no principal in context.
+curl -s -w '\n%{http_code}\n' "http://localhost:8080/organizations/$ROOT/hierarchy-rollup"
+
+# 403: a real principal, but its role has no organization.read permission.
+curl -s -w '\n%{http_code}\n' "http://localhost:8080/organizations/$ROOT/hierarchy-rollup" \
+  -H "X-Workspace-ID: $WS" -H "X-User-ID: $NOPERM"
 ```
 
 **Expected:**
-- `TestHierarchyRollupHTTP_TreeAndSelfScope` passes.
-- On the full seeded tree above (run via `TestHierarchyRollupHTTP_RestrictedNodeAndGrant`):
-  `scope=tree` returns `HTTP 200` with `restricted_excluded=[{id: <childA-id>, display_name: "UAT-ChildA"}]`,
-  `weighted_pipeline.amount_minor = 1000000` (root only; childA's 500000 excluded),
-  `aggregated_account_count = 2` (root + childB — childA is restricted and not counted).
-
----
-
-## Step 3 [auto]: scope=self — only root's own figures, aggregated_account_count=1
-
-```bash
-go test -tags=integration -run TestHierarchyRollupHTTP_TreeAndSelfScope \
-  ./backend/internal/modules/records/...
-```
-
-**Expected:** Same test (`TestHierarchyRollupHTTP_TreeAndSelfScope`) covers both tree and self
-scope in one run. The `scope=self` sub-case asserts:
-- `HTTP 200`, `scope="self"`, `aggregated_account_count=1`
-- `weighted_pipeline.amount_minor=10000` (root's own single deal only)
-- `activity_count_30d=1`
-- `restricted_excluded=[]` (self-scope never exposes subtree restriction)
-
----
-
-## Step 4 [auto]: record_grant override — restricted child flips into the included set
-
-```bash
-go test -tags=integration -run TestHierarchyRollupHTTP_RestrictedNodeAndGrant \
-  ./backend/internal/modules/records/...
-```
-
-**Expected:** `TestHierarchyRollupHTTP_RestrictedNodeAndGrant` passes. It asserts:
-- Before grant: `restricted_excluded` contains the child, child's weighted_pipeline excluded.
-- After `INSERT INTO record_grant ...` for the viewer on that child: same `GET` returns
-  `restricted_excluded=[]`, totals include the child's figures.
-
----
-
-## Step 5 [auto]: missing FX rate → 422 fx_rate_unavailable
-
-```bash
-go test -tags=integration -run TestHierarchyRollupHTTP_FXRateUnavailable \
-  ./backend/internal/modules/records/...
-```
-
-**Expected:** `TestHierarchyRollupHTTP_FXRateUnavailable` passes. It seeds a USD open deal
-with NO `fx_rate` table row and asserts:
-- `HTTP 422`
-- `body.code = "fx_rate_unavailable"`
-- `body.details.currency = "USD"`
-- `body.details.as_of` is a `YYYY-MM-DD` date string (non-empty)
-
----
-
-## Step 6 [auto]: nonexistent / out-of-workspace org id → 404
-
-```bash
-go test -tags=integration -run TestHierarchyRollupHTTP_NotFound \
-  ./backend/internal/modules/records/...
-```
-
-**Expected:** `TestHierarchyRollupHTTP_NotFound` passes. It asserts:
-- A random nonexistent UUID → `HTTP 404`, `body.code = "not_found"`
-- An org id from a different workspace (the CTE's `WHERE workspace_id=$2` filter excludes it) →
-  `HTTP 404`
-
----
-
-## Step 7 [auto]: RD-AC-8 decomposition — tree total = self + Σ children
-
-```bash
-go test -tags=integration -run TestHierarchyRollupHTTP_Decomposition \
-  ./backend/internal/modules/records/...
-```
-
-**Expected:** `TestHierarchyRollupHTTP_Decomposition` passes. It seeds root → childA →
-grandchild (3-level), calls the endpoint with different root ids and scopes, and reconciles:
-- `root_tree.weighted_pipeline = root_self.weighted_pipeline + childA_tree.weighted_pipeline`
-- `root_tree.activity_count_30d = root_self.activity_count_30d + childA_tree.activity_count_30d`
-- `root_tree.aggregated_account_count = 3`
-- Absolute weighted total: `3000 + 5000 + 7000 = 15000`
-
----
-
-## Step 8 [auto]: 401 / 403 auth gates fire for the hierarchy-rollup sub-path
-
-```bash
-go test -tags=integration -run TestHierarchyRollupHTTP_Auth \
-  ./backend/internal/modules/records/...
-```
-
-**Expected:** `TestHierarchyRollupHTTP_Auth` passes:
-- No principal in context → `HTTP 401` (RequireAuth gate)
-- Principal with no `organization.read` permission → `HTTP 403` (RbacMiddleware gate)
+- First request: `HTTP 401` (`RequireAuth` fires before any permission check runs).
+- Second request: `HTTP 403` (`RbacMiddleware`'s `session.AuthorizePerms(perms, "organization",
+  "read")` denies — `$NOPERM`'s role only grants `deal.read`).
 
 ---
 
