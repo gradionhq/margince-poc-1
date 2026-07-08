@@ -15,8 +15,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 )
 
-func strPtrOffer(s string) *string { return &s }
-func f64Ptr(f float64) *float64    { return &f }
+func f64Ptr(f float64) *float64 { return &f }
 
 func newDraftOffer(t *testing.T, db *sql.DB, wsID, dealID string) domain.Offer {
 	t.Helper()

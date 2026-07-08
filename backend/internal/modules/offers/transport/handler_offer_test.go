@@ -151,7 +151,7 @@ func (f *fakeOfferLineItemStore) Delete(ctx context.Context, id, offerID, worksp
 
 // helpers
 
-func newOfferHandler() *OfferHandler {
+func newTestOfferHandler() *OfferHandler {
 	return NewOfferHandler(newFakeOfferStore(), newFakeOfferLineItemStore())
 }
 
@@ -178,7 +178,7 @@ func validCreateLineItemBody() map[string]any {
 // ---- tests ----
 
 func TestOfferHandler_CreateDealOffer_Created(t *testing.T) {
-	h := newOfferHandler()
+	h := newTestOfferHandler()
 	bodyBytes, _ := json.Marshal(validCreateOfferBody())
 	req := httptest.NewRequest(http.MethodPost, "/deals/deal-1/offers", bytes.NewReader(bodyBytes))
 	req = withWorkspace(req)
@@ -199,7 +199,7 @@ func TestOfferHandler_CreateDealOffer_Created(t *testing.T) {
 }
 
 func TestOfferHandler_CreateDealOffer_MissingProvenance_422(t *testing.T) {
-	h := newOfferHandler()
+	h := newTestOfferHandler()
 	body := map[string]any{
 		"offer_number": "ANG-001",
 		"currency":     "EUR",
@@ -231,7 +231,7 @@ func TestOfferHandler_CreateDealOffer_DuplicateOfferNumber_409(t *testing.T) {
 }
 
 func TestOfferHandler_ListDealOffers_Empty_OK(t *testing.T) {
-	h := newOfferHandler()
+	h := newTestOfferHandler()
 	req := httptest.NewRequest(http.MethodGet, "/deals/deal-1/offers", nil)
 	req = withWorkspace(req)
 	w := httptest.NewRecorder()
@@ -241,7 +241,7 @@ func TestOfferHandler_ListDealOffers_Empty_OK(t *testing.T) {
 }
 
 func TestOfferHandler_GetOffer_NotFound_404(t *testing.T) {
-	h := newOfferHandler()
+	h := newTestOfferHandler()
 	req := httptest.NewRequest(http.MethodGet, "/offers/missing-id", nil)
 	req = withWorkspace(req)
 	w := httptest.NewRecorder()
@@ -340,7 +340,7 @@ func TestOfferHandler_DeleteOfferLineItem_NoContent(t *testing.T) {
 }
 
 func TestOfferHandler_RoutingDispatch_UnknownSuffix_404(t *testing.T) {
-	h := newOfferHandler()
+	h := newTestOfferHandler()
 	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/regenerate", nil)
 	req = withWorkspace(req)
 	w := httptest.NewRecorder()

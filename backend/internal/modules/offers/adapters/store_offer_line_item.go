@@ -80,20 +80,13 @@ func scanOfferLineItem(row interface{ Scan(dest ...any) error }) (domain.OfferLi
 	return li, err
 }
 
-// Create snapshots the referenced product (if any) onto the line — copying
-// description/unit_price_minor always, and tax_rate unless explicitTaxRate
-// overrides it (OFFER-AC-9b) — inserts the row, recomputes the parent
-// offer's totals, and writes one audit_log entry, all in one tx locked
-// against a concurrent offer status flip (OFFER-WIRE-4).
-// source/captured_by are validated but not persisted (no DB column) —
-// echoed back on the returned struct only, mirroring OfferTemplate.
-func (s *OfferLineItemStore) Create(ctx context.Context, li domain.OfferLineItem, explicitTaxRate *float64) (domain.OfferLineItem, error) {
-	if err := sqlutil.RequireProvenance(li.Source, li.CapturedBy); err != nil {
-		return domain.OfferLineItem{}, err
-	}
-	if li.Unit == "" {
-		li.Unit = "unit"
-	}
+// applyProductSnapshot resolves li's product-snapshot fields (OFFER-AC-9b):
+// when li.ProductID is set, description/unit_price_minor are always copied
+// from the product, and tax_rate is copied from the product's default
+// unless explicitTaxRate overrides it — in which case explicitTaxRate always
+// wins, product-linked or not. Split out of Create purely to keep Create's
+// own branch count under the cyclop budget; no behavior change.
+func (s *OfferLineItemStore) applyProductSnapshot(ctx context.Context, li domain.OfferLineItem, explicitTaxRate *float64) (domain.OfferLineItem, error) {
 	if li.ProductID != nil {
 		p, err := s.products.Get(ctx, *li.ProductID, li.WorkspaceID)
 		if err != nil {
@@ -112,10 +105,31 @@ func (s *OfferLineItemStore) Create(ctx context.Context, li domain.OfferLineItem
 	if explicitTaxRate != nil {
 		li.TaxRate = *explicitTaxRate
 	}
+	return li, nil
+}
+
+// Create snapshots the referenced product (if any) onto the line — copying
+// description/unit_price_minor always, and tax_rate unless explicitTaxRate
+// overrides it (OFFER-AC-9b) — inserts the row, recomputes the parent
+// offer's totals, and writes one audit_log entry, all in one tx locked
+// against a concurrent offer status flip (OFFER-WIRE-4).
+// source/captured_by are validated but not persisted (no DB column) —
+// echoed back on the returned struct only, mirroring OfferTemplate.
+func (s *OfferLineItemStore) Create(ctx context.Context, li domain.OfferLineItem, explicitTaxRate *float64) (domain.OfferLineItem, error) {
+	if err := sqlutil.RequireProvenance(li.Source, li.CapturedBy); err != nil {
+		return domain.OfferLineItem{}, err
+	}
+	if li.Unit == "" {
+		li.Unit = "unit"
+	}
+	li, err := s.applyProductSnapshot(ctx, li, explicitTaxRate)
+	if err != nil {
+		return domain.OfferLineItem{}, err
+	}
 	li.ID = ids.New()
 
 	var out domain.OfferLineItem
-	err := database.WithWorkspaceTx(ctx, s.db, li.WorkspaceID, func(tx *sql.Tx) error {
+	err = database.WithWorkspaceTx(ctx, s.db, li.WorkspaceID, func(tx *sql.Tx) error {
 		status, _, err := lockOfferForMutation(ctx, tx, li.OfferID, li.WorkspaceID)
 		if err != nil {
 			return err
@@ -196,8 +210,10 @@ func (s *OfferLineItemStore) Update(ctx context.Context, id, offerID, workspaceI
 			return err
 		}
 		if posVal := nullInt64(updates, "position"); posVal != nil {
-			if err := s.checkPositionConflict(ctx, tx, offerID, id, int(posVal.(int64))); err != nil {
-				return err
+			if posInt, ok := posVal.(int64); ok {
+				if err := s.checkPositionConflict(ctx, tx, offerID, id, int(posInt)); err != nil {
+					return err
+				}
 			}
 		}
 		row := tx.QueryRowContext(ctx, `
