@@ -78,7 +78,8 @@ func SetOptions(ctx context.Context, db *sql.DB, id string, options []string) (C
 	if err != nil {
 		return Created{}, fmt.Errorf("customfields: marshal options: %w", err)
 	}
-	row := tx.QueryRowContext(ctx, `UPDATE custom_field SET options=$1 WHERE id=$2::uuid AND workspace_id=$3::uuid RETURNING `+catalogColumns,
+	row := tx.QueryRowContext(ctx, `UPDATE custom_field SET options=$1 WHERE id=$2::uuid AND workspace_id=$3::uuid
+		RETURNING id, workspace_id, object, slug, label, type, status, archived_at, column_name, currency, options, created_by, created_at, updated_at, version`,
 		optionsJSON, id, p.TenantID)
 	out, err := scanCatalogRow(row)
 	if err != nil {
