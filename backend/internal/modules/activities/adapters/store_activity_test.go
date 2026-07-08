@@ -601,6 +601,9 @@ func TestActivityStore_ListFiltered_DirectionFilter_UsesNewIndex(t *testing.T) {
 		}
 		plan.WriteString(line + "\n")
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("explain rows: %v", err)
+	}
 	if !strings.Contains(plan.String(), "idx_activity_direction") {
 		t.Fatalf("expected idx_activity_direction in the query plan, got:\n%s", plan.String())
 	}

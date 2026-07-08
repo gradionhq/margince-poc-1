@@ -26,6 +26,8 @@ const (
 	fieldOrganizationID    = "organization_id"
 	colDealID              = "deal_id"
 	fieldIsDone            = "is_done"
+	sortColOccurredAt      = "occurred_at"
+	dueAtSortExpr          = "COALESCE(due_at, 'infinity'::timestamptz)"
 )
 
 // entityLinkColumn maps an activity_link entity_type to its FK column —
@@ -265,7 +267,7 @@ type activitySortSpec struct {
 }
 
 func parseActivitySortSpec(sort string) activitySortSpec {
-	spec := activitySortSpec{column: "occurred_at", cursor: "occurred_at", orderDir: "DESC"}
+	spec := activitySortSpec{column: sortColOccurredAt, cursor: sortColOccurredAt, orderDir: "DESC"}
 	if sort == "" {
 		return spec
 	}
@@ -283,15 +285,15 @@ func parseActivitySortSpec(sort string) activitySortSpec {
 		spec.column = term
 		spec.cursor = term
 	case "due_at":
-		spec.column = "COALESCE(due_at, 'infinity'::timestamptz)"
-		spec.cursor = "COALESCE(due_at, 'infinity'::timestamptz)"
+		spec.column = dueAtSortExpr
+		spec.cursor = dueAtSortExpr
 	default:
-		return activitySortSpec{column: "occurred_at", cursor: "occurred_at", orderDir: "DESC"}
+		return activitySortSpec{column: sortColOccurredAt, cursor: sortColOccurredAt, orderDir: "DESC"}
 	}
 	return spec
 }
 
-func buildActivityListWhere(workspaceID, cursor string, limit int, f domain.ActivityListFilter) (string, []any, activitySortSpec, error) {
+func buildActivityListWhere(workspaceID, cursor string, f domain.ActivityListFilter) (string, []any, activitySortSpec, error) {
 	spec := parseActivitySortSpec(f.Sort)
 	args := []any{workspaceID}
 	where := `a.workspace_id=$1::uuid`
@@ -349,7 +351,7 @@ func (s *ActivityStore) ListFiltered(ctx context.Context, workspaceID, cursor st
 		limit = 20
 	}
 
-	where, args, spec, err := buildActivityListWhere(workspaceID, cursor, limit, f)
+	where, args, spec, err := buildActivityListWhere(workspaceID, cursor, f)
 	if err != nil {
 		return nil, "", err
 	}
@@ -358,18 +360,21 @@ func (s *ActivityStore) ListFiltered(ctx context.Context, workspaceID, cursor st
 
 	out := []domain.Activity{}
 	dbErr := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		query := fmt.Sprintf(`
+		var query strings.Builder
+		query.WriteString(`
 			SELECT a.id, a.workspace_id, a.kind, a.subject, a.body,
 			       a.occurred_at, a.due_at, a.assignee_id, a.remind_at, a.is_done, a.done_at,
 			       a.duration_seconds, a.direction, a.meeting_status, a.source_system, a.source_id,
 			       a.version, a.source, a.captured_by, a.created_at, a.updated_at
 			FROM activity a`)
 		if f.EntityType != "" && f.EntityID != "" {
-			query += ` JOIN activity_link al ON al.activity_id = a.id`
+			query.WriteString(` JOIN activity_link al ON al.activity_id = a.id`)
 		}
-		query += ` WHERE ` + where + fmt.Sprintf(` ORDER BY %s %s, a.id %s LIMIT $%d`, orderCol, orderDir, orderDir, len(args)+1)
+		query.WriteString(` WHERE `)
+		query.WriteString(where)
+		_, _ = fmt.Fprintf(&query, ` ORDER BY %s %s, a.id %s LIMIT $%d`, orderCol, orderDir, orderDir, len(args)+1)
 		args = append(args, limit+1)
-		rows, err := tx.QueryContext(ctx, query, args...)
+		rows, err := tx.QueryContext(ctx, query.String(), args...)
 		if err != nil {
 			return err
 		}
@@ -398,7 +403,7 @@ func (s *ActivityStore) ListFiltered(ctx context.Context, workspaceID, cursor st
 		switch spec.cursor {
 		case "created_at":
 			sortVal = last.CreatedAt.UTC().Format(time.RFC3339Nano)
-		case "COALESCE(due_at, 'infinity'::timestamptz)":
+		case dueAtSortExpr:
 			if last.DueAt != nil {
 				sortVal = last.DueAt.UTC().Format(time.RFC3339Nano)
 			} else {
