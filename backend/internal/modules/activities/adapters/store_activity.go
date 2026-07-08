@@ -287,6 +287,11 @@ func (s *ActivityStore) List(ctx context.Context, workspaceID, entityType, entit
 				&a.CreatedAt, &a.UpdatedAt); err != nil {
 				return err
 			}
+			// List never selects links (or raw, by design — see
+			// TestActivityStore_List_NeverSelectsRaw), but Activity.Links has no
+			// omitempty and must marshal to JSON "[]", not "null" — so it needs an
+			// explicit non-nil zero value here, mirroring selectLinks' initializer.
+			a.Links = []domain.ActivityLink{}
 			out = append(out, a)
 		}
 		return rows.Err()

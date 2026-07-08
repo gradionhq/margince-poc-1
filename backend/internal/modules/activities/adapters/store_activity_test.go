@@ -5,9 +5,11 @@ package adapters
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -324,6 +326,41 @@ func TestActivityStore_List_NeverSelectsRaw(t *testing.T) {
 	for _, a := range items {
 		if a.Raw != nil {
 			t.Fatalf("List must never populate Raw (hot-path exclusion, ACT-AC-2), got %+v", a.Raw)
+		}
+	}
+}
+
+func TestActivityStore_List_LinksNeverNil(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "listlinksnil")
+	s := NewActivityStore(db)
+
+	if _, _, err := s.Create(context.Background(), domain.Activity{
+		WorkspaceID: wsID, Kind: "note", OccurredAt: time.Now(), Source: "ui", CapturedBy: "human:test",
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	items, _, err := s.List(context.Background(), wsID, "", "", "", 20)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(items) == 0 {
+		t.Fatal("expected at least one activity")
+	}
+	for _, a := range items {
+		if a.Links == nil {
+			t.Fatalf("List must never leave Links nil (JSON null vs [] wire shape, crm.yaml Activity.links is a non-nullable array), got nil for activity %s", a.ID)
+		}
+		b, err := json.Marshal(a)
+		if err != nil {
+			t.Fatalf("marshal activity %s: %v", a.ID, err)
+		}
+		if strings.Contains(string(b), `"links":null`) {
+			t.Fatalf("List activity %s marshaled with links:null, want links:[]: %s", a.ID, b)
+		}
+		if !strings.Contains(string(b), `"links":[]`) {
+			t.Fatalf("List activity %s expected empty links array in JSON, got: %s", a.ID, b)
 		}
 	}
 }
