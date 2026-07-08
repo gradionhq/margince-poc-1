@@ -1,4 +1,6 @@
-package records
+// Package fieldhistory implements the field-level change history projection over
+// audit_log before/after diffs (RD-WIRE-5 / RD-AC-5 / RD-AC-11).
+package fieldhistory
 
 import (
 	"encoding/base64"
@@ -11,11 +13,11 @@ import (
 	audithistorydomain "github.com/gradionhq/margince/backend/internal/modules/audithistory/domain"
 )
 
-// FieldHistoryEntry is one per-field change projected read-only from a single audit_log row's
+// Entry is one per-field change projected read-only from a single audit_log row's
 // before/after diff (RD-WIRE-5 / RD-AC-5). id is the source audit_log row's id.
 // old_value/new_value are server-rendered strings. No omitempty on nullable pointer/map fields —
 // the contract requires explicit null serialization, not key omission.
-type FieldHistoryEntry struct {
+type Entry struct {
 	ID         string         `json:"id"`
 	EntityType string         `json:"entity_type"`
 	EntityID   string         `json:"entity_id"`
@@ -43,11 +45,11 @@ type auditLogRow struct {
 	after      map[string]any
 }
 
-// diffRowFields projects one audit_log row into per-field FieldHistoryEntry values (RD-AC-5).
+// diffRowFields projects one audit_log row into per-field Entry values (RD-AC-5).
 // mask hides fields via total withholding (matching live-value masking). fieldFilter, if non-nil,
 // narrows to only the named field — applied inside the loop before any row is counted toward the
 // page. passport_id/evidence surface only when actor_type == "agent".
-func diffRowFields(row auditLogRow, mask audithistorydomain.EntityFieldMask, fieldFilter *string) []FieldHistoryEntry {
+func diffRowFields(row auditLogRow, mask audithistorydomain.EntityFieldMask, fieldFilter *string) []Entry {
 	maskedBefore := audithistorydomain.ApplyFieldMask(row.before, mask)
 	maskedAfter := audithistorydomain.ApplyFieldMask(row.after, mask)
 
@@ -65,7 +67,7 @@ func diffRowFields(row auditLogRow, mask audithistorydomain.EntityFieldMask, fie
 	}
 	sort.Strings(keys)
 
-	var entries []FieldHistoryEntry
+	var entries []Entry
 	for _, key := range keys {
 		if fieldFilter != nil && key != *fieldFilter {
 			continue
@@ -80,21 +82,21 @@ func diffRowFields(row auditLogRow, mask audithistorydomain.EntityFieldMask, fie
 		case inBefore && !inAfter:
 			// field removed
 			entries = append(entries, makeFieldEntry(row, key, stringifyValue(beforeVal), nil))
-		// both present with equal values: emit nothing (RD-AC-5 no-fabricated-timeline)
+			// both present with equal values: emit nothing (RD-AC-5 no-fabricated-timeline)
 		}
 	}
 	return entries
 }
 
-// makeFieldEntry builds one FieldHistoryEntry.
-func makeFieldEntry(row auditLogRow, field string, oldValue, newValue *string) FieldHistoryEntry {
+// makeFieldEntry builds one Entry.
+func makeFieldEntry(row auditLogRow, field string, oldValue, newValue *string) Entry {
 	var passportID *string
 	var evidence map[string]any
 	if row.actorType == "agent" {
 		passportID = row.passportID
 		evidence = row.evidence
 	}
-	return FieldHistoryEntry{
+	return Entry{
 		ID:         row.id,
 		EntityType: row.entityType,
 		EntityID:   row.entityID,

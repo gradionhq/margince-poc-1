@@ -1,4 +1,4 @@
-package records
+package fieldhistory
 
 import (
 	"encoding/base64"
@@ -9,9 +9,6 @@ import (
 
 	audithistorydomain "github.com/gradionhq/margince/backend/internal/modules/audithistory/domain"
 )
-
-// strp is a test helper that returns a pointer to s.
-func strp(s string) *string { return &s }
 
 // mustUnmarshal JSON-decodes src into map[string]any the same way the DB driver does.
 func mustUnmarshal(t *testing.T, src string) map[string]any {
@@ -255,7 +252,7 @@ func TestDiffRowFields_Stringification(t *testing.T) {
 	}
 
 	// verify float64 stringification
-	byField := make(map[string]FieldHistoryEntry)
+	byField := make(map[string]Entry)
 	for _, e := range entries {
 		byField[e.Field] = e
 	}

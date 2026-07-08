@@ -1,6 +1,6 @@
 //go:build integration
 
-package records_test
+package fieldhistory_test
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	_ "github.com/lib/pq"
 
 	audithistorydomain "github.com/gradionhq/margince/backend/internal/modules/audithistory/domain"
-	"github.com/gradionhq/margince/backend/internal/modules/records"
+	"github.com/gradionhq/margince/backend/internal/modules/records/fieldhistory"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 )
@@ -76,21 +76,22 @@ func seedFieldHistoryRow(
 // strPtr returns a *string pointer to s.
 func strPtr(s string) *string { return &s }
 
-// TestFieldHistoryStore_DiffProjection covers RD-AC-11/RD-WIRE-5:
+// TestStore_DiffProjection covers RD-AC-11/RD-WIRE-5:
 // one audit_log row with a 3-field before/after diff (2 changed, 1 unchanged) produces
 // exactly 2 entries sharing that row's id + changed_at; the unchanged field produces zero.
-func TestFieldHistoryStore_DiffProjection(t *testing.T) {
+func TestStore_DiffProjection(t *testing.T) {
 	db := pgtest.OpenTestDB(t)
 	ws := pgtest.NewWorkspaceSQL(t, db)
 	entityID := ids.New()
 
-	rowID := seedFieldHistoryRow(t, db, ws, "organization", entityID, "human", "user-1", nil, nil,
+	rowID := seedFieldHistoryRow(
+		t, db, ws, "organization", entityID, "human", "user-1", nil, nil,
 		map[string]any{"name": "Acme", "status": "active", "size": "large"},
 		map[string]any{"name": "Acme Corp", "status": "active", "size": "medium"},
 		nil,
 	)
 
-	store := records.NewFieldHistoryStore(db)
+	store := fieldhistory.NewStore(db)
 	entries, cursor, err := store.List(context.Background(), ws, "organization", entityID, nil, nil, "", 50)
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -134,10 +135,10 @@ func TestFieldHistoryStore_DiffProjection(t *testing.T) {
 	}
 }
 
-// TestFieldHistoryStore_Attribution covers RD-AC-5:
+// TestStore_Attribution covers RD-AC-5:
 // agent entries carry passport_id+evidence; human entries do not;
 // actor_type filter narrows to matching rows; field filter narrows to one field.
-func TestFieldHistoryStore_Attribution(t *testing.T) {
+func TestStore_Attribution(t *testing.T) {
 	db := pgtest.OpenTestDB(t)
 	ws := pgtest.NewWorkspaceSQL(t, db)
 	entityID := ids.New()
@@ -145,7 +146,8 @@ func TestFieldHistoryStore_Attribution(t *testing.T) {
 	ev := map[string]any{"source": "memory", "confidence": 0.9}
 
 	// Agent row: two fields changed
-	agentRowID := seedFieldHistoryRow(t, db, ws, "person", entityID, "agent", "agent-1", &passID, ev,
+	agentRowID := seedFieldHistoryRow(
+		t, db, ws, "person", entityID, "agent", "agent-1", &passID, ev,
 		map[string]any{"score": float64(1), "label": "low"},
 		map[string]any{"score": float64(5), "label": "high"},
 		nil,
@@ -153,13 +155,14 @@ func TestFieldHistoryStore_Attribution(t *testing.T) {
 	_ = agentRowID
 
 	// Human row: one field changed
-	seedFieldHistoryRow(t, db, ws, "person", entityID, "human", "user-2", nil, nil,
+	seedFieldHistoryRow(
+		t, db, ws, "person", entityID, "human", "user-2", nil, nil,
 		map[string]any{"label": "high"},
 		map[string]any{"label": "vip"},
 		nil,
 	)
 
-	store := records.NewFieldHistoryStore(db)
+	store := fieldhistory.NewStore(db)
 	ctx := context.Background()
 
 	t.Run("agent_attribution", func(t *testing.T) {
@@ -176,21 +179,20 @@ func TestFieldHistoryStore_Attribution(t *testing.T) {
 		// Entries are newest-first; human row was inserted last so it's first
 		// Verify the agent entries carry passport_id + evidence
 		for _, e := range entries {
-			if e.ActorType == "agent" {
-				if e.PassportID == nil || *e.PassportID != passID {
-					t.Errorf("agent entry: PassportID = %v, want %q", e.PassportID, passID)
-				}
-				if e.Evidence == nil {
-					t.Errorf("agent entry: Evidence is nil, want non-nil")
-				}
-			} else {
-				// non-agent: nil passport_id + evidence
+			if e.ActorType != "agent" {
 				if e.PassportID != nil {
 					t.Errorf("human entry: PassportID must be nil, got %v", e.PassportID)
 				}
 				if e.Evidence != nil {
 					t.Errorf("human entry: Evidence must be nil, got %v", e.Evidence)
 				}
+				continue
+			}
+			if e.PassportID == nil || *e.PassportID != passID {
+				t.Errorf("agent entry: PassportID = %v, want %q", e.PassportID, passID)
+			}
+			if e.Evidence == nil {
+				t.Errorf("agent entry: Evidence is nil, want non-nil")
 			}
 		}
 	})
@@ -232,23 +234,25 @@ func TestFieldHistoryStore_Attribution(t *testing.T) {
 	})
 }
 
-// TestFieldHistoryStore_Masking covers RD-AC-5/RD-PARAM-6:
+// TestStore_Masking covers RD-AC-5/RD-PARAM-6:
 // WithFieldMasks hides masked fields entirely; an erasure tombstone (before=NULL, after=NULL)
 // contributes zero entries with no special-case code.
-func TestFieldHistoryStore_Masking(t *testing.T) {
+func TestStore_Masking(t *testing.T) {
 	db := pgtest.OpenTestDB(t)
 	ws := pgtest.NewWorkspaceSQL(t, db)
 	entityID := ids.New()
 
 	// Seed one row that changes both a masked and an unmasked field
-	seedFieldHistoryRow(t, db, ws, "person", entityID, "human", "user-1", nil, nil,
+	seedFieldHistoryRow(
+		t, db, ws, "person", entityID, "human", "user-1", nil, nil,
 		map[string]any{"name": "Alice", "ssn": "111-11-1111"},
 		map[string]any{"name": "Bob", "ssn": "222-22-2222"},
 		nil,
 	)
 
 	// Seed an erasure tombstone (before=NULL, after=NULL)
-	seedFieldHistoryRow(t, db, ws, "person", entityID, "system", "system", nil, nil,
+	seedFieldHistoryRow(
+		t, db, ws, "person", entityID, "system", "system", nil, nil,
 		nil, nil, nil,
 	)
 
@@ -256,7 +260,7 @@ func TestFieldHistoryStore_Masking(t *testing.T) {
 	mask := map[string]audithistorydomain.EntityFieldMask{
 		"person": {"ssn": {}},
 	}
-	store := records.NewFieldHistoryStore(db).WithFieldMasks(mask)
+	store := fieldhistory.NewStore(db).WithFieldMasks(mask)
 	ctx := context.Background()
 
 	entries, cursor, err := store.List(ctx, ws, "person", entityID, nil, nil, "", 50)
@@ -281,14 +285,14 @@ func TestFieldHistoryStore_Masking(t *testing.T) {
 	}
 }
 
-// TestFieldHistoryStore_Empty covers RD-AC-5's honest-empty requirement:
+// TestStore_Empty covers RD-AC-5's honest-empty requirement:
 // a never-seeded entity_id returns (empty slice, "", nil) — never an error.
-func TestFieldHistoryStore_Empty(t *testing.T) {
+func TestStore_Empty(t *testing.T) {
 	db := pgtest.OpenTestDB(t)
 	ws := pgtest.NewWorkspaceSQL(t, db)
 	entityID := ids.New() // not seeded in audit_log
 
-	store := records.NewFieldHistoryStore(db)
+	store := fieldhistory.NewStore(db)
 	entries, cursor, err := store.List(context.Background(), ws, "organization", entityID, nil, nil, "", 50)
 	if err != nil {
 		t.Fatalf("List error want nil, got %v", err)
@@ -304,9 +308,9 @@ func TestFieldHistoryStore_Empty(t *testing.T) {
 	}
 }
 
-// TestFieldHistoryStore_Pagination proves cursor pagination: the second page picks up exactly
+// TestStore_Pagination proves cursor pagination: the second page picks up exactly
 // where the first left off with no duplicate or skipped entries; the final page returns "".
-func TestFieldHistoryStore_Pagination(t *testing.T) {
+func TestStore_Pagination(t *testing.T) {
 	db := pgtest.OpenTestDB(t)
 	ws := pgtest.NewWorkspaceSQL(t, db)
 	entityID := ids.New()
@@ -326,7 +330,7 @@ func TestFieldHistoryStore_Pagination(t *testing.T) {
 		map[string]any{"gamma": "C"}, map[string]any{"gamma": "C2"}, &t3)
 
 	// Newest-first order: r3 > r2 > r1
-	store := records.NewFieldHistoryStore(db)
+	store := fieldhistory.NewStore(db)
 
 	// Page 1 (limit=2): entries from r3 and r2
 	page1, cur1, err := store.List(ctx, ws, "organization", entityID, nil, nil, "", 2)
@@ -377,9 +381,9 @@ func TestFieldHistoryStore_Pagination(t *testing.T) {
 	_ = r3
 }
 
-// TestFieldHistoryStore_NewestFirst proves entries are returned newest-first
+// TestStore_NewestFirst proves entries are returned newest-first
 // even when rows are seeded out of temporal order.
-func TestFieldHistoryStore_NewestFirst(t *testing.T) {
+func TestStore_NewestFirst(t *testing.T) {
 	db := pgtest.OpenTestDB(t)
 	ws := pgtest.NewWorkspaceSQL(t, db)
 	entityID := ids.New()
@@ -398,7 +402,7 @@ func TestFieldHistoryStore_NewestFirst(t *testing.T) {
 	seedFieldHistoryRow(t, db, ws, "person", entityID, "human", "u1", nil, nil,
 		map[string]any{"x": "n1"}, map[string]any{"x": "n2"}, &tNewest)
 
-	store := records.NewFieldHistoryStore(db)
+	store := fieldhistory.NewStore(db)
 	entries, _, err := store.List(ctx, ws, "person", entityID, nil, nil, "", 50)
 	if err != nil {
 		t.Fatalf("List: %v", err)

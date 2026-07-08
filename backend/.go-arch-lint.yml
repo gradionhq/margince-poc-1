@@ -145,7 +145,8 @@ components:
   dealsports:        { in: internal/modules/deals/ports }
   dealsadapters:     { in: internal/modules/deals/adapters }
   dealsapp:          { in: internal/modules/deals/app }
-  records:           { in: internal/modules/records }
+  records:              { in: internal/modules/records }
+  recordsfieldhistory:  { in: internal/modules/records/fieldhistory }
   people:            { in: internal/modules/people }
   peopledomain:      { in: internal/modules/people/domain }
   peopleports:       { in: internal/modules/people/ports }
@@ -331,8 +332,10 @@ deps:
   # deals' FX/weighting funcs, database.WithWorkspaceTx, and auth.LoadRolePermissions +
   # session types for the row_scope RBAC lookup (self-contained tree-walk + aggregation).
   records:
-    mayDependOn: [deals, dealsdomain, errs, database, auth, session, audithistorydomain]
+    mayDependOn: [deals, dealsdomain, errs, database, auth, session]
     canUse: [pq]
+  recordsfieldhistory:
+    mayDependOn: [audithistorydomain, database, httpkit, authzkern, crmctx]
   # people domain uses strengthkern for PersonStrengthFrom; peopledomain composes
   # ActivityRef/deal/relationship refs (intentional cross-module composite-reference sharing).
   peopledomain:

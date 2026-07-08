@@ -43,6 +43,7 @@ var servedResources = map[string]bool{
 	"relationships": true, "activities": true, "records": true,
 	"record-grants": true, "custom-fields": true,
 	"products": true, "offer-templates": true,
+	"field-history": true,
 }
 
 // TestEveryServedContractOpIsRouted asserts every crm.yaml operation under a
