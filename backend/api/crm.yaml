@@ -3830,6 +3830,50 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Quotas]
+      operationId: updateQuota
+      summary: Update a quota (partial).
+      description: |
+        Merge-PATCH (API-CONV-1); If-Match required for concurrency-safe writes (API-CC-2).
+        Re-validates the owner-XOR-team contract after the merge — patching into a both-set
+        or neither-set state returns the same 422 owner_xor_team_required shape as
+        createQuota.
+      x-mcp-tool: { verb: update_record, record_type: quota, tier: green }
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateQuotaRequest' }
+      responses:
+        '200':
+          description: Updated quota.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Quota' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422':
+          description: Validation failed, including the owner-XOR-team contract.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                bothSet:
+                  value:
+                    type: 'https://errors.margince.com/validation_error'
+                    title: Validation failed
+                    status: 422
+                    code: validation_error
+                    detail: Exactly one of owner_id/team_id must be set, not both.
+                    details:
+                      errors:
+                        - { field: owner_id, code: owner_xor_team_required, message: 'Supply exactly one of owner_id or team_id, not both.' }
 
   # field_mask, deal_channel, gtm_module_install are config/
   # join tables surfaced through admin/parent endpoints, not standalone CRUD.
@@ -7424,6 +7468,20 @@ components:
         note plus a 422 on mismatch, matching how CreateCustomFieldRequest documents its
         conditional currency/options requirement (CF-T01).
       required: [period_start, period_end, target_minor, currency]
+      properties:
+        owner_id: { type: [string, 'null'], format: uuid }
+        team_id: { type: [string, 'null'], format: uuid }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        target_minor: { type: integer, format: int64 }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+
+    UpdateQuotaRequest:
+      type: object
+      description: >-
+        Merge-PATCH (API-CONV-1). Re-validates owner-XOR-team after the merge is applied —
+        patching the row into a both-set or neither-set state is refused with the same 422
+        owner_xor_team_required shape as createQuota, not silently accepted.
       properties:
         owner_id: { type: [string, 'null'], format: uuid }
         team_id: { type: [string, 'null'], format: uuid }

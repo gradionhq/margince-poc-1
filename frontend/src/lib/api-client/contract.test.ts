@@ -588,6 +588,16 @@ describe("CustomField retire shape (CUSTOM-FIELDS-WIRE-4)", () => {
   });
 });
 
+describe("UpdateQuotaRequest contract compliance (RD-WIRE-2)", () => {
+  it("is a partial merge-PATCH — every field optional", () => {
+    const req: components["schemas"]["UpdateQuotaRequest"] = {
+      target_minor: 30000000,
+    };
+    expect(req.target_minor).toBe(30000000);
+    expect(Object.keys(req)).toEqual(["target_minor"]);
+  });
+});
+
 describe("CreateQuotaRequest + owner-XOR-team 422 shape contract compliance (RD-WIRE-2)", () => {
   it("accepts an owner-scoped quota with no team_id", () => {
     const req: components["schemas"]["CreateQuotaRequest"] = {

@@ -46,3 +46,4 @@ export type RenameCustomFieldRequest = C["schemas"]["RenameCustomFieldRequest"];
 export type Quota              = C["schemas"]["Quota"];
 export type QuotaListResponse  = C["schemas"]["QuotaListResponse"];
 export type CreateQuotaRequest = C["schemas"]["CreateQuotaRequest"];
+export type UpdateQuotaRequest = C["schemas"]["UpdateQuotaRequest"];

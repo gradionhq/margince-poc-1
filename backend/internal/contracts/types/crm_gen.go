@@ -6009,6 +6009,16 @@ type UpdateProductRequest struct {
 	UnitPriceMinor *int64 `json:"unit_price_minor,omitempty"`
 }
 
+// UpdateQuotaRequest Merge-PATCH (API-CONV-1). Re-validates owner-XOR-team after the merge is applied — patching the row into a both-set or neither-set state is refused with the same 422 owner_xor_team_required shape as createQuota, not silently accepted.
+type UpdateQuotaRequest struct {
+	Currency    *string             `json:"currency,omitempty"`
+	OwnerId     *openapi_types.UUID `json:"owner_id,omitempty"`
+	PeriodEnd   *openapi_types.Date `json:"period_end,omitempty"`
+	PeriodStart *openapi_types.Date `json:"period_start,omitempty"`
+	TargetMinor *int64              `json:"target_minor,omitempty"`
+	TeamId      *openapi_types.UUID `json:"team_id,omitempty"`
+}
+
 // UpdateRelationshipRequest defines model for UpdateRelationshipRequest.
 type UpdateRelationshipRequest struct {
 	EndedAt          *openapi_types.Date `json:"ended_at,omitempty"`
@@ -7283,6 +7293,25 @@ type CreateQuotaParams struct {
 	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
 }
 
+// UpdateQuotaParams defines parameters for UpdateQuota.
+type UpdateQuotaParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+
+	// IfMatchParam Optional optimistic-concurrency precondition for a mutating request (PATCH/advance/merge):
+	// the last-seen entity `version`. If the row's current `version` differs, the write is
+	// rejected with `409 code: version_skew` (ErrVersionSkew) and no change is made — re-read,
+	// re-apply, retry. Omitting it is last-write-wins (discouraged for agent/automated writers).
+	// Accepted on every native-mode mutating endpoint that returns a versioned entity.
+	IfMatchParam *IfMatchParam `json:"If-Match,omitempty"`
+}
+
 // ListRecordGrantsParams defines parameters for ListRecordGrants.
 type ListRecordGrantsParams struct {
 	RecordType  *ListRecordGrantsParamsRecordType  `form:"record_type,omitempty" json:"record_type,omitempty"`
@@ -7588,6 +7617,9 @@ type UpdateProductJSONRequestBody = UpdateProductRequest
 
 // CreateQuotaJSONRequestBody defines body for CreateQuota for application/json ContentType.
 type CreateQuotaJSONRequestBody = CreateQuotaRequest
+
+// UpdateQuotaJSONRequestBody defines body for UpdateQuota for application/json ContentType.
+type UpdateQuotaJSONRequestBody = UpdateQuotaRequest
 
 // CreateRecordGrantJSONRequestBody defines body for CreateRecordGrant for application/json ContentType.
 type CreateRecordGrantJSONRequestBody = CreateRecordGrantRequest
@@ -12765,6 +12797,9 @@ type ServerInterface interface {
 	// Get a quota by id.
 	// (GET /quotas/{id})
 	GetQuota(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Update a quota (partial).
+	// (PATCH /quotas/{id})
+	UpdateQuota(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateQuotaParams)
 	// List manual per-record grants, filtered by record or by subject (A52/ADR-0039).
 	// (GET /record-grants)
 	ListRecordGrants(w http.ResponseWriter, r *http.Request, params ListRecordGrantsParams)
@@ -13656,6 +13691,12 @@ func (_ Unimplemented) CreateQuota(w http.ResponseWriter, r *http.Request, param
 // Get a quota by id.
 // (GET /quotas/{id})
 func (_ Unimplemented) GetQuota(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update a quota (partial).
+// (PATCH /quotas/{id})
+func (_ Unimplemented) UpdateQuota(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateQuotaParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -20301,6 +20342,80 @@ func (siw *ServerInterfaceWrapper) GetQuota(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// UpdateQuota operation middleware
+func (siw *ServerInterfaceWrapper) UpdateQuota(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateQuotaParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatchParam IfMatchParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatchParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatchParam = &IfMatchParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateQuota(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListRecordGrants operation middleware
 func (siw *ServerInterfaceWrapper) ListRecordGrants(w http.ResponseWriter, r *http.Request) {
 	var err error
@@ -21813,6 +21928,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/quotas/{id}", wrapper.GetQuota)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/quotas/{id}", wrapper.UpdateQuota)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/record-grants", wrapper.ListRecordGrants)
