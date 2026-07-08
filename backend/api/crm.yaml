@@ -98,6 +98,8 @@ tags:
     description: Deal rooms — published shared spaces with disclosed-consent access control (B-E08.5/B-E08.6).
   - name: Attachments
     description: File attachments — blob-store object references bound to a record (RD-DDL-1); bytes flow through presigned blob-seam URLs, never the JSON API (ADR-0051).
+  - name: CustomFields
+    description: Runtime, admin-defined scalar fields on existing core objects (custom-fields.md, A46/ADR-0002 Amendment 2) — list/create/rename/retire only; no hard delete.
 
 # =============================================================================
 paths:
@@ -3789,6 +3791,210 @@ paths:
               schema: { $ref: '#/components/schemas/FieldHistoryListResponse' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  # ------------------------------ /custom-fields -----------------------------
+  /custom-fields:
+    get:
+      tags: [CustomFields]
+      operationId: listCustomFields
+      summary: List custom fields for an object (admin read; includes retired by default).
+      description: |
+        CUSTOM-FIELDS-WIRE-1. Unlike a normal resource list, this admin view returns both
+        active and retired fields by default — `status` narrows to one lifecycle state.
+        Backs the custom-fields admin field table (custom-fields.md).
+      x-mcp-tool: { verb: search_records, record_type: custom_field, tier: green }
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Sort'
+        - name: object
+          in: query
+          required: true
+          schema: { type: string, enum: [person, organization, deal, lead, activity] }
+          description: Target core object (CUSTOM-FIELDS-PARAM-2).
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, retired] }
+          description: >-
+            Filter to one lifecycle state. Omitted returns both active and retired — this
+            admin list intentionally does not default-exclude retired rows.
+      responses:
+        '200':
+          description: A page of custom fields for the given object.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomFieldListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [CustomFields]
+      operationId: createCustomField
+      summary: Define a new custom field on an existing core object (🟡 — a schema change).
+      description: |
+        CUSTOM-FIELDS-WIRE-2. Stages the governed engine's single-transaction add (schema
+        change + catalog row + one audit entry, custom-fields.md). Always 🟡 — schema
+        changes are never 🟢 — so an agent caller must supply `X-Approval-Token`, exactly
+        like `mergePerson` and `advanceDeal`'s closed-won transition; a human's direct call
+        is itself the approval (API-CONV-10). `column_name` is server-derived and never
+        client-supplied. When the validated `label`/`type`/`object` combination is judged
+        structural — a new object, a relationship, or logic, never one of the six closed
+        types on one of the five closed objects — the request is refused with a
+        `structural_change_refused` 422 (see the example below). The actual
+        structural-detection judgment (parsing the label for words like
+        "object"/"relationship"/"link to") is a handler concern **out of this ticket's
+        scope** — this contract only names and shapes the refusal.
+      x-mcp-tool: { verb: create_record, record_type: custom_field, tier: yellow }
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ApprovalToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCustomFieldRequest' }
+            examples:
+              text:
+                value:
+                  object: deal
+                  label: Renewal date
+                  type: date
+                  source: ui
+                  captured_by: human:018f3a1b-0000-7000-8000-000000000001
+              currency:
+                value:
+                  object: deal
+                  label: Budget ceiling
+                  type: currency
+                  currency: USD
+                  source: ui
+                  captured_by: human:018f3a1b-0000-7000-8000-000000000001
+              picklist:
+                value:
+                  object: deal
+                  label: Procurement route
+                  type: picklist
+                  options: [direct, reseller, marketplace]
+                  source: ui
+                  captured_by: human:018f3a1b-0000-7000-8000-000000000001
+      responses:
+        '201':
+          description: The newly created custom field.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomField' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: RBAC denied, or a 🟡 create attempted without an approval token.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                approvalRequired:
+                  value:
+                    type: 'https://errors.margince.com/approval_required'
+                    title: Approval required
+                    status: 403
+                    code: approval_required
+                    detail: Adding a custom field is a schema change and is confirm-first; supply an approval token.
+        '422':
+          description: Field definition failed validation, or is judged structural (`structural_change_refused`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                validation:
+                  value:
+                    type: 'https://errors.margince.com/validation_error'
+                    title: Validation failed
+                    status: 422
+                    code: validation_error
+                    detail: One or more fields are invalid.
+                    details:
+                      errors:
+                        - { field: currency, code: required_for_type_currency }
+                structuralChangeRefused:
+                  summary: The requested field is structural, not a bounded scalar attribute (ADR-0002 Amendment 2)
+                  value:
+                    type: 'https://errors.margince.com/structural_change_refused'
+                    title: Structural change refused
+                    status: 422
+                    code: structural_change_refused
+                    detail: This looks like a new object, relationship, or logic — not a scalar attribute on an existing object. Runtime custom fields only add bounded scalar columns; a structural change ships as a reviewed source change instead.
+                    details:
+                      route: source_development_path
+
+  /custom-fields/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    patch:
+      tags: [CustomFields]
+      operationId: renameCustomField
+      summary: Rename a custom field's display label (🟢 — not a schema change).
+      description: |
+        CUSTOM-FIELDS-WIRE-3. Audited catalog `label` update only; `column_name` never
+        moves (custom-fields.md — "the physical column identity never moves"). Merge-PATCH:
+        `column_name`, `object`, and `type` are absent from the request schema entirely.
+      x-mcp-tool: { verb: update_record, record_type: custom_field, tier: green }
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RenameCustomFieldRequest' }
+      responses:
+        '200':
+          description: The renamed custom field.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomField' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /custom-fields/{id}/retire:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [CustomFields]
+      operationId: retireCustomField
+      summary: Retire (soft-retire) a custom field — irreversible-feeling, confirm-first.
+      description: |
+        CUSTOM-FIELDS-WIRE-4. Sets `status=retired`; hides the field from the API and
+        filtering while the column and every value in it are preserved — the engine never
+        drops a column as a side effect (CUSTOM-FIELDS-AC-13). 🟡 (mirrors `archivePerson`'s
+        posture: an irreversible-feeling state change users must confirm) — an agent caller
+        must supply `X-Approval-Token`. Not the generic archive shape: this is a status flip
+        on a still-fetchable row, not `archived_at` (which stays null).
+      x-mcp-tool: { verb: update_record, record_type: custom_field, tier: yellow }
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ApprovalToken'
+      responses:
+        '200':
+          description: >-
+            The retired custom field (`status: "retired"`, `archived_at` still null).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomField' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: RBAC denied, or a 🟡 retire attempted without an approval token.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                approvalRequired:
+                  value:
+                    type: 'https://errors.margince.com/approval_required'
+                    title: Approval required
+                    status: 403
+                    code: approval_required
+                    detail: Retiring a custom field is confirm-first; supply an approval token.
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # DEFERRED — stubs only (data-model.md §12). Intentionally NOT specified:
   #   /sequences, /sequences/{id}/steps, /enrollments   (outbound cadences; sends gated)
   #   /overlay/*                                         (overlay-on-incumbents read model)
@@ -6366,3 +6572,98 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    # ---- Custom fields (CUSTOM-FIELDS-WIRE-1..5, A46/ADR-0002 Amendment 2) ----
+    CustomField:
+      type: object
+      description: |
+        A workspace-defined runtime field on an existing core object (custom-fields.md).
+        Mirrors the `custom_field` catalog table — the system-of-record for every
+        runtime-added column (CUSTOM-FIELDS-SCHEMA-1). `column_name` is the physical
+        `cf_`-prefixed identifier, stable across rename; `status=retired` hides the field
+        from the API and filtering while the column and its values are preserved (soft
+        retire, never a column drop — CUSTOM-FIELDS-AC-13). Deliberately carries no
+        `source`/`captured_by` — the catalog row itself has no such columns; provenance on
+        create is captured for audit attribution only (see `CreateCustomFieldRequest`).
+      required: [id, workspace_id, object, label, slug, type, status, column_name, created_by, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        workspace_id: { type: string, format: uuid }
+        object:
+          type: string
+          enum: [person, organization, deal, lead, activity]
+          description: The existing core object this field is added to (CUSTOM-FIELDS-PARAM-2).
+        label: { type: string, description: Display label; the only thing a rename updates. }
+        slug: { type: string, description: Admin-facing key the column_name derives from. }
+        type:
+          type: string
+          enum: [text, number, date, currency, picklist, boolean]
+          description: The closed set of six scalar types (CUSTOM-FIELDS-PARAM-1). Immutable once created.
+        status:
+          type: string
+          enum: [active, retired]
+          description: 'retired = soft: hidden from the API and filtering, column and values preserved (CUSTOM-FIELDS-AC-13).'
+        column_name:
+          type: string
+          readOnly: true
+          description: >-
+            Server-derived, `cf_`-prefixed, slug-derived physical column identifier
+            (CUSTOM-FIELDS-PARAM-3) — never client-supplied, immutable once live, stable
+            across rename.
+        currency:
+          type: [string, 'null']
+          pattern: '^[A-Z]{3}$'
+          description: ISO-4217 currency code; present when `type=currency`, null otherwise.
+        options:
+          type: [array, 'null']
+          items: { type: string }
+          description: Allowed picklist values; present (non-empty) when `type=picklist` (CUSTOM-FIELDS-PARAM-5), null otherwise.
+        created_by: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        archived_at:
+          type: [string, 'null']
+          format: date-time
+          description: >-
+            Base envelope field (DM-CONV-3); stays null even when `status=retired` — retire
+            is a status flip, not an archive.
+        version: { $ref: '#/components/schemas/RowVersion' }
+
+    CustomFieldListResponse:
+      type: object
+      required: [data, page]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/CustomField' } }
+        page: { $ref: '#/components/schemas/PageInfo' }
+
+    CreateCustomFieldRequest:
+      type: object
+      description: |
+        🟡 always (a schema change is never 🟢) — see `createCustomField`. `currency` is
+        required when `type=currency` (pattern `^[A-Z]{3}$`); `options` is required
+        non-empty when `type=picklist` (CUSTOM-FIELDS-PARAM-5). Neither conditional
+        requirement is expressed as an OpenAPI 3.1 `oneOf`/`if`-`then` here — a prose note
+        plus a 422 on mismatch is sufficient, matching how Offer/Product money fields are
+        documented elsewhere in this contract.
+      required: [object, label, type, source, captured_by]
+      properties:
+        object:
+          type: string
+          enum: [person, organization, deal, lead, activity]
+        label: { type: string }
+        type:
+          type: string
+          enum: [text, number, date, currency, picklist, boolean]
+        currency: { type: [string, 'null'], pattern: '^[A-Z]{3}$' }
+        options: { type: [array, 'null'], items: { type: string } }
+        source: { type: string }
+        captured_by: { type: string }
+      additionalProperties: true
+
+    RenameCustomFieldRequest:
+      type: object
+      description: >-
+        Merge-PATCH; `label` only — `column_name`, `object`, and `type` are absent from this
+        request schema entirely (immutable, not just ignored if sent).
+      properties:
+        label: { type: string }
