@@ -2,8 +2,10 @@
 
 Contract-only ticket — no handler/business logic ships in this branch, and none of the six new
 operations is registered on the real live mux. Every `[auto]` step below is a build/codegen/
-gate-level check; the two `[live]` steps boot the real stack only to confirm honest 404s (no
-handler is wired), not to exercise business behavior.
+gate-level check; the two `[live]` steps boot the real stack to confirm no new business logic is
+actually wired in — Step 15 gets an honest 404 (no route registered), while Step 16 gets a `200`
+via a pre-existing, unrelated fallthrough in the existing `OrganizationHandler` (see Step 16 for
+detail) — neither exercises real hierarchy-rollup business behavior.
 
 1. **[auto]** Run `make gen-types` from repo root. Expected: exits 0, prints `gen-types: wrote
    backend/internal/contracts/types/crm_gen.go + frontend/src/lib/api-client/generated/crm.d.ts`.
@@ -52,9 +54,16 @@ handler is wired), not to exercise business behavior.
     (or the same generic auth/not-found response any unmounted path gets). This is the expected,
     correct behavior for a contract-only ticket — it is not a bug to fix here.
 16. **[live]** Same stack, `curl -s -o /dev/null -w "%{http_code}\n"
-    http://localhost:8080/organizations/<any-existing-id>/hierarchy-rollup`. Expected: the
-    generic `/organizations/` subtree handler receives it (mux-level match) but the real
-    `OrganizationHandler`'s own internal routing has no case for `hierarchy-rollup`, so it
-    answers its own "not found"/"method not handled" response — again, not `200`, and not a
-    panic/500. Confirms the route-mount gate's forward-direction pass at Step 13 reflects real
-    server behavior, not just a test artifact.
+    http://localhost:8080/organizations/<any-existing-id>/hierarchy-rollup`. Expected: **`200`**,
+    with the plain `Organization` object body — the pre-existing get-organization-by-id handler
+    answers it. This is because `httpkit.PathID()` extracts only the first path segment after the
+    `/organizations/` prefix and ignores any trailing sub-route by design, so
+    `OrganizationHandler` treats `.../{id}/hierarchy-rollup` as a plain `GET /organizations/{id}`.
+    There is no dedicated `hierarchy-rollup` business logic wired up (confirming this ticket is
+    contract-only, as intended), but the observable HTTP behavior is a `200` fallthrough, not a
+    404/not-found. Note: this fallthrough is pre-existing behavior in
+    `backend/internal/shared/kernel/httpkit/httpkit.go` / `OrganizationHandler`, reproducible
+    today against `main` and not introduced by RD-T02 — any nonsense sub-route (e.g.
+    `.../totally-not-a-real-subroute`) gets the same `200`-with-plain-org-body response. Fixing
+    that looseness is out of scope for this ticket; it would need its own hardening ticket against
+    `httpkit`/`OrganizationHandler`.
