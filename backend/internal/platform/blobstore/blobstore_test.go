@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestMemoryStore_PutGetRoundTrip(t *testing.T) {
@@ -38,5 +40,30 @@ func TestMemoryStore_GetMissing(t *testing.T) {
 	s := NewMemoryStore()
 	if _, err := s.Get(context.Background(), "nope"); err == nil {
 		t.Fatal("Get(missing) should error")
+	}
+}
+
+func TestMemoryStore_PresignedPutURL_ReturnsDeterministicURL(t *testing.T) {
+	m := NewMemoryStore()
+	u, err := m.PresignedPutURL(context.Background(), "attachments/ws1/att1/f.pdf", 15*time.Minute)
+	if err != nil {
+		t.Fatalf("presign put: %v", err)
+	}
+	if !strings.HasPrefix(u, "memory://attachments/ws1/att1/f.pdf") {
+		t.Fatalf("expected memory:// URL prefixed with the key, got %q", u)
+	}
+}
+
+func TestMemoryStore_PresignedGetURL_MatchesPutRoundTrip(t *testing.T) {
+	m := NewMemoryStore()
+	if _, err := m.Put(context.Background(), "k1", strings.NewReader("hello")); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	u, err := m.PresignedGetURL(context.Background(), "k1", 5*time.Minute)
+	if err != nil {
+		t.Fatalf("presign get: %v", err)
+	}
+	if !strings.HasPrefix(u, "memory://k1") {
+		t.Fatalf("expected memory:// URL, got %q", u)
 	}
 }
