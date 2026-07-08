@@ -146,6 +146,7 @@ components:
   dealsapp:          { in: internal/modules/deals/app }
   records:           { in: internal/modules/records }
   recordsadapters:   { in: internal/modules/records/adapters }
+  recordstransport:  { in: internal/modules/records/transport }
   people:            { in: internal/modules/people }
   peopledomain:      { in: internal/modules/people/domain }
   peopleports:       { in: internal/modules/people/ports }
@@ -336,6 +337,8 @@ deps:
   recordsadapters:
     mayDependOn: [deals, errs, database, audit, sqlutil]
     canUse: [pq]
+  recordstransport:
+    mayDependOn: [records, crmctx, errs, httpkit]
   # people domain uses strengthkern for PersonStrengthFrom; peopledomain composes
   # ActivityRef/deal/relationship refs (intentional cross-module composite-reference sharing).
   peopledomain:

@@ -24,6 +24,7 @@ import (
 	people "github.com/gradionhq/margince/backend/internal/modules/people"
 	peopletransport "github.com/gradionhq/margince/backend/internal/modules/people/transport"
 	"github.com/gradionhq/margince/backend/internal/modules/records"
+	recordstransport "github.com/gradionhq/margince/backend/internal/modules/records/transport"
 	relationships "github.com/gradionhq/margince/backend/internal/modules/relationships"
 	relstransport "github.com/gradionhq/margince/backend/internal/modules/relationships/transport"
 	platformauth "github.com/gradionhq/margince/backend/internal/platform/auth"
@@ -130,6 +131,7 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 	crud("/record-grants", platformauth.ObjRecordGrant, relstransport.NewRecordGrantHandler(people.NewRecordGrantStore(k.db), k.db, k.verifier))
 	crud("/products", platformauth.ObjProduct, offerstransport.NewProductHandler(offers.NewProductStore(k.db)))
 	crud("/offer-templates", platformauth.ObjOfferTemplate, offerstransport.NewOfferTemplateHandler(offers.NewOfferTemplateStore(k.db)))
+	crud("/quotas", platformauth.ObjQuota, recordstransport.NewQuotaHandler(records.NewQuotaStore(k.db)))
 
 	historyAuthz := authz.Authorizer(func(ctx context.Context, object, action string) error {
 		p, _ := crmctx.From(ctx)
