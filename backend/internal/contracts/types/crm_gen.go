@@ -3950,6 +3950,21 @@ type CreateProductRequest struct {
 	UnitPriceMinor int64 `json:"unit_price_minor"`
 }
 
+// CreateQuotaRequest Exactly one of owner_id/team_id must be non-null — supplying both or neither is a 422
+// validation_error carrying a distinct, machine-branchable details.errors[].code
+// (owner_xor_team_required), not the generic per-field validation code (see
+// createQuota's 422 examples). Not expressed as an OpenAPI 3.1 oneOf here — a prose
+// note plus a 422 on mismatch, matching how CreateCustomFieldRequest documents its
+// conditional currency/options requirement (CF-T01).
+type CreateQuotaRequest struct {
+	Currency    string              `json:"currency"`
+	OwnerId     *openapi_types.UUID `json:"owner_id,omitempty"`
+	PeriodEnd   openapi_types.Date  `json:"period_end"`
+	PeriodStart openapi_types.Date  `json:"period_start"`
+	TargetMinor int64               `json:"target_minor"`
+	TeamId      *openapi_types.UUID `json:"team_id,omitempty"`
+}
+
 // CreateRecordGrantRequest defines model for CreateRecordGrantRequest.
 type CreateRecordGrantRequest struct {
 	Access      CreateRecordGrantRequestAccess      `json:"access"`
@@ -7256,6 +7271,18 @@ type ListQuotasParams struct {
 	TeamId               *openapi_types.UUID   `form:"team_id,omitempty" json:"team_id,omitempty"`
 }
 
+// CreateQuotaParams defines parameters for CreateQuota.
+type CreateQuotaParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+}
+
 // ListRecordGrantsParams defines parameters for ListRecordGrants.
 type ListRecordGrantsParams struct {
 	RecordType  *ListRecordGrantsParamsRecordType  `form:"record_type,omitempty" json:"record_type,omitempty"`
@@ -7558,6 +7585,9 @@ type CreateProductJSONRequestBody = CreateProductRequest
 
 // UpdateProductJSONRequestBody defines body for UpdateProduct for application/json ContentType.
 type UpdateProductJSONRequestBody = UpdateProductRequest
+
+// CreateQuotaJSONRequestBody defines body for CreateQuota for application/json ContentType.
+type CreateQuotaJSONRequestBody = CreateQuotaRequest
 
 // CreateRecordGrantJSONRequestBody defines body for CreateRecordGrant for application/json ContentType.
 type CreateRecordGrantJSONRequestBody = CreateRecordGrantRequest
@@ -12729,6 +12759,9 @@ type ServerInterface interface {
 	// List quotas (cursor-paginated).
 	// (GET /quotas)
 	ListQuotas(w http.ResponseWriter, r *http.Request, params ListQuotasParams)
+	// Create a quota (owner XOR team revenue target for one period).
+	// (POST /quotas)
+	CreateQuota(w http.ResponseWriter, r *http.Request, params CreateQuotaParams)
 	// Get a quota by id.
 	// (GET /quotas/{id})
 	GetQuota(w http.ResponseWriter, r *http.Request, idParam IdParam)
@@ -13611,6 +13644,12 @@ func (_ Unimplemented) UpdateProduct(w http.ResponseWriter, r *http.Request, idP
 // List quotas (cursor-paginated).
 // (GET /quotas)
 func (_ Unimplemented) ListQuotas(w http.ResponseWriter, r *http.Request, params ListQuotasParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a quota (owner XOR team revenue target for one period).
+// (POST /quotas)
+func (_ Unimplemented) CreateQuota(w http.ResponseWriter, r *http.Request, params CreateQuotaParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -20185,6 +20224,52 @@ func (siw *ServerInterfaceWrapper) ListQuotas(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// CreateQuota operation middleware
+func (siw *ServerInterfaceWrapper) CreateQuota(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateQuotaParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateQuota(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetQuota operation middleware
 func (siw *ServerInterfaceWrapper) GetQuota(w http.ResponseWriter, r *http.Request) {
 	var err error
@@ -21722,6 +21807,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/quotas", wrapper.ListQuotas)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/quotas", wrapper.CreateQuota)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/quotas/{id}", wrapper.GetQuota)

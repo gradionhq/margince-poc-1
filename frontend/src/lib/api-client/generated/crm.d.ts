@@ -2144,7 +2144,16 @@ export interface paths {
         /** List quotas (cursor-paginated). */
         get: operations["listQuotas"];
         put?: never;
-        post?: never;
+        /**
+         * Create a quota (owner XOR team revenue target for one period).
+         * @description RD-WIRE-2. Exactly one of owner_id/team_id must be non-null (RD-DDL-2 CHECK) —
+         *     supplying both or neither is refused with a 422 validation_error carrying a distinct
+         *     details.errors[].code (owner_xor_team_required), not the generic per-field
+         *     validation code, so a caller can branch on this specific violation. target_minor is
+         *     always human-set (RD-PARAM-3) — no default, no AI-guessed or server-computed
+         *     fallback.
+         */
+        post: operations["createQuota"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5582,6 +5591,27 @@ export interface components {
         QuotaListResponse: {
             data: components["schemas"]["Quota"][];
             page: components["schemas"]["PageInfo"];
+        };
+        /**
+         * @description Exactly one of owner_id/team_id must be non-null — supplying both or neither is a 422
+         *     validation_error carrying a distinct, machine-branchable details.errors[].code
+         *     (owner_xor_team_required), not the generic per-field validation code (see
+         *     createQuota's 422 examples). Not expressed as an OpenAPI 3.1 oneOf here — a prose
+         *     note plus a 422 on mismatch, matching how CreateCustomFieldRequest documents its
+         *     conditional currency/options requirement (CF-T01).
+         */
+        CreateQuotaRequest: {
+            /** Format: uuid */
+            owner_id?: string | null;
+            /** Format: uuid */
+            team_id?: string | null;
+            /** Format: date */
+            period_start: string;
+            /** Format: date */
+            period_end: string;
+            /** Format: int64 */
+            target_minor: number;
+            currency: string;
         };
     };
     responses: {
@@ -10511,6 +10541,52 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    createQuota: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+                 *     `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+                 *     returns the original status + body. Reusing the same key with a *different* request body
+                 *     returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+                 *     **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+                 *     retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+                 *     (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateQuotaRequest"];
+            };
+        };
+        responses: {
+            /** @description Created quota. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Quota"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Validation failed, including the owner-XOR-team contract. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     getQuota: {

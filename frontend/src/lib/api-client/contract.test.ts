@@ -588,6 +588,40 @@ describe("CustomField retire shape (CUSTOM-FIELDS-WIRE-4)", () => {
   });
 });
 
+describe("CreateQuotaRequest + owner-XOR-team 422 shape contract compliance (RD-WIRE-2)", () => {
+  it("accepts an owner-scoped quota with no team_id", () => {
+    const req: components["schemas"]["CreateQuotaRequest"] = {
+      owner_id: "00000000-0000-0000-0000-000000000001",
+      period_start: "2026-01-01",
+      period_end: "2026-03-31",
+      target_minor: 28000000,
+      currency: "EUR",
+    };
+    expect(req.owner_id).not.toBeNull();
+  });
+
+  it("accepts a team-scoped quota with no owner_id", () => {
+    const req: components["schemas"]["CreateQuotaRequest"] = {
+      team_id: "00000000-0000-0000-0000-000000000030",
+      period_start: "2026-01-01",
+      period_end: "2026-03-31",
+      target_minor: 100000000,
+      currency: "EUR",
+    };
+    expect(req.team_id).not.toBeNull();
+  });
+
+  it("Problem carries a machine-branchable owner_xor_team_required details.errors[].code", () => {
+    const refusal: components["schemas"]["Problem"] = {
+      status: 422,
+      code: "validation_error",
+      details: { errors: [{ field: "owner_id", code: "owner_xor_team_required" }] },
+    };
+    expect(refusal.code).toBe("validation_error");
+    expect(refusal.details?.errors[0].code).toBe("owner_xor_team_required");
+  });
+});
+
 describe("Quota / QuotaListResponse contract compliance (RD-WIRE-2)", () => {
   it("Quota carries owner XOR team, a human-set target, and no provenance fields", () => {
     const quota: components["schemas"]["Quota"] = {

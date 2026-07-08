@@ -3742,6 +3742,76 @@ paths:
               schema: { $ref: '#/components/schemas/QuotaListResponse' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Quotas]
+      operationId: createQuota
+      summary: Create a quota (owner XOR team revenue target for one period).
+      description: |
+        RD-WIRE-2. Exactly one of owner_id/team_id must be non-null (RD-DDL-2 CHECK) —
+        supplying both or neither is refused with a 422 validation_error carrying a distinct
+        details.errors[].code (owner_xor_team_required), not the generic per-field
+        validation code, so a caller can branch on this specific violation. target_minor is
+        always human-set (RD-PARAM-3) — no default, no AI-guessed or server-computed
+        fallback.
+      x-mcp-tool: { verb: create_record, record_type: quota, tier: green }
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateQuotaRequest' }
+            examples:
+              ownerQuota:
+                value:
+                  owner_id: 018f3a1b-0000-7000-8000-000000000001
+                  period_start: '2026-01-01'
+                  period_end: '2026-03-31'
+                  target_minor: 28000000
+                  currency: EUR
+              teamQuota:
+                value:
+                  team_id: 018f3a1b-0000-7000-8000-000000000030
+                  period_start: '2026-01-01'
+                  period_end: '2026-03-31'
+                  target_minor: 100000000
+                  currency: EUR
+      responses:
+        '201':
+          description: Created quota.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Quota' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: Validation failed, including the owner-XOR-team contract.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                bothSet:
+                  summary: Both owner_id and team_id supplied
+                  value:
+                    type: 'https://errors.margince.com/validation_error'
+                    title: Validation failed
+                    status: 422
+                    code: validation_error
+                    detail: Exactly one of owner_id/team_id must be set, not both.
+                    details:
+                      errors:
+                        - { field: owner_id, code: owner_xor_team_required, message: 'Supply exactly one of owner_id or team_id, not both.' }
+                neitherSet:
+                  summary: Neither owner_id nor team_id supplied
+                  value:
+                    type: 'https://errors.margince.com/validation_error'
+                    title: Validation failed
+                    status: 422
+                    code: validation_error
+                    detail: Exactly one of owner_id/team_id must be set.
+                    details:
+                      errors:
+                        - { field: owner_id, code: owner_xor_team_required, message: 'Supply exactly one of owner_id or team_id.' }
 
   /quotas/{id}:
     parameters:
@@ -7343,3 +7413,21 @@ components:
       properties:
         data: { type: array, items: { $ref: '#/components/schemas/Quota' } }
         page: { $ref: '#/components/schemas/PageInfo' }
+
+    CreateQuotaRequest:
+      type: object
+      description: |
+        Exactly one of owner_id/team_id must be non-null — supplying both or neither is a 422
+        validation_error carrying a distinct, machine-branchable details.errors[].code
+        (owner_xor_team_required), not the generic per-field validation code (see
+        createQuota's 422 examples). Not expressed as an OpenAPI 3.1 oneOf here — a prose
+        note plus a 422 on mismatch, matching how CreateCustomFieldRequest documents its
+        conditional currency/options requirement (CF-T01).
+      required: [period_start, period_end, target_minor, currency]
+      properties:
+        owner_id: { type: [string, 'null'], format: uuid }
+        team_id: { type: [string, 'null'], format: uuid }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        target_minor: { type: integer, format: int64 }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
