@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	// Registers the postgres driver so sql.Open("postgres", ...) resolves; only the driver's side-effecting init() is used.
 	_ "github.com/lib/pq"
 
 	"github.com/gradionhq/margince/backend/internal/modules/activities/domain"
@@ -156,24 +157,31 @@ func TestActivityStore_Create_MultiEntityLinks(t *testing.T) {
 			t.Fatalf("scan link: %v", err)
 		}
 		count++
-		switch entityType {
-		case "person":
-			if !pID.Valid || oID.Valid || dID.Valid {
-				t.Fatalf("person link must have exactly person_id populated, got p=%v o=%v d=%v", pID, oID, dID)
-			}
-		case "deal":
-			if !dID.Valid || pID.Valid || oID.Valid {
-				t.Fatalf("deal link must have exactly deal_id populated, got p=%v o=%v d=%v", pID, oID, dID)
-			}
-		default:
-			t.Fatalf("unexpected entity_type %q", entityType)
-		}
+		assertActivityLinkRow(t, entityType, pID, oID, dID)
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatalf("iterate links: %v", err)
 	}
 	if count != 2 {
 		t.Fatalf("expected 2 activity_link rows, got %d", count)
+	}
+}
+
+// assertActivityLinkRow checks that exactly the FK column matching entityType
+// is populated on an activity_link row, and none of the others.
+func assertActivityLinkRow(t *testing.T, entityType string, pID, oID, dID sql.NullString) {
+	t.Helper()
+	switch entityType {
+	case "person":
+		if !pID.Valid || oID.Valid || dID.Valid {
+			t.Fatalf("person link must have exactly person_id populated, got p=%v o=%v d=%v", pID, oID, dID)
+		}
+	case "deal":
+		if !dID.Valid || pID.Valid || oID.Valid {
+			t.Fatalf("deal link must have exactly deal_id populated, got p=%v o=%v d=%v", pID, oID, dID)
+		}
+	default:
+		t.Fatalf("unexpected entity_type %q", entityType)
 	}
 }
 

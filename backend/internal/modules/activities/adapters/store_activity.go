@@ -105,16 +105,44 @@ func jsonbParam(v map[string]any) any {
 // original row's links untouched (ACT-WIRE-2).
 func (s *ActivityStore) insertLinks(ctx context.Context, tx *sql.Tx, activityID, workspaceID string, links []domain.ActivityLink) error {
 	for _, l := range links {
-		col, ok := entityLinkColumn[l.EntityType]
-		if !ok {
+		// entityLinkColumn is still consulted for its "unknown entity_type"
+		// error path, but its string result is never interpolated into SQL —
+		// insertLink below dispatches on l.EntityType against a fixed set of
+		// literal INSERT statements instead, so no query text is built from
+		// runtime data (avoids a SonarCloud dynamic-SQL hotspot).
+		if _, ok := entityLinkColumn[l.EntityType]; !ok {
 			return fmt.Errorf("unknown activity_link entity_type: %s", l.EntityType)
 		}
-		q := fmt.Sprintf(`INSERT INTO activity_link (id, workspace_id, activity_id, entity_type, %s) VALUES ($1,$2,$3,$4,$5)`, col)
-		if _, err := tx.ExecContext(ctx, q, ids.New(), workspaceID, activityID, l.EntityType, l.EntityID); err != nil {
+		if err := s.insertLink(ctx, tx, activityID, workspaceID, l); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// insertLink writes a single activity_link row using one of three literal
+// (non-interpolated) INSERT statements, one per FK column — see insertLinks.
+func (s *ActivityStore) insertLink(ctx context.Context, tx *sql.Tx, activityID, workspaceID string, l domain.ActivityLink) error {
+	var err error
+	switch l.EntityType {
+	case entityTypePerson:
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO activity_link (id, workspace_id, activity_id, entity_type, person_id) VALUES ($1,$2,$3,$4,$5)`,
+			ids.New(), workspaceID, activityID, l.EntityType, l.EntityID)
+	case entityTypeOrganization:
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO activity_link (id, workspace_id, activity_id, entity_type, organization_id) VALUES ($1,$2,$3,$4,$5)`,
+			ids.New(), workspaceID, activityID, l.EntityType, l.EntityID)
+	case entityTypeDeal:
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO activity_link (id, workspace_id, activity_id, entity_type, deal_id) VALUES ($1,$2,$3,$4,$5)`,
+			ids.New(), workspaceID, activityID, l.EntityType, l.EntityID)
+	default:
+		// Unreachable: insertLinks already validated l.EntityType against
+		// entityLinkColumn before calling insertLink.
+		return fmt.Errorf("unknown activity_link entity_type: %s", l.EntityType)
+	}
+	return err
 }
 
 // Create inserts an activity in one workspace-scoped tx. When a.SourceSystem
@@ -332,60 +360,76 @@ func (s *ActivityStore) Update(ctx context.Context, id, workspaceID string, upda
 
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		if hasDueAt || hasAssigneeID || hasIsDone {
-			var kind string
-			if err := tx.QueryRowContext(ctx,
-				`SELECT kind FROM activity WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
-				id, workspaceID).Scan(&kind); err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
-					return errs.ErrNotFound
-				}
-				return err
-			}
-			if err := validateTaskFields(kind, dueAt, assigneeID, boolVal(isDoneVal)); err != nil {
+			if err := guardTaskFieldsAgainstKind(ctx, tx, id, workspaceID, dueAt, assigneeID, boolVal(isDoneVal)); err != nil {
 				return err
 			}
 		}
-		// The optimistic-concurrency guard is folded into the WHERE: ifMatch==0 skips the
-		// version check (last-write-wins); a non-zero ifMatch requires the row version to match.
-		res, err := tx.ExecContext(ctx, `
-				UPDATE activity
-				SET subject     = COALESCE($3, subject),
-				    body        = COALESCE($4, body),
-				    remind_at   = CASE WHEN $5 THEN $6 ELSE remind_at END,
-				    due_at      = CASE WHEN $7 THEN $8 ELSE due_at END,
-				    assignee_id = CASE WHEN $9 THEN $10::uuid ELSE assignee_id END,
-				    is_done     = CASE WHEN $11 THEN $12 ELSE is_done END,
-				    done_at     = CASE
-				                    WHEN $11 AND $12 THEN now()
-				                    WHEN $11 AND NOT $12 THEN NULL
-				                    ELSE done_at
-				                  END,
-				    updated_at  = now()
-				WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL
-				  AND ($13 = 0 OR version = $13)`,
-			id, workspaceID,
-			sqlutil.NullStr(updates, "subject"),
-			sqlutil.NullStr(updates, "body"),
-			hasRemindAt, remindAt,
-			hasDueAt, dueAt,
-			hasAssigneeID, assigneeID,
-			hasIsDone, boolVal(isDoneVal),
-			ifMatch)
-		if err != nil {
-			return err
-		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			if ifMatch != 0 {
-				return errs.ErrVersionSkew
-			}
-			return errs.ErrNotFound
-		}
-		return nil
+		return s.applyUpdate(ctx, tx, id, workspaceID, updates, ifMatch,
+			hasRemindAt, remindAt, hasDueAt, dueAt, hasAssigneeID, assigneeID, hasIsDone, boolVal(isDoneVal))
 	})
 	if err != nil {
 		return domain.Activity{}, err
 	}
 	return s.Get(ctx, id, workspaceID)
+}
+
+// guardTaskFieldsAgainstKind enforces ACT-AC-11 on Update: when the caller is
+// touching due_at/assignee_id/is_done, look up the row's kind and reject a
+// task-only field on a non-task kind before the UPDATE runs. ErrNotFound if
+// the row is absent (mirrors the UPDATE's own WHERE-clause not-found case).
+func guardTaskFieldsAgainstKind(ctx context.Context, tx *sql.Tx, id, workspaceID string, dueAt *time.Time, assigneeID *string, isDone bool) error {
+	var kind string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT kind FROM activity WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
+		id, workspaceID).Scan(&kind); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errs.ErrNotFound
+		}
+		return err
+	}
+	return validateTaskFields(kind, dueAt, assigneeID, isDone)
+}
+
+// applyUpdate runs the bounded UPDATE with the optimistic-concurrency guard
+// folded into the WHERE clause: ifMatch==0 skips the version check
+// (last-write-wins); a non-zero ifMatch requires the row version to match.
+func (s *ActivityStore) applyUpdate(ctx context.Context, tx *sql.Tx, id, workspaceID string, updates map[string]any, ifMatch int64,
+	hasRemindAt bool, remindAt *time.Time, hasDueAt bool, dueAt *time.Time, hasAssigneeID bool, assigneeID *string, hasIsDone bool, isDone bool,
+) error {
+	res, err := tx.ExecContext(ctx, `
+			UPDATE activity
+			SET subject     = COALESCE($3, subject),
+			    body        = COALESCE($4, body),
+			    remind_at   = CASE WHEN $5 THEN $6 ELSE remind_at END,
+			    due_at      = CASE WHEN $7 THEN $8 ELSE due_at END,
+			    assignee_id = CASE WHEN $9 THEN $10::uuid ELSE assignee_id END,
+			    is_done     = CASE WHEN $11 THEN $12 ELSE is_done END,
+			    done_at     = CASE
+			                    WHEN $11 AND $12 THEN now()
+			                    WHEN $11 AND NOT $12 THEN NULL
+			                    ELSE done_at
+			                  END,
+			    updated_at  = now()
+			WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL
+			  AND ($13 = 0 OR version = $13)`,
+		id, workspaceID,
+		sqlutil.NullStr(updates, "subject"),
+		sqlutil.NullStr(updates, "body"),
+		hasRemindAt, remindAt,
+		hasDueAt, dueAt,
+		hasAssigneeID, assigneeID,
+		hasIsDone, isDone,
+		ifMatch)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		if ifMatch != 0 {
+			return errs.ErrVersionSkew
+		}
+		return errs.ErrNotFound
+	}
+	return nil
 }
 
 // Archive soft-deletes an activity (sets archived_at).
