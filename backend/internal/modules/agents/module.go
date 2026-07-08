@@ -7,8 +7,13 @@
 package crmagents
 
 import (
+	"context"
+	"encoding/json"
+
+	"github.com/gradionhq/margince/backend/internal/modules/agents/app"
 	"github.com/gradionhq/margince/backend/internal/modules/agents/domain"
 	"github.com/gradionhq/margince/backend/internal/modules/agents/ports"
+	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 )
 
 // Proposal is one candidate overnight change.
@@ -62,3 +67,19 @@ type StageFunc = ports.StageFunc
 
 // Effector applies an approved or unconditionally-🟢 proposal's effect.
 type Effector = ports.Effector
+
+// ActorOvernight is the attribution string this module uses throughout.
+const ActorOvernight = app.ActorOvernight
+
+// TopicOvernightApplied is the domain event topic for a landed effect.
+const TopicOvernightApplied = app.TopicOvernightApplied
+
+// StageProposal stages a 🟡 RoutedProposal onto the approvals seam.
+func StageProposal(ctx context.Context, tx DBExec, repo crmapprovals.Repository, stage StageFunc, p RoutedProposal, dryRunPreview json.RawMessage) (string, error) {
+	return app.StageProposal(ctx, tx, repo, stage, p, dryRunPreview)
+}
+
+// ApplyGreen executes a 🟢 RoutedProposal's effect directly.
+func ApplyGreen(ctx context.Context, tx DBExec, effector Effector, emitter EventEmitter, p RoutedProposal) (string, error) {
+	return app.ApplyGreen(ctx, tx, effector, emitter, p)
+}
