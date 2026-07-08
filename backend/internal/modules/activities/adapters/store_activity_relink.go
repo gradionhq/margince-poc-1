@@ -40,7 +40,8 @@ func (s *ActivityStore) Relink(ctx context.Context, activityID, workspaceID, ent
 		if err := s.insertLink(ctx, tx, activityID, workspaceID, domain.ActivityLink{EntityType: entityType, EntityID: entityID}); err != nil {
 			return err
 		}
-		e := crmaudit.EntryFromPrincipal(ctx, "activity_relink", entityTypeActivity, &activityID, nil, nil)
+		e := crmaudit.EntryFromPrincipal(ctx, "activity_relink", entityTypeActivity, &activityID, nil,
+			map[string]any{"entity_type": entityType, "entity_id": entityID})
 		e.WorkspaceID = workspaceID
 		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
 			return fmt.Errorf("activity relink audit: %w", err)
