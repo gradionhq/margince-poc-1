@@ -243,3 +243,111 @@ func TestActivityStore_Create_TaskKind_AllowsTaskFields(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+func TestActivityStore_Get_ReturnsLinksAndRaw(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, personID, dealID := seedActivityStoreFixtures(t, db, "getlinks")
+	s := NewActivityStore(db)
+
+	created, _, err := s.Create(context.Background(), domain.Activity{
+		WorkspaceID: wsID, Kind: "note", OccurredAt: time.Now(), Source: "ui", CapturedBy: "human:test",
+		Raw:   map[string]any{"k": "v"},
+		Links: []domain.ActivityLink{{EntityType: "person", EntityID: personID}, {EntityType: "deal", EntityID: dealID}},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	got, err := s.Get(context.Background(), created.ID, wsID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if len(got.Links) != 2 {
+		t.Fatalf("expected 2 links on Get, got %d: %+v", len(got.Links), got.Links)
+	}
+	if got.Raw == nil || got.Raw["k"] != "v" {
+		t.Fatalf("expected raw={k:v} on Get, got %+v", got.Raw)
+	}
+	linkedTypes := map[string]bool{}
+	for _, l := range got.Links {
+		linkedTypes[l.EntityType] = true
+		if l.ActivityID != created.ID {
+			t.Fatalf("link activity_id mismatch: got %s want %s", l.ActivityID, created.ID)
+		}
+	}
+	if !linkedTypes["person"] || !linkedTypes["deal"] {
+		t.Fatalf("expected person+deal links, got %+v", got.Links)
+	}
+}
+
+func TestActivityStore_Get_NotFound_404(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "get404")
+	s := NewActivityStore(db)
+	_, err := s.Get(context.Background(), "00000000-0000-0000-0000-000000000000", wsID)
+	if !errors.Is(err, errs.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestActivityStore_List_NeverSelectsRaw(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "listraw")
+	s := NewActivityStore(db)
+
+	if _, _, err := s.Create(context.Background(), domain.Activity{
+		WorkspaceID: wsID, Kind: "note", OccurredAt: time.Now(), Source: "ui", CapturedBy: "human:test",
+		Raw: map[string]any{"sensitive": "payload"},
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	items, _, err := s.List(context.Background(), wsID, "", "", "", 20)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(items) == 0 {
+		t.Fatal("expected at least one activity")
+	}
+	for _, a := range items {
+		if a.Raw != nil {
+			t.Fatalf("List must never populate Raw (hot-path exclusion, ACT-AC-2), got %+v", a.Raw)
+		}
+	}
+}
+
+func TestActivityStore_Update_TaskFieldOnNonTaskKind_Rejected(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "updtaskfield")
+	s := NewActivityStore(db)
+
+	created, _, err := s.Create(context.Background(), domain.Activity{
+		WorkspaceID: wsID, Kind: "note", OccurredAt: time.Now(), Source: "ui", CapturedBy: "human:test"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	_, err = s.Update(context.Background(), created.ID, wsID, map[string]any{"is_done": true}, 0)
+	if !errors.Is(err, errs.ErrFieldNotValidForKind) {
+		t.Fatalf("expected ErrFieldNotValidForKind updating is_done on a note, got %v", err)
+	}
+}
+
+func TestActivityStore_Update_TaskKind_AllowsIsDone(t *testing.T) {
+	db := openActivityStoreTestDB(t)
+	wsID, _, _ := seedActivityStoreFixtures(t, db, "updtaskok")
+	s := NewActivityStore(db)
+
+	created, _, err := s.Create(context.Background(), domain.Activity{
+		WorkspaceID: wsID, Kind: "task", OccurredAt: time.Now(), Source: "ui", CapturedBy: "human:test"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	updated, err := s.Update(context.Background(), created.ID, wsID, map[string]any{"is_done": true}, 0)
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if !updated.IsDone {
+		t.Fatal("expected is_done=true after update")
+	}
+}

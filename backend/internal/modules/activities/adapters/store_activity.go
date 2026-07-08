@@ -167,28 +167,66 @@ func (s *ActivityStore) Create(ctx context.Context, a domain.Activity) (domain.A
 	return got, created, err
 }
 
-// Get returns one activity by id, workspace-scoped; ErrNotFound if absent.
+// Get returns one activity by id, workspace-scoped, including its typed links
+// and raw capture payload; ErrNotFound if absent (ACT-WIRE-3).
 func (s *ActivityStore) Get(ctx context.Context, id, workspaceID string) (domain.Activity, error) {
 	var a domain.Activity
+	var rawBytes []byte
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `
+		scanErr := tx.QueryRowContext(ctx, `
 			SELECT id, workspace_id, kind, subject, body,
 			       occurred_at, due_at, assignee_id, remind_at, is_done, done_at,
 			       duration_seconds, direction, meeting_status, source_system, source_id,
-			       transcript_ref, version, source, captured_by, created_at, updated_at, archived_at
+			       transcript_ref, raw, version, source, captured_by, created_at, updated_at, archived_at
 			FROM activity WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
 			id, workspaceID).Scan(
 			&a.ID, &a.WorkspaceID, &a.Kind, &a.Subject, &a.Body,
 			&a.OccurredAt, &a.DueAt, &a.AssigneeID, &a.RemindAt, &a.IsDone, &a.DoneAt,
 			&a.DurationSeconds, &a.Direction, &a.MeetingStatus, &a.SourceSystem, &a.SourceID,
-			&a.TranscriptRef, &a.Version, &a.Source, &a.CapturedBy,
+			&a.TranscriptRef, &rawBytes, &a.Version, &a.Source, &a.CapturedBy,
 			&a.CreatedAt, &a.UpdatedAt, &a.ArchivedAt,
 		)
+		if scanErr != nil {
+			return scanErr
+		}
+		links, linkErr := s.selectLinks(ctx, tx, a.ID)
+		if linkErr != nil {
+			return linkErr
+		}
+		a.Links = links
+		return nil
 	})
 	if errors.Is(err, sql.ErrNoRows) {
-		return a, errs.ErrNotFound
+		return domain.Activity{}, errs.ErrNotFound
 	}
-	return a, err
+	if err != nil {
+		return domain.Activity{}, err
+	}
+	if rawBytes != nil {
+		sqlutil.UnmarshalJSON(rawBytes, &a.Raw)
+	}
+	return a, nil
+}
+
+// selectLinks reads every activity_link row for id, in the caller's transaction.
+func (s *ActivityStore) selectLinks(ctx context.Context, tx *sql.Tx, activityID string) ([]domain.ActivityLink, error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT id, entity_type, coalesce(person_id, organization_id, deal_id) FROM activity_link WHERE activity_id=$1`,
+		activityID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	links := []domain.ActivityLink{}
+	for rows.Next() {
+		var l domain.ActivityLink
+		l.ActivityID = activityID
+		if err := rows.Scan(&l.ID, &l.EntityType, &l.EntityID); err != nil {
+			return nil, err
+		}
+		links = append(links, l)
+	}
+	return links, rows.Err()
 }
 
 // List returns a keyset page of activities, optionally filtered to a linked entity, and the next cursor.
@@ -288,6 +326,20 @@ func (s *ActivityStore) Update(ctx context.Context, id, workspaceID string, upda
 	}
 
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		if hasDueAt || hasAssigneeID || hasIsDone {
+			var kind string
+			if err := tx.QueryRowContext(ctx,
+				`SELECT kind FROM activity WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
+				id, workspaceID).Scan(&kind); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return errs.ErrNotFound
+				}
+				return err
+			}
+			if err := validateTaskFields(kind, dueAt, assigneeID, boolVal(isDoneVal)); err != nil {
+				return err
+			}
+		}
 		// The optimistic-concurrency guard is folded into the WHERE: ifMatch==0 skips the
 		// version check (last-write-wins); a non-zero ifMatch requires the row version to match.
 		res, err := tx.ExecContext(ctx, `
