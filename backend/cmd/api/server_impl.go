@@ -24,6 +24,7 @@ import (
 	relationships "github.com/gradionhq/margince/backend/internal/modules/relationships"
 	relstransport "github.com/gradionhq/margince/backend/internal/modules/relationships/transport"
 	platformauth "github.com/gradionhq/margince/backend/internal/platform/auth"
+	customfields "github.com/gradionhq/margince/backend/internal/platform/customfields"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/authz"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
@@ -56,6 +57,7 @@ func buildAllOperations(k *routeKit) *server.AllOperations {
 		server.ActivitiesAdapter{H: actstransport.NewActivityHandler(activities.NewActivityStore(k.db))},
 		server.AuditAdapter{H: audithistory.New(k.db, historyAuthz).Handler},
 		*server.NewIdentityAdapter(k.db, k.sessionStore, k.passportStore),
+		server.CustomFieldsAdapter{H: customfields.NewHandler(k.db, k.verifier)},
 		server.ProductsAdapter{H: offerstransport.NewProductHandler(offers.NewProductStore(k.db))},
 		server.OfferTemplatesAdapter{H: offerstransport.NewOfferTemplateHandler(offers.NewOfferTemplateStore(k.db))},
 	)

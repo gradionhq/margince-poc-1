@@ -1,0 +1,209 @@
+package customfields
+
+import "testing"
+
+func TestValidate_UnsupportedObjectRejected(t *testing.T) {
+	errs := Validate(FieldSpec{Object: "widget", Label: "X", Type: TypeText, Source: "ui", CapturedBy: "human:u1"})
+	if !hasFieldError(errs, "object", "unsupported_object") {
+		t.Fatalf("expected object/unsupported_object, got %+v", errs)
+	}
+}
+
+func TestValidate_UnsupportedTypeRejected(t *testing.T) {
+	errs := Validate(FieldSpec{Object: "deal", Label: "X", Type: "money", Source: "ui", CapturedBy: "human:u1"})
+	if !hasFieldError(errs, "type", "unsupported_type") {
+		t.Fatalf("expected type/unsupported_type, got %+v", errs)
+	}
+}
+
+func TestValidate_EmptyLabelRejected(t *testing.T) {
+	errs := Validate(FieldSpec{Object: "deal", Label: "  ", Type: TypeText, Source: "ui", CapturedBy: "human:u1"})
+	if !hasFieldError(errs, "label", "required") {
+		t.Fatalf("expected label/required, got %+v", errs)
+	}
+}
+
+func TestValidate_CurrencyRequiresISOCode(t *testing.T) {
+	errs := Validate(FieldSpec{Object: "deal", Label: "Budget", Type: TypeCurrency, Source: "ui", CapturedBy: "human:u1"})
+	if !hasFieldError(errs, "currency", "required_for_type_currency") {
+		t.Fatalf("expected currency/required_for_type_currency, got %+v", errs)
+	}
+	errsBad := Validate(FieldSpec{Object: "deal", Label: "Budget", Type: TypeCurrency, Currency: "usd", Source: "ui", CapturedBy: "human:u1"})
+	if !hasFieldError(errsBad, "currency", "required_for_type_currency") {
+		t.Fatalf("lowercase currency must fail the ^[A-Z]{3}$ pattern, got %+v", errsBad)
+	}
+	if errs := Validate(FieldSpec{Object: "deal", Label: "Budget", Type: TypeCurrency, Currency: "USD", Source: "ui", CapturedBy: "human:u1"}); len(errs) != 0 {
+		t.Fatalf("valid currency must pass, got %+v", errs)
+	}
+}
+
+func TestValidate_PicklistRequiresNonEmptyOptions(t *testing.T) {
+	errs := Validate(FieldSpec{Object: "deal", Label: "Route", Type: TypePicklist, Source: "ui", CapturedBy: "human:u1"})
+	if !hasFieldError(errs, "options", "required_for_type_picklist") {
+		t.Fatalf("expected options/required_for_type_picklist, got %+v", errs)
+	}
+	if errs := Validate(FieldSpec{Object: "deal", Label: "Route", Type: TypePicklist, Options: []string{"direct"}, Source: "ui", CapturedBy: "human:u1"}); len(errs) != 0 {
+		t.Fatalf("one option must pass (PARAM-5 minimum=1), got %+v", errs)
+	}
+}
+
+func TestValidate_RequiresSourceAndCapturedBy(t *testing.T) {
+	errs := Validate(FieldSpec{Object: "deal", Label: "X", Type: TypeText})
+	if !hasFieldError(errs, "source", "required") || !hasFieldError(errs, "captured_by", "required") {
+		t.Fatalf("expected source/required and captured_by/required, got %+v", errs)
+	}
+}
+
+func TestDeriveSlug_LowercasesAndUnderscoresNonAlnum(t *testing.T) {
+	cases := map[string]string{
+		"Renewal date":         "renewal_date",
+		"Budget Ceiling!!":     "budget_ceiling",
+		"  Procurement Route ": "procurement_route",
+		"Contract end date":    "contract_end_date",
+	}
+	for label, want := range cases {
+		if got := DeriveSlug(label); got != want {
+			t.Errorf("DeriveSlug(%q) = %q, want %q", label, got, want)
+		}
+	}
+}
+
+func TestDeriveSlug_EmptyAfterStrippingFallsBackToField(t *testing.T) {
+	if got := DeriveSlug("!!!"); got != "field" {
+		t.Fatalf("DeriveSlug(%q) = %q, want %q", "!!!", got, "field")
+	}
+}
+
+func TestDeriveSlug_TruncatesLongLabelsForIdentifierSafety(t *testing.T) {
+	longLabel := "This is a very long field label that keeps going and going and going and going"
+	slug := DeriveSlug(longLabel)
+	col := ColumnName(slug)
+	// cf_<slug>_check must stay under Postgres's 63-byte identifier cap.
+	if len(col+"_check") > 63 {
+		t.Fatalf("derived column+check name too long (%d bytes): %s_check", len(col+"_check"), col)
+	}
+}
+
+func TestColumnName_IsCfPrefixed(t *testing.T) {
+	if got := ColumnName("renewal_date"); got != "cf_renewal_date" {
+		t.Fatalf("ColumnName = %q, want cf_renewal_date", got)
+	}
+}
+
+func TestIsStructural_MatchesEachKeyword(t *testing.T) {
+	structural := []string{
+		"Add a new object for contracts",
+		"Relationship to the parent account",
+		"Link to the billing record",
+		"Lookup to another deal",
+		"A formula for total value",
+		"A validation rule requiring approval",
+	}
+	for _, label := range structural {
+		if !IsStructural(label) {
+			t.Errorf("IsStructural(%q) = false, want true", label)
+		}
+	}
+}
+
+func TestIsStructural_PlainScalarLabelPasses(t *testing.T) {
+	plain := []string{"Renewal date", "Budget ceiling", "Procurement route", "Contract end date"}
+	for _, label := range plain {
+		if IsStructural(label) {
+			t.Errorf("IsStructural(%q) = true, want false", label)
+		}
+	}
+}
+
+func TestBuildDDL_TypeMapping(t *testing.T) {
+	cases := []struct {
+		fieldType, wantSQLType string
+	}{
+		{TypeText, "text"},
+		{TypeNumber, "numeric"},
+		{TypeDate, "date"},
+		{TypeCurrency, "bigint"},
+		{TypePicklist, "text"},
+		{TypeBoolean, "boolean"},
+	}
+	for _, c := range cases {
+		spec := FieldSpec{Object: "deal", Label: "X", Type: c.fieldType}
+		if c.fieldType == TypePicklist {
+			spec.Options = []string{"a", "b"}
+		}
+		ddl, err := BuildDDL("deal", "cf_x", spec)
+		if err != nil {
+			t.Fatalf("BuildDDL(%s): %v", c.fieldType, err)
+		}
+		want := "ADD COLUMN \"cf_x\" " + c.wantSQLType + " NULL"
+		if !contains(ddl, want) {
+			t.Errorf("BuildDDL(%s) = %q, want it to contain %q", c.fieldType, ddl, want)
+		}
+	}
+}
+
+func TestBuildDDL_UnsupportedTypeErrors(t *testing.T) {
+	if _, err := BuildDDL("deal", "cf_x", FieldSpec{Object: "deal", Label: "X", Type: "money"}); err == nil {
+		t.Fatal("expected an error for an unsupported type")
+	}
+}
+
+func TestBuildDDL_PicklistIncludesGeneratedCheck(t *testing.T) {
+	spec := FieldSpec{Object: "deal", Label: "Route", Type: TypePicklist, Options: []string{"direct", "reseller"}}
+	ddl, err := BuildDDL("deal", "cf_route", spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(ddl, "ADD CONSTRAINT") || !contains(ddl, "CHECK") || !contains(ddl, "'direct'") || !contains(ddl, "'reseller'") {
+		t.Fatalf("picklist DDL missing generated CHECK: %s", ddl)
+	}
+}
+
+func TestBuildDDL_LabelWithSQLNeverReachesRawText(t *testing.T) {
+	// AC-12/CUSTOM-FIELDS-AC-12: the identifier is slug-derived, never free
+	// text — even a label carrying an injection attempt must never appear
+	// verbatim in the generated DDL.
+	label := `evil'); DROP TABLE person;--`
+	slug := DeriveSlug(label)
+	col := ColumnName(slug)
+	spec := FieldSpec{Object: "person", Label: label, Type: TypeText}
+	ddl, err := BuildDDL("person", col, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"DROP", "--", "'", ";"} {
+		if contains(ddl, bad) {
+			t.Fatalf("ddl leaked raw label text (found %q): %s", bad, ddl)
+		}
+	}
+}
+
+func TestBuildDDL_RejectsInvalidIdentifier(t *testing.T) {
+	// Defensive: even though object/column are always server-derived, guard
+	// against a caller passing something that isn't a valid identifier.
+	if _, err := BuildDDL("deal; DROP TABLE deal", "cf_x", FieldSpec{Object: "deal", Label: "X", Type: TypeText}); err == nil {
+		t.Fatal("expected an error for an invalid object identifier")
+	}
+}
+
+func hasFieldError(errs []FieldError, field, code string) bool {
+	for _, e := range errs {
+		if e.Field == field && e.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || (len(substr) > 0 && indexOf(s, substr) >= 0))
+}
+
+func indexOf(s, substr string) int {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
+}
