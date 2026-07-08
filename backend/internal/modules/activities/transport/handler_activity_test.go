@@ -19,8 +19,6 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 )
 
-const activityHandlerTestWorkspaceID = "00000000-0000-0000-0000-000000000d01"
-
 func openActivityHandlerTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
@@ -33,11 +31,6 @@ func openActivityHandlerTestDB(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	return db
-}
-
-func withActivityWorkspace(r *http.Request) *http.Request {
-	ctx := crmctx.With(r.Context(), crmctx.Principal{TenantID: activityHandlerTestWorkspaceID, UserID: "human:test"})
-	return r.WithContext(ctx)
 }
 
 // seedActivityHandlerFixtures seeds a workspace + deal, then a task activity
@@ -102,6 +95,72 @@ func TestActivityHandler_List_FiltersByEntityTypeAndID(t *testing.T) {
 	}
 	if len(page.Data) != 1 || page.Data[0].ID != activityID {
 		t.Fatalf("expected 1 activity (%s) for deal %s, got %+v", activityID, dealID, page.Data)
+	}
+}
+
+func TestActivityHandler_List_RejectsUnknownSortField(t *testing.T) {
+	store := &activityHandlerListCaptureStore{t: t}
+	h := NewActivityHandler(store)
+
+	req := withActivityWorkspace(httptest.NewRequest(http.MethodGet, "/activities?sort=-occurred_at,subject", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422, body=%s", w.Code, w.Body.String())
+	}
+	var problem struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &problem); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if problem.Code != "sort_field_not_allowed" {
+		t.Fatalf("expected sort_field_not_allowed, got %q (body=%s)", problem.Code, w.Body.String())
+	}
+	if store.listCalled {
+		t.Fatal("list store method should not be called after sort validation fails")
+	}
+}
+
+func TestActivityHandler_List_UsesFullQuerySurface(t *testing.T) {
+	store := &activityHandlerListCaptureStore{
+		t:            t,
+		returnItems:  []actdomain.Activity{{ID: "a1"}},
+		returnCursor: "next-cursor",
+	}
+	h := NewActivityHandler(store)
+
+	req := withActivityWorkspace(httptest.NewRequest(http.MethodGet, "/activities?cursor=c123&limit=7&sort=-due_at&q=quarterly%20review&kind=task&entity_type=deal&entity_id=deal-1&assignee_id=user-1&include_archived=true", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	if store.listCalled {
+		t.Fatal("List should not be called by the activity list handler")
+	}
+	if store.workspaceID != activityHandlerTestWorkspaceID {
+		t.Fatalf("workspaceID = %q, want %q", store.workspaceID, activityHandlerTestWorkspaceID)
+	}
+	if store.cursor != "c123" {
+		t.Fatalf("cursor = %q, want %q", store.cursor, "c123")
+	}
+	if store.limit != 7 {
+		t.Fatalf("limit = %d, want 7", store.limit)
+	}
+	if store.filtered.Sort != "-due_at" || store.filtered.Kind != "task" || store.filtered.EntityType != "deal" || store.filtered.EntityID != "deal-1" || store.filtered.AssigneeID != "user-1" || store.filtered.Q != "quarterly review" || !store.filtered.IncludeArchived {
+		t.Fatalf("unexpected filter forwarded to store: %+v", store.filtered)
+	}
+	var page struct {
+		Data []actdomain.Activity `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
+		t.Fatalf("decode page: %v", err)
+	}
+	if len(page.Data) != 1 || page.Data[0].ID != "a1" {
+		t.Fatalf("unexpected response payload: %+v", page.Data)
 	}
 }
 
