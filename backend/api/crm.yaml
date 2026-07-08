@@ -74,6 +74,10 @@ tags:
     description: Thin, segregated machine/bulk-sourced prospects + promotion.
   - name: Products
     description: Rate-card products (the line-item catalogue for offers/quotes). Optional — a workspace may quote free-form.
+  - name: OfferTemplates
+    description: Branded DE/EN PDF layouts for offers (admin surface; at most one default per locale).
+  - name: Offers
+    description: The Angebot — a bounded line-item quote bound to one deal (ADR-0037). Editable only while draft.
   - name: Invoices
     description: Invoices derived from accepted offers — totals are copied from the offer snapshot, never free-typed.
   - name: Imports
@@ -3465,6 +3469,132 @@ paths:
   # or-omit (features/07) and NEVER fabricates a price (rate-card or blank).
   # =========================================================================
 
+  /offer-templates:
+    get:
+      tags: [OfferTemplates]
+      operationId: listOfferTemplates
+      summary: List offer templates (branded DE/EN PDF layouts; admin surface).
+      description: Default view excludes archived rows; pass include_archived=true to include them.
+      x-mcp-tool: { verb: search_records, record_type: offer_template, tier: green }
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/IncludeArchived'
+      responses:
+        '200':
+          description: A page of offer templates.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfferTemplateListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [OfferTemplates]
+      operationId: createOfferTemplate
+      summary: Create an offer template.
+      description: |
+        name must be unique per workspace (409 on collision). At most one default template
+        per locale (OFFER-DDL-4) — setting is_default=true while another default exists for
+        the same locale is rejected (409 offer_template_default_conflict).
+      x-mcp-tool: { verb: create_record, record_type: offer_template, tier: green }
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOfferTemplateRequest' }
+            examples:
+              minimal:
+                value:
+                  name: Standard DE
+                  locale: de-DE
+                  layout: { logo_ref: null, terms_asset_ref: null }
+                  source: ui
+                  captured_by: 'human:018f3a1b-0000-7000-8000-000000000001'
+      responses:
+        '201':
+          description: Created offer template.
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfferTemplate' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: A template with this name already exists, or a default already exists for this locale.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                name_duplicate:
+                  value:
+                    type: 'https://errors.margince.com/offer_template_name_duplicate'
+                    title: Duplicate name
+                    status: 409
+                    code: offer_template_name_duplicate
+                    detail: An offer template with this name already exists.
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /offer-templates/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [OfferTemplates]
+      operationId: getOfferTemplate
+      summary: Get an offer template by id.
+      x-mcp-tool: { verb: read_record, record_type: offer_template, tier: green }
+      responses:
+        '200':
+          description: The offer template.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfferTemplate' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [OfferTemplates]
+      operationId: updateOfferTemplate
+      summary: Update an offer template (full replace — all writable fields replaced).
+      description: Uses PUT (not PATCH), mirroring updateProduct's full-replace shape.
+      x-mcp-tool: { verb: update_record, record_type: offer_template, tier: green }
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateOfferTemplateRequest' }
+      responses:
+        '200':
+          description: Updated offer template.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfferTemplate' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [OfferTemplates]
+      operationId: archiveOfferTemplate
+      summary: Archive (soft-delete) an offer template.
+      description: Sets archived_at (soft-archive); the template is hidden from the default list but still fetchable by id.
+      x-mcp-tool: { verb: update_record, record_type: offer_template, tier: yellow }
+      responses:
+        '200':
+          description: Archived offer template (now carries a non-null archived_at).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfferTemplate' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /conversation-links:
     post:
       tags: [Conversations]
@@ -4992,6 +5122,54 @@ components:
       required: [data, page]
       properties:
         data: { type: array, items: { $ref: '#/components/schemas/Product' } }
+        page: { $ref: '#/components/schemas/PageInfo' }
+
+    # ---- OfferTemplate (OFFER-WIRE-2) ----
+    OfferTemplate:
+      type: object
+      description: A branded, governed PDF layout for offers (DE/EN). Mirrors the offer_template table.
+      required: [id, workspace_id, name, locale, is_default, layout, source, captured_by, version, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        workspace_id: { type: string, format: uuid }
+        name: { type: string }
+        locale: { type: string, default: de-DE, description: 'DE/EN at launch (e.g. de-DE, en-US).' }
+        is_default: { type: boolean, default: false, description: At most one default template per locale (OFFER-DDL-4). }
+        layout: { type: object, additionalProperties: true, description: Logo/header/footer/terms-block refs — bounded params, not a CMS. }
+        source: { type: string }
+        captured_by: { type: string }
+        version: { $ref: '#/components/schemas/RowVersion' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        archived_at: { type: [string, 'null'], format: date-time }
+
+    CreateOfferTemplateRequest:
+      type: object
+      required: [name, layout, source, captured_by]
+      properties:
+        name: { type: string }
+        locale: { type: string, default: de-DE }
+        is_default: { type: boolean, default: false }
+        layout: { type: object, additionalProperties: true }
+        source: { type: string }
+        captured_by: { type: string }
+
+    UpdateOfferTemplateRequest:
+      type: object
+      description: Full replace via PUT — mirrors UpdateProductRequest's rate-card versioning shape.
+      properties:
+        name: { type: string }
+        locale: { type: string }
+        is_default: { type: boolean }
+        layout: { type: object, additionalProperties: true }
+        source: { type: string }
+        captured_by: { type: string }
+
+    OfferTemplateListResponse:
+      type: object
+      required: [data, page]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/OfferTemplate' } }
         page: { $ref: '#/components/schemas/PageInfo' }
 
     # ---- DraftingAsset ----

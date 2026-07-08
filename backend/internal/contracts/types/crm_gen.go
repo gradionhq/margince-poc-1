@@ -3287,6 +3287,16 @@ type CreateListRequestEntityType string
 // CreateListRequestListType defines model for CreateListRequest.ListType.
 type CreateListRequestListType string
 
+// CreateOfferTemplateRequest defines model for CreateOfferTemplateRequest.
+type CreateOfferTemplateRequest struct {
+	CapturedBy string                 `json:"captured_by"`
+	IsDefault  *bool                  `json:"is_default,omitempty"`
+	Layout     map[string]interface{} `json:"layout"`
+	Locale     *string                `json:"locale,omitempty"`
+	Name       string                 `json:"name"`
+	Source     string                 `json:"source"`
+}
+
 // CreateOrganizationRequest defines model for CreateOrganizationRequest.
 type CreateOrganizationRequest struct {
 	// Address Structured postal address.
@@ -4053,6 +4063,40 @@ type Money struct {
 
 	// Currency ISO-4217 uppercase.
 	Currency *string `json:"currency,omitempty"`
+}
+
+// OfferTemplate A branded, governed PDF layout for offers (DE/EN). Mirrors the offer_template table.
+type OfferTemplate struct {
+	ArchivedAt *time.Time         `json:"archived_at,omitempty"`
+	CapturedBy string             `json:"captured_by"`
+	CreatedAt  time.Time          `json:"created_at"`
+	Id         openapi_types.UUID `json:"id"`
+
+	// IsDefault At most one default template per locale (OFFER-DDL-4).
+	IsDefault bool `json:"is_default"`
+
+	// Layout Logo/header/footer/terms-block refs — bounded params
+	Layout map[string]interface{} `json:"layout"`
+
+	// Locale DE/EN at launch (e.g. de-DE, en-US).
+	Locale    string    `json:"locale"`
+	Name      string    `json:"name"`
+	Source    string    `json:"source"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	// Version Monotonic row version, incremented by the server on every mutation (data-model §1.7).
+	// Echoed back as the `version` field on every mutable entity. To make a write conditional,
+	// send the last-seen value in `If-Match`; a mismatch returns `409 code: version_skew`
+	// (ErrVersionSkew) so the client re-reads before retrying. Applies to the native path,
+	// not only overlay mode.
+	Version     *RowVersion        `json:"version,omitempty"`
+	WorkspaceId openapi_types.UUID `json:"workspace_id"`
+}
+
+// OfferTemplateListResponse defines model for OfferTemplateListResponse.
+type OfferTemplateListResponse struct {
+	Data []OfferTemplate `json:"data"`
+	Page PageInfo        `json:"page"`
 }
 
 // Organization A company. Mirrors the `organization` table.
@@ -5004,6 +5048,16 @@ type UpdateLeadRequest struct {
 // UpdateLeadRequestStatus defines model for UpdateLeadRequest.Status.
 type UpdateLeadRequestStatus string
 
+// UpdateOfferTemplateRequest Full replace via PUT — mirrors UpdateProductRequest's rate-card versioning shape.
+type UpdateOfferTemplateRequest struct {
+	CapturedBy *string                 `json:"captured_by,omitempty"`
+	IsDefault  *bool                   `json:"is_default,omitempty"`
+	Layout     *map[string]interface{} `json:"layout,omitempty"`
+	Locale     *string                 `json:"locale,omitempty"`
+	Name       *string                 `json:"name,omitempty"`
+	Source     *string                 `json:"source,omitempty"`
+}
+
 // UpdateOrganizationRequest defines model for UpdateOrganizationRequest.
 type UpdateOrganizationRequest struct {
 	// Address Structured postal address.
@@ -5663,6 +5717,54 @@ type AssignMemberRoleParams struct {
 	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
 }
 
+// ListOfferTemplatesParams defines parameters for ListOfferTemplates.
+type ListOfferTemplatesParams struct {
+	// CursorParam Opaque keyset cursor from a prior response's `page.next_cursor`. The cursor encodes the
+	// effective `sort` and `filter` of the originating request plus the last row's keyset
+	// (sort-key tuple + `id` tie-breaker). **Stability:** results are stable under concurrent
+	// inserts/updates (keyset pagination, not offset). Supplying `cursor` together with a `sort`
+	// or filter that differs from the one the cursor was minted under returns
+	// `422 code: cursor_param_mismatch` — re-issue the query without the cursor.
+	CursorParam *CursorParam `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// LimitParam Max items in the page.
+	LimitParam *LimitParam `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// IncludeArchivedParam Include soft-deleted (archived) rows. Default false.
+	IncludeArchivedParam *IncludeArchivedParam `form:"include_archived,omitempty" json:"include_archived,omitempty"`
+}
+
+// CreateOfferTemplateParams defines parameters for CreateOfferTemplate.
+type CreateOfferTemplateParams struct {
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+}
+
+// UpdateOfferTemplateParams defines parameters for UpdateOfferTemplate.
+type UpdateOfferTemplateParams struct {
+	// IfMatchParam Optional optimistic-concurrency precondition for a mutating request (PATCH/advance/merge):
+	// the last-seen entity `version`. If the row's current `version` differs, the write is
+	// rejected with `409 code: version_skew` (ErrVersionSkew) and no change is made — re-read,
+	// re-apply, retry. Omitting it is last-write-wins (discouraged for agent/automated writers).
+	// Accepted on every native-mode mutating endpoint that returns a versioned entity.
+	IfMatchParam *IfMatchParam `json:"If-Match,omitempty"`
+
+	// IdempotencyKeyParam Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+	// `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+	// returns the original status + body. Reusing the same key with a *different* request body
+	// returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+	// **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+	// retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+	// (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+	IdempotencyKeyParam *IdempotencyKeyParam `json:"Idempotency-Key,omitempty"`
+}
+
 // ListOrganizationsParams defines parameters for ListOrganizations.
 type ListOrganizationsParams struct {
 	// CursorParam Opaque keyset cursor from a prior response's `page.next_cursor`. The cursor encodes the
@@ -6234,6 +6336,12 @@ type AddListMemberJSONRequestBody = AddListMemberRequest
 
 // AssignMemberRoleJSONRequestBody defines body for AssignMemberRole for application/json ContentType.
 type AssignMemberRoleJSONRequestBody = AssignRoleRequest
+
+// CreateOfferTemplateJSONRequestBody defines body for CreateOfferTemplate for application/json ContentType.
+type CreateOfferTemplateJSONRequestBody = CreateOfferTemplateRequest
+
+// UpdateOfferTemplateJSONRequestBody defines body for UpdateOfferTemplate for application/json ContentType.
+type UpdateOfferTemplateJSONRequestBody = UpdateOfferTemplateRequest
 
 // CreateOrganizationJSONRequestBody defines body for CreateOrganization for application/json ContentType.
 type CreateOrganizationJSONRequestBody = CreateOrganizationRequest
@@ -9745,6 +9853,21 @@ type ServerInterface interface {
 	// Revoke a role from a workspace member.
 	// (DELETE /members/{user_id}/roles/{role_key})
 	RevokeMemberRole(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID, roleKey string)
+	// List offer templates (branded DE/EN PDF layouts; admin surface).
+	// (GET /offer-templates)
+	ListOfferTemplates(w http.ResponseWriter, r *http.Request, params ListOfferTemplatesParams)
+	// Create an offer template.
+	// (POST /offer-templates)
+	CreateOfferTemplate(w http.ResponseWriter, r *http.Request, params CreateOfferTemplateParams)
+	// Archive (soft-delete) an offer template.
+	// (DELETE /offer-templates/{id})
+	ArchiveOfferTemplate(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Get an offer template by id.
+	// (GET /offer-templates/{id})
+	GetOfferTemplate(w http.ResponseWriter, r *http.Request, idParam IdParam)
+	// Update an offer template (full replace — all writable fields replaced).
+	// (PUT /offer-templates/{id})
+	UpdateOfferTemplate(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateOfferTemplateParams)
 	// List organizations (live by default; cursor-paginated).
 	// (GET /organizations)
 	ListOrganizations(w http.ResponseWriter, r *http.Request, params ListOrganizationsParams)
@@ -10381,6 +10504,36 @@ func (_ Unimplemented) AssignMemberRole(w http.ResponseWriter, r *http.Request, 
 // Revoke a role from a workspace member.
 // (DELETE /members/{user_id}/roles/{role_key})
 func (_ Unimplemented) RevokeMemberRole(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID, roleKey string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List offer templates (branded DE/EN PDF layouts; admin surface).
+// (GET /offer-templates)
+func (_ Unimplemented) ListOfferTemplates(w http.ResponseWriter, r *http.Request, params ListOfferTemplatesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create an offer template.
+// (POST /offer-templates)
+func (_ Unimplemented) CreateOfferTemplate(w http.ResponseWriter, r *http.Request, params CreateOfferTemplateParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Archive (soft-delete) an offer template.
+// (DELETE /offer-templates/{id})
+func (_ Unimplemented) ArchiveOfferTemplate(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get an offer template by id.
+// (GET /offer-templates/{id})
+func (_ Unimplemented) GetOfferTemplate(w http.ResponseWriter, r *http.Request, idParam IdParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update an offer template (full replace — all writable fields replaced).
+// (PUT /offer-templates/{id})
+func (_ Unimplemented) UpdateOfferTemplate(w http.ResponseWriter, r *http.Request, idParam IdParam, params UpdateOfferTemplateParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -14015,6 +14168,252 @@ func (siw *ServerInterfaceWrapper) RevokeMemberRole(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// ListOfferTemplates operation middleware
+func (siw *ServerInterfaceWrapper) ListOfferTemplates(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListOfferTemplatesParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.CursorParam, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.LimitParam, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchivedParam, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListOfferTemplates(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateOfferTemplate operation middleware
+func (siw *ServerInterfaceWrapper) CreateOfferTemplate(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateOfferTemplateParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateOfferTemplate(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveOfferTemplate operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveOfferTemplate(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveOfferTemplate(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOfferTemplate operation middleware
+func (siw *ServerInterfaceWrapper) GetOfferTemplate(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOfferTemplate(w, r, idParam)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateOfferTemplate operation middleware
+func (siw *ServerInterfaceWrapper) UpdateOfferTemplate(w http.ResponseWriter, r *http.Request) {
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var idParam IdParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &idParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateOfferTemplateParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatchParam IfMatchParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatchParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatchParam = &IfMatchParam
+
+	}
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKeyParam IdempotencyKeyParam
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKeyParam, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKeyParam = &IdempotencyKeyParam
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateOfferTemplate(w, r, idParam, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListOrganizations operation middleware
 func (siw *ServerInterfaceWrapper) ListOrganizations(w http.ResponseWriter, r *http.Request) {
 	var err error
@@ -17046,6 +17445,21 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/members/{user_id}/roles/{role_key}", wrapper.RevokeMemberRole)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/offer-templates", wrapper.ListOfferTemplates)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/offer-templates", wrapper.CreateOfferTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/offer-templates/{id}", wrapper.ArchiveOfferTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/offer-templates/{id}", wrapper.GetOfferTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/offer-templates/{id}", wrapper.UpdateOfferTemplate)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/organizations", wrapper.ListOrganizations)

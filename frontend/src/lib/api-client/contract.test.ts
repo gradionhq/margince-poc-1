@@ -313,6 +313,36 @@ describe("Product.description contract compliance (OFFER-WIRE-1 completion)", ()
   });
 });
 
+describe("OfferTemplate contract compliance (OFFER-WIRE-2)", () => {
+  it("carries name/locale/is_default/layout, locale defaults de-DE", () => {
+    const template: components["schemas"]["OfferTemplate"] = {
+      id: "00000000-0000-0000-0000-000000000060",
+      workspace_id: "00000000-0000-0000-0000-000000000002",
+      name: "Standard DE",
+      locale: "de-DE",
+      is_default: true,
+      layout: { logo_ref: null },
+      source: "test",
+      captured_by: "human:test",
+      version: 1,
+      created_at: "2025-01-01T00:00:00Z",
+      updated_at: "2025-01-01T00:00:00Z",
+    };
+    expect(template.locale).toBe("de-DE");
+    expect(template.is_default).toBe(true);
+  });
+});
+
+describe("OfferTemplateListResponse contract compliance (OFFER-WIRE-2)", () => {
+  it("data is an array of OfferTemplate", () => {
+    const resp: components["schemas"]["OfferTemplateListResponse"] = {
+      data: [],
+      page: { has_more: false },
+    };
+    expect(Array.isArray(resp.data)).toBe(true);
+  });
+});
+
 describe("PipelineRollup contract compliance (DEAL-EXT-1)", () => {
   it("matches DEAL-FORM-2's shape plus per-stage and per-deal breakdowns", () => {
     const rollup: components["schemas"]["PipelineRollup"] = {
