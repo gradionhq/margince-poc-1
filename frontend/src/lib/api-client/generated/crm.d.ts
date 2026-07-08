@@ -983,6 +983,36 @@ export interface paths {
         patch: operations["updateActivity"];
         trace?: never;
     };
+    "/activities/{id}/relink": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Relink an activity — add or move one typed link (idempotent).
+         * @description Adds or moves one typed link on the activity in a single idempotent action: replaying the
+         *     same (activity, entity_type, entity_id) creates no duplicate link (`uq_activity_link`,
+         *     ACT-DDL-2) and the response carries the unchanged link set. The activity's original
+         *     `source`/`captured_by` provenance is preserved byte-for-byte — the relink records who
+         *     associated it, never who captured it — and writes exactly one audit row
+         *     (action=activity_relink). `entity_type` is constrained to `person`/`organization`/`deal`;
+         *     the `activity_link_shape` CHECK (ACT-DDL-2) has no `lead` arm, so a `lead` target is
+         *     rejected (422), not silently coerced. 🟢 (internal association, not outbound).
+         */
+        post: operations["relinkActivity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/activities/{id}/draft-email": {
         parameters: {
             query?: never;
@@ -3841,6 +3871,12 @@ export interface components {
             /** @description Completing a task writes one audit row + task.completed event. */
             is_done?: boolean;
         };
+        RelinkActivityRequest: {
+            /** @enum {string} */
+            entity_type: "person" | "organization" | "deal";
+            /** Format: uuid */
+            entity_id: string;
+        };
         ActivityListResponse: {
             data: components["schemas"]["Activity"][];
             page: components["schemas"]["PageInfo"];
@@ -4731,7 +4767,7 @@ export interface components {
              */
             on_behalf_of?: string | null;
             /** @enum {string} */
-            action: "create" | "update" | "archive" | "merge" | "promote" | "disqualify" | "restore" | "export" | "erase" | "anonymize" | "login" | "assign" | "advance_stage" | "send_email" | "consent_grant" | "consent_withdraw" | "approve" | "reject" | "record_share" | "record_unshare" | "capture" | "modify" | "expired" | "generate" | "import" | "publish" | "parameterize" | "pause" | "bulk_set_field" | "bulk_archive" | "bulk_reassign" | "score_override";
+            action: "create" | "update" | "archive" | "merge" | "promote" | "disqualify" | "restore" | "export" | "erase" | "anonymize" | "login" | "assign" | "advance_stage" | "send_email" | "consent_grant" | "consent_withdraw" | "approve" | "reject" | "record_share" | "record_unshare" | "capture" | "modify" | "expired" | "generate" | "import" | "publish" | "parameterize" | "pause" | "bulk_set_field" | "bulk_archive" | "bulk_reassign" | "score_override" | "activity_relink";
             entity_type: string;
             /** Format: uuid */
             entity_id?: string | null;
@@ -8330,6 +8366,48 @@ export interface operations {
                     "application/json": components["schemas"]["Activity"];
                 };
             };
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    relinkActivity: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Client-supplied key making a POST safe to retry. **Scope:** the key is unique within
+                 *     `(workspace_id, principal, request-path)` and retained **24h**; a replay within that window
+                 *     returns the original status + body. Reusing the same key with a *different* request body
+                 *     returns `409 code: idempotency_key_conflict` (never a silent replay of mismatched intent).
+                 *     **Precedence vs natural keys:** on `logActivity`/`createLead`, the Idempotency-Key (transport
+                 *     retry-safety) is checked first; if absent, the `(source_system, source_id)` natural key
+                 *     (data-model dedupe) governs. The two never both create a row. Strongly recommended on all POSTs.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RelinkActivityRequest"];
+            };
+        };
+        responses: {
+            /** @description The relinked activity (full entity, including its updated link set). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Activity"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
         };

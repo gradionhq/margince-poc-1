@@ -65,6 +65,7 @@ var GeneratedTools = []GeneratedTool{
 	{OperationID: "mergePerson", Verb: "merge_records", RecordType: "person", Tier: TierYellow, Resolver: ""},
 	{OperationID: "overrideDealKPISignal", Verb: "override_deal_kpi_signal", RecordType: "ai_feedback", Tier: TierYellow, Resolver: ""},
 	{OperationID: "regenerateOffer", Verb: "draft_offer", RecordType: "offer", Tier: TierGreen, Resolver: ""},
+	{OperationID: "relinkActivity", Verb: "update_record", RecordType: "activity", Tier: TierGreen, Resolver: ""},
 	{OperationID: "renameCustomField", Verb: "update_record", RecordType: "custom_field", Tier: TierGreen, Resolver: ""},
 	{OperationID: "renderOffer", Verb: "render_offer", RecordType: "offer", Tier: TierGreen, Resolver: ""},
 	{OperationID: "resolveDerivation", Verb: "explain_number", RecordType: "", Tier: TierGreen, Resolver: ""},
