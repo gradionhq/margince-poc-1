@@ -601,16 +601,27 @@ describe("QuotaAttainment contract compliance (RD-WIRE-3)", () => {
       band: "met",
       as_of_date: "2026-03-31",
       contributing_deals: [
-        { deal_id: "00000000-0000-0000-0000-000000000080", base_value_minor: 15000000 },
-        { deal_id: "00000000-0000-0000-0000-000000000081", base_value_minor: 16387200 },
+        {
+          deal_id: "00000000-0000-0000-0000-000000000080",
+          base_value_minor: 15000000,
+        },
+        {
+          deal_id: "00000000-0000-0000-0000-000000000081",
+          base_value_minor: 16387200,
+        },
       ],
     };
-    const sum = attainment.contributing_deals.reduce((acc, d) => acc + d.base_value_minor, 0);
+    const sum = attainment.contributing_deals.reduce(
+      (acc, d) => acc + d.base_value_minor,
+      0,
+    );
     expect(sum).toBe(attainment.closed_won_minor);
     expect(attainment.band).toBe("met");
     expect(attainment.attainment_pct).toBeGreaterThan(100); // uncapped raw value (RD-PARAM-4)
     // gap_minor = closed_won_minor - target_minor (RD-FORM-2 worked example: positive surplus once attainment > 100%)
-    expect(attainment.gap_minor).toBe(attainment.closed_won_minor - attainment.target_minor);
+    expect(attainment.gap_minor).toBe(
+      attainment.closed_won_minor - attainment.target_minor,
+    );
   });
 
   it("Problem carries a distinct code for a zero-target refusal vs. a failed computation", () => {
@@ -682,7 +693,9 @@ describe("CreateQuotaRequest + owner-XOR-team 422 shape contract compliance (RD-
     const refusal: components["schemas"]["Problem"] = {
       status: 422,
       code: "validation_error",
-      details: { errors: [{ field: "owner_id", code: "owner_xor_team_required" }] },
+      details: {
+        errors: [{ field: "owner_id", code: "owner_xor_team_required" }],
+      },
     };
     expect(refusal.code).toBe("validation_error");
     expect(refusal.details?.errors[0].code).toBe("owner_xor_team_required");
