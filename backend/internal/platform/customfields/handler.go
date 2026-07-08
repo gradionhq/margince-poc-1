@@ -9,6 +9,7 @@ import (
 
 	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	httpkit "github.com/gradionhq/margince/backend/internal/shared/kernel/httpkit"
 	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
 	"github.com/gradionhq/margince/backend/internal/shared/ports/mcp"
 )
@@ -49,17 +50,6 @@ func NewHandler(db *sql.DB, verifier approvalsport.Verifier) *Handler {
 	return &Handler{db: db, verifier: verifier}
 }
 
-// pathID extracts an ID from a request path. Given "/custom-fields/abc" and
-// prefix "/custom-fields", returns "abc".
-func pathID(path, prefix string) string {
-	rest := strings.TrimPrefix(path, prefix)
-	rest = strings.TrimPrefix(rest, "/")
-	if i := strings.Index(rest, "/"); i >= 0 {
-		rest = rest[:i]
-	}
-	return rest
-}
-
 // ServeHTTP dispatches on method + path. The collection route (POST create)
 // is method-only; the three id-scoped routes need the id (and, for retire/
 // options, a path suffix) parsed out of r.URL.Path — this Handler is
@@ -70,7 +60,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.serveSuffixRoutes(w, r) {
 		return
 	}
-	id := pathID(r.URL.Path, "/custom-fields")
+	id := httpkit.PathID(r.URL.Path, "/custom-fields")
 	switch {
 	case r.Method == http.MethodPost && id == "":
 		h.create(w, r)
@@ -86,12 +76,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // (mirrors organizations/transport/handler_org.go's serveSuffixRoutes).
 func (h *Handler) serveSuffixRoutes(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/retire") {
-		id := pathID(strings.TrimSuffix(r.URL.Path, "/retire"), "/custom-fields")
+		id := httpkit.PathID(strings.TrimSuffix(r.URL.Path, "/retire"), "/custom-fields")
 		h.retire(w, r, id)
 		return true
 	}
 	if r.Method == http.MethodPatch && strings.HasSuffix(r.URL.Path, "/options") {
-		id := pathID(strings.TrimSuffix(r.URL.Path, "/options"), "/custom-fields")
+		id := httpkit.PathID(strings.TrimSuffix(r.URL.Path, "/options"), "/custom-fields")
 		h.setOptions(w, r, id)
 		return true
 	}
