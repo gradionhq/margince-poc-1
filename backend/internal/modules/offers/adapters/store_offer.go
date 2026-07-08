@@ -155,6 +155,17 @@ type OfferStore struct{ db *sql.DB }
 // NewOfferStore returns an OfferStore backed by db.
 func NewOfferStore(db *sql.DB) *OfferStore { return &OfferStore{db: db} }
 
+// RenderIngredients bundles the resolved inputs the PDF renderer needs.
+// OfferStore stays free of blobstore concerns; the transport layer writes
+// the PDF bytes and then persists the blob reference separately.
+type RenderIngredients struct {
+	Offer      domain.Offer
+	LineItems  []domain.OfferLineItem
+	BuyerBlock map[string]any
+	IssuerName string
+	Locale     string
+}
+
 func (s *OfferStore) checkOfferNumberConflict(ctx context.Context, tx *sql.Tx, workspaceID, offerNumber string, revision int64) error {
 	var existingID string
 	err := tx.QueryRowContext(ctx, `
@@ -568,4 +579,98 @@ func (s *OfferStore) Regenerate(ctx context.Context, id, workspaceID string) (do
 		return domain.Offer{}, err
 	}
 	return s.Get(ctx, out.ID, workspaceID)
+}
+
+// PrepareRender gathers the resolved, persisted inputs required to build an
+// offer PDF without touching blob storage.
+func (s *OfferStore) PrepareRender(ctx context.Context, id, workspaceID string) (RenderIngredients, error) {
+	var out RenderIngredients
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		_, _, err := lockOfferForMutation(ctx, tx, id, workspaceID)
+		if err != nil {
+			return err
+		}
+
+		offer, err := scanOffer(tx.QueryRowContext(ctx, offerGetQuery, id, workspaceID))
+		if err != nil {
+			return err
+		}
+		out.Offer = offer
+
+		rows, err := tx.QueryContext(ctx, offerLineItemListQuery, id, workspaceID)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			li, scanErr := scanOfferLineItem(rows)
+			if scanErr != nil {
+				return scanErr
+			}
+			out.LineItems = append(out.LineItems, li)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+
+		switch {
+		case offer.Status == domain.OfferStatusSent:
+			out.BuyerBlock = offer.BuyerSnapshot
+		case offer.BuyerOrgID != nil:
+			buyerBlock, err := s.buildBuyerSnapshot(ctx, offer.BuyerOrgID, workspaceID)
+			if err != nil {
+				return err
+			}
+			out.BuyerBlock = buyerBlock
+		default:
+			out.BuyerBlock = nil
+		}
+
+		issuerName, _, err := loadWorkspaceNameAndBaseCurrency(ctx, tx, workspaceID)
+		if err != nil {
+			return err
+		}
+		out.IssuerName = issuerName
+
+		locale := "de-DE"
+		if offer.TemplateID != nil {
+			tmpl, err := NewOfferTemplateStore(s.db).Get(ctx, *offer.TemplateID, workspaceID)
+			if err != nil {
+				return err
+			}
+			locale = tmpl.Locale
+		}
+		out.Locale = locale
+		return nil
+	})
+	if err != nil {
+		return RenderIngredients{}, err
+	}
+	return out, nil
+}
+
+// SetPdfAssetRef stores the blob reference produced by render and audits it
+// as a standard offer update.
+func (s *OfferStore) SetPdfAssetRef(ctx context.Context, id, workspaceID, ref string) (domain.Offer, error) {
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		if _, _, err := lockOfferForMutation(ctx, tx, id, workspaceID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE offer SET pdf_asset_ref=$1
+			WHERE id=$2::uuid AND workspace_id=$3::uuid`,
+			ref, id, workspaceID); err != nil {
+			return fmt.Errorf("offer render: %w", err)
+		}
+		e := crmaudit.EntryFromPrincipal(ctx, "update", entityTypeOffer, &id, nil, nil)
+		e.WorkspaceID = workspaceID
+		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+			return fmt.Errorf("offer render audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.Offer{}, err
+	}
+	return s.Get(ctx, id, workspaceID)
 }
