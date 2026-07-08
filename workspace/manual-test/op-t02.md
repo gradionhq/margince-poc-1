@@ -25,7 +25,7 @@ passes.
    and both declare a `403` response describing the missing/invalid approval-token case (mirroring
    `sendEmail`'s shape).
 
-5. **[auto]** Run `grep -n -A5 "operationId: acceptOffer" backend/api/crm.yaml | grep -A40 "operationId: acceptOffer"`.
+5. **[auto]** Run `grep -n -A40 "operationId: acceptOffer" backend/api/crm.yaml`.
    Expected: a `409` response with `code: offer_not_acceptable` is present, describing the
    already-accepted/wrong-status case.
 
