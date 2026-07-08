@@ -366,7 +366,7 @@ func TestCursorInvalidBase64(t *testing.T) {
 
 func TestCursorValidBase64WrongShape(t *testing.T) {
 	// syntactically valid base64 but missing the | separator
-	bad := base64.StdEncoding.EncodeToString([]byte("no-pipe-here"))
+	bad := base64.RawURLEncoding.EncodeToString([]byte("no-pipe-here"))
 	_, _, ok := decodeCursor(bad)
 	if ok {
 		t.Fatal("decodeCursor with valid base64 but wrong shape must return ok=false")
@@ -375,7 +375,7 @@ func TestCursorValidBase64WrongShape(t *testing.T) {
 
 func TestCursorValidBase64InvalidTimestamp(t *testing.T) {
 	// valid base64, has |, but timestamp is not RFC3339Nano
-	bad := base64.StdEncoding.EncodeToString([]byte("not-a-timestamp|some-id"))
+	bad := base64.RawURLEncoding.EncodeToString([]byte("not-a-timestamp|some-id"))
 	_, _, ok := decodeCursor(bad)
 	if ok {
 		t.Fatal("decodeCursor with invalid timestamp must return ok=false")

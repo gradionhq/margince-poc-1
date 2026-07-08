@@ -123,7 +123,7 @@ func stringifyValue(v any) *string {
 // Format: base64(RFC3339Nano "|" id).
 func encodeCursor(occurredAt time.Time, id string) string {
 	raw := occurredAt.UTC().Format(time.RFC3339Nano) + "|" + id
-	return base64.StdEncoding.EncodeToString([]byte(raw))
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
 // decodeCursor decodes an opaque cursor string.
@@ -135,7 +135,7 @@ func decodeCursor(s string) (occurredAt time.Time, id string, ok bool) {
 	if s == "" {
 		return time.Time{}, "", true
 	}
-	b, err := base64.StdEncoding.DecodeString(s)
+	b, err := base64.RawURLEncoding.DecodeString(s)
 	if err != nil {
 		return time.Time{}, "", false
 	}
