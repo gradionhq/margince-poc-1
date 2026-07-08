@@ -93,3 +93,66 @@ var errTokenInvalidStub = &tokenInvalidStubErr{}
 type tokenInvalidStubErr struct{}
 
 func (*tokenInvalidStubErr) Error() string { return "stub: token invalid" }
+
+func newPatchReq(path string, body map[string]any, isAgent bool, token string) *http.Request {
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPatch, path, bytes.NewReader(b))
+	req = withCFPrincipal(req, isAgent, "00000000-0000-0000-0000-0000000c0001", "00000000-0000-0000-0000-0000000c0099")
+	if token != "" {
+		req.Header.Set("X-Approval-Token", token)
+	}
+	return req
+}
+
+func newRetireReq(path string, isAgent bool, token string) *http.Request {
+	req := httptest.NewRequest(http.MethodPost, path, nil)
+	req = withCFPrincipal(req, isAgent, "00000000-0000-0000-0000-0000000c0001", "00000000-0000-0000-0000-0000000c0099")
+	if token != "" {
+		req.Header.Set("X-Approval-Token", token)
+	}
+	return req
+}
+
+// TestRenameCustomField_GreenTier_AgentNeverNeedsToken_NeverTouchesDBWhenMalformed
+// proves rename is 🟢: an agent principal is never gated, so a malformed
+// body's 400 must come from JSON decoding, never a token check.
+func TestRenameCustomField_GreenTier_AgentNeverNeedsToken_MalformedBody400(t *testing.T) {
+	h := NewHandler(nil, fakeVerifier{})
+	req := httptest.NewRequest(http.MethodPatch, "/custom-fields/018f3a1b-0000-7000-8000-0000000000ff", bytes.NewReader([]byte("{not json")))
+	req = withCFPrincipal(req, true, "00000000-0000-0000-0000-0000000c0001", "00000000-0000-0000-0000-0000000c0099")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestRetireCustomField_AgentWithoutToken_403ApprovalRequired_NeverTouchesDB(t *testing.T) {
+	h := NewHandler(nil, fakeVerifier{})
+	req := newRetireReq("/custom-fields/018f3a1b-0000-7000-8000-0000000000ff/retire", true, "")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
+	if body["code"] != "approval_required" {
+		t.Fatalf("expected code=approval_required, got %v", body["code"])
+	}
+}
+
+func TestSetCustomFieldOptions_AgentWithoutToken_403ApprovalRequired_NeverTouchesDB(t *testing.T) {
+	h := NewHandler(nil, fakeVerifier{})
+	req := newPatchReq("/custom-fields/018f3a1b-0000-7000-8000-0000000000ff/options", map[string]any{"options": []string{"a"}}, true, "")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
+	if body["code"] != "approval_required" {
+		t.Fatalf("expected code=approval_required, got %v", body["code"])
+	}
+}
