@@ -25,6 +25,7 @@ var (
 	ErrApprovalRequired          = errors.New("approval required")                    // -> 403 (agent on a 🟡 transition, no token — API-ERR-10)
 	ErrStatusMismatch            = errors.New("status mismatch")                      // -> 422 (explicit status != target stage's derived semantic)
 	ErrLostReasonRequired        = errors.New("lost reason required")                 // -> 422 (advancing to a lost stage needs lost_reason)
+	ErrFieldNotValidForKind      = errors.New("field not valid for kind")             // -> 422 (task-only field set on a non-task activity kind)
 )
 
 // HTTPStatus maps a domain error to its HTTP status code — the single sentinel→status
@@ -55,7 +56,8 @@ func HTTPStatus(err error) int {
 		errors.Is(err, ErrNotArchived),
 		errors.Is(err, ErrMergedRecord),
 		errors.Is(err, ErrStatusMismatch),
-		errors.Is(err, ErrLostReasonRequired):
+		errors.Is(err, ErrLostReasonRequired),
+		errors.Is(err, ErrFieldNotValidForKind):
 		return 422
 	case errors.Is(err, ErrSuppressed):
 		return 451

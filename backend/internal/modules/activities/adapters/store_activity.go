@@ -27,6 +27,14 @@ const (
 	fieldIsDone            = "is_done"
 )
 
+// entityLinkColumn maps an activity_link entity_type to its FK column —
+// shared by List's timeline JOIN and Create's link-insert.
+var entityLinkColumn = map[string]string{
+	entityTypePerson:       fieldPersonID,
+	entityTypeOrganization: fieldOrganizationID,
+	entityTypeDeal:         colDealID,
+}
+
 // Generic, domain-free store helpers (provenance guard, keyset/offset cursors,
 // bounded-update field readers) live in the Tier-0 shared/kernel/sqlutil package.
 
@@ -64,29 +72,99 @@ type ActivityStore struct{ db *sql.DB }
 // NewActivityStore returns an ActivityStore.
 func NewActivityStore(db *sql.DB) *ActivityStore { return &ActivityStore{db: db} }
 
-// Create inserts an activity in one workspace-scoped tx.
-func (s *ActivityStore) Create(ctx context.Context, a domain.Activity) (domain.Activity, error) {
+// validateTaskFields enforces the activity_task_fields DB CHECK (kind='task' OR
+// (due_at IS NULL AND assignee_id IS NULL AND is_done=false)) at the application
+// boundary, so a request that would trip that CHECK fails 422
+// field_not_valid_for_kind instead of a 500 from an unmapped constraint
+// violation (ACT-AC-11). Scoped to exactly the three columns the CHECK covers —
+// remind_at/done_at/meeting_status/duration_seconds/direction are documented as
+// kind-scoped in the Activity schema's own comment but are not DB-enforced, so
+// validating them is a separate, unscoped concern.
+func validateTaskFields(kind string, dueAt *time.Time, assigneeID *string, isDone bool) error {
+	if kind == "task" {
+		return nil
+	}
+	if dueAt != nil || assigneeID != nil || isDone {
+		return errs.ErrFieldNotValidForKind
+	}
+	return nil
+}
+
+// jsonbParam binds v as a jsonb query parameter, or SQL NULL when v is nil —
+// distinct from sqlutil.MarshalJSON's always-{} behavior, since activity.raw is
+// nullable and null is a meaningfully different state from an empty object.
+func jsonbParam(v map[string]any) any {
+	if v == nil {
+		return nil
+	}
+	return sqlutil.MarshalJSON(v)
+}
+
+// insertLinks writes one activity_link row per link, in the caller's transaction.
+// Only called for a freshly-inserted activity — an idempotent replay leaves the
+// original row's links untouched (ACT-WIRE-2).
+func (s *ActivityStore) insertLinks(ctx context.Context, tx *sql.Tx, activityID, workspaceID string, links []domain.ActivityLink) error {
+	for _, l := range links {
+		col, ok := entityLinkColumn[l.EntityType]
+		if !ok {
+			return fmt.Errorf("unknown activity_link entity_type: %s", l.EntityType)
+		}
+		q := fmt.Sprintf(`INSERT INTO activity_link (id, workspace_id, activity_id, entity_type, %s) VALUES ($1,$2,$3,$4,$5)`, col)
+		if _, err := tx.ExecContext(ctx, q, ids.New(), workspaceID, activityID, l.EntityType, l.EntityID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Create inserts an activity in one workspace-scoped tx. When a.SourceSystem
+// and a.SourceID are both present, the insert is idempotent against
+// uq_activity_source: a replay of the same (source_system, source_id) pair
+// resolves to the existing row (created=false) instead of a duplicate or a
+// unique-violation error (ACT-WIRE-2). A fresh insert also writes one
+// activity_link row per a.Links entry (ACT-AC-1) and a.Raw into the raw jsonb
+// column (ACT-AC-2). Rejects missing provenance (ACT-AC-3) and a task-only
+// field set on a non-task kind (ACT-AC-11) before ever reaching the DB.
+func (s *ActivityStore) Create(ctx context.Context, a domain.Activity) (domain.Activity, bool, error) {
 	if err := sqlutil.RequireProvenance(a.Source, a.CapturedBy); err != nil {
-		return domain.Activity{}, err
+		return domain.Activity{}, false, err
+	}
+	if err := validateTaskFields(a.Kind, a.DueAt, a.AssigneeID, a.IsDone); err != nil {
+		return domain.Activity{}, false, err
 	}
 	a.ID = ids.New()
+	var created bool
 	err := database.WithWorkspaceTx(ctx, s.db, a.WorkspaceID, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `
+		res, err := tx.ExecContext(ctx, `
 			INSERT INTO activity (id, workspace_id, kind, subject, body,
 			    occurred_at, due_at, assignee_id, remind_at, is_done, duration_seconds,
 			    direction, meeting_status, source_system, source_id,
-			    source, captured_by, version)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,1)`,
+			    source, captured_by, raw, version)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,1)
+			ON CONFLICT (workspace_id, source_system, source_id)
+			    WHERE source_system IS NOT NULL AND source_id IS NOT NULL AND archived_at IS NULL DO NOTHING`,
 			a.ID, a.WorkspaceID, a.Kind, a.Subject, a.Body,
 			a.OccurredAt, a.DueAt, a.AssigneeID, a.RemindAt, a.IsDone, a.DurationSeconds,
 			a.Direction, a.MeetingStatus, a.SourceSystem, a.SourceID,
-			a.Source, a.CapturedBy)
-		return err
+			a.Source, a.CapturedBy, jsonbParam(a.Raw))
+		if err != nil {
+			return err
+		}
+		n, _ := res.RowsAffected()
+		created = n > 0
+		if !created {
+			// Idempotent replay: the row already exists under this source key.
+			return tx.QueryRowContext(ctx,
+				`SELECT id FROM activity WHERE workspace_id=$1 AND source_system=$2 AND source_id=$3`,
+				a.WorkspaceID, a.SourceSystem, a.SourceID).Scan(&a.ID)
+		}
+		return s.insertLinks(ctx, tx, a.ID, a.WorkspaceID, a.Links)
 	})
 	if err != nil {
-		return domain.Activity{}, err
+		return domain.Activity{}, false, err
 	}
-	return s.Get(ctx, a.ID, a.WorkspaceID)
+	got, err := s.Get(ctx, a.ID, a.WorkspaceID)
+	return got, created, err
 }
 
 // Get returns one activity by id, workspace-scoped; ErrNotFound if absent.
@@ -130,11 +208,7 @@ func (s *ActivityStore) List(ctx context.Context, workspaceID, entityType, entit
 		var err error
 		if entityType != "" && entityID != "" {
 			// Timeline query via activity_link
-			colName := map[string]string{
-				entityTypePerson:       fieldPersonID,
-				entityTypeOrganization: fieldOrganizationID,
-				entityTypeDeal:         colDealID,
-			}[entityType]
+			colName := entityLinkColumn[entityType]
 			if colName == "" {
 				return fmt.Errorf("unknown entity_type: %s", entityType)
 			}
