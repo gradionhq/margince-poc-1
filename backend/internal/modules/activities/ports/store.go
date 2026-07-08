@@ -10,8 +10,10 @@ import (
 // Store is the activity repository seam. Adapters implement this interface;
 // the application service depends on it.
 type Store interface {
-	// Create inserts a new activity row and returns the persisted record.
-	Create(ctx context.Context, a domain.Activity) (domain.Activity, error)
+	// Create inserts a new activity row and returns the persisted record, plus
+	// whether this call freshly inserted it (false = idempotent replay of an
+	// existing (source_system, source_id) pair — see uq_activity_source).
+	Create(ctx context.Context, a domain.Activity) (result domain.Activity, created bool, err error)
 	// Get returns one activity by id, workspace-scoped; ErrNotFound if absent.
 	Get(ctx context.Context, id, workspaceID string) (domain.Activity, error)
 	// List returns a keyset page of activities, optionally filtered to a linked

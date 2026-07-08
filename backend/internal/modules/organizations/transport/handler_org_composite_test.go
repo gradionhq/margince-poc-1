@@ -78,7 +78,7 @@ func TestOrganizationHandler_Get_Composite360(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed deal: %v", err)
 	}
-	act, err := actStore.Create(ctx, actDomain.Activity{WorkspaceID: orgCompositeWS, Kind: "call", OccurredAt: time.Now(), Source: p0.Source, CapturedBy: p0.CapturedBy})
+	act, _, err := actStore.Create(ctx, actDomain.Activity{WorkspaceID: orgCompositeWS, Kind: "call", OccurredAt: time.Now(), Source: p0.Source, CapturedBy: p0.CapturedBy})
 	if err != nil {
 		t.Fatalf("seed activity: %v", err)
 	}
