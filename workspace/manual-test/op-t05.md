@@ -37,7 +37,7 @@ go build ./backend/internal/modules/offers/...
 ### Step 2.1 — Offer create→list→get→update round-trip [auto]
 
 ```bash
-make test-it DIR=backend/internal/modules/offers
+make test-it DIR=backend/internal/modules/offers/adapters
 ```
 
 **Expected:** `TestOfferStore_CreateGetListUpdate_RoundTrip` passes —
@@ -715,7 +715,7 @@ draft.
 
 ---
 
-### Step 20: Out-of-scope verbs still return 501 [live]
+### Step 20: Out-of-scope verbs still return 404 [live]
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}" -X POST \
@@ -729,8 +729,13 @@ curl -s -o /dev/null -w "%{http_code}" -X POST \
   -H "X-Workspace-ID: $WS"
 ```
 
-**Expected:** both return HTTP 501 Not Implemented — `regenerate`/`render`/`send`/`accept` are
-a separate ticket and remain untouched stubs.
+**Expected:** both return HTTP 404 Not Found — `regenerate`/`render`/`send`/`accept` are a
+separate ticket and remain untouched 501 stubs on `OffersAdapter`, but `backend/cmd/api/routes.go`
+mounts the manually-registered `offerHandler` as the sole live handler for `/offers/*`
+(`buildAllOperations`, which wires the `OffersAdapter` stubs, is built but explicitly discarded via
+`_ = buildAllOperations(k)` — a pre-existing GH-81 architecture decision unrelated to this ticket).
+Since the live dispatch tree never reaches the 501-stub adapter for these out-of-scope verbs, the
+request falls through the handler's routing switch and returns 404, not 501.
 
 ---
 
