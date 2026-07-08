@@ -4783,6 +4783,76 @@ paths:
                     detail: Retiring a custom field is confirm-first; supply an approval token.
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /custom-fields/{id}/options:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    patch:
+      tags: [CustomFields]
+      operationId: updateCustomFieldOptions
+      summary: Edit a picklist custom field's allowed options (🟡 — regenerates the column's CHECK).
+      description: |
+        CUSTOM-FIELDS-PARAM-5. Only valid for `type=picklist` fields (422 `not_picklist`
+        otherwise). Replaces the catalog's `options` array and regenerates the physical
+        column's CHECK constraint from the new set via the governed engine (same
+        base-role-ALTER-then-downgrade tx shape as `createCustomField` — this is the one
+        DDL path rename/retire never touch). Removing every option is refused (422,
+        detail "A picklist needs at least one option") — a picklist always keeps at least
+        one allowed value. 🟡 like `retireCustomField`: this mutates a schema-adjacent CHECK
+        constraint, so an agent caller must supply `X-Approval-Token`.
+      x-mcp-tool: { verb: update_record, record_type: custom_field, tier: yellow }
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ApprovalToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateCustomFieldOptionsRequest' }
+      responses:
+        '200':
+          description: The custom field with its regenerated option set.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomField' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: RBAC denied, or a 🟡 options edit attempted without an approval token.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                approvalRequired:
+                  value:
+                    type: 'https://errors.margince.com/approval_required'
+                    title: Approval required
+                    status: 403
+                    code: approval_required
+                    detail: Editing a picklist's options changes a schema-adjacent CHECK constraint and is confirm-first; supply an approval token.
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: The field is not a picklist, or the edit would remove every option.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                notPicklist:
+                  value:
+                    type: 'https://errors.margince.com/validation_error'
+                    title: Validation failed
+                    status: 422
+                    code: not_picklist
+                    detail: Only a picklist field's options can be edited.
+                lastOption:
+                  value:
+                    type: 'https://errors.margince.com/validation_error'
+                    title: Validation failed
+                    status: 422
+                    code: validation_error
+                    detail: A picklist needs at least one option
+                    details:
+                      errors:
+                        - { field: options, code: min_one_required }
+
   # DEFERRED — stubs only (data-model.md §12). Intentionally NOT specified:
   #   /sequences, /sequences/{id}/steps, /enrollments   (outbound cadences; sends gated)
   #   /overlay/*                                         (overlay-on-incumbents read model)
@@ -7659,6 +7729,18 @@ components:
         request schema entirely (immutable, not just ignored if sent).
       properties:
         label: { type: string }
+
+    UpdateCustomFieldOptionsRequest:
+      type: object
+      description: >-
+        CUSTOM-FIELDS-PARAM-5. Replaces the picklist's full allowed-option set (ordered);
+        at least one option is required — an empty array is rejected (422).
+      required: [options]
+      properties:
+        options:
+          type: array
+          items: { type: string }
+          minItems: 1
 
     # ---- Quota + attainment (RD-WIRE-2/3, RD-DDL-2, RD-FORM-2) ----
     Quota:
