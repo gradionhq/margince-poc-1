@@ -177,6 +177,8 @@ func (s *OfferTemplateStore) Get(ctx context.Context, id, workspaceID string) (d
 }
 
 // List returns a cursor-paginated slice of offer_templates.
+//
+//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
 func (s *OfferTemplateStore) List(ctx context.Context, workspaceID, cursor string, limit int, includeArchived bool) ([]domain.OfferTemplate, string, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20

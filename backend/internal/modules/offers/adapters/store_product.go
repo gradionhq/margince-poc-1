@@ -188,6 +188,8 @@ func (s *ProductStore) Get(ctx context.Context, id, workspaceID string) (domain.
 
 // List returns a cursor-paginated slice of products (OFFER-AC-9c: an empty
 // catalogue answers 200 with an empty page, never an error).
+//
+//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
 func (s *ProductStore) List(ctx context.Context, workspaceID, cursor string, limit int, includeArchived bool) ([]domain.Product, string, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20

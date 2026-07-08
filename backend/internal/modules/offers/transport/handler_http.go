@@ -66,7 +66,8 @@ func writeGetResult[T any](w http.ResponseWriter, v T, err error) {
 // cursor/limit/include_archived query parsing shared by every offers list
 // handler, and writes the paginated response.
 func listResults[T any](w http.ResponseWriter, r *http.Request,
-	fn func(ctx context.Context, workspaceID, cursor string, limit int, includeArchived bool) ([]T, string, error)) {
+	fn func(ctx context.Context, workspaceID, cursor string, limit int, includeArchived bool) ([]T, string, error),
+) {
 	wsID, ok := httpkit.RequireWorkspace(w, r)
 	if !ok {
 		return

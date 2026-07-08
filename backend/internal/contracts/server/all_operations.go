@@ -66,16 +66,16 @@ func NewAllOperations(
 	offerTemplates OfferTemplatesAdapter,
 ) *AllOperations {
 	return &AllOperations{
-		PeopleAdapter:        people,
-		OrganizationsAdapter: organizations,
-		DealsAdapter:         deals,
-		PipelinesAdapter:     pipelines,
-		PartnersAdapter:      partners,
-		RelationshipsAdapter: relationships,
-		ActivitiesAdapter:    activities,
-		AuditAdapter:         audit,
-		IdentityAdapter:      identity,
-		ProductsAdapter:      products,
+		PeopleAdapter:         people,
+		OrganizationsAdapter:  organizations,
+		DealsAdapter:          deals,
+		PipelinesAdapter:      pipelines,
+		PartnersAdapter:       partners,
+		RelationshipsAdapter:  relationships,
+		ActivitiesAdapter:     activities,
+		AuditAdapter:          audit,
+		IdentityAdapter:       identity,
+		ProductsAdapter:       products,
 		OfferTemplatesAdapter: offerTemplates,
 	}
 }
