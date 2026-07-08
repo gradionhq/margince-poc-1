@@ -74,3 +74,85 @@ func NewOfferTemplate(name string, p prov.Provenance) OfferTemplate {
 		Source: p.Source, CapturedBy: p.CapturedBy, Version: 1,
 	}
 }
+
+// OfferStatusDraft is the only status this ticket's Update/line-item paths
+// ever accept a mutation against (OFFER-WIRE-4 draft-only guard).
+const OfferStatusDraft = "draft"
+
+// Offer is a versioned Angebot bound to one deal (OFFER-DDL-2). net_minor/
+// tax_minor/gross_minor are DERIVED server-side from line items
+// (OFFER-PARAM-4) — never accepted from the client (API-ERR-15).
+// BuyerSnapshot/IssuerSnapshot/FxRateToBase/FxRateDate/PdfAssetRef/AcceptedAt
+// are all owned by the out-of-scope send/render/accept verbs and stay nil/
+// zero through this ticket's entire lifecycle.
+type Offer struct {
+	ID             string                 `json:"id"`
+	WorkspaceID    string                 `json:"workspace_id"`
+	DealID         string                 `json:"deal_id"`
+	OfferNumber    string                 `json:"offer_number"`
+	Revision       int64                  `json:"revision"`
+	Status         string                 `json:"status"`
+	Currency       string                 `json:"currency"`
+	BuyerOrgID     *string                `json:"buyer_org_id"`
+	BuyerSnapshot  map[string]interface{} `json:"buyer_snapshot"`
+	IssuerSnapshot map[string]interface{} `json:"issuer_snapshot"`
+	ValidUntil     *time.Time             `json:"valid_until"`
+	IntroText      *string                `json:"intro_text"`
+	TermsText      *string                `json:"terms_text"`
+	NetMinor       int64                  `json:"net_minor"`
+	TaxMinor       int64                  `json:"tax_minor"`
+	GrossMinor     int64                  `json:"gross_minor"`
+	FxRateToBase   *string                `json:"fx_rate_to_base"`
+	FxRateDate     *time.Time             `json:"fx_rate_date"`
+	TemplateID     *string                `json:"template_id"`
+	PdfAssetRef    *string                `json:"pdf_asset_ref"`
+	AcceptedAt     *time.Time             `json:"accepted_at"`
+	Version        int64                  `json:"version"`
+	Source         string                 `json:"source"`
+	CapturedBy     string                 `json:"captured_by"`
+	CreatedAt      time.Time              `json:"created_at"`
+	UpdatedAt      time.Time              `json:"updated_at"`
+	ArchivedAt     *time.Time             `json:"archived_at"`
+}
+
+// NewOffer returns an Offer with a fresh ID, status=draft, revision=1,
+// version=1, and copied provenance.
+func NewOffer(dealID, offerNumber, currency string, p prov.Provenance) Offer {
+	return Offer{
+		ID: ids.New(), DealID: dealID, OfferNumber: offerNumber, Currency: currency,
+		Status: OfferStatusDraft, Revision: 1, Version: 1,
+		Source: p.Source, CapturedBy: p.CapturedBy,
+	}
+}
+
+// OfferLineItem is a typed line on an offer (OFFER-DDL-3); price is a
+// snapshot copied from product at pick time (OFFER-AC-9b), never re-read
+// later. No version column (no optimistic concurrency on line items).
+type OfferLineItem struct {
+	ID             string     `json:"id"`
+	WorkspaceID    string     `json:"workspace_id"`
+	OfferID        string     `json:"offer_id"`
+	Position       int        `json:"position"`
+	ProductID      *string    `json:"product_id"`
+	Description    string     `json:"description"`
+	Unit           string     `json:"unit"`
+	Quantity       float64    `json:"quantity"`
+	UnitPriceMinor int64      `json:"unit_price_minor"`
+	DiscountPct    float64    `json:"discount_pct"`
+	TaxRate        float64    `json:"tax_rate"`
+	Source         string     `json:"source"`
+	CapturedBy     string     `json:"captured_by"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	ArchivedAt     *time.Time `json:"archived_at"`
+}
+
+// NewOfferLineItem returns an OfferLineItem with a fresh ID and copied
+// provenance, defaulting unit="unit" (DDL default).
+func NewOfferLineItem(offerID string, position int, description string, quantity float64, unitPriceMinor int64, p prov.Provenance) OfferLineItem {
+	return OfferLineItem{
+		ID: ids.New(), OfferID: offerID, Position: position, Description: description,
+		Unit: "unit", Quantity: quantity, UnitPriceMinor: unitPriceMinor,
+		Source: p.Source, CapturedBy: p.CapturedBy,
+	}
+}
