@@ -77,6 +77,47 @@ func TestOfferLineItemStore_Create_ProductSnapshot(t *testing.T) {
 	}
 }
 
+func TestOfferLineItemStore_Evidence_RoundTrips(t *testing.T) {
+	db := pgtest.OpenTestDB(t)
+	wsID, dealID := seedOfferWorkspace(t, db)
+	lineStore := adapters.NewOfferLineItemStore(db, adapters.NewProductStore(db))
+	offer := newDraftOffer(t, db, wsID, dealID)
+	evidence := &domain.Evidence{Snippet: "the customer asked for consulting", SourceID: "activity-1"}
+
+	li := domain.OfferLineItem{
+		WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
+		Description: "Consulting", Quantity: 2, UnitPriceMinor: 150000,
+		Evidence: evidence,
+		Source:   "test", CapturedBy: "human:test",
+	}
+	created, err := lineStore.Create(context.Background(), li, nil)
+	if err != nil {
+		t.Fatalf("create line: %v", err)
+	}
+	if created.Evidence == nil || created.Evidence.Snippet != evidence.Snippet || created.Evidence.SourceID != evidence.SourceID {
+		t.Fatalf("expected create to round-trip evidence, got %+v", created.Evidence)
+	}
+
+	updated, err := lineStore.Update(context.Background(), created.ID, offer.ID, wsID, map[string]any{"description": "Consulting (updated)"})
+	if err != nil {
+		t.Fatalf("update line: %v", err)
+	}
+	if updated.Evidence == nil || updated.Evidence.Snippet != evidence.Snippet || updated.Evidence.SourceID != evidence.SourceID {
+		t.Fatalf("expected update to preserve evidence, got %+v", updated.Evidence)
+	}
+
+	lines, err := lineStore.List(context.Background(), offer.ID, wsID)
+	if err != nil {
+		t.Fatalf("list lines: %v", err)
+	}
+	if len(lines) != 1 {
+		t.Fatalf("expected one line, got %d", len(lines))
+	}
+	if lines[0].Evidence == nil || lines[0].Evidence.Snippet != evidence.Snippet || lines[0].Evidence.SourceID != evidence.SourceID {
+		t.Fatalf("expected list to round-trip evidence, got %+v", lines[0].Evidence)
+	}
+}
+
 // TestOfferLineItemStore_Reconciliation_RoundThenSum_DivergesFromSumThenRound
 // is OFFER-AC-3's real assertion: two lines, each with a discount and a
 // non-zero tax rate, chosen so round-then-sum and sum-then-round produce

@@ -4802,9 +4802,15 @@ type Money struct {
 // DERIVED server-side from its line items (OFFER-PARAM-4) — never accepted on
 // request (API-ERR-15). Mirrors the offer table.
 type Offer struct {
-	AcceptedAt *time.Time          `json:"accepted_at,omitempty"`
-	ArchivedAt *time.Time          `json:"archived_at,omitempty"`
-	BuyerOrgId *openapi_types.UUID `json:"buyer_org_id,omitempty"`
+	AcceptedAt *time.Time `json:"accepted_at,omitempty"`
+
+	// AiDisclosure Human-readable Art. 50 disclosure text; non-null iff ai_generated=true.
+	AiDisclosure *string `json:"ai_disclosure,omitempty"`
+
+	// AiGenerated Art. 50 AI-assisted disclosure (GATE-AI-9). true only on the response of the regenerate call (OFFER-WIRE-6) that produced this revision; false on every other read — this ticket discloses AI authorship on the drafting call itself, not by persisting it across every future read.
+	AiGenerated *bool               `json:"ai_generated,omitempty"`
+	ArchivedAt  *time.Time          `json:"archived_at,omitempty"`
+	BuyerOrgId  *openapi_types.UUID `json:"buyer_org_id,omitempty"`
 
 	// BuyerSnapshot Buyer name/address/VAT captured at send time (OFFER-PARAM-5); null until sent.
 	BuyerSnapshot *map[string]interface{} `json:"buyer_snapshot,omitempty"`
@@ -4814,6 +4820,23 @@ type Offer struct {
 
 	// DealId The deal this offer is bound to.
 	DealId openapi_types.UUID `json:"deal_id"`
+
+	// DiffFromPrevious Populated only on a regenerate response (OFFER-AC-11d/16) — added/removed/changed line items vs the immediately prior revision. Null on every other read (transient, never persisted).
+	DiffFromPrevious *struct {
+		Added   *[]OfferLineItem `json:"added,omitempty"`
+		Changed *[]struct {
+			// After A typed line item on an offer; price is a snapshot copied from product (never
+			// re-read after send). Mirrors the offer_line_item table. Line totals
+			// (line_net/line_tax/line_total) are DERIVED — never wire fields (API-ERR-15).
+			After *OfferLineItem `json:"after,omitempty"`
+
+			// Before A typed line item on an offer; price is a snapshot copied from product (never
+			// re-read after send). Mirrors the offer_line_item table. Line totals
+			// (line_net/line_tax/line_total) are DERIVED — never wire fields (API-ERR-15).
+			Before *OfferLineItem `json:"before,omitempty"`
+		} `json:"changed,omitempty"`
+		Removed *[]OfferLineItem `json:"removed,omitempty"`
+	} `json:"diff_from_previous,omitempty"`
 
 	// FxRateDate Frozen alongside fx_rate_to_base at send; null until sent.
 	FxRateDate *openapi_types.Date `json:"fx_rate_date,omitempty"`
@@ -4876,13 +4899,22 @@ type OfferLineItem struct {
 	CreatedAt  time.Time  `json:"created_at"`
 
 	// Description Snapshot — free-typed or copied from the referenced product.
-	Description string             `json:"description"`
-	DiscountPct float32            `json:"discount_pct"`
-	Id          openapi_types.UUID `json:"id"`
-	OfferId     openapi_types.UUID `json:"offer_id"`
+	Description string  `json:"description"`
+	DiscountPct float32 `json:"discount_pct"`
+
+	// Evidence Grounding citation for an AI-proposed line (evidence-or-omit, OFFER-AC-11a/13, GATE-AI-1); null for a human-entered line.
+	Evidence *struct {
+		Snippet  *string             `json:"snippet,omitempty"`
+		SourceId *openapi_types.UUID `json:"source_id,omitempty"`
+	} `json:"evidence,omitempty"`
+	Id      openapi_types.UUID `json:"id"`
+	OfferId openapi_types.UUID `json:"offer_id"`
 
 	// Position Display order; unique per offer.
 	Position int `json:"position"`
+
+	// PriceGrounded false only for an AI-proposed line the retriever/rate-card could not ground a price for (OFFER-AC-11b/14) — unit_price_minor is 0 in that case, an honest sentinel never a guessed value; true (the default) for every human-entered or rate-card/conversation-grounded line.
+	PriceGrounded *bool `json:"price_grounded,omitempty"`
 
 	// ProductId Optional rate-card reference; price/description are copied onto the line as a snapshot on pick.
 	ProductId *openapi_types.UUID `json:"product_id,omitempty"`
@@ -4895,7 +4927,7 @@ type OfferLineItem struct {
 	TaxRate float32 `json:"tax_rate"`
 	Unit    string  `json:"unit"`
 
-	// UnitPriceMinor Snapshot — never re-read from product after send. Never a float.
+	// UnitPriceMinor Snapshot — never re-read from product after send. Never a float. Human-entered lines (createOfferLineItem) always supply a concrete value.
 	UnitPriceMinor       int64                  `json:"unit_price_minor"`
 	UpdatedAt            time.Time              `json:"updated_at"`
 	WorkspaceId          openapi_types.UUID     `json:"workspace_id"`
@@ -10135,6 +10167,22 @@ func (a *Offer) UnmarshalJSON(b []byte) error {
 		delete(object, "accepted_at")
 	}
 
+	if raw, found := object["ai_disclosure"]; found {
+		err = json.Unmarshal(raw, &a.AiDisclosure)
+		if err != nil {
+			return fmt.Errorf("error reading 'ai_disclosure': %w", err)
+		}
+		delete(object, "ai_disclosure")
+	}
+
+	if raw, found := object["ai_generated"]; found {
+		err = json.Unmarshal(raw, &a.AiGenerated)
+		if err != nil {
+			return fmt.Errorf("error reading 'ai_generated': %w", err)
+		}
+		delete(object, "ai_generated")
+	}
+
 	if raw, found := object["archived_at"]; found {
 		err = json.Unmarshal(raw, &a.ArchivedAt)
 		if err != nil {
@@ -10189,6 +10237,14 @@ func (a *Offer) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("error reading 'deal_id': %w", err)
 		}
 		delete(object, "deal_id")
+	}
+
+	if raw, found := object["diff_from_previous"]; found {
+		err = json.Unmarshal(raw, &a.DiffFromPrevious)
+		if err != nil {
+			return fmt.Errorf("error reading 'diff_from_previous': %w", err)
+		}
+		delete(object, "diff_from_previous")
 	}
 
 	if raw, found := object["fx_rate_date"]; found {
@@ -10369,6 +10425,20 @@ func (a Offer) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if a.AiDisclosure != nil {
+		object["ai_disclosure"], err = json.Marshal(a.AiDisclosure)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'ai_disclosure': %w", err)
+		}
+	}
+
+	if a.AiGenerated != nil {
+		object["ai_generated"], err = json.Marshal(a.AiGenerated)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'ai_generated': %w", err)
+		}
+	}
+
 	if a.ArchivedAt != nil {
 		object["archived_at"], err = json.Marshal(a.ArchivedAt)
 		if err != nil {
@@ -10408,6 +10478,13 @@ func (a Offer) MarshalJSON() ([]byte, error) {
 	object["deal_id"], err = json.Marshal(a.DealId)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'deal_id': %w", err)
+	}
+
+	if a.DiffFromPrevious != nil {
+		object["diff_from_previous"], err = json.Marshal(a.DiffFromPrevious)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'diff_from_previous': %w", err)
+		}
 	}
 
 	if a.FxRateDate != nil {
@@ -10595,6 +10672,14 @@ func (a *OfferLineItem) UnmarshalJSON(b []byte) error {
 		delete(object, "discount_pct")
 	}
 
+	if raw, found := object["evidence"]; found {
+		err = json.Unmarshal(raw, &a.Evidence)
+		if err != nil {
+			return fmt.Errorf("error reading 'evidence': %w", err)
+		}
+		delete(object, "evidence")
+	}
+
 	if raw, found := object["id"]; found {
 		err = json.Unmarshal(raw, &a.Id)
 		if err != nil {
@@ -10617,6 +10702,14 @@ func (a *OfferLineItem) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("error reading 'position': %w", err)
 		}
 		delete(object, "position")
+	}
+
+	if raw, found := object["price_grounded"]; found {
+		err = json.Unmarshal(raw, &a.PriceGrounded)
+		if err != nil {
+			return fmt.Errorf("error reading 'price_grounded': %w", err)
+		}
+		delete(object, "price_grounded")
 	}
 
 	if raw, found := object["product_id"]; found {
@@ -10729,6 +10822,13 @@ func (a OfferLineItem) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("error marshaling 'discount_pct': %w", err)
 	}
 
+	if a.Evidence != nil {
+		object["evidence"], err = json.Marshal(a.Evidence)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'evidence': %w", err)
+		}
+	}
+
 	object["id"], err = json.Marshal(a.Id)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'id': %w", err)
@@ -10742,6 +10842,11 @@ func (a OfferLineItem) MarshalJSON() ([]byte, error) {
 	object["position"], err = json.Marshal(a.Position)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'position': %w", err)
+	}
+
+	object["price_grounded"], err = json.Marshal(a.PriceGrounded)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'price_grounded': %w", err)
 	}
 
 	if a.ProductId != nil {
