@@ -19,42 +19,29 @@ import (
 // PersonStore — PO-F-3 relationship strength
 // ---------------------------------------------------------------------------
 
-// scanAllLivePersons runs personCustomSelect(active)'s fixed
-// id-ordered SELECT and scans every live workspace row (including its active
-// custom-field values) into a slice — the row-fetch step listByStrength
-// shares with listByID's non-strength cases, factored out so
-// listByStrength itself stays under the file-length/funlen cap.
+// scanAllLivePersons runs personListColumns' fixed id-ordered SELECT and
+// scans every live workspace row (including its active custom-field values)
+// into a slice — the row-fetch step listByStrength shares with listByID's
+// non-strength cases, factored out so listByStrength itself stays under the
+// file-length/funlen cap.
 func scanAllLivePersons(ctx context.Context, tx *sql.Tx, workspaceID string, active []customfields.Column) ([]domain.Person, error) {
 	// Non-nil so an empty result marshals to a JSON array ([]), never null.
 	all := []domain.Person{}
-	//nolint:gosec // G202: personCustomSelect returns quoted, catalog-derived identifiers only, never user input
-	rows, err := tx.QueryContext(ctx, `
-		SELECT id, workspace_id, full_name, first_name, last_name, title,
-		       owner_id, social`+personCustomSelect(active)+`, version, source, captured_by, created_at, updated_at
+	//nolint:gosec // G202: personListColumns/customfields.SelectSuffix return quoted, catalog-derived identifiers only, never user input
+	query := personListColumns + customfields.SelectSuffix(active) + `, version, source, captured_by, created_at, updated_at
 		FROM person
 		WHERE workspace_id=$1::uuid AND archived_at IS NULL
-		ORDER BY id`,
-		workspaceID)
+		ORDER BY id`
+	rows, err := tx.QueryContext(ctx, query, workspaceID) // NOSONAR: query is built from a fixed literal + customfields.SelectSuffix's quoted, catalog-derived identifiers only; workspaceID is a bound param
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
-		var p domain.Person
-		var socialRaw []byte
-		dests := customfields.ScanDests(active)
-		scanArgs := append([]any{
-			&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
-			&p.OwnerID, &socialRaw,
-		}, dests...)
-		scanArgs = append(scanArgs, &p.Version, &p.Source, &p.CapturedBy,
-			&p.CreatedAt, &p.UpdatedAt)
-		if err := rows.Scan(scanArgs...); err != nil {
+		p, err := scanPersonListRow(rows, active)
+		if err != nil {
 			return nil, err
 		}
-		p.Social = map[string]any{}
-		sqlutil.UnmarshalJSON(socialRaw, &p.Social)
-		p.CustomFields = customfields.ExtractValues(active, dests)
 		all = append(all, p)
 	}
 	return all, rows.Err()
