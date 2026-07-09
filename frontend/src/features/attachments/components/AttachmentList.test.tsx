@@ -7,6 +7,9 @@ import { AttachmentList } from "./AttachmentList.js";
 
 vi.mock("../api/attachments.js", () => ({
   useAttachments: vi.fn(),
+  useRequestAccess: () => ({
+    mutateAsync: vi.fn(),
+  }),
 }));
 
 import { useAttachments } from "../api/attachments.js";
@@ -108,5 +111,43 @@ describe("AttachmentList", () => {
 
     expect(screen.getByTestId("attachment-row-a1")).toBeInTheDocument();
     expect(screen.getByText("contract.pdf")).toBeInTheDocument();
+  });
+
+  it("renders the visibility rail and filters restricted rows on the client", async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    vi.mocked(useAttachments).mockReturnValue({
+      data: [
+        makeAttachment({ id: "a1", filename: "visible.pdf" }),
+        makeAttachment({
+          id: "a2",
+          filename: "restricted.pdf",
+          access: "restricted",
+        }),
+      ],
+      isLoading: false,
+      isError: false,
+      refetch,
+    } as never);
+
+    renderList({ entityType: "deal", entityId: "d1" });
+
+    expect(
+      screen.getByTestId("attachments-visibility-rail"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "All" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Visible to me" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("visible.pdf")).toBeInTheDocument();
+    expect(screen.getByText("restricted.pdf")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Visible to me" }));
+
+    expect(screen.getByText("visible.pdf")).toBeInTheDocument();
+    expect(
+      screen.queryByText("restricted.pdf"),
+    ).not.toBeInTheDocument();
+    expect(refetch).not.toHaveBeenCalled();
   });
 });

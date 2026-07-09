@@ -1,8 +1,12 @@
+import { useState } from "react";
 import type { components } from "../../../lib/api-client/generated/index.js";
-import { Button, RailIcon } from "../../../shared/ui/forge.js";
+import { Button, Chip, RailIcon } from "../../../shared/ui/forge.js";
+import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
+import { useRequestAccess } from "../api/attachments.js";
 import { ScanStatusChip } from "./ScanStatusChip.js";
 
 type Attachment = components["schemas"]["Attachment"];
+type Toast = { id: string; variant: "success" | "error" | "info"; message: string };
 
 function formatBytes(bytes: number) {
   return new Intl.NumberFormat(undefined).format(bytes) + " bytes";
@@ -48,9 +52,34 @@ export function AttachmentRow({
   onDetails?: (attachment: Attachment) => void;
   onFilenameClick?: (attachment: Attachment) => void;
 }) {
-  const canOpen = sourceCanOpen(attachment);
+  const requestAccess = useRequestAccess(attachment.id);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const isRestricted = attachment.access === "restricted";
+  const isBlocked = attachment.scan_status === "blocked";
+  const canOpen = sourceCanOpen(attachment) && !isRestricted && !isBlocked;
   const openFilename = onFilenameClick ?? onDetails;
-  const showDownload = Boolean(attachment.download_url) && attachment.scan_status !== "blocked";
+  const showDownload =
+    Boolean(attachment.download_url) && !isRestricted && !isBlocked;
+
+  function pushToast(variant: Toast["variant"], message: string) {
+    setToasts((current) => [
+      ...current,
+      { id: crypto.randomUUID(), variant, message },
+    ]);
+  }
+
+  async function handleRequestAccess() {
+    try {
+      await requestAccess.mutateAsync();
+      pushToast("success", "Access request sent and logged.");
+    } catch {
+      pushToast("error", "Failed to request access.");
+    }
+  }
+
+  function handleBlockedInfo() {
+    pushToast("info", "Blocked because the file was quarantined.");
+  }
 
   return (
     <li
@@ -77,8 +106,17 @@ export function AttachmentRow({
           )}
           <div className="mt-gf-xs flex flex-wrap items-center gap-x-gf-sm gap-y-gf-xs text-gf-caption text-gf-secondary">
             <ScanStatusChip scanStatus={attachment.scan_status} />
+            {isRestricted && <Chip variant="info">Restricted</Chip>}
             <span>{formatBytes(attachment.byte_size)}</span>
             <span>{provenanceLabel(attachment)}</span>
+            {isRestricted && (
+              <span className="text-gf-status-warning">not your role</span>
+            )}
+            {isBlocked && (
+              <span className="text-gf-status-danger">
+                Quarantined - not downloadable
+              </span>
+            )}
             <time dateTime={attachment.created_at}>
               {formatTimestamp(attachment.created_at)}
             </time>
@@ -86,25 +124,53 @@ export function AttachmentRow({
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-gf-xs">
-        {showDownload && (
+        {isRestricted ? (
           <Button
             variant="ghost"
             size="sm"
-            icon="Download"
-            onClick={() => onDownload?.(attachment)}
+            icon="Lock"
+            onClick={() => void handleRequestAccess()}
           >
-            Download
+            Request access
           </Button>
+        ) : isBlocked ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon="Info"
+            onClick={handleBlockedInfo}
+          >
+            Why was this blocked?
+          </Button>
+        ) : (
+          <>
+            {showDownload && (
+              <Button
+                variant="ghost"
+                size="sm"
+                icon="Download"
+                onClick={() => onDownload?.(attachment)}
+              >
+                Download
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              icon="Info"
+              onClick={() => onDetails?.(attachment)}
+            >
+              Details
+            </Button>
+          </>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          icon="Info"
-          onClick={() => onDetails?.(attachment)}
-        >
-          Details
-        </Button>
       </div>
+      <ToastContainer
+        toasts={toasts}
+        onDismiss={(id) =>
+          setToasts((current) => current.filter((toast) => toast.id !== id))
+        }
+      />
     </li>
   );
 }
