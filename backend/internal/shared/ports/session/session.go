@@ -60,6 +60,7 @@ var knownObjects = map[string]bool{
 	"attachment":     true, // RD-T05: attachment CRUD RBAC gate
 	"offer":          true,
 	"custom_field":   true, // CF-T03: custom-field definition CRUD gate
+	"quota":          true, // RD-T06: sales-quota RBAC gate
 }
 
 var knownRowScopes = map[string]bool{
