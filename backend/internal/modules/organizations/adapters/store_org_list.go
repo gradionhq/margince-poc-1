@@ -57,6 +57,35 @@ func buildOrgListWhere(f domain.OrgListFilter, args []any, n int) (string, []any
 	return where, args
 }
 
+// orgListColumns is the fixed SELECT column list shared by every List
+// variant below (listByCustomColumn/listByOrgID/listByOrgStrength); each
+// appends the active custom columns, then its own trailer/WHERE/ORDER BY.
+const orgListColumns = `
+			SELECT id, workspace_id, name, website, classification, relevance,
+			       owner_id, social`
+
+// scanOrgListRow scans one row from a List query (orgListColumns + every
+// active custom column, in that order) into a domain.Organization — the
+// per-row scan/unmarshal/attach glue that is identical across every List
+// variant, factored out so none of them hand-duplicates it.
+func scanOrgListRow(rows *sql.Rows, active []customfields.Column) (domain.Organization, error) {
+	var o domain.Organization
+	var socialRaw []byte
+	dests := customfields.ScanDests(active)
+	scanArgs := append([]any{
+		&o.ID, &o.WorkspaceID, &o.DisplayName, &o.Website, &o.Classification, &o.Relevance,
+		&o.OwnerID, &socialRaw,
+	}, dests...)
+	scanArgs = append(scanArgs, &o.Version, &o.Source, &o.CapturedBy, &o.CreatedAt, &o.UpdatedAt)
+	if err := rows.Scan(scanArgs...); err != nil {
+		return o, err
+	}
+	o.Social = map[string]any{}
+	sqlutil.UnmarshalJSON(socialRaw, &o.Social)
+	o.CustomFields = customfields.ExtractValues(active, dests)
+	return o, nil
+}
+
 // List returns a page of live organizations; sort="" or "id" uses ID keyset cursor, and
 // "strength"/"-strength" fetches all matching rows, attaches aggregates, sorts by score,
 // offset-paginates.
@@ -94,38 +123,26 @@ func (s *OrgStore) listByCustomColumn(ctx context.Context, workspaceID, cursor s
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		args := []any{workspaceID}
 		extraWhere, args := buildOrgListWhere(filter, args, 1)
-		//nolint:gosec // G202: cfSelectSuffix + pq.QuoteIdentifier(col) inject only catalog-derived cf_* column names; extraWhere injects only $N placeholders, all values bound via args
-		rows, err := tx.QueryContext(ctx, `
-			SELECT id, workspace_id, name, website, classification, relevance,
-			       owner_id, social`+cfSelectSuffix(active)+`, version, source, captured_by, created_at, updated_at
+		//nolint:gosec // G202: orgListColumns/customfields.SelectSuffix + pq.QuoteIdentifier(col) inject only catalog-derived cf_* column names; extraWhere injects only $N placeholders, all values bound via args
+		query := orgListColumns + customfields.SelectSuffix(active) + `, version, source, captured_by, created_at, updated_at
 			FROM organization
-			WHERE workspace_id=$1::uuid AND archived_at IS NULL`+extraWhere+`
-			ORDER BY `+pq.QuoteIdentifier(col)+` `+func() string {
+			WHERE workspace_id=$1::uuid AND archived_at IS NULL` + extraWhere + `
+			ORDER BY ` + pq.QuoteIdentifier(col) + ` ` + func() string {
 			if desc {
 				return "DESC NULLS LAST"
 			}
 			return "ASC NULLS LAST"
-		}()+`, id`,
-			args...)
+		}() + `, id`
+		rows, err := tx.QueryContext(ctx, query, args...) // NOSONAR: query is built from a fixed literal + customfields.SelectSuffix/pq.QuoteIdentifier's quoted, catalog-derived identifiers only; all filter values are bound via args
 		if err != nil {
 			return err
 		}
 		defer func() { _ = rows.Close() }()
 		for rows.Next() {
-			var o domain.Organization
-			var socialRaw []byte
-			dests := customfields.ScanDests(active)
-			scanArgs := append([]any{
-				&o.ID, &o.WorkspaceID, &o.DisplayName, &o.Website, &o.Classification, &o.Relevance,
-				&o.OwnerID, &socialRaw,
-			}, dests...)
-			scanArgs = append(scanArgs, &o.Version, &o.Source, &o.CapturedBy, &o.CreatedAt, &o.UpdatedAt)
-			if err := rows.Scan(scanArgs...); err != nil {
+			o, err := scanOrgListRow(rows, active)
+			if err != nil {
 				return err
 			}
-			o.Social = map[string]any{}
-			sqlutil.UnmarshalJSON(socialRaw, &o.Social)
-			o.CustomFields = customfields.ExtractValues(active, dests)
 			all = append(all, o)
 		}
 		return rows.Err()
@@ -151,34 +168,22 @@ func (s *OrgStore) listByOrgID(ctx context.Context, workspaceID, cursor string, 
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		args := []any{workspaceID, cursor, limit + 1}
 		extraWhere, args := buildOrgListWhere(filter, args, 3)
-		//nolint:gosec // G202: cfSelectSuffix injects only pq.QuoteIdentifier'd cf_* names; extraWhere injects only bound-param indices ($N); all filter values are passed via args
-		rows, err := tx.QueryContext(ctx, `
-			SELECT id, workspace_id, name, website, classification, relevance,
-			       owner_id, social`+cfSelectSuffix(active)+`, version, source, captured_by, created_at, updated_at
+		//nolint:gosec // G202: orgListColumns/customfields.SelectSuffix injects only pq.QuoteIdentifier'd cf_* names; extraWhere injects only bound-param indices ($N); all filter values are passed via args
+		query := orgListColumns + customfields.SelectSuffix(active) + `, version, source, captured_by, created_at, updated_at
 			FROM organization
 			WHERE workspace_id=$1::uuid AND archived_at IS NULL
-			  AND ($2 = '' OR id::text > $2)`+extraWhere+`
-			ORDER BY id LIMIT $3`,
-			args...)
+			  AND ($2 = '' OR id::text > $2)` + extraWhere + `
+			ORDER BY id LIMIT $3`
+		rows, err := tx.QueryContext(ctx, query, args...) // NOSONAR: query is built from a fixed literal + customfields.SelectSuffix's quoted, catalog-derived identifiers only; all filter values are bound via args
 		if err != nil {
 			return err
 		}
 		defer func() { _ = rows.Close() }()
 		for rows.Next() {
-			var o domain.Organization
-			var socialRaw []byte
-			dests := customfields.ScanDests(active)
-			scanArgs := append([]any{
-				&o.ID, &o.WorkspaceID, &o.DisplayName, &o.Website, &o.Classification, &o.Relevance,
-				&o.OwnerID, &socialRaw,
-			}, dests...)
-			scanArgs = append(scanArgs, &o.Version, &o.Source, &o.CapturedBy, &o.CreatedAt, &o.UpdatedAt)
-			if err := rows.Scan(scanArgs...); err != nil {
+			o, err := scanOrgListRow(rows, active)
+			if err != nil {
 				return err
 			}
-			o.Social = map[string]any{}
-			sqlutil.UnmarshalJSON(socialRaw, &o.Social)
-			o.CustomFields = customfields.ExtractValues(active, dests)
 			out = append(out, o)
 		}
 		if err := rows.Err(); err != nil {
@@ -207,33 +212,21 @@ func (s *OrgStore) listByOrgStrength(ctx context.Context, workspaceID, cursor st
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		args := []any{workspaceID}
 		extraWhere, args := buildOrgListWhere(filter, args, 1)
-		//nolint:gosec // G202: cfSelectSuffix injects only pq.QuoteIdentifier'd cf_* names; extraWhere injects only bound-param indices ($N); all filter values are passed via args
-		rows, err := tx.QueryContext(ctx, `
-			SELECT id, workspace_id, name, website, classification, relevance,
-			       owner_id, social`+cfSelectSuffix(active)+`, version, source, captured_by, created_at, updated_at
+		//nolint:gosec // G202: orgListColumns/customfields.SelectSuffix injects only pq.QuoteIdentifier'd cf_* names; extraWhere injects only bound-param indices ($N); all filter values are passed via args
+		query := orgListColumns + customfields.SelectSuffix(active) + `, version, source, captured_by, created_at, updated_at
 			FROM organization
-			WHERE workspace_id=$1::uuid AND archived_at IS NULL`+extraWhere+`
-			ORDER BY id`,
-			args...)
+			WHERE workspace_id=$1::uuid AND archived_at IS NULL` + extraWhere + `
+			ORDER BY id`
+		rows, err := tx.QueryContext(ctx, query, args...) // NOSONAR: query is built from a fixed literal + customfields.SelectSuffix's quoted, catalog-derived identifiers only; all filter values are bound via args
 		if err != nil {
 			return err
 		}
 		defer func() { _ = rows.Close() }()
 		for rows.Next() {
-			var o domain.Organization
-			var socialRaw []byte
-			dests := customfields.ScanDests(active)
-			scanArgs := append([]any{
-				&o.ID, &o.WorkspaceID, &o.DisplayName, &o.Website, &o.Classification, &o.Relevance,
-				&o.OwnerID, &socialRaw,
-			}, dests...)
-			scanArgs = append(scanArgs, &o.Version, &o.Source, &o.CapturedBy, &o.CreatedAt, &o.UpdatedAt)
-			if err := rows.Scan(scanArgs...); err != nil {
+			o, err := scanOrgListRow(rows, active)
+			if err != nil {
 				return err
 			}
-			o.Social = map[string]any{}
-			sqlutil.UnmarshalJSON(socialRaw, &o.Social)
-			o.CustomFields = customfields.ExtractValues(active, dests)
 			all = append(all, o)
 		}
 		if err := rows.Err(); err != nil {

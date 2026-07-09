@@ -76,12 +76,12 @@ func (s *OrgStore) Create(ctx context.Context, o domain.Organization, rawExtra m
 			o.ID, o.WorkspaceID, o.DisplayName, o.Website, classification, o.Relevance,
 			o.OwnerID, social, address, o.Source, o.CapturedBy,
 		}
-		customCols, customVals, customArgs := cfInsertColumns(active, rawExtra, 12)
+		customCols, customVals, customArgs := customfields.InsertColumns(active, rawExtra, 12)
 		cols = append(cols, customCols...)
 		vals = append(vals, customVals...)
 		args = append(args, customArgs...)
 		//nolint:gosec // G202: only pq.QuoteIdentifier'd catalog-derived cf_* column names and $N placeholders are interpolated; all values are bound via args
-		_, err := tx.ExecContext(ctx,
+		_, err := tx.ExecContext(ctx, // NOSONAR: cols/vals are quoted, catalog-derived identifiers ($N placeholders only) from customfields.InsertColumns; all values are bound via args
 			`INSERT INTO organization (`+strings.Join(cols, ", ")+`) VALUES (`+strings.Join(vals, ", ")+`)`,
 			args...)
 		if err != nil {
@@ -166,10 +166,31 @@ func insertOrgDomains(ctx context.Context, tx *sql.Tx, workspaceID, orgID string
 	return nil
 }
 
-// Get returns a live organization by id, workspace-scoped; ErrNotFound if absent.
-//
-//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
-func (s *OrgStore) Get(ctx context.Context, id, workspaceID string) (domain.Organization, error) {
+// orgDetailColumns is the fixed SELECT column list shared by Get and GetAny —
+// the only difference between the two reads is whether archived rows are
+// excluded, so both build their query by appending this same base plus the
+// active custom columns.
+const orgDetailColumns = `
+	SELECT id, workspace_id, name, website, classification, relevance,
+	       owner_id, social, address, parent_org_id, merged_into_id,
+	       version, source, captured_by, created_at, updated_at, archived_at`
+
+// orgDetailScanTargets returns the ordered Scan() targets for orgDetailColumns
+// (extended with the active custom-column destinations) shared by Get and
+// GetAny — the mechanical scan-target/column-list pairing that is identical
+// between the two reads, split out so neither hand-duplicates it.
+func orgDetailScanTargets(o *domain.Organization, socialRaw, addrRaw *[]byte, dests []any) []any {
+	return append([]any{
+		&o.ID, &o.WorkspaceID, &o.DisplayName, &o.Website, &o.Classification, &o.Relevance,
+		&o.OwnerID, socialRaw, addrRaw, &o.ParentOrgID, &o.MergedIntoID,
+		&o.Version, &o.Source, &o.CapturedBy,
+		&o.CreatedAt, &o.UpdatedAt, &o.ArchivedAt,
+	}, dests...)
+}
+
+// getOrg is Get/GetAny's shared body: liveOnly toggles the "AND archived_at
+// IS NULL" predicate that is the only difference between the two reads.
+func (s *OrgStore) getOrg(ctx context.Context, id, workspaceID string, liveOnly bool) (domain.Organization, error) {
 	active, err := customfields.ActiveColumns(ctx, s.db, workspaceID, "organization")
 	if err != nil {
 		return domain.Organization{}, err
@@ -177,26 +198,18 @@ func (s *OrgStore) Get(ctx context.Context, id, workspaceID string) (domain.Orga
 	var o domain.Organization
 	var socialRaw, addrRaw []byte
 	dests := customfields.ScanDests(active)
+	where := "WHERE id=$1::uuid AND workspace_id=$2::uuid"
+	if liveOnly {
+		where += " AND archived_at IS NULL"
+	}
 	err = database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		targets := append([]any{
-			&o.ID, &o.WorkspaceID, &o.DisplayName, &o.Website, &o.Classification, &o.Relevance,
-			&o.OwnerID, &socialRaw, &addrRaw, &o.ParentOrgID, &o.MergedIntoID,
-			&o.Version, &o.Source, &o.CapturedBy,
-			&o.CreatedAt, &o.UpdatedAt, &o.ArchivedAt,
-		}, dests...)
-		err := tx.QueryRowContext(ctx, `
-			SELECT id, workspace_id, name, website, classification, relevance,
-			       owner_id, social, address, parent_org_id, merged_into_id,
-			       version, source, captured_by, created_at, updated_at, archived_at`+cfSelectSuffix(active)+`
-			FROM organization WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
-			id, workspaceID).Scan(targets...)
-		if err != nil {
+		targets := orgDetailScanTargets(&o, &socialRaw, &addrRaw, dests)
+		query := orgDetailColumns + customfields.SelectSuffix(active) + `
+			FROM organization ` + where
+		if err := tx.QueryRowContext(ctx, query, id, workspaceID).Scan(targets...); err != nil { // NOSONAR: query is built from a fixed literal + customfields.SelectSuffix's quoted, catalog-derived identifiers only; id/workspaceID are bound params
 			return err
 		}
-		if err := attachOrgDomains(ctx, tx, workspaceID, &o); err != nil {
-			return err
-		}
-		return nil
+		return attachOrgDomains(ctx, tx, workspaceID, &o)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return o, errs.ErrNotFound
@@ -212,6 +225,11 @@ func (s *OrgStore) Get(ctx context.Context, id, workspaceID string) (domain.Orga
 	}
 	o.CustomFields = customfields.ExtractValues(active, dests)
 	return o, nil
+}
+
+// Get returns a live organization by id, workspace-scoped; ErrNotFound if absent.
+func (s *OrgStore) Get(ctx context.Context, id, workspaceID string) (domain.Organization, error) {
+	return s.getOrg(ctx, id, workspaceID, true)
 }
 
 // Update applies partial updates to an organization, writes one audit_log row and one
@@ -235,7 +253,7 @@ func (s *OrgStore) Update(ctx context.Context, id, workspaceID string, updates m
 			sqlutil.NullStr(updates, "website"),
 			sqlutil.NullStr(updates, "owner_id"),
 		}
-		customSet, customArgs := cfUpdateSetClauses(active, updates, 6)
+		customSet, customArgs := customfields.UpdateSetClauses(active, updates, 6)
 		setClauses = append(setClauses, customSet...)
 		args = append(args, customArgs...)
 		where := "WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL"
@@ -244,7 +262,7 @@ func (s *OrgStore) Update(ctx context.Context, id, workspaceID string, updates m
 			where = fmt.Sprintf("WHERE id=$1::uuid AND workspace_id=$2::uuid AND version=$%d AND archived_at IS NULL", len(args))
 		}
 		//nolint:gosec // G202: only pq.QuoteIdentifier'd catalog-derived cf_* column names and $N placeholders are interpolated; all values are bound via args
-		res, err := tx.ExecContext(ctx,
+		res, err := tx.ExecContext(ctx, // NOSONAR: setClauses/where are quoted, catalog-derived identifiers ($N placeholders only) from customfields.UpdateSetClauses; all values are bound via args
 			`UPDATE organization SET `+strings.Join(setClauses, ", ")+` `+where,
 			args...)
 		if err != nil {
@@ -380,51 +398,8 @@ func (s *OrgStore) Restore(ctx context.Context, id, workspaceID string) (domain.
 }
 
 // GetAny fetches an organization by id regardless of archived_at status.
-//
-//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
 func (s *OrgStore) GetAny(ctx context.Context, id, workspaceID string) (domain.Organization, error) {
-	active, err := customfields.ActiveColumns(ctx, s.db, workspaceID, "organization")
-	if err != nil {
-		return domain.Organization{}, err
-	}
-	var o domain.Organization
-	var socialRaw, addrRaw []byte
-	dests := customfields.ScanDests(active)
-	err = database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		targets := append([]any{
-			&o.ID, &o.WorkspaceID, &o.DisplayName, &o.Website, &o.Classification, &o.Relevance,
-			&o.OwnerID, &socialRaw, &addrRaw, &o.ParentOrgID, &o.MergedIntoID,
-			&o.Version, &o.Source, &o.CapturedBy,
-			&o.CreatedAt, &o.UpdatedAt, &o.ArchivedAt,
-		}, dests...)
-		err := tx.QueryRowContext(ctx, `
-			SELECT id, workspace_id, name, website, classification, relevance,
-			       owner_id, social, address, parent_org_id, merged_into_id,
-			       version, source, captured_by, created_at, updated_at, archived_at`+cfSelectSuffix(active)+`
-			FROM organization WHERE id=$1::uuid AND workspace_id=$2::uuid`,
-			id, workspaceID).Scan(targets...)
-		if err != nil {
-			return err
-		}
-		if err := attachOrgDomains(ctx, tx, workspaceID, &o); err != nil {
-			return err
-		}
-		return nil
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return o, errs.ErrNotFound
-	}
-	if err != nil {
-		return o, err
-	}
-	o.Social = map[string]any{}
-	sqlutil.UnmarshalJSON(socialRaw, &o.Social)
-	if addrRaw != nil {
-		o.Address = map[string]any{}
-		sqlutil.UnmarshalJSON(addrRaw, &o.Address)
-	}
-	o.CustomFields = customfields.ExtractValues(active, dests)
-	return o, nil
+	return s.getOrg(ctx, id, workspaceID, false)
 }
 
 func attachOrgDomains(ctx context.Context, tx *sql.Tx, workspaceID string, o *domain.Organization) error {
