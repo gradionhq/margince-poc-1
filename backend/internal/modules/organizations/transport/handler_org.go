@@ -57,6 +57,8 @@ type actStoreSeam interface {
 // GET .../hierarchy-rollup read. Satisfied by *records.RollupStore.
 type rollupStoreSeam interface {
 	Compute(ctx context.Context, rootID, workspaceID, userID, scope string) (records.RollupResult, error)
+	OpenPipelineRollup(ctx context.Context, orgID, workspaceID string) (*int64, int, error)
+	ComputedFieldsVisible(ctx context.Context, workspaceID string, principal crmctx.Principal) (bool, error)
 }
 
 // OrganizationHandler routes /organizations and /organizations/{id} requests
@@ -300,12 +302,90 @@ func (h *OrganizationHandler) get(w http.ResponseWriter, r *http.Request, id str
 		httpkit.JSONError(w, err)
 		return
 	}
+	cf, err := h.computedFields(r.Context(), wsID, o.ID)
+	if err != nil {
+		httpkit.JSONError(w, err)
+		return
+	}
+	o.ComputedFields = cf
 	httpkit.JSONOK(w, organizationDetailResponse{
 		Organization:  o,
 		Relationships: rels,
 		Deals:         deals,
 		Activities:    acts,
 	})
+}
+
+// computedFields builds RD-T11's formula-field display rows, returning nil when the
+// rollup store is unavailable or the caller lacks computed_field:read visibility.
+func (h *OrganizationHandler) computedFields(ctx context.Context, wsID, orgID string) ([]domain.ComputedField, error) {
+	if h.rollupStore == nil {
+		return nil, nil
+	}
+	principal, _ := crmctx.From(ctx)
+	visible, err := h.rollupStore.ComputedFieldsVisible(ctx, wsID, principal)
+	if err != nil {
+		return nil, err
+	}
+	if !visible {
+		return nil, nil
+	}
+	openPipelineMinor, _, err := h.rollupStore.OpenPipelineRollup(ctx, orgID, wsID)
+	if err != nil {
+		return nil, err
+	}
+	v := int64(0)
+	if openPipelineMinor != nil {
+		v = *openPipelineMinor
+	}
+	notBuilt := "not_yet_built"
+	return []domain.ComputedField{
+		{
+			Key:          "open_pipeline",
+			Label:        "Open pipeline",
+			Kind:         "currency_minor",
+			ValueMinor:   &v,
+			FormulaSQL:   "SUM(deal.amount_minor_base) WHERE organization_id = ... AND status = 'open' AND NOT archived",
+			Dependencies: []string{"deal.amount_minor", "deal.fx_rate_to_base", "deal.status"},
+			Computable:   true,
+		},
+		{
+			Key:          "weighted_pipeline",
+			Label:        "Weighted pipeline",
+			Kind:         "currency_minor",
+			FormulaSQL:   "",
+			Dependencies: []string{},
+			Computable:   false,
+			Reason:       &notBuilt,
+		},
+		{
+			Key:          "customer_age",
+			Label:        "Customer age",
+			Kind:         "duration_months",
+			FormulaSQL:   "",
+			Dependencies: []string{},
+			Computable:   false,
+			Reason:       &notBuilt,
+		},
+		{
+			Key:          "net_revenue_retention",
+			Label:        "Net revenue retention",
+			Kind:         "percent",
+			FormulaSQL:   "",
+			Dependencies: []string{},
+			Computable:   false,
+			Reason:       &notBuilt,
+		},
+		{
+			Key:          "blended_gross_margin",
+			Label:        "Blended gross margin",
+			Kind:         "percent",
+			FormulaSQL:   "",
+			Dependencies: []string{},
+			Computable:   false,
+			Reason:       &notBuilt,
+		},
+	}, nil
 }
 
 func (h *OrganizationHandler) update(w http.ResponseWriter, r *http.Request, id string) {

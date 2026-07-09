@@ -61,6 +61,7 @@ var knownObjects = map[string]bool{
 	"offer":          true,
 	"custom_field":   true, // CF-T03: custom-field definition CRUD gate
 	"quota":          true, // RD-T06: sales-quota RBAC gate
+	"computed_field": true, // RD-T11: organization computed_fields visibility gate
 }
 
 var knownRowScopes = map[string]bool{
