@@ -7,6 +7,17 @@ import (
 	"github.com/gradionhq/margince/backend/internal/modules/agents/domain"
 )
 
+const (
+	stageActionIntegrityFlag = "integrity_flag"
+	stageActionCorrection    = "stage_correction"
+	stageEffectKeyCheck      = "check"
+	stageEffectKeyClaim      = "claim"
+	stageEffectKeyField      = "field"
+	stageEffectKeyValue      = "value"
+	stageCheckName           = "stage_unsupported"
+	stageCorrectionField     = "stage"
+)
+
 // Fact convention for the stage-unsupported check:
 //   - EntityType = "stage_claim": the deal's currently-claimed stage.
 //     Detail: {"confidence": <float>, "stage": "<string>"} - both
@@ -73,12 +84,12 @@ func ProduceStageUnsupportedFlags(view domain.AssembledView) ([]domain.Proposal,
 		}
 
 		flagEffect, _ := json.Marshal(map[string]string{
-			"check": "stage_unsupported",
-			"claim": claim.Stage,
+			stageEffectKeyCheck: stageCheckName,
+			stageEffectKeyClaim: claim.Stage,
 		})
 		out = append(out, domain.Proposal{
 			WorkspaceID:  view.WorkspaceID,
-			ActionType:   "integrity_flag",
+			ActionType:   stageActionIntegrityFlag,
 			TargetEntity: f.EntityID,
 			Effect:       flagEffect,
 			Evidence:     fmt.Sprintf("captured stage signals do not support the claimed stage %q", claim.Stage),
@@ -91,12 +102,12 @@ func ProduceStageUnsupportedFlags(view domain.AssembledView) ([]domain.Proposal,
 		}
 		best := bestStageSignal(signals)
 		correctionEffect, _ := json.Marshal(map[string]string{
-			"field": "stage",
-			"value": best.detail.SupportsStage,
+			stageEffectKeyField: stageCorrectionField,
+			stageEffectKeyValue: best.detail.SupportsStage,
 		})
 		out = append(out, domain.Proposal{
 			WorkspaceID:  view.WorkspaceID,
-			ActionType:   "stage_correction",
+			ActionType:   stageActionCorrection,
 			TargetEntity: f.EntityID,
 			Effect:       correctionEffect,
 			Evidence:     fmt.Sprintf("captured stage_signal indicates stage %q", best.detail.SupportsStage),

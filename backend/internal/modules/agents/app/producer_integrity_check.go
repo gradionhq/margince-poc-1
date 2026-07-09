@@ -1,3 +1,5 @@
+// Package app contains the overnight-agent pass wiring and producer logic.
+//
 // IntegrityCheckProduce wires ONA-T04's four deterministic cross-checks into
 // one ports.Produce - the data-vs-claims integrity pass. Each check
 // (producer_integrity_call.go, producer_integrity_mail.go,

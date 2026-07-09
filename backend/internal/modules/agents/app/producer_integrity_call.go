@@ -1,9 +1,15 @@
+// Package app contains the overnight-agent pass wiring and producer logic.
 package app
 
 import (
 	"encoding/json"
 
 	"github.com/gradionhq/margince/backend/internal/modules/agents/domain"
+)
+
+const (
+	callActionIntegrityFlag = "integrity_flag"
+	callCheckName           = "untraced_call"
 )
 
 // Fact convention for the untraced-call check (see this plan's/spec's Fact
@@ -29,49 +35,19 @@ type callClaimDetail struct {
 // Fact. Order-preserving over view.Facts. Never errors - a malformed
 // claim is skipped, not an error (see producer_integrity_check.go).
 func ProduceUntracedCallFlags(view domain.AssembledView) ([]domain.Proposal, error) {
-	traced := map[string]bool{}
-	for _, f := range view.Facts {
-		if f.EntityType == "call_trace" {
-			traced[f.EntityID] = true
-		}
-	}
-
-	var out []domain.Proposal
-	for _, f := range view.Facts {
-		if f.EntityType != "call_claim" {
-			continue
-		}
-		detail, ok := decodeCallClaim(f.Detail)
-		if !ok || traced[f.EntityID] {
-			continue
-		}
-		effect, _ := json.Marshal(map[string]string{
-			"check": "untraced_call",
-			"claim": detail.Description,
-		})
-		out = append(out, domain.Proposal{
-			WorkspaceID:  view.WorkspaceID,
-			ActionType:   "integrity_flag",
-			TargetEntity: f.EntityID,
-			Effect:       effect,
-			Evidence:     "no calendar entry or transcript trace found for this call",
-			Confidence:   detail.Confidence,
-			Source:       f.Source,
-		})
-	}
-	return out, nil
+	return produceIntegrityFlags(view, "call_claim", "call_trace", callActionIntegrityFlag, callCheckName, "no calendar entry or transcript trace found for this call", decodeCallClaim), nil
 }
 
 // decodeCallClaim parses a "call_claim" Fact.Detail, returning ok=false
 // for unparseable JSON or a missing required field - the single no-guess
 // check point for this claim type.
-func decodeCallClaim(raw string) (callClaimDetail, bool) {
+func decodeCallClaim(raw string) (string, *float64, bool) {
 	var d callClaimDetail
 	if err := json.Unmarshal([]byte(raw), &d); err != nil {
-		return callClaimDetail{}, false
+		return "", nil, false
 	}
 	if d.Confidence == nil || d.Description == "" {
-		return callClaimDetail{}, false
+		return "", nil, false
 	}
-	return d, true
+	return d.Description, d.Confidence, true
 }
