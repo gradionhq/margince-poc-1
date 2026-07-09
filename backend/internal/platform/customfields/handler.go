@@ -36,9 +36,10 @@ var retireCustomFieldTool = mcp.GeneratedTool{OperationID: "retireCustomField", 
 // declaration (crm.yaml: update_record/custom_field/yellow, CF-T04).
 var updateCustomFieldOptionsTool = mcp.GeneratedTool{OperationID: "updateCustomFieldOptions", Verb: mpcVerbUpdateRecord, RecordType: mpcRecordTypeField, Tier: mcp.TierYellow}
 
-// Handler serves /custom-fields (CF-T03): POST (create) is wired to the
-// governed add-field engine; GET (list) stays 501 — CF-T02 contracted it,
-// wiring it is a future ticket's job (Out of scope).
+// Handler serves /custom-fields: GET (list) is the admin field-table read
+// (listCustomFields, CUSTOM-FIELDS-WIRE-1); POST (create) is wired to the
+// governed add-field engine (CF-T03); PATCH (rename) + the /retire and
+// /options suffix routes cover the lifecycle (CF-T04).
 type Handler struct {
 	db       *sql.DB
 	verifier approvalsport.Verifier
@@ -72,6 +73,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	id := pathID(r.URL.Path, "/custom-fields")
 	switch {
+	case r.Method == http.MethodGet && id == "":
+		h.list(w, r)
 	case r.Method == http.MethodPost && id == "":
 		h.create(w, r)
 	case r.Method == http.MethodPatch && id != "":
@@ -96,6 +99,31 @@ func (h *Handler) serveSuffixRoutes(w http.ResponseWriter, r *http.Request) bool
 		return true
 	}
 	return false
+}
+
+// list implements GET /custom-fields?object=<obj>[&status=active|retired]
+// (listCustomFields, CUSTOM-FIELDS-WIRE-1, x-mcp-tool
+// search_records/custom_field/green — a read, never gated). Backs the
+// custom-fields admin field table; returns both active and retired rows by
+// default, narrowable by status.
+func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
+	object := r.URL.Query().Get("object")
+	if object == "" {
+		jsonProblem(w, http.StatusBadRequest, "bad_request", "The 'object' query parameter is required.")
+		return
+	}
+	status := r.URL.Query().Get("status")
+
+	p, _ := crmctx.From(r.Context())
+	fields, err := List(r.Context(), h.db, p.TenantID, object, status)
+	if err != nil {
+		jsonProblem(w, http.StatusInternalServerError, "internal_error", "Something went wrong.")
+		return
+	}
+	jsonOK(w, map[string]any{
+		"data": fields,
+		"page": map[string]any{"next_cursor": nil, "has_more": false},
+	})
 }
 
 type createCustomFieldRequest struct {
