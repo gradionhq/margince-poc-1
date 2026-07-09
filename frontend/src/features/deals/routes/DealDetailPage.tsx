@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type { Stage } from "../../../lib/api-client/generated/index.js";
 import { ArchiveConfirmDialog } from "../../../shared/ui/ArchiveConfirmDialog.js";
 import {
@@ -10,6 +10,8 @@ import {
 import { Button, Skeleton } from "../../../shared/ui/forge.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
 import { AttachmentsPanel } from "../../attachments/index.js";
+import { useAuthStore } from "../../identity/store/authStore.js";
+import { useCreateOffer, useDealOffers } from "../../offers/api/offers.js";
 import {
   dealsKeys,
   useAdvanceDeal,
@@ -42,7 +44,9 @@ const TIMELINE_KINDS = new Set(["email", "call", "meeting"]);
 
 export function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const qc = useQueryClient();
+  const { role, user } = useAuthStore();
   const { data: deal, isLoading, isError, refetch } = useDeal(id);
   const { data: allStages, isLoading: stagesLoading } = useStages(
     deal?.pipeline_id,
@@ -60,6 +64,13 @@ export function DealDetailPage() {
   const advance = useAdvanceDeal(deal?.pipeline_id);
   const archive = useArchiveDeal(id ?? "");
   const restore = useRestoreDeal(id ?? "");
+  const {
+    data: dealOffersResponse,
+    isLoading: offersLoading,
+    isError: offersError,
+    refetch: refetchOffers,
+  } = useDealOffers(id);
+  const createOffer = useCreateOffer(id);
   const [outcomeOpen, setOutcomeOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -76,6 +87,14 @@ export function DealDetailPage() {
   function refreshDetailAndHistory() {
     refetch();
     qc.invalidateQueries({ queryKey: dealsKeys.history(id) });
+  }
+
+  function canCreateOfferForRole(currentRole: string | null | undefined) {
+    return (
+      currentRole === "admin" ||
+      currentRole === "rep" ||
+      currentRole === "manager"
+    );
   }
 
   if (isLoading) {
@@ -139,6 +158,18 @@ export function DealDetailPage() {
   const historyEntries = (history ?? []).filter(
     (h) => h.action === "create" || h.action === "advance_stage",
   );
+  const offers = dealOffersResponse?.data ?? [];
+  const currentOffers = offers.reduce<typeof offers>((acc, row) => {
+    const existing = acc.find((item) => item.offer_number === row.offer_number);
+    if (!existing || existing.revision < row.revision) {
+      return [
+        ...acc.filter((item) => item.offer_number !== row.offer_number),
+        row,
+      ];
+    }
+    return acc;
+  }, []);
+  const canCreateOffer = canCreateOfferForRole(role);
 
   return (
     <div className="p-gf-lg grid grid-cols-1 lg:grid-cols-3 gap-gf-lg">
@@ -236,6 +267,68 @@ export function DealDetailPage() {
           entityId={deal.id}
           dealId={deal.id}
         />
+
+        <section
+          data-testid="deal-offers-card"
+          className="rounded-lg border border-gf-subtle bg-gf-card p-gf-lg"
+        >
+          <h3 className="text-gf-body font-semibold text-gf-primary">Offers</h3>
+          {offersLoading ? (
+            <Skeleton height="96px" />
+          ) : offersError ? (
+            <div className="mt-gf-sm">
+              <p className="text-gf-body text-gf-status-danger">
+                Failed to load offers.
+              </p>
+              <button
+                type="button"
+                onClick={() => refetchOffers()}
+                className="text-gf-accent underline"
+              >
+                Retry
+              </button>
+            </div>
+          ) : currentOffers.length === 0 ? (
+            <div className="mt-gf-sm flex items-center justify-between gap-gf-md">
+              <p className="text-gf-body text-gf-secondary">No offers yet.</p>
+              {canCreateOffer && (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    const capturedBy = `human:${user?.id ?? "unknown"}`;
+                    createOffer.mutate(
+                      {
+                        offer_number: `ANG-${Date.now()}`,
+                        currency: deal.currency ?? "EUR",
+                        source: "ui",
+                        captured_by: capturedBy,
+                      },
+                      {
+                        onSuccess: (offer) =>
+                          navigate(`/deals/${id}/offers/${offer.id}`),
+                      },
+                    );
+                  }}
+                >
+                  New offer
+                </Button>
+              )}
+            </div>
+          ) : (
+            <ul className="mt-gf-sm flex flex-col gap-gf-xs">
+              {currentOffers.map((offer) => (
+                <li key={offer.id}>
+                  <Link
+                    to={`/deals/${id}/offers/${offer.id}`}
+                    className="text-gf-accent underline"
+                  >
+                    {offer.offer_number} v{offer.revision}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
 
       <div>

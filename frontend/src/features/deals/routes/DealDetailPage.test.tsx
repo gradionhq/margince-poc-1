@@ -8,6 +8,9 @@ const advanceMutate = vi.fn();
 const archiveMutate = vi.fn();
 const restoreMutate = vi.fn();
 const refetchDeal = vi.fn();
+const refetchDealOffers = vi.fn();
+const createOfferMutate = vi.fn();
+let mockRole: string | null = "admin";
 const dealData = {
   id: "d1",
   name: "Acme deal",
@@ -24,6 +27,10 @@ const dealData = {
     { id: "r2", person_id: "p2", role: "economic_buyer" },
   ],
   timeline: [],
+};
+const dealOffersData = {
+  data: [],
+  page: {},
 };
 
 vi.mock("../api/deals.js", () => ({
@@ -81,6 +88,25 @@ vi.mock("../api/deals.js", () => ({
   useDealHistory: () => ({ data: [], isLoading: false, isError: false }),
 }));
 
+vi.mock("../../offers/api/offers.js", () => ({
+  useDealOffers: () => ({
+    data: dealOffersData,
+    isLoading: false,
+    isError: false,
+    refetch: refetchDealOffers,
+  }),
+  useCreateOffer: () => ({ mutate: createOfferMutate, isPending: false }),
+}));
+
+vi.mock("../../identity/store/authStore.js", () => ({
+  useAuthStore: () => ({
+    user: { id: "u1" },
+    role: mockRole,
+    roles: mockRole ? [mockRole] : [],
+    loading: false,
+  }),
+}));
+
 vi.mock("../../attachments/api/attachments.js", () => ({
   useAttachments: () => ({
     data: [],
@@ -122,10 +148,13 @@ const originalStatus = dealData.status;
 
 describe("DealDetailPage", () => {
   beforeEach(() => {
+    mockRole = "admin";
     advanceMutate.mockReset();
     archiveMutate.mockReset();
     restoreMutate.mockReset();
     refetchDeal.mockReset();
+    refetchDealOffers.mockReset();
+    createOfferMutate.mockReset();
   });
 
   afterEach(() => {
@@ -309,5 +338,40 @@ describe("DealDetailPage", () => {
     expect(
       screen.getByText(/acme deal will be removed from the default list/i),
     ).toBeInTheDocument();
+  });
+
+  it("renders an Offers card with empty-state chrome when there are no offers", async () => {
+    renderPage();
+
+    expect(screen.getByTestId("deal-offers-card")).toBeInTheDocument();
+    expect(screen.getByText(/no offers yet/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /new offer/i }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /new offer/i }));
+
+    expect(createOfferMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        captured_by: "human:u1",
+      }),
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+      }),
+    );
+  });
+
+  it("hides the New offer button for read_only and ops roles", () => {
+    mockRole = "read_only";
+    renderPage();
+    expect(
+      screen.queryByRole("button", { name: /new offer/i }),
+    ).not.toBeInTheDocument();
+
+    mockRole = "ops";
+    renderPage();
+    expect(
+      screen.queryByRole("button", { name: /new offer/i }),
+    ).not.toBeInTheDocument();
   });
 });
