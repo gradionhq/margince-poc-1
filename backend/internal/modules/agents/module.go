@@ -9,6 +9,7 @@ package crmagents
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/gradionhq/margince/backend/internal/modules/agents/app"
 	"github.com/gradionhq/margince/backend/internal/modules/agents/domain"
@@ -68,6 +69,12 @@ type StageFunc = ports.StageFunc
 // Effector applies an approved or unconditionally-🟢 proposal's effect.
 type Effector = ports.Effector
 
+// DealReader is the narrow read port for close-date hygiene.
+type DealReader = ports.DealReader
+
+// DealSnapshot is the deal state a close-date-hygiene sweep reads.
+type DealSnapshot = ports.DealSnapshot
+
 // ActorOvernight is the attribution string this module uses throughout.
 const ActorOvernight = app.ActorOvernight
 
@@ -99,6 +106,11 @@ func BuildBatch(in []RoutedProposal, producerErr error) RunResult {
 
 // PassInput carries every seam a future runner injects into one pass.
 type PassInput = app.PassInput
+
+// NewCloseDateProduce returns the close-date hygiene ports.Produce closure.
+func NewCloseDateProduce(dealReader DealReader, clock func() time.Time) Produce {
+	return app.NewCloseDateProduce(dealReader, clock)
+}
 
 // RunPass is the pass a future agent-runner will call as a function.
 func RunPass(ctx context.Context, tx DBExec, in PassInput) (RunResult, error) {

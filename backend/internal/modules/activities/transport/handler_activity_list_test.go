@@ -58,6 +58,11 @@ func (f *activityHandlerListCaptureStore) Archive(context.Context, string, strin
 	return actdomain.Activity{}, nil
 }
 
+func (f *activityHandlerListCaptureStore) Relink(context.Context, string, string, string, string) (actdomain.Activity, error) {
+	f.t.Fatal("Relink should not be called")
+	return actdomain.Activity{}, nil
+}
+
 func withActivityWorkspace(r *http.Request) *http.Request {
 	ctx := crmctx.With(r.Context(), crmctx.Principal{TenantID: activityHandlerTestWorkspaceID, UserID: "human:test"})
 	return r.WithContext(ctx)
