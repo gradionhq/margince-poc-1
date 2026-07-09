@@ -18,12 +18,11 @@ export function Dropzone({
   }
 
   return (
-    <div
-      role="group"
+    <fieldset
       aria-label="Upload files dropzone"
       data-testid="dropzone"
       data-dragging={isDragging ? "true" : "false"}
-      className={`rounded-lg border border-dashed p-gf-lg transition-colors ${isDragging ? "border-gf-accent bg-gf-accent/10" : "border-gf-subtle bg-gf-card"}`}
+      className={`m-0 min-w-0 rounded-lg border border-dashed p-gf-lg transition-colors ${isDragging ? "border-gf-accent bg-gf-accent/10" : "border-gf-subtle bg-gf-card"}`}
       onDragOver={(event) => {
         event.preventDefault();
         setIsDragging(true);
@@ -66,6 +65,6 @@ export function Dropzone({
           Browse files
         </button>
       </div>
-    </div>
+    </fieldset>
   );
 }

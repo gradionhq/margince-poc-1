@@ -6,10 +6,14 @@ import { useRequestAccess } from "../api/attachments.js";
 import { ScanStatusChip } from "./ScanStatusChip.js";
 
 type Attachment = components["schemas"]["Attachment"];
-type Toast = { id: string; variant: "success" | "error" | "info"; message: string };
+type Toast = {
+  id: string;
+  variant: "success" | "error" | "info";
+  message: string;
+};
 
 function formatBytes(bytes: number) {
-  return new Intl.NumberFormat(undefined).format(bytes) + " bytes";
+  return `${new Intl.NumberFormat(undefined).format(bytes)} bytes`;
 }
 
 function formatTimestamp(iso: string) {
@@ -31,7 +35,9 @@ function iconForContentType(contentType: string) {
 }
 
 function sourceCanOpen(attachment: Attachment) {
-  return attachment.source === "human" || attachment.captured_by.startsWith("agent:");
+  return (
+    attachment.source === "human" || attachment.captured_by.startsWith("agent:")
+  );
 }
 
 function provenanceLabel(attachment: Attachment) {
@@ -88,7 +94,10 @@ export function AttachmentRow({
     >
       <div className="flex min-w-0 items-start gap-gf-sm">
         <div className="mt-0.5 shrink-0 text-gf-secondary">
-          <RailIcon name={iconForContentType(attachment.content_type)} size={18} />
+          <RailIcon
+            name={iconForContentType(attachment.content_type)}
+            size={18}
+          />
         </div>
         <div className="min-w-0 flex-1">
           {canOpen ? (

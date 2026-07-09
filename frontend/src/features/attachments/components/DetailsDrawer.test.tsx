@@ -1,9 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type {
-  Activity,
-  components,
-} from "../../../lib/api-client/generated/index.js";
+import type { components } from "../../../lib/api-client/generated/index.js";
 import { DetailsDrawer } from "./DetailsDrawer.js";
 
 type Attachment = components["schemas"]["Attachment"];
@@ -112,12 +109,12 @@ describe("DetailsDrawer", () => {
       activity_id: "stored-act",
     };
 
-    render(
-      <DetailsDrawer attachment={attachment} open onClose={onClose} />,
-    );
+    render(<DetailsDrawer attachment={attachment} open onClose={onClose} />);
 
     expect(screen.getByText("Timeline activity id")).toBeInTheDocument();
     expect(screen.getByText("stored-act")).toBeInTheDocument();
-    expect(screen.getByText(/captured by agent:attachment-extractor/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/captured by agent:attachment-extractor/i),
+    ).toBeInTheDocument();
   });
 });

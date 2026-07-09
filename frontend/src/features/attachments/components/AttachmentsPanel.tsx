@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { components } from "../../../lib/api-client/generated/index.js";
-import { useDeal, useDealActivities } from "../../deals/api/deals.js";
-import { useAttachments, useCreateAttachment } from "../api/attachments.js";
-import { useAuthStore } from "../../identity/store/authStore.js";
-import { Dropzone } from "./Dropzone.js";
-import { AttachmentList } from "./AttachmentList.js";
-import { DetailsDrawer } from "./DetailsDrawer.js";
-import { ExtractionPanel } from "./ExtractionPanel.js";
 import { Chip } from "../../../shared/ui/forge.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
+import { useDeal, useDealActivities } from "../../deals/api/deals.js";
+import { useAuthStore } from "../../identity/store/authStore.js";
+import { useAttachments, useCreateAttachment } from "../api/attachments.js";
+import { AttachmentList } from "./AttachmentList.js";
+import { DetailsDrawer } from "./DetailsDrawer.js";
+import { Dropzone } from "./Dropzone.js";
+import { ExtractionPanel } from "./ExtractionPanel.js";
 
 type Attachment = components["schemas"]["Attachment"];
 type Activity = components["schemas"]["Activity"];
@@ -38,7 +38,10 @@ function labelForEntity(entityType: AttachmentsPanelProps["entityType"]) {
     : entityType.charAt(0).toUpperCase() + entityType.slice(1);
 }
 
-function entityHref(entityType: AttachmentsPanelProps["entityType"], id: string) {
+function entityHref(
+  entityType: AttachmentsPanelProps["entityType"],
+  id: string,
+) {
   if (entityType === "deal") return `/deals/${id}`;
   return undefined;
 }
@@ -72,9 +75,8 @@ function AttachmentsPanelShell({
 }) {
   const { role } = useAuthStore();
   const createAttachment = useCreateAttachment();
-  const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(
-    null,
-  );
+  const [selectedAttachment, setSelectedAttachment] =
+    useState<Attachment | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   function pushToast(variant: Toast["variant"], message: string) {
@@ -149,12 +151,14 @@ function AttachmentsPanelShell({
               <Chip variant="info">Your role: {roleCopy(role)}</Chip>
             </div>
             <p className="text-gf-caption text-gf-secondary">
-              Files inherit the parent record&apos;s RBAC and are written to
-              the record timeline with provenance.
+              Files inherit the parent record&apos;s RBAC and are written to the
+              record timeline with provenance.
             </p>
           </header>
 
-          <Dropzone onFilesSelected={(files) => void handleFilesSelected(files)} />
+          <Dropzone
+            onFilesSelected={(files) => void handleFilesSelected(files)}
+          />
 
           <AttachmentList
             entityType={entityType}

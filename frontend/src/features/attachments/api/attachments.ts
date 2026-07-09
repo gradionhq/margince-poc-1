@@ -35,7 +35,10 @@ async function putAttachmentBytes(url: string, file: File) {
   }
 }
 
-export function useAttachments(filter: { entityType: string; entityId: string }) {
+export function useAttachments(filter: {
+  entityType: string;
+  entityId: string;
+}) {
   return useQuery<Attachment[]>({
     queryKey: attachmentsKeys.list(filter.entityType, filter.entityId),
     queryFn: async () => {
@@ -57,7 +60,9 @@ export function useAttachments(filter: { entityType: string; entityId: string })
     },
     refetchInterval: (query) => {
       const attachments = query.state.data ?? [];
-      return attachments.some((attachment) => attachment.scan_status === "scanning")
+      return attachments.some(
+        (attachment) => attachment.scan_status === "scanning",
+      )
         ? 3000
         : false;
     },
@@ -159,7 +164,11 @@ export function useAttachmentExtraction(id: string | undefined) {
 
 export function useAcceptExtraction(id: string) {
   const queryClient = useQueryClient();
-  return useMutation<AttachmentExtractionAcceptResponse, unknown, AcceptExtractionRequest>({
+  return useMutation<
+    AttachmentExtractionAcceptResponse,
+    unknown,
+    AcceptExtractionRequest
+  >({
     mutationFn: async (body) => {
       const { data, error } = await apiClient.POST(
         `/attachments/${id}/extraction:accept` as "/attachments/{id}/extraction:accept",

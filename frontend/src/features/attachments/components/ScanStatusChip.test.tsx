@@ -11,7 +11,10 @@ describe("ScanStatusChip", () => {
       "data-state",
       "running",
     );
-    expect(screen.getByTestId("chip")).toHaveAttribute("data-variant", "neutral");
+    expect(screen.getByTestId("chip")).toHaveAttribute(
+      "data-variant",
+      "neutral",
+    );
   });
 
   it("renders clean as a success chip", () => {
@@ -22,7 +25,10 @@ describe("ScanStatusChip", () => {
       "data-state",
       "success",
     );
-    expect(screen.getByTestId("chip")).toHaveAttribute("data-variant", "success");
+    expect(screen.getByTestId("chip")).toHaveAttribute(
+      "data-variant",
+      "success",
+    );
   });
 
   it("renders blocked as a danger chip", () => {
@@ -33,6 +39,9 @@ describe("ScanStatusChip", () => {
       "data-state",
       "error",
     );
-    expect(screen.getByTestId("chip")).toHaveAttribute("data-variant", "danger");
+    expect(screen.getByTestId("chip")).toHaveAttribute(
+      "data-variant",
+      "danger",
+    );
   });
 });

@@ -23,7 +23,8 @@ const attachments = [
     entity_type: "deal",
     entity_id: "d1",
     filename: "QA-Validation-Requirements.docx",
-    content_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    content_type:
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     byte_size: 1536,
     storage_key: "attachments/a1",
     checksum: "sha256:abc",
@@ -162,15 +163,23 @@ describe("AttachmentsPanel", () => {
       "href",
       "/deals/d1",
     );
-    expect(screen.getByText(/Your role: Sales · sees deal-room files/i)).toBeInTheDocument();
-    expect(screen.getByText("QA-Validation-Requirements.docx")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Your role: Sales · sees deal-room files/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("QA-Validation-Requirements.docx"),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
         name: /AI read this file — 2 fields it can ground, staged for your record \(accept to persist\)/i,
       }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getAllByRole("button", { name: /^download$/i })[0]!);
+    const downloadButtons = screen.getAllByRole("button", {
+      name: /^download$/i,
+    });
+    expect(downloadButtons.length).toBeGreaterThan(0);
+    await user.click(downloadButtons[0]);
 
     expect(clickSpy).toHaveBeenCalledOnce();
     expect(
@@ -189,7 +198,11 @@ describe("AttachmentsPanel", () => {
       </MemoryRouter>,
     );
 
-    await user.click(screen.getAllByRole("button", { name: /^details$/i })[0]!);
+    const detailsButtons = screen.getAllByRole("button", {
+      name: /^details$/i,
+    });
+    expect(detailsButtons.length).toBeGreaterThan(0);
+    await user.click(detailsButtons[0]);
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).toBeInTheDocument();

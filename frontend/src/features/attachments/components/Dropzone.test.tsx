@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Dropzone } from "./Dropzone.js";
 
@@ -16,7 +16,9 @@ function makeFileList(files: File[]): FileList {
 describe("Dropzone", () => {
   it("calls onFilesSelected when files are dropped", () => {
     const onFilesSelected = vi.fn();
-    const { container } = render(<Dropzone onFilesSelected={onFilesSelected} />);
+    const { container } = render(
+      <Dropzone onFilesSelected={onFilesSelected} />,
+    );
 
     const dropzone = screen.getByTestId("dropzone");
 

@@ -31,7 +31,9 @@ function parseTimestamp(iso: string) {
 function hasStoredActivityId(
   attachment: Attachment,
 ): attachment is Attachment & { activity_id: string } {
-  return "activity_id" in attachment && typeof attachment.activity_id === "string";
+  return (
+    "activity_id" in attachment && typeof attachment.activity_id === "string"
+  );
 }
 
 function closestTimelineActivity(
@@ -103,18 +105,20 @@ export function DetailsDrawer({
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-gf-modal bg-gf-primary/40"
-      onClick={onClose}
-      data-testid="details-drawer-backdrop"
-    >
+    <div className="fixed inset-0 z-gf-modal">
+      <button
+        type="button"
+        className="absolute inset-0 cursor-default bg-gf-primary/40"
+        aria-label="Close attachment details"
+        onClick={onClose}
+        data-testid="details-drawer-backdrop"
+      />
       <aside
         role="dialog"
         aria-modal="true"
         aria-labelledby="details-drawer-title"
         data-testid="details-drawer"
         className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col border-l border-gf-subtle bg-gf-surface shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
       >
         <header className="flex items-start justify-between gap-gf-md border-b border-gf-subtle px-gf-lg py-gf-md">
           <div className="min-w-0">
@@ -160,17 +164,13 @@ export function DetailsDrawer({
               </dd>
             </div>
             <div>
-              <dt className="text-gf-caption text-gf-secondary">
-                Attached at
-              </dt>
+              <dt className="text-gf-caption text-gf-secondary">Attached at</dt>
               <dd className="text-gf-body text-gf-primary">
                 {formatTimestamp(attachment.created_at)}
               </dd>
             </div>
             <div>
-              <dt className="text-gf-caption text-gf-secondary">
-                Scan result
-              </dt>
+              <dt className="text-gf-caption text-gf-secondary">Scan result</dt>
               <dd className="text-gf-body text-gf-primary">
                 <ScanStatusChip scanStatus={attachment.scan_status} />
               </dd>

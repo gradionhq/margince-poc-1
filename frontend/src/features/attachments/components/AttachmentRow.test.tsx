@@ -59,8 +59,12 @@ describe("AttachmentRow", () => {
     expect(screen.getByText("1,536 bytes")).toBeInTheDocument();
     expect(screen.getByText(/uploaded by/i)).toBeInTheDocument();
     expect(screen.getByText(/2026/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /download/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /details/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /download/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /details/i }),
+    ).toBeInTheDocument();
   });
 
   it("makes the filename clickable when the source is human or agent-captured", async () => {
@@ -91,8 +95,12 @@ describe("AttachmentRow", () => {
       />,
     );
 
-    expect(screen.getByText(/captured by agent:attachment-extractor/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "contract.pdf" })).toBeInTheDocument();
+    expect(
+      screen.getByText(/captured by agent:attachment-extractor/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "contract.pdf" }),
+    ).toBeInTheDocument();
   });
 
   it("locks restricted rows down to request-access and keeps scan status visible", async () => {
