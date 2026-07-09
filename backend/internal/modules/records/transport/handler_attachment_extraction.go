@@ -46,16 +46,22 @@ func (h *AttachmentHandler) getExtraction(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	extractor := h.extractor
-	if extractor == nil {
-		extractor = extraction.NoOpExtractor{}
-	}
-	fields, err := extractor.Extract(r.Context(), a.ID)
+	fields, err := h.extractFields(r.Context(), a.ID)
 	if err != nil {
 		httpkit.JSONError(w, err)
 		return
 	}
 	httpkit.JSONOK(w, partitionExtraction(fields))
+}
+
+// extractFields runs the configured extractor (or a no-op fallback when none
+// is wired) against an attachment.
+func (h *AttachmentHandler) extractFields(ctx context.Context, attachmentID string) ([]extraction.ExtractedField, error) {
+	extractor := h.extractor
+	if extractor == nil {
+		extractor = extraction.NoOpExtractor{}
+	}
+	return extractor.Extract(ctx, attachmentID)
 }
 
 func (h *AttachmentHandler) acceptExtraction(w http.ResponseWriter, r *http.Request, id string) {
@@ -83,11 +89,7 @@ func (h *AttachmentHandler) acceptExtraction(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	extractor := h.extractor
-	if extractor == nil {
-		extractor = extraction.NoOpExtractor{}
-	}
-	fields, err := extractor.Extract(r.Context(), a.ID)
+	fields, err := h.extractFields(r.Context(), a.ID)
 	if err != nil {
 		httpkit.JSONError(w, err)
 		return
@@ -115,11 +117,9 @@ func (h *AttachmentHandler) acceptExtraction(w http.ResponseWriter, r *http.Requ
 		httpkit.JSONProblem(w, http.StatusInternalServerError, "missing_audit_writer")
 		return
 	}
-	for _, call := range plan.auditCalls {
-		if err := h.audit.WriteExtractionAcceptAudit(r.Context(), wsID, a.EntityType, a.EntityID, call.field, call.sourceQuote, call.capturedBy); err != nil {
-			httpkit.JSONError(w, err)
-			return
-		}
+	if err := h.writeExtractionAcceptAudits(r.Context(), wsID, a.EntityType, a.EntityID, plan.auditCalls); err != nil {
+		httpkit.JSONError(w, err)
+		return
 	}
 
 	dealID, err := uuid.Parse(a.EntityID)
@@ -131,6 +131,17 @@ func (h *AttachmentHandler) acceptExtraction(w http.ResponseWriter, r *http.Requ
 		DealId:   openapi_types.UUID(dealID),
 		Accepted: plan.accepted,
 	})
+}
+
+// writeExtractionAcceptAudits records one audit entry per accepted extraction
+// field, stopping at the first failure.
+func (h *AttachmentHandler) writeExtractionAcceptAudits(ctx context.Context, wsID, entityType, entityID string, calls []acceptedExtractionAuditCall) error {
+	for _, call := range calls {
+		if err := h.audit.WriteExtractionAcceptAudit(ctx, wsID, entityType, entityID, call.field, call.sourceQuote, call.capturedBy); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (h *AttachmentHandler) requestAccess(w http.ResponseWriter, r *http.Request, id string) {
