@@ -7,8 +7,15 @@ import { OfferBuilderPage, canMutateOffer } from "./OfferBuilderPage.js";
 
 const refetchOffer = vi.fn();
 const refetchDealOffers = vi.fn();
+const refetchDeal = vi.fn();
 
 let mockRole: string | null = "admin";
+let mockUserId = "u1";
+let mockDeal = {
+  id: "d1",
+  name: "Acme Renewal",
+  workspace_id: "w1",
+};
 let mockOffer = {
   id: "o2",
   workspace_id: "w1",
@@ -19,6 +26,7 @@ let mockOffer = {
   currency: "EUR",
   source: "test",
   captured_by: "human:test",
+  valid_until: "2026-08-01T00:00:00Z",
   created_at: "2026-07-01T00:00:00Z",
   updated_at: "2026-07-01T00:00:00Z",
   line_items: [],
@@ -40,10 +48,43 @@ let mockOfferErrorStatus: number | null = null;
 let mockDealOffersError = false;
 let mockOfferLoading = false;
 let mockDealOffersLoading = false;
+let mockDealLoading = false;
+let mockLineItems = [
+  {
+    id: "l1",
+    offer_id: "o2",
+    description: "Committed line",
+    unit: "ea",
+    quantity: 2,
+    unit_price_minor: 1000,
+    discount_pct: 0,
+    tax_rate: 20,
+    source: "ui",
+    captured_by: "human:u1",
+    evidence: null,
+    price_grounded: true,
+    position: 1,
+  },
+  {
+    id: "l2",
+    offer_id: "o2",
+    description: "Staged AI line",
+    unit: "ea",
+    quantity: 1,
+    unit_price_minor: 0,
+    discount_pct: 0,
+    tax_rate: 20,
+    source: "ai",
+    captured_by: "agent:assistant",
+    evidence: { snippet: "Add a premium support line", source_id: "src1" },
+    price_grounded: false,
+    position: 2,
+  },
+];
 
 vi.mock("../../identity/store/authStore.js", () => ({
   useAuthStore: () => ({
-    user: { id: "u1" },
+    user: { id: mockUserId },
     role: mockRole,
     roles: [mockRole].filter(Boolean),
     loading: false,
@@ -57,6 +98,42 @@ vi.mock("../api/offers.js", () => ({
     isError: mockOfferError,
     error: mockOfferError ? { status: mockOfferErrorStatus ?? 500 } : null,
     refetch: refetchOffer,
+  }),
+  useRegenerateOffer: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useRenderOffer: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useSendOffer: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useDealOffers: () => ({
+    data: mockDealOffersError ? undefined : { data: mockDealOffers, page: {} },
+    isLoading: mockDealOffersLoading,
+    isError: mockDealOffersError,
+    error: mockDealOffersError ? { status: 500 } : null,
+    refetch: refetchDealOffers,
+  }),
+  useOfferLineItems: () => ({
+    data: mockLineItems,
+    isLoading: false,
+    isError: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}));
+
+vi.mock("../../deals/api/deals.js", () => ({
+  useDeal: () => ({
+    data: mockDealLoading ? undefined : mockDeal,
+    isLoading: mockDealLoading,
+    isError: false,
+    error: null,
+    refetch: refetchDeal,
   }),
   useDealOffers: () => ({
     data: mockDealOffersError ? undefined : { data: mockDealOffers, page: {} },
@@ -102,6 +179,8 @@ describe("OfferBuilderPage", () => {
     mockDealOffersError = false;
     mockOfferLoading = false;
     mockDealOffersLoading = false;
+    mockDealLoading = false;
+    mockUserId = "u1";
     mockOffer = {
       id: "o2",
       workspace_id: "w1",
@@ -112,6 +191,7 @@ describe("OfferBuilderPage", () => {
       currency: "EUR",
       source: "test",
       captured_by: "human:test",
+      valid_until: "2026-08-01T00:00:00Z",
       created_at: "2026-07-01T00:00:00Z",
       updated_at: "2026-07-01T00:00:00Z",
       line_items: [],
@@ -122,6 +202,38 @@ describe("OfferBuilderPage", () => {
     mockDealOffers = [
       mockOffer,
       { ...mockOffer, id: "o1", revision: 1, status: "superseded" },
+    ];
+    mockLineItems = [
+      {
+        id: "l1",
+        offer_id: "o2",
+        description: "Committed line",
+        unit: "ea",
+        quantity: 2,
+        unit_price_minor: 1000,
+        discount_pct: 0,
+        tax_rate: 20,
+        source: "ui",
+        captured_by: "human:u1",
+        evidence: null,
+        price_grounded: true,
+        position: 1,
+      },
+      {
+        id: "l2",
+        offer_id: "o2",
+        description: "Staged AI line",
+        unit: "ea",
+        quantity: 1,
+        unit_price_minor: 0,
+        discount_pct: 0,
+        tax_rate: 20,
+        source: "ai",
+        captured_by: "agent:assistant",
+        evidence: { snippet: "Add a premium support line", source_id: "src1" },
+        price_grounded: false,
+        position: 2,
+      },
     ];
   });
 
@@ -161,6 +273,30 @@ describe("OfferBuilderPage", () => {
     expect(screen.getByText("draft")).toBeInTheDocument();
     expect(screen.getByTestId("offer-versions-bar")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /v1/i })).toBeInTheDocument();
+  });
+
+  it("composes the full offer builder and shows the send card on drafts", () => {
+    renderPage();
+
+    expect(screen.getByRole("heading", { name: /regenerate/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/Committed line/i)).toHaveLength(2);
+    expect(screen.getByRole("heading", { name: /staged ai lines/i })).toBeInTheDocument();
+    expect(screen.getByText(/Explain this total/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /angebot/i })).toBeInTheDocument();
+    expect(screen.getByTestId("send-card")).toBeInTheDocument();
+    expect(
+      screen.getByText(/your own click here is the approval/i),
+    ).toBeInTheDocument();
+  });
+
+  it("hides every edit affordance and the send card once the offer is sent", () => {
+    mockOffer = { ...mockOffer, status: "sent" };
+    mockDealOffers = [{ ...mockOffer, id: "o2", status: "sent" }];
+    renderPage();
+
+    expect(screen.queryByTestId("send-card")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add line/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/this revision is locked/i)).toBeInTheDocument();
   });
 
   it("navigates to a locked revision when its pill is clicked", async () => {

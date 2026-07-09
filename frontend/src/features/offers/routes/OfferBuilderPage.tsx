@@ -1,8 +1,17 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Skeleton } from "../../../shared/ui/forge.js";
+import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
 import { useAuthStore } from "../../identity/store/authStore.js";
-import { useDealOffers, useOffer } from "../api/offers.js";
+import { useDeal, useDealOffers } from "../../deals/api/deals.js";
+import { useOfferLineItems, useOffer, offersKeys } from "../api/offers.js";
+import { ExplainTotalPanel } from "../components/ExplainTotalPanel.js";
+import { LineItemEditor } from "../components/LineItemEditor.js";
+import { OfferPreviewPanel } from "../components/OfferPreviewPanel.js";
+import { RegenerateBanner } from "../components/RegenerateBanner.js";
+import { SendCard } from "../components/SendCard.js";
+import { StagedLinesPanel } from "../components/StagedLinesPanel.js";
 
 export function canMutateOffer(
   role: string | null | undefined,
@@ -28,7 +37,10 @@ export function OfferBuilderPage() {
   const { id, offerId } = useParams<{ id: string; offerId: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { role } = useAuthStore();
+  const { role, user } = useAuthStore();
+  const [toasts, setToasts] = useState<{ id: string; variant: "success" | "error"; message: string }[]>([]);
+  const pushToast = (variant: "success" | "error", message: string) =>
+    setToasts((current) => [...current, { id: crypto.randomUUID(), variant, message }]);
   const {
     data: offer,
     isLoading,
@@ -42,6 +54,8 @@ export function OfferBuilderPage() {
     isError: dealOffersError,
     refetch: refetchDealOffers,
   } = useDealOffers(id);
+  const { data: deal } = useDeal(id);
+  const { data: lineItems = [] } = useOfferLineItems(offerId);
 
   const dealOffers = dealOffersResponse?.data ?? [];
   const currentChain = offer
@@ -54,6 +68,10 @@ export function OfferBuilderPage() {
   const canEdit = canMutateOffer(role, offer);
   const offerStatus = (offerError as { status?: number } | undefined)?.status;
   const hasPermissionError = offerStatus === 401 || offerStatus === 403;
+  const dealName = deal?.name ?? "Deal";
+  const committedLines = lineItems.filter(
+    (line) => !(line.evidence != null && line.captured_by.startsWith("agent:")),
+  );
 
   if (isLoading || dealOffersLoading) {
     return <OfferBuilderSkeleton />;
@@ -151,6 +169,49 @@ export function OfferBuilderPage() {
           })}
         </ul>
       </section>
+
+      <RegenerateBanner dealId={id ?? ""} offer={offer} canMutateOffer={canEdit} />
+
+      <LineItemEditor
+        lines={committedLines}
+        canMutateOffer={canEdit}
+        onCreate={() => undefined}
+        onUpdate={() => undefined}
+        onDelete={() => undefined}
+      />
+
+      <StagedLinesPanel
+        lines={lineItems}
+        canMutateOffer={canEdit}
+        currentUserId={user?.id ?? ""}
+        onAccept={async () => undefined}
+        onDismiss={async () => undefined}
+      />
+
+      <ExplainTotalPanel
+        currency={offer.currency}
+        lines={committedLines}
+        grossMinor={offer.gross_minor}
+      />
+
+        <OfferPreviewPanel
+        dealName={dealName}
+        offer={offer}
+        lines={committedLines}
+        canMutateOffer={canEdit}
+      />
+
+      <SendCard
+        offer={offer}
+        canMutateOffer={canEdit}
+        onSent={(next) => {
+          qc.setQueryData(offersKeys.detail(offer.id), next);
+          navigate(`/deals/${id}/offers/${next.id}`);
+        }}
+        pushToast={pushToast}
+      />
+
+      <ToastContainer toasts={toasts} onDismiss={(toastId) => setToasts((current) => current.filter((t) => t.id !== toastId))} />
 
       <section data-testid="offer-builder-shell">
         <p className="text-gf-body text-gf-secondary">
