@@ -17,6 +17,11 @@ import (
 
 const entityTypeOfferLineItem = "offer_line_item"
 
+// defaultUnit is the fallback unit label applied wherever a caller omits one
+// (offer line items, products, AI-drafted regenerate lines) — shared to
+// satisfy golangci-lint's goconst min-occurrences rule.
+const defaultUnit = "unit"
+
 // productReader is the narrow seam OfferLineItemStore needs to snapshot a
 // product's description/unit_price_minor/default_tax_rate onto a line at
 // pick time (OFFER-AC-9b) — read once at create, never re-read later.
@@ -212,7 +217,7 @@ func (s *OfferLineItemStore) Create(ctx context.Context, li domain.OfferLineItem
 		return domain.OfferLineItem{}, err
 	}
 	if li.Unit == "" {
-		li.Unit = "unit"
+		li.Unit = defaultUnit
 	}
 	li, err := s.applyProductSnapshot(ctx, li, explicitTaxRate)
 	if err != nil {
