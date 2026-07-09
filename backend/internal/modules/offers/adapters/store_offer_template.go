@@ -87,7 +87,7 @@ func (s *OfferTemplateStore) Create(ctx context.Context, t domain.OfferTemplate)
 	t.ID = ids.New()
 	locale := t.Locale
 	if locale == "" {
-		locale = "de-DE"
+		locale = localeDE
 	}
 	layout := sqlutil.MarshalJSON(t.Layout)
 	err := database.WithWorkspaceTx(ctx, s.db, t.WorkspaceID, func(tx *sql.Tx) error {

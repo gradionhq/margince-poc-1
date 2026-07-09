@@ -1,17 +1,25 @@
 package transport
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	"github.com/gradionhq/margince/backend/internal/modules/offers/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/offers/domain"
+	"github.com/gradionhq/margince/backend/internal/platform/blobstore"
+	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/httpkit"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
+	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
+	"github.com/gradionhq/margince/backend/internal/shared/ports/mcp"
 	"github.com/gradionhq/margince/backend/internal/shared/ports/retrieval"
 )
 
@@ -22,6 +30,9 @@ import (
 const (
 	pathPrefixOffers     = "/offers"
 	pathSegmentLineItems = "/line-items"
+	pathSuffixRender     = "/render"
+	pathSuffixSend       = "/send"
+	pathSuffixRegenerate = "/regenerate"
 )
 
 type offerStoreSeam interface {
@@ -29,7 +40,10 @@ type offerStoreSeam interface {
 	Get(ctx context.Context, id, workspaceID string) (domain.Offer, error)
 	List(ctx context.Context, workspaceID, dealID, cursor string, limit int, includeArchived bool) ([]domain.Offer, string, error)
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (domain.Offer, error)
+	Send(ctx context.Context, id, workspaceID string) (domain.Offer, error)
 	Regenerate(ctx context.Context, id, workspaceID string, signals []domain.OfferLineSignal) (domain.Offer, error)
+	PrepareRender(ctx context.Context, id, workspaceID string) (adapters.RenderIngredients, error)
+	SetPdfAssetRef(ctx context.Context, id, workspaceID, ref string) (domain.Offer, error)
 }
 
 type offerLineItemStoreSeam interface {
@@ -39,20 +53,24 @@ type offerLineItemStoreSeam interface {
 	Delete(ctx context.Context, id, offerID, workspaceID string) error
 }
 
-// OfferHandler routes /deals/{id}/offers, /offers/{id}, /offers/{id}/regenerate,
-// /offers/{id}/line-items, and /offers/{id}/line-items/{lineId} requests
-// (OFFER-WIRE-3/4/5/6). Mirrors DealHandler's suffix-routing shape — one
+var sendOfferTool = mcp.GeneratedTool{OperationID: "sendOffer", Verb: "send_offer", RecordType: "offer", Tier: mcp.TierYellow}
+
+// OfferHandler routes /deals/{id}/offers, /offers/{id}, /offers/{id}/line-items,
+// /offers/{id}/render, /offers/{id}/send, and /offers/{id}/regenerate requests
+// (OFFER-WIRE-3/4/5/6/7/8). Mirrors DealHandler's suffix-routing shape — one
 // handler, several path shapes, because line items are a draft-only child
-// collection of one offer.
+// collection of one offer and the action routes stay on the same handler.
 type OfferHandler struct {
 	offers    offerStoreSeam
 	lineItems offerLineItemStoreSeam
+	verifier  approvalsport.Verifier
+	blob      blobstore.Store
 	retriever retrieval.Retriever
 }
 
 // NewOfferHandler returns an OfferHandler backed by the given stores.
-func NewOfferHandler(offers offerStoreSeam, lineItems offerLineItemStoreSeam, retriever retrieval.Retriever) *OfferHandler {
-	return &OfferHandler{offers: offers, lineItems: lineItems, retriever: retriever}
+func NewOfferHandler(offers offerStoreSeam, lineItems offerLineItemStoreSeam, verifier approvalsport.Verifier, blob blobstore.Store, retriever retrieval.Retriever) *OfferHandler {
+	return &OfferHandler{offers: offers, lineItems: lineItems, verifier: verifier, blob: blob, retriever: retriever}
 }
 
 func (h *OfferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +88,12 @@ func (h *OfferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	case strings.Contains(path, pathSegmentLineItems):
 		h.serveLineItems(w, r, path)
+	case r.Method == http.MethodPost && strings.HasSuffix(path, pathSuffixRender):
+		h.render(w, r, httpkit.PathID(strings.TrimSuffix(path, pathSuffixRender), pathPrefixOffers))
+	case r.Method == http.MethodPost && strings.HasSuffix(path, pathSuffixSend):
+		h.send(w, r, httpkit.PathID(strings.TrimSuffix(path, pathSuffixSend), pathPrefixOffers))
+	case r.Method == http.MethodPost && strings.HasSuffix(path, pathSuffixRegenerate):
+		h.regenerate(w, r, httpkit.PathID(strings.TrimSuffix(path, pathSuffixRegenerate), pathPrefixOffers))
 	default:
 		h.serveOffer(w, r, path)
 	}
@@ -211,30 +235,6 @@ func (h *OfferHandler) update(w http.ResponseWriter, r *http.Request, id string)
 	httpkit.WriteUpdateResult(w, o, err)
 }
 
-func (h *OfferHandler) regenerate(w http.ResponseWriter, r *http.Request, id string) {
-	wsID := httpkit.WorkspaceID(r)
-	offer, err := h.offers.Get(r.Context(), id, wsID)
-	if err != nil {
-		httpkit.JSONError(w, err)
-		return
-	}
-	assembled, err := h.retriever.AssembleContext(r.Context(), offer.DealID)
-	if err != nil {
-		httpkit.JSONError(w, err)
-		return
-	}
-	o, err := h.offers.Regenerate(r.Context(), id, wsID, decodeOfferLineSignals(assembled))
-	if errors.Is(err, adapters.ErrOfferNotDraft) {
-		httpkit.JSONProblem(w, http.StatusConflict, "offer_not_draft")
-		return
-	}
-	if err != nil {
-		httpkit.JSONError(w, err)
-		return
-	}
-	httpkit.JSONOK(w, o)
-}
-
 // ---- line-item handlers ----
 
 type createLineItemBody struct {
@@ -346,4 +346,88 @@ func (h *OfferHandler) deleteLineItem(w http.ResponseWriter, r *http.Request, of
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---- offer actions ----
+
+func (h *OfferHandler) render(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := httpkit.WorkspaceID(r)
+	ingredients, err := h.offers.PrepareRender(r.Context(), id, wsID)
+	if err != nil {
+		httpkit.JSONError(w, err)
+		return
+	}
+	pdfBytes, err := adapters.RenderOfferPDF(ingredients.Offer, ingredients.LineItems, ingredients.BuyerBlock, ingredients.IssuerName, ingredients.Locale)
+	if err != nil {
+		httpkit.JSONError(w, err)
+		return
+	}
+	ref, err := h.blob.Put(r.Context(), fmt.Sprintf("offers/%s/%s/%d.pdf", wsID, id, ingredients.Offer.Revision), bytes.NewReader(pdfBytes))
+	if err != nil {
+		httpkit.JSONError(w, err)
+		return
+	}
+	updated, err := h.offers.SetPdfAssetRef(r.Context(), id, wsID, ref)
+	httpkit.WriteUpdateResult(w, updated, err)
+}
+
+func (h *OfferHandler) send(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := httpkit.WorkspaceID(r)
+	p, _ := crmctx.From(r.Context())
+	diffFields := map[string]any{"offer_id": id}
+	if err := toolgate.Enforce(r.Context(), p, h.verifier, sendOfferTool, wsID, diffFields, nil, r.Header.Get("X-Approval-Token")); err != nil {
+		if errors.Is(err, toolgate.ErrApprovalRequired) {
+			httpkit.JSONProblem(w, http.StatusForbidden, "approval_required")
+		} else {
+			httpkit.JSONProblem(w, http.StatusForbidden, "approval_token_invalid")
+		}
+		return
+	}
+	updated, err := h.offers.Send(r.Context(), id, wsID)
+	if errors.Is(err, adapters.ErrOfferNotDraft) {
+		httpkit.JSONProblem(w, http.StatusConflict, "offer_not_draft")
+		return
+	}
+	var fxErr *deals.FXRateUnavailableError
+	if errors.As(err, &fxErr) {
+		jsonFXRateUnavailable(w, fxErr)
+		return
+	}
+	httpkit.WriteUpdateResult(w, updated, err)
+}
+
+// regenerate resolves the offer, assembles the deal's retrieval context and
+// decodes it into candidate AI line signals (a no-op today —
+// transport.NewNoOpRetriever always yields an empty context, so signals is
+// always nil/empty until a real retriever is wired — see
+// decodeOfferLineSignals), and hands both id and the decoded signals to
+// OfferStore.Regenerate, which always clones the prior sent offer's line
+// items verbatim and layers AI-authored lines on top only when grounded
+// signals are present (OFFER-AC-10d). The precondition is requireSent, not
+// requireDraft: crm.yaml's regenerateOffer operation is documented as
+// "regenerate a sent offer into a new draft revision".
+func (h *OfferHandler) regenerate(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := httpkit.WorkspaceID(r)
+	offer, err := h.offers.Get(r.Context(), id, wsID)
+	if err != nil {
+		httpkit.JSONError(w, err)
+		return
+	}
+	assembled, err := h.retriever.AssembleContext(r.Context(), offer.DealID)
+	if err != nil {
+		httpkit.JSONError(w, err)
+		return
+	}
+	updated, err := h.offers.Regenerate(r.Context(), id, wsID, decodeOfferLineSignals(assembled))
+	if errors.Is(err, adapters.ErrOfferNotSent) {
+		httpkit.JSONProblem(w, http.StatusConflict, "offer_not_sent")
+		return
+	}
+	httpkit.WriteUpdateResult(w, updated, err)
+}
+
+func jsonFXRateUnavailable(w http.ResponseWriter, err *deals.FXRateUnavailableError) {
+	httpkit.JSONProblemDetails(w, http.StatusUnprocessableEntity, "fx_rate_unavailable",
+		fmt.Sprintf("No stored FX rate for %s as of %s.", err.Currency, err.AsOf.Format("2006-01-02")),
+		map[string]any{"currency": err.Currency, "as_of": err.AsOf.Format("2006-01-02")})
 }
