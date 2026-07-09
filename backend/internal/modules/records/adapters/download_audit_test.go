@@ -148,7 +148,11 @@ func TestWriteDownloadAudit_LeadBound_AuditedButNotLinked(t *testing.T) {
 }
 
 func TestWriteRequestAccessAudit_WritesLinkedActivity(t *testing.T) {
-	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:audit-test", TenantID: "ws-1"})
+	// UserID is bare, matching production (crmctx.Principal.UserID never
+	// carries a pre-baked "human:" prefix — see auth_handler.go's HandleLogin,
+	// which casts the id straight into a Postgres $1::uuid). requestCapturedBy
+	// must add the prefix itself.
+	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "audit-test", TenantID: "ws-1"})
 	store := &recordingActivityCreator{}
 
 	if err := adapters.WriteRequestAccessAudit(ctx, store, "ws-1", domain.EntityTypeDeal, "deal-1", "report.pdf"); err != nil {

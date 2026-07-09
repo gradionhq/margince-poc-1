@@ -23,8 +23,16 @@ import (
 
 const testWS = "00000000-0000-0000-0000-000000000att"
 
+// testUserID is a bare user id, matching production: crmctx.Principal.UserID
+// is always populated with a bare app_user.id UUID (see auth_handler.go's
+// HandleLogin, which casts userID straight to Postgres $1::uuid), never a
+// "human:"-prefixed string. Fixtures here must not pre-bake the "human:"
+// prefix, or tests that assert on captured_by values would pass regardless
+// of whether the code under test actually prefixes it.
+const testUserID = "test-user-id"
+
 func withAttachWorkspace(r *http.Request) *http.Request {
-	ctx := crmctx.With(r.Context(), crmctx.Principal{TenantID: testWS, UserID: "human:test"})
+	ctx := crmctx.With(r.Context(), crmctx.Principal{TenantID: testWS, UserID: testUserID})
 	return r.WithContext(ctx)
 }
 

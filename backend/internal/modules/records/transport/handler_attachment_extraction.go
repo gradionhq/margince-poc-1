@@ -171,9 +171,9 @@ func (h *AttachmentHandler) requestAccess(w http.ResponseWriter, r *http.Request
 
 func humanCapturedBy(principal crmctx.Principal) string {
 	if principal.UserID == "" {
-		return "human:"
+		return "system:attachment-extraction-accept"
 	}
-	return principal.UserID
+	return "human:" + principal.UserID
 }
 
 func coerceExtractionValue(field, value string) (any, error) {

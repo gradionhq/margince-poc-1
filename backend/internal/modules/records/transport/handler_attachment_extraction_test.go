@@ -181,7 +181,7 @@ func TestAttachmentHandler_AcceptExtraction_EditedFieldFlipsProvenanceAndCapture
 	if len(audit.extractionCalls) != 2 {
 		t.Fatalf("want 2 extraction audit rows, got %d", len(audit.extractionCalls))
 	}
-	if audit.extractionCalls[0].field != "name" || audit.extractionCalls[0].capturedBy != "human:test" {
+	if audit.extractionCalls[0].field != "name" || audit.extractionCalls[0].capturedBy != "human:"+testUserID {
 		t.Fatalf("want edited field audit to be human-authored, got %+v", audit.extractionCalls[0])
 	}
 	if audit.extractionCalls[1].field != "currency" || audit.extractionCalls[1].capturedBy != "agent:attachment-extractor" {
@@ -297,7 +297,7 @@ func TestAttachmentHandler_RequestAccess_Returns200AndAuditsPrincipal(t *testing
 	if audit.requestCalled != 1 {
 		t.Fatalf("want 1 request-access audit row, got %d", audit.requestCalled)
 	}
-	if audit.requestCapturedBy != "human:test" {
+	if audit.requestCapturedBy != testUserID {
 		t.Fatalf("want request-access audit to carry the request principal, got %q", audit.requestCapturedBy)
 	}
 }

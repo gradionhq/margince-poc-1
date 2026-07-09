@@ -115,7 +115,7 @@ func WriteExtractionAcceptAudit(ctx context.Context, store ActivityCreator, work
 
 func requestCapturedBy(ctx context.Context) string {
 	if p, ok := crmctx.From(ctx); ok && p.UserID != "" {
-		return p.UserID
+		return "human:" + p.UserID
 	}
 	return "system:attachment-request-access"
 }
