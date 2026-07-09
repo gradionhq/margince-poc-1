@@ -50,9 +50,6 @@ func (e StalledRecoveryEffector) Apply(ctx context.Context, tx crmapprovals.DBEx
 	if effect.Draft == nil || effect.Draft.Subject == "" || effect.Draft.Body == "" {
 		return "", nil
 	}
-	if e.Logger == nil {
-		return "", nil
-	}
 	return e.Logger.LogFollowUp(ctx, tx, effect.WorkspaceID, effect.DealID, effect.Draft.Subject, effect.Draft.Body, ActorOvernight, ActorOvernight)
 }
 

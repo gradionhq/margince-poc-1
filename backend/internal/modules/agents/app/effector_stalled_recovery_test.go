@@ -9,14 +9,6 @@ import (
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 )
 
-func mustRawJSON(v map[string]any) json.RawMessage {
-	b, err := json.Marshal(v)
-	if err != nil {
-		panic(err)
-	}
-	return b
-}
-
 type stalledRecoveryLoggerCall struct {
 	workspaceID string
 	dealID      string
@@ -47,7 +39,7 @@ func (f *fakeActivityLogger) LogFollowUp(_ context.Context, _ crmapprovals.DBExe
 func TestStalledRecoveryEffector_ApprovedSendUsesDraftAndReturnsRollbackHandle(t *testing.T) {
 	logger := &fakeActivityLogger{id: "activity-123"}
 	effector := app.StalledRecoveryEffector{Logger: logger}
-	payload := mustRawJSON(map[string]any{
+	payload := json.RawMessage(mustJSON(map[string]any{
 		"reason":               "no_reply_14_days",
 		"evidence_activity_id": "act-9",
 		"deal_id":              "9",
@@ -56,7 +48,7 @@ func TestStalledRecoveryEffector_ApprovedSendUsesDraftAndReturnsRollbackHandle(t
 			"subject": "Checking in",
 			"body":    "Hi, just following up.",
 		},
-	})
+	}))
 
 	handle, err := effector.Apply(context.Background(), nil, "stalled_recovery", payload)
 	if err != nil {
@@ -86,12 +78,12 @@ func TestStalledRecoveryEffector_ApprovedSendUsesDraftAndReturnsRollbackHandle(t
 func TestStalledRecoveryEffector_ApprovedFlagOnlyWithoutDraftIsNoOp(t *testing.T) {
 	logger := &fakeActivityLogger{id: "activity-123"}
 	effector := app.StalledRecoveryEffector{Logger: logger}
-	payload := mustRawJSON(map[string]any{
+	payload := json.RawMessage(mustJSON(map[string]any{
 		"reason":               "champion_quiet",
 		"evidence_activity_id": "act-10",
 		"deal_id":              "10",
 		"workspace_id":         "ws-10",
-	})
+	}))
 
 	handle, err := effector.Apply(context.Background(), nil, "stalled_recovery", payload)
 	if err != nil {
