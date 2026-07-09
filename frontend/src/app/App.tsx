@@ -7,6 +7,7 @@ import { CompaniesPage } from "../features/organizations/routes/CompaniesPage.js
 import { CompanyDetailPage } from "../features/organizations/routes/CompanyDetailPage.js";
 import { PeoplePage } from "../features/people/routes/PeoplePage.js";
 import { PersonDetailPage } from "../features/people/routes/PersonDetailPage.js";
+import { AccountHierarchyPage } from "../features/records/routes/AccountHierarchyPage.js";
 import { ProtectedRoute } from "./ProtectedRoute.js";
 import { ShellPlaceholderPage } from "./ShellPlaceholderPage.js";
 import { AppShell } from "./shell/AppShell.js";
@@ -30,6 +31,10 @@ export default function App() {
         <Route path="/people/:id" element={<PersonDetailPage />} />
         <Route path="/companies" element={<CompaniesPage />} />
         <Route path="/companies/:id" element={<CompanyDetailPage />} />
+        <Route
+          path="/companies/:id/hierarchy"
+          element={<AccountHierarchyPage />}
+        />
         <Route path="/leads" element={<ShellPlaceholderPage title="Leads" />} />
         <Route path="/deals" element={<PipelinePage />} />
         <Route path="/deals/:id" element={<DealDetailPage />} />
