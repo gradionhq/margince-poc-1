@@ -13,9 +13,8 @@ import (
 // ListDealOffers/CreateDealOffer/GetOffer/UpdateOffer/ListOfferLineItems/
 // CreateOfferLineItem/UpdateOfferLineItem/DeleteOfferLineItem delegate to the
 // real OfferHandler cmd/api/routes.go wires (mirrors ProductsAdapter's
-// shape). RegenerateOffer delegates too; RenderOffer/SendOffer/AcceptOffer
-// stay 501 stubs — a separate ticket owns the sent->accepted transitions and
-// ApprovalToken gating.
+// shape). RegenerateOffer and AcceptOffer delegate too; RenderOffer/SendOffer
+// stay 501 stubs — a separate ticket owns render/send.
 type OffersAdapter struct {
 	H *offerstransport.OfferHandler
 }
