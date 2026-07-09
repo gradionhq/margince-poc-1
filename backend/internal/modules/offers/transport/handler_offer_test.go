@@ -15,8 +15,6 @@ import (
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 )
 
-func i64Ptr(i int64) *int64 { return &i }
-
 // fakeOfferStore is an in-memory OfferStore for handler tests — mirrors
 // fakeProductStore's map-backed shape.
 type fakeOfferStore struct {
@@ -305,7 +303,7 @@ func TestOfferHandler_UpdateOfferLineItem_Updated(t *testing.T) {
 	lineStore := newFakeOfferLineItemStore()
 	lineStore.items["li-1"] = domain.OfferLineItem{
 		ID: "li-1", OfferID: "offer-1", Position: 1,
-		Description: "Original", Quantity: 1, UnitPriceMinor: i64Ptr(100),
+		Description: "Original", Quantity: 1, UnitPriceMinor: 100,
 		Source: "test", CapturedBy: "human:test",
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}

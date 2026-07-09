@@ -74,16 +74,16 @@ func (s *OfferLineItemStore) checkPositionConflict(ctx context.Context, tx *sql.
 // same pattern. evidence is stored in the jsonb column and round-tripped.
 const offerLineItemInsertQuery = `
 	INSERT INTO offer_line_item (id, workspace_id, offer_id, position, product_id,
-	    description, unit, quantity, unit_price_minor, discount_pct, tax_rate, evidence)
-	VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+	    description, unit, quantity, unit_price_minor, price_grounded, discount_pct, tax_rate, evidence)
+	VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 	RETURNING
 	id, workspace_id, offer_id, position, product_id, description, unit,
-	quantity, unit_price_minor, discount_pct, tax_rate, evidence,
+	quantity, unit_price_minor, price_grounded, discount_pct, tax_rate, evidence,
 	created_at, updated_at, archived_at`
 
 const offerLineItemListQuery = `SELECT
 	id, workspace_id, offer_id, position, product_id, description, unit,
-	quantity, unit_price_minor, discount_pct, tax_rate, evidence,
+	quantity, unit_price_minor, price_grounded, discount_pct, tax_rate, evidence,
 	created_at, updated_at, archived_at
 	FROM offer_line_item WHERE offer_id=$1::uuid AND workspace_id=$2::uuid
 	ORDER BY position`
@@ -96,21 +96,22 @@ const offerLineItemUpdateQuery = `
 	    unit             = COALESCE($8, unit),
 	    quantity         = COALESCE($9, quantity),
 	    unit_price_minor = COALESCE($10, unit_price_minor),
-	    discount_pct     = COALESCE($11, discount_pct),
-	    tax_rate         = COALESCE($12, tax_rate),
-	    evidence         = COALESCE($13, evidence)
+	    price_grounded   = COALESCE($11, price_grounded),
+	    discount_pct     = COALESCE($12, discount_pct),
+	    tax_rate         = COALESCE($13, tax_rate),
+	    evidence         = COALESCE($14, evidence)
 	WHERE id=$1::uuid AND offer_id=$2::uuid AND workspace_id=$3::uuid
 	RETURNING
 	id, workspace_id, offer_id, position, product_id, description, unit,
-	quantity, unit_price_minor, discount_pct, tax_rate, evidence,
+	quantity, unit_price_minor, price_grounded, discount_pct, tax_rate, evidence,
 	created_at, updated_at, archived_at`
 
 func scanOfferLineItem(row interface{ Scan(dest ...any) error }) (domain.OfferLineItem, error) {
 	var li domain.OfferLineItem
 	var evidenceBytes []byte
 	err := row.Scan(&li.ID, &li.WorkspaceID, &li.OfferID, &li.Position, &li.ProductID,
-		&li.Description, &li.Unit, &li.Quantity, &li.UnitPriceMinor, &li.DiscountPct,
-		&li.TaxRate, &evidenceBytes, &li.CreatedAt, &li.UpdatedAt, &li.ArchivedAt)
+		&li.Description, &li.Unit, &li.Quantity, &li.UnitPriceMinor, &li.PriceGrounded,
+		&li.DiscountPct, &li.TaxRate, &evidenceBytes, &li.CreatedAt, &li.UpdatedAt, &li.ArchivedAt)
 	if err != nil {
 		return li, err
 	}
@@ -161,6 +162,15 @@ func evidenceFromUpdate(updates map[string]any) *domain.Evidence {
 	return nil
 }
 
+func nullBool(m map[string]any, key string) any {
+	if v, ok := m[key]; ok {
+		if b, ok := v.(bool); ok {
+			return b
+		}
+	}
+	return nil
+}
+
 // applyProductSnapshot resolves li's product-snapshot fields (OFFER-AC-9b):
 // when li.ProductID is set, description/unit_price_minor are always copied
 // from the product, and tax_rate is copied from the product's default
@@ -178,8 +188,7 @@ func (s *OfferLineItemStore) applyProductSnapshot(ctx context.Context, li domain
 		} else {
 			li.Description = p.Name
 		}
-		price := p.UnitPriceMinor
-		li.UnitPriceMinor = &price
+		li.UnitPriceMinor = p.UnitPriceMinor
 		if explicitTaxRate == nil && p.DefaultTaxRate != nil {
 			li.TaxRate = *p.DefaultTaxRate
 		}
@@ -243,7 +252,7 @@ func (s *OfferLineItemStore) createTx(ctx context.Context, tx *sql.Tx, li domain
 	}
 	row := tx.QueryRowContext(ctx, offerLineItemInsertQuery,
 		li.ID, li.WorkspaceID, li.OfferID, li.Position, li.ProductID,
-		li.Description, li.Unit, li.Quantity, li.UnitPriceMinor, li.DiscountPct, li.TaxRate, evidenceJSON(li.Evidence))
+		li.Description, li.Unit, li.Quantity, li.UnitPriceMinor, li.PriceGrounded, li.DiscountPct, li.TaxRate, evidenceJSON(li.Evidence))
 	out, err := scanOfferLineItem(row)
 	if err != nil {
 		return domain.OfferLineItem{}, fmt.Errorf("offer_line_item create: %w", err)
@@ -324,6 +333,7 @@ func (s *OfferLineItemStore) updateTx(ctx context.Context, tx *sql.Tx, id, offer
 		sqlutil.NullStr(updates, "unit"),
 		nullFloat64(updates, "quantity"),
 		nullInt64(updates, "unit_price_minor"),
+		nullBool(updates, "price_grounded"),
 		nullFloat64(updates, "discount_pct"),
 		nullFloat64(updates, "tax_rate"),
 		evidenceJSON(evidenceFromUpdate(updates)))

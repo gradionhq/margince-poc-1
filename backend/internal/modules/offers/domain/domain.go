@@ -177,10 +177,11 @@ type OfferLineItem struct {
 	Description    string     `json:"description"`
 	Unit           string     `json:"unit"`
 	Quantity       float64    `json:"quantity"`
-	UnitPriceMinor *int64     `json:"unit_price_minor"`
+	UnitPriceMinor int64      `json:"unit_price_minor"`
 	DiscountPct    float64    `json:"discount_pct"`
 	TaxRate        float64    `json:"tax_rate"`
 	Evidence       *Evidence  `json:"evidence"`
+	PriceGrounded  bool       `json:"price_grounded"`
 	Source         string     `json:"source"`
 	CapturedBy     string     `json:"captured_by"`
 	CreatedAt      time.Time  `json:"created_at"`
@@ -193,7 +194,7 @@ type OfferLineItem struct {
 func NewOfferLineItem(offerID string, position int, description string, quantity float64, unitPriceMinor int64, p prov.Provenance) OfferLineItem {
 	return OfferLineItem{
 		ID: ids.New(), OfferID: offerID, Position: position, Description: description,
-		Unit: "unit", Quantity: quantity, UnitPriceMinor: &unitPriceMinor,
+		Unit: "unit", Quantity: quantity, UnitPriceMinor: unitPriceMinor, PriceGrounded: true,
 		Source: p.Source, CapturedBy: p.CapturedBy,
 	}
 }
