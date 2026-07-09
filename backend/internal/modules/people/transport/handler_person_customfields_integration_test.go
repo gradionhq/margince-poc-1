@@ -18,18 +18,40 @@ import (
 	deals "github.com/gradionhq/margince/backend/internal/modules/deals"
 	people "github.com/gradionhq/margince/backend/internal/modules/people"
 	relationships "github.com/gradionhq/margince/backend/internal/modules/relationships"
+	customfields "github.com/gradionhq/margince/backend/internal/platform/customfields"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 )
 
-func seedPersonCustomField(t *testing.T, db *sql.DB, wsID, userID string) {
+// seedPersonCustomField seeds an active custom field on person via
+// customfields.Create — the one chokepoint allowed to run the ALTER TABLE —
+// per the plan's own instruction, rather than a hand-written catalog INSERT
+// that can drift from that engine's real column set (created_by is a uuid
+// FK to app_user, not a free-text principal id like person.captured_by).
+// label must be unique per call within a test binary run: the underlying
+// engine ALTER TABLEs a real, workspace-independent column onto the shared
+// person table (CF-T03), so two calls with the same label collide even
+// across different workspace IDs.
+func seedPersonCustomField(t *testing.T, db *sql.DB, wsID, label string) customfields.Created {
 	t.Helper()
-	_, err := db.ExecContext(context.Background(), `
-		INSERT INTO custom_field (workspace_id, object, slug, label, type, column_name, created_by)
-		VALUES ($1::uuid,'person','score','Score','number','cf_score',$2::uuid)`,
-		wsID, userID)
+	userID := ids.New()
+	if _, err := db.ExecContext(context.Background(),
+		`INSERT INTO app_user (id,workspace_id,email,display_name) VALUES ($1::uuid,$2::uuid,$3,$4)`,
+		userID, wsID, "u"+userID+"@t.test", "U"); err != nil {
+		t.Fatalf("seed app_user: %v", err)
+	}
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID, UserID: userID})
+	created, err := customfields.Create(ctx, db, customfields.FieldSpec{
+		Object:     "person",
+		Label:      label,
+		Type:       customfields.TypeNumber,
+		Source:     "test",
+		CapturedBy: "human:" + userID,
+	})
 	if err != nil {
 		t.Fatalf("seed custom field: %v", err)
 	}
+	return created
 }
 
 func TestPersonHandler_CustomFields_RoundTripAndSortVocabulary(t *testing.T) {
@@ -37,7 +59,7 @@ func TestPersonHandler_CustomFields_RoundTripAndSortVocabulary(t *testing.T) {
 	wsID := "00000000-0000-0000-0000-000000000051"
 	seedWorkspace(t, db, wsID)
 	setRLS(t, db, wsID)
-	seedPersonCustomField(t, db, wsID, "human:test")
+	seedPersonCustomField(t, db, wsID, "Score")
 
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID, UserID: "human:test"})
 	store := people.NewPersonStore(db)
@@ -75,14 +97,22 @@ func TestPersonHandler_CustomFields_RoundTripAndSortVocabulary(t *testing.T) {
 		t.Fatalf("GET /people/{id}: got %d: %s", getW.Code, getW.Body.String())
 	}
 	var got people.Person
-	if err := json.NewDecoder(getW.Body).Decode(&got); err != nil {
+	getBody := getW.Body.Bytes()
+	if err := json.Unmarshal(getBody, &got); err != nil {
 		t.Fatal(err)
-	}
-	if got.CustomFields["cf_score"] != float64(42) {
-		t.Fatalf("get cf_score = %#v, want 42", got.CustomFields["cf_score"])
 	}
 	if len(got.Relationships) != 0 || len(got.Deals) != 0 || len(got.Activities) != 0 {
 		t.Fatalf("composite arrays should remain present and empty, got %+v", got)
+	}
+	// Person.UnmarshalJSON deliberately never populates CustomFields (it is
+	// json:"-" and production code never decodes wire JSON into a Person) —
+	// decode into a plain map to assert the wire-level cf_score value instead.
+	var gotRaw map[string]any
+	if err := json.Unmarshal(getBody, &gotRaw); err != nil {
+		t.Fatal(err)
+	}
+	if gotRaw["cf_score"] != float64(42) {
+		t.Fatalf("get cf_score = %#v, want 42", gotRaw["cf_score"])
 	}
 
 	updateBody := map[string]any{"cf_score": 7}
@@ -118,7 +148,7 @@ func TestPersonHandler_Get_CompositeKeepsArrays(t *testing.T) {
 	wsID := "00000000-0000-0000-0000-000000000052"
 	seedWorkspace(t, db, wsID)
 	setRLS(t, db, wsID)
-	seedPersonCustomField(t, db, wsID, "human:test")
+	seedPersonCustomField(t, db, wsID, "Rank")
 
 	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID, UserID: "human:test"})
 	personStore := people.NewPersonStore(db)
@@ -127,7 +157,7 @@ func TestPersonHandler_Get_CompositeKeepsArrays(t *testing.T) {
 	activityStore := activities.NewActivityStore(db)
 	h := NewPersonHandler(personStore, relStore, dealStore, activityStore, &crmapprovals.DBVerifier{DB: db})
 
-	p, err := personStore.Create(ctx, people.Person{WorkspaceID: wsID, FullName: "Composite", Source: "test", CapturedBy: "human:test", CustomFields: map[string]any{"cf_score": 1}}, nil)
+	p, err := personStore.Create(ctx, people.Person{WorkspaceID: wsID, FullName: "Composite", Source: "test", CapturedBy: "human:test", CustomFields: map[string]any{"cf_rank": 1}}, nil)
 	if err != nil {
 		t.Fatalf("seed person: %v", err)
 	}

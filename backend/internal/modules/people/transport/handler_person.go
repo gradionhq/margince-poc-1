@@ -236,44 +236,6 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 	jsonCreated(w, created)
 }
 
-// personDetailResponse is the person-360 composite read — the person itself
-// plus relationships, deals, and activities. Its own Relationships/Deals/
-// Activities fields shadow the embedded Person's `omitempty`-tagged fields of
-// the same Go field name (same class as deals/transport's dealDetailResponse:
-// list responses must omit these keys when unset, but a single-record read
-// must always show `[]`, never `null` or absent, when the composite result
-// set is legitimately empty — not expressible via one struct/tag serving both
-// list and get semantics).
-type personDetailResponse struct {
-	peopledomain.Person
-	Relationships []relationships.Relationship `json:"relationships"`
-	Deals         []deals.Deal                 `json:"deals"`
-	Activities    []activities.ActivityRef     `json:"activities"`
-}
-
-func (r personDetailResponse) MarshalJSON() ([]byte, error) {
-	base, err := json.Marshal(r.Person)
-	if err != nil {
-		return nil, err
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(base, &fields); err != nil {
-		return nil, err
-	}
-	for k, v := range map[string]any{
-		"relationships": r.Relationships,
-		"deals":         r.Deals,
-		"activities":    r.Activities,
-	} {
-		raw, err := json.Marshal(v)
-		if err != nil {
-			return nil, err
-		}
-		fields[k] = raw
-	}
-	return json.Marshal(fields)
-}
-
 func (h *PersonHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	wsID := workspaceID(r)
 	p, err := h.store.GetAny(r.Context(), id, wsID)
@@ -436,22 +398,6 @@ func decodeJSONMap[T any](raw map[string]json.RawMessage, out *T) error {
 		return err
 	}
 	return json.Unmarshal(b, out)
-}
-
-func extractCustomFields(raw map[string]json.RawMessage, active []string) map[string]any {
-	out := map[string]any{}
-	for _, key := range active {
-		v, ok := raw[key]
-		if !ok {
-			continue
-		}
-		var decoded any
-		if err := json.Unmarshal(v, &decoded); err != nil {
-			continue
-		}
-		out[key] = decoded
-	}
-	return out
 }
 
 // parseIfMatch parses the optional If-Match header into an optimistic-concurrency

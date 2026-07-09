@@ -89,6 +89,7 @@ func (s *PersonStore) Create(ctx context.Context, p domain.Person, emails []doma
 	err = database.WithWorkspaceTx(ctx, s.db, p.WorkspaceID, func(tx *sql.Tx) error {
 		args := []any{p.ID, p.WorkspaceID, p.FullName, p.FirstName, p.LastName, p.Title, p.OwnerID, social, address, p.Source, p.CapturedBy}
 		args = append(args, customArgs...)
+		//nolint:gosec // G202: customCols/customVals are quoted, catalog-derived identifiers + bound-param placeholders ($N), never user input; all values are passed via args
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO person (id, workspace_id, full_name, first_name, last_name, title,
 			    owner_id, social, address, source, captured_by`+customCols+`)
@@ -175,6 +176,7 @@ func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (domain.P
 	}, dests...)
 	scanArgs = append(scanArgs, &p.Version, &p.Source, &p.CapturedBy, &p.CreatedAt, &p.UpdatedAt, &p.ArchivedAt)
 	err = database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		//nolint:gosec // G201: personCustomSelect returns quoted, catalog-derived identifiers only, never user input
 		query := fmt.Sprintf(`
 			SELECT id, workspace_id, full_name, first_name, last_name, title,
 			       owner_id, social, address, merged_into_id, converted_from_lead_id%s,
@@ -225,6 +227,7 @@ func (s *PersonStore) GetAny(ctx context.Context, id, workspaceID string) (domai
 	}, dests...)
 	scanArgs = append(scanArgs, &p.Version, &p.Source, &p.CapturedBy, &p.CreatedAt, &p.UpdatedAt, &p.ArchivedAt)
 	err = database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		//nolint:gosec // G201: personCustomSelect returns quoted, catalog-derived identifiers only, never user input
 		query := fmt.Sprintf(`
 			SELECT id, workspace_id, full_name, first_name, last_name, title,
 			       owner_id, social, address, merged_into_id, converted_from_lead_id%s,
@@ -288,6 +291,7 @@ func (s *PersonStore) listByID(ctx context.Context, workspaceID, cursor string, 
 	// Non-nil so an empty result marshals to a JSON array ([]), never null.
 	out := []domain.Person{}
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		//nolint:gosec // G202: personCustomSelect returns quoted, catalog-derived identifiers only, never user input; all values are bound params
 		rows, err := tx.QueryContext(ctx, `
 			SELECT id, workspace_id, full_name, first_name, last_name, title,
 			       owner_id, social`+personCustomSelect(active)+`,
@@ -305,8 +309,10 @@ func (s *PersonStore) listByID(ctx context.Context, workspaceID, cursor string, 
 			var p domain.Person
 			var socialRaw []byte
 			dests := customfields.ScanDests(active)
-			scanArgs := append([]any{&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
-				&p.OwnerID, &socialRaw}, dests...)
+			scanArgs := append([]any{
+				&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
+				&p.OwnerID, &socialRaw,
+			}, dests...)
 			scanArgs = append(scanArgs, &p.Version, &p.Source, &p.CapturedBy,
 				&p.CreatedAt, &p.UpdatedAt)
 			if err := rows.Scan(scanArgs...); err != nil {
@@ -346,6 +352,7 @@ func (s *PersonStore) listByCustomColumn(ctx context.Context, workspaceID, curso
 	// Non-nil so an empty result marshals to a JSON array ([]), never null.
 	out := []domain.Person{}
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		//nolint:gosec // G202: column is re-derived against the caller's own active-columns fetch (never trusted from the transport layer a second time) and pq.QuoteIdentifier-quoted; personCustomSelect returns quoted, catalog-derived identifiers only
 		rows, err := tx.QueryContext(ctx, `
 			SELECT id, workspace_id, full_name, first_name, last_name, title,
 			       owner_id, social`+personCustomSelect(active)+`,
@@ -369,8 +376,10 @@ func (s *PersonStore) listByCustomColumn(ctx context.Context, workspaceID, curso
 			var p domain.Person
 			var socialRaw []byte
 			dests := customfields.ScanDests(active)
-			scanArgs := append([]any{&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
-				&p.OwnerID, &socialRaw}, dests...)
+			scanArgs := append([]any{
+				&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
+				&p.OwnerID, &socialRaw,
+			}, dests...)
 			scanArgs = append(scanArgs, &p.Version, &p.Source, &p.CapturedBy,
 				&p.CreatedAt, &p.UpdatedAt)
 			if err := rows.Scan(scanArgs...); err != nil {
@@ -415,18 +424,22 @@ func (s *PersonStore) Update(ctx context.Context, id, workspaceID string, update
 		}
 		base += ", updated_at = now()"
 		if ifMatch == 0 {
-			args := []any{id, workspaceID,
+			args := []any{
+				id, workspaceID,
 				sqlutil.NullStr(updates, "full_name"),
 				sqlutil.NullStr(updates, "title"),
-				sqlutil.NullStr(updates, "owner_id")}
+				sqlutil.NullStr(updates, "owner_id"),
+			}
 			args = append(args, customArgs...)
 			res, err = tx.ExecContext(ctx, base+`
 				WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`, args...)
 		} else {
-			args := []any{id, workspaceID,
+			args := []any{
+				id, workspaceID,
 				sqlutil.NullStr(updates, "full_name"),
 				sqlutil.NullStr(updates, "title"),
-				sqlutil.NullStr(updates, "owner_id")}
+				sqlutil.NullStr(updates, "owner_id"),
+			}
 			args = append(args, customArgs...)
 			args = append(args, ifMatch)
 			res, err = tx.ExecContext(ctx, base+`

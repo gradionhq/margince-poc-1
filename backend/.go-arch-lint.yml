@@ -363,7 +363,7 @@ deps:
   peopleports:
     mayDependOn: [peopledomain, strengthkern]
   peopleadapters:
-    mayDependOn: [peopledomain, errs, ids, prov, dedupekern, strengthkern, audit, database, sqlutil]
+    mayDependOn: [peopledomain, errs, ids, prov, dedupekern, strengthkern, audit, database, sqlutil, customfields]
     canUse: [pq]
   people:
     mayDependOn: [peopledomain, peopleadapters, prov]

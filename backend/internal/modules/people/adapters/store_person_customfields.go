@@ -9,6 +9,8 @@ import (
 	"github.com/gradionhq/margince/backend/internal/platform/customfields"
 )
 
+// ActiveCustomFieldNames returns the workspace's active cf_* column names on
+// person, for merging into the sort-vocabulary allow-list.
 func (s *PersonStore) ActiveCustomFieldNames(ctx context.Context, workspaceID string) ([]string, error) {
 	active, err := customfields.ActiveColumns(ctx, s.db, workspaceID, "person")
 	if err != nil {
