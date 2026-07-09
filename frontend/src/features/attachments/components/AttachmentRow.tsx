@@ -1,16 +1,11 @@
-import { useState } from "react";
 import type { components } from "../../../lib/api-client/generated/index.js";
 import { Button, Chip, RailIcon } from "../../../shared/ui/forge.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
 import { useRequestAccess } from "../api/attachments.js";
+import { useToasts } from "../hooks/useToasts.js";
 import { ScanStatusChip } from "./ScanStatusChip.js";
 
 type Attachment = components["schemas"]["Attachment"];
-type Toast = {
-  id: string;
-  variant: "success" | "error" | "info";
-  message: string;
-};
 
 function formatBytes(bytes: number) {
   return `${new Intl.NumberFormat(undefined).format(bytes)} bytes`;
@@ -59,20 +54,13 @@ export function AttachmentRow({
   onFilenameClick?: (attachment: Attachment) => void;
 }) {
   const requestAccess = useRequestAccess(attachment.id);
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const { toasts, pushToast, dismissToast } = useToasts();
   const isRestricted = attachment.access === "restricted";
   const isBlocked = attachment.scan_status === "blocked";
   const canOpen = sourceCanOpen(attachment) && !isRestricted && !isBlocked;
   const openFilename = onFilenameClick ?? onDetails;
   const showDownload =
     Boolean(attachment.download_url) && !isRestricted && !isBlocked;
-
-  function pushToast(variant: Toast["variant"], message: string) {
-    setToasts((current) => [
-      ...current,
-      { id: crypto.randomUUID(), variant, message },
-    ]);
-  }
 
   async function handleRequestAccess() {
     try {
@@ -174,12 +162,7 @@ export function AttachmentRow({
           </>
         )}
       </div>
-      <ToastContainer
-        toasts={toasts}
-        onDismiss={(id) =>
-          setToasts((current) => current.filter((toast) => toast.id !== id))
-        }
-      />
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </li>
   );
 }

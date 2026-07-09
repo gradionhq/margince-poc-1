@@ -11,18 +11,13 @@ import {
   useAcceptExtraction,
   useAttachmentExtraction,
 } from "../api/attachments.js";
+import { useToasts } from "../hooks/useToasts.js";
 
 type AttachmentExtraction = components["schemas"]["AttachmentExtraction"];
 type ExtractedField = AttachmentExtraction["fields"][number];
 type OmittedField = AttachmentExtraction["omitted"][number];
 type AcceptedField =
   components["schemas"]["AttachmentExtractionAcceptResponse"]["accepted"][number];
-
-type Toast = {
-  id: string;
-  variant: "success" | "error" | "info";
-  message: string;
-};
 
 type ExtractionPanelProps = {
   attachmentId: string;
@@ -37,10 +32,6 @@ function singularize(count: number, word: string) {
   return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
-function toastId() {
-  return crypto.randomUUID();
-}
-
 export function ExtractionPanel({
   attachmentId,
   dealId,
@@ -52,19 +43,14 @@ export function ExtractionPanel({
   const [accepted, setAccepted] = useState<AcceptedField[] | null>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const { toasts, pushToast, dismissToast } = useToasts();
 
   useEffect(() => {
     setDismissed(false);
     setAccepted(null);
     setEditingField(null);
     setDraftValues({});
-    setToasts([]);
   }, []);
-
-  function pushToast(variant: Toast["variant"], message: string) {
-    setToasts((current) => [...current, { id: toastId(), variant, message }]);
-  }
 
   const groundedFields = data?.fields ?? [];
   const omittedFields = data?.omitted ?? [];
@@ -82,14 +68,7 @@ export function ExtractionPanel({
   }
 
   if (dismissed) {
-    return (
-      <ToastContainer
-        toasts={toasts}
-        onDismiss={(id) =>
-          setToasts((t) => t.filter((toast) => toast.id !== id))
-        }
-      />
-    );
+    return <ToastContainer toasts={toasts} onDismiss={dismissToast} />;
   }
 
   if (
@@ -97,14 +76,7 @@ export function ExtractionPanel({
     isError ||
     (!accepted && groundedFields.length === 0 && omittedFields.length === 0)
   ) {
-    return (
-      <ToastContainer
-        toasts={toasts}
-        onDismiss={(id) =>
-          setToasts((t) => t.filter((toast) => toast.id !== id))
-        }
-      />
-    );
+    return <ToastContainer toasts={toasts} onDismiss={dismissToast} />;
   }
 
   const activeAcceptedFields = accepted ?? [];
@@ -315,12 +287,7 @@ export function ExtractionPanel({
         </div>
       </section>
 
-      <ToastContainer
-        toasts={toasts}
-        onDismiss={(id) =>
-          setToasts((current) => current.filter((toast) => toast.id !== id))
-        }
-      />
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </>
   );
 }

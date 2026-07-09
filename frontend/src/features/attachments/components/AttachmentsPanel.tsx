@@ -6,6 +6,7 @@ import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
 import { useDeal, useDealActivities } from "../../deals/api/deals.js";
 import { useAuthStore } from "../../identity/store/authStore.js";
 import { useAttachments, useCreateAttachment } from "../api/attachments.js";
+import { useToasts } from "../hooks/useToasts.js";
 import { AttachmentList } from "./AttachmentList.js";
 import { DetailsDrawer } from "./DetailsDrawer.js";
 import { Dropzone } from "./Dropzone.js";
@@ -13,12 +14,6 @@ import { ExtractionPanel } from "./ExtractionPanel.js";
 
 type Attachment = components["schemas"]["Attachment"];
 type Activity = components["schemas"]["Activity"];
-
-type Toast = {
-  id: string;
-  variant: "success" | "error" | "info";
-  message: string;
-};
 
 export type AttachmentsPanelProps =
   | {
@@ -77,14 +72,7 @@ function AttachmentsPanelShell({
   const createAttachment = useCreateAttachment();
   const [selectedAttachment, setSelectedAttachment] =
     useState<Attachment | null>(null);
-  const [toasts, setToasts] = useState<Toast[]>([]);
-
-  function pushToast(variant: Toast["variant"], message: string) {
-    setToasts((current) => [
-      ...current,
-      { id: crypto.randomUUID(), variant, message },
-    ]);
-  }
+  const { toasts, pushToast, dismissToast } = useToasts();
 
   async function handleFilesSelected(files: FileList) {
     if (entityType !== "deal" || !dealId) return;
@@ -186,12 +174,7 @@ function AttachmentsPanelShell({
         />
       )}
 
-      <ToastContainer
-        toasts={toasts}
-        onDismiss={(id) =>
-          setToasts((current) => current.filter((toast) => toast.id !== id))
-        }
-      />
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </>
   );
 }
