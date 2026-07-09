@@ -3,11 +3,12 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Icon, Skeleton } from "../../../shared/ui/forge.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
-import { useDeal, useDealOffers } from "../../deals/api/deals.js";
+import { useDeal } from "../../deals/api/deals.js";
 import { useAuthStore } from "../../identity/store/authStore.js";
 import {
   offersKeys,
   useCreateLineItem,
+  useDealOffers,
   useDeleteLineItem,
   useOffer,
   useOfferLineItems,
