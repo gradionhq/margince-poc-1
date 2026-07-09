@@ -23,6 +23,7 @@ type Proposal struct {
 	Evidence     string          // non-empty snippet a human can read; GATE-AI-1
 	Confidence   *float64        // nil means "missing" — never a 0.0 sentinel; GATE-AI-1
 	Source       string          // resolvable provenance reference; GATE-AI-1
+	EventTopic   string          // overrides the emitted event topic for this proposal; empty falls back to TopicOvernightApplied
 }
 
 // RoutedProposal pairs a gated Proposal with its derived tier — the ONLY
