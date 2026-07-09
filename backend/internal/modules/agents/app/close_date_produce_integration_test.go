@@ -5,6 +5,8 @@ package app_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,12 +63,19 @@ func seedOpenDealFull(t *testing.T, db *sql.DB, wsID, pipelineID, stageID string
 	return dealID
 }
 
-func seedClosedDealWithPastCloseDate(t *testing.T, db *sql.DB, wsID, pipelineID, stageID, status string, closeDate time.Time) string {
+// seedClosedDealWithPastCloseDate seeds a won or lost deal (lostReason is
+// required by the deal_lost_reason DB constraint when status = "lost", and
+// must be nil otherwise).
+func seedClosedDealWithPastCloseDate(t *testing.T, db *sql.DB, wsID, pipelineID, stageID, status string, closeDate time.Time, lostReason *string) string {
 	t.Helper()
 	var dealID string
-	if err := db.QueryRow(`INSERT INTO deal (workspace_id, name, pipeline_id, stage_id, status, expected_close_date, closed_at, source, captured_by)
-		VALUES ($1::uuid,$2,$3::uuid,$4::uuid,$5,$6::date,$7,'fixture','agent:overnight') RETURNING id`,
-		wsID, "agents-closed-"+ids.New(), pipelineID, stageID, status, closeDate.Format("2006-01-02"), closeDate).Scan(&dealID); err != nil {
+	var reason sql.NullString
+	if lostReason != nil {
+		reason = sql.NullString{String: *lostReason, Valid: true}
+	}
+	if err := db.QueryRow(`INSERT INTO deal (workspace_id, name, pipeline_id, stage_id, status, expected_close_date, closed_at, lost_reason, source, captured_by)
+		VALUES ($1::uuid,$2,$3::uuid,$4::uuid,$5,$6::date,$7,$8,'fixture','agent:overnight') RETURNING id`,
+		wsID, "agents-closed-"+ids.New(), pipelineID, stageID, status, closeDate.Format("2006-01-02"), closeDate, reason).Scan(&dealID); err != nil {
 		t.Fatalf("seed closed deal: %v", err)
 	}
 	return dealID
@@ -97,6 +106,32 @@ func assertPendingApprovalActionType(t *testing.T, db *sql.DB, wsID, actionType 
 	}
 }
 
+// assertApprovalPayloadReason reads the persisted approval_item.payload for
+// the one pending item matching (actionType, dealID) and asserts its
+// "reason"/"message" fields — proving the review-item's framing (e.g. "gone
+// quiet" vs "confirm the date"), not just its action_type routing.
+func assertApprovalPayloadReason(t *testing.T, db *sql.DB, wsID, actionType, dealID, wantReason, wantMessageSubstring string) {
+	t.Helper()
+	var raw []byte
+	if err := db.QueryRow(`SELECT payload FROM approval_item WHERE workspace_id = $1::uuid AND action_type = $2 AND status = 'pending' AND payload->>'deal_id' = $3`,
+		wsID, actionType, dealID).Scan(&raw); err != nil {
+		t.Fatalf("query approval item payload for %s / deal %s: %v", actionType, dealID, err)
+	}
+	var payload struct {
+		Reason  string `json:"reason"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("unmarshal approval item payload: %v", err)
+	}
+	if payload.Reason != wantReason {
+		t.Fatalf("payload reason for %s / deal %s = %q, want %q", actionType, dealID, payload.Reason, wantReason)
+	}
+	if !strings.Contains(payload.Message, wantMessageSubstring) {
+		t.Fatalf("payload message for %s / deal %s = %q, want substring %q", actionType, dealID, payload.Message, wantMessageSubstring)
+	}
+}
+
 func TestRunPass_CloseDateHygiene_FullSweep_InvariantHoldsAcrossEveryTier(t *testing.T) {
 	db := testDB(t)
 	wsID := seedWorkspace(t, db)
@@ -104,6 +139,7 @@ func TestRunPass_CloseDateHygiene_FullSweep_InvariantHoldsAcrossEveryTier(t *tes
 		{name: "Discovery", position: 1, semantic: "open", winProb: 20},
 		{name: "Negotiation", position: 2, semantic: "open", winProb: 60},
 		{name: "Won", position: 3, semantic: "won", winProb: 100},
+		{name: "Lost", position: 4, semantic: "lost", winProb: 0},
 	})
 	now := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
 	overdue := now.AddDate(0, 0, -12)
@@ -116,7 +152,9 @@ func TestRunPass_CloseDateHygiene_FullSweep_InvariantHoldsAcrossEveryTier(t *tes
 	missingID := seedOpenDealFull(t, db, wsID, pipelineID, stages[0].id, nil, nil, nil, now.AddDate(0, 0, -3))
 	downgradeID := seedOpenDealFull(t, db, wsID, pipelineID, stages[0].id, &overdue, nil, nil, quiet)
 	waitSuppressedID := seedOpenDealFull(t, db, wsID, pipelineID, stages[1].id, &overdue, nil, &waitUntil, quiet)
-	wonID := seedClosedDealWithPastCloseDate(t, db, wsID, pipelineID, stages[2].id, "won", overdue)
+	wonID := seedClosedDealWithPastCloseDate(t, db, wsID, pipelineID, stages[2].id, "won", overdue, nil)
+	lostReason := "budget cut"
+	lostID := seedClosedDealWithPastCloseDate(t, db, wsID, pipelineID, stages[3].id, "lost", overdue, &lostReason)
 	healthyID := seedOpenDealFull(t, db, wsID, pipelineID, stages[0].id, &healthyDate, nil, nil, now.AddDate(0, 0, -1))
 
 	// PROVISIONAL_CONFIRM (rep-set forecast_category="commit"): Discovery
@@ -172,9 +210,20 @@ func TestRunPass_CloseDateHygiene_FullSweep_InvariantHoldsAcrossEveryTier(t *tes
 	assertPendingApprovalActionType(t, db, wsID, "overnight.close-date-confirm-request", 4) // late_stage + missing + wait-suppressed(late_stage) + commit-override cases
 	assertPendingApprovalActionType(t, db, wsID, "overnight.close-date-downgrade-review", 1)
 
+	// The quiet deal's review item must say "gone quiet", never re-framed as
+	// a routine confirm-the-date ask — this is the DOWNGRADE_AND_REVIEW vs
+	// PROVISIONAL_CONFIRM distinction the spec calls out as load-bearing.
+	assertApprovalPayloadReason(t, db, wsID, "overnight.close-date-downgrade-review", downgradeID, "quiet", "gone quiet")
+	assertApprovalPayloadReason(t, db, wsID, "overnight.close-date-confirm-request", provisionalLateStageID, "provisional_confirm", "Confirm the real close date")
+
 	wonAfter, _ := dealStore.GetAny(context.Background(), wonID, wsID)
 	if wonAfter.ExpectedCloseDate == nil || !wonAfter.ExpectedCloseDate.Before(now) {
 		t.Fatalf("won deal's close date must be untouched (still overdue), got %v", wonAfter.ExpectedCloseDate)
+	}
+
+	lostAfter, _ := dealStore.GetAny(context.Background(), lostID, wsID)
+	if lostAfter.ExpectedCloseDate == nil || !lostAfter.ExpectedCloseDate.Before(now) {
+		t.Fatalf("lost deal's close date must be untouched (still overdue), got %v", lostAfter.ExpectedCloseDate)
 	}
 
 	waitAfter, _ := dealStore.Get(context.Background(), waitSuppressedID, wsID)
@@ -187,7 +236,5 @@ func TestRunPass_CloseDateHygiene_FullSweep_InvariantHoldsAcrossEveryTier(t *tes
 		t.Fatalf("healthy (unflagged) deal must be left exactly as seeded, got %v", healthyAfter.ExpectedCloseDate)
 	}
 
-	_ = provisionalLateStageID
 	_ = missingID
-	_ = downgradeID
 }
