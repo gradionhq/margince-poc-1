@@ -1395,8 +1395,9 @@ paths:
         The `draft_offer` MCP verb. Creates a new `draft` revision `n+1` from the offer's current
         state and flips the prior revision to `superseded` (OFFER-PARAM-6) — a sent offer is
         never edited in place (OFFER-AC-1). Non-destructive (nothing is lost, only superseded),
-        so this is 🟢 unlike `send`/`accept`. The response is the new draft revision itself, not a
-        diff object.
+        so this is 🟢 unlike `send`/`accept`. The response is the new draft revision itself, and
+        it carries the AI-authoring disclosure plus the diff-from-previous summary on that same
+        Offer object.
       x-mcp-tool: { verb: draft_offer, record_type: offer, tier: green }
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -6336,6 +6337,22 @@ components:
         template_id: { type: [string, 'null'], format: uuid }
         pdf_asset_ref: { type: [string, 'null'], readOnly: true, description: Rendered PDF ref — set by the render action (OFFER-WIRE-7). }
         accepted_at: { type: [string, 'null'], format: date-time, readOnly: true }
+        ai_generated: { type: boolean, readOnly: true, default: false, description: 'Art. 50 AI-assisted disclosure (GATE-AI-9). true only on the response of the regenerate call (OFFER-WIRE-6) that produced this revision; false on every other read — this ticket discloses AI authorship on the drafting call itself, not by persisting it across every future read.' }
+        ai_disclosure: { type: [string, 'null'], readOnly: true, description: 'Human-readable Art. 50 disclosure text; non-null iff ai_generated=true.' }
+        diff_from_previous:
+          type: [object, 'null']
+          readOnly: true
+          description: 'Populated only on a regenerate response (OFFER-AC-11d/16) — added/removed/changed line items vs the immediately prior revision. Null on every other read (transient, never persisted).'
+          properties:
+            added: { type: array, items: { $ref: '#/components/schemas/OfferLineItem' } }
+            removed: { type: array, items: { $ref: '#/components/schemas/OfferLineItem' } }
+            changed:
+              type: array
+              items:
+                type: object
+                properties:
+                  before: { $ref: '#/components/schemas/OfferLineItem' }
+                  after: { $ref: '#/components/schemas/OfferLineItem' }
         source: { type: string }
         captured_by: { type: string }
         version: { $ref: '#/components/schemas/RowVersion' }
@@ -6400,9 +6417,16 @@ components:
         description: { type: string, description: 'Snapshot — free-typed or copied from the referenced product.' }
         unit: { type: string, default: unit }
         quantity: { type: number, minimum: 0, description: 'numeric(14,3); must be > 0 (handler-enforced).' }
-        unit_price_minor: { type: integer, format: int64, description: 'Snapshot — never re-read from product after send. Never a float.' }
+        unit_price_minor: { type: [integer, 'null'], format: int64, description: 'Snapshot — never re-read from product after send. Never a float. Null when the AI-drafting path could not ground a price (OFFER-AC-11b/14); never fabricated. Human-entered lines (createOfferLineItem) always supply a concrete value.' }
         discount_pct: { type: number, minimum: 0, maximum: 100, default: 0 }
         tax_rate: { type: number, default: 0, description: 'Percent (e.g. 19.00 = DE USt.); defaults from the referenced product''s default_tax_rate on pick, per-line override allowed.' }
+        evidence:
+          type: [object, 'null']
+          readOnly: true
+          properties:
+            snippet: { type: string }
+            source_id: { type: string, format: uuid }
+          description: 'Grounding citation for an AI-proposed line (evidence-or-omit, OFFER-AC-11a/13, GATE-AI-1); null for a human-entered line.'
         source: { type: string }
         captured_by: { type: string }
         created_at: { type: string, format: date-time }
