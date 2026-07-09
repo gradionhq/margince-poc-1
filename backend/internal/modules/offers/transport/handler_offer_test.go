@@ -117,6 +117,26 @@ func (f *fakeOfferStore) Send(ctx context.Context, id, workspaceID string) (doma
 	return o, nil
 }
 
+func (f *fakeOfferStore) Accept(ctx context.Context, id, workspaceID string) (domain.Offer, error) {
+	if f.nextErr != nil {
+		err := f.nextErr
+		f.nextErr = nil
+		return domain.Offer{}, err
+	}
+	o, ok := f.offers[id]
+	if !ok {
+		return domain.Offer{}, errs.ErrNotFound
+	}
+	if o.Status != domain.OfferStatusSent {
+		return domain.Offer{}, adapters.ErrOfferNotAcceptable
+	}
+	now := time.Now().UTC()
+	o.Status = domain.OfferStatusAccepted
+	o.AcceptedAt = &now
+	f.offers[id] = o
+	return o, nil
+}
+
 // Regenerate mirrors OfferStore.Regenerate's public contract closely enough
 // for handler-level tests: it records every call's args (regenerateCalled/
 // regenerateID/regenerateWSID/regenerateSignals) so a test can assert what
@@ -540,6 +560,66 @@ func TestOfferHandler_Send_HumanPrincipal_NoTokenNeeded(t *testing.T) {
 	}
 	if respBody["buyer_snapshot"] == nil || respBody["issuer_snapshot"] == nil {
 		t.Fatalf("expected snapshots populated, got buyer=%v issuer=%v", respBody["buyer_snapshot"], respBody["issuer_snapshot"])
+	}
+}
+
+func TestOfferHandler_Accept_HumanPrincipal_NoTokenNeeded(t *testing.T) {
+	offerStore := newFakeOfferStore()
+	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusSent, "EUR")
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
+
+	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/accept", nil)
+	req = withWorkspace(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	respBody := decodeJSONBody(t, w)
+	if status, ok := respBody["status"].(string); !ok || status != "accepted" {
+		t.Fatalf("expected status=accepted, got %v", respBody["status"])
+	}
+	if respBody["accepted_at"] == nil {
+		t.Fatal("expected accepted_at populated")
+	}
+}
+
+func TestOfferHandler_Accept_AgentPrincipal_NoToken_403ApprovalRequired(t *testing.T) {
+	offerStore := newFakeOfferStore()
+	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusSent, "EUR")
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
+
+	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/accept", nil)
+	req = req.WithContext(crmctx.With(req.Context(), crmctx.Principal{TenantID: testWorkspaceID, UserID: "agent:1", IsAgent: true}))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403, body=%s", w.Code, w.Body.String())
+	}
+	respBody := decodeJSONBody(t, w)
+	if code, ok := respBody["code"].(string); !ok || code != "approval_required" {
+		t.Fatalf("expected code=approval_required, got %v", respBody["code"])
+	}
+}
+
+func TestOfferHandler_Accept_NotSent_409(t *testing.T) {
+	offerStore := newFakeOfferStore()
+	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusDraft, "EUR")
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
+
+	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/accept", nil)
+	req = withWorkspace(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409, body=%s", w.Code, w.Body.String())
+	}
+	respBody := decodeJSONBody(t, w)
+	if code, ok := respBody["code"].(string); !ok || code != "offer_not_acceptable" {
+		t.Fatalf("expected code=offer_not_acceptable, got %v", respBody["code"])
 	}
 }
 
