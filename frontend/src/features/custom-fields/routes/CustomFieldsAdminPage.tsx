@@ -43,7 +43,6 @@ export function CustomFieldsAdminPage() {
   const [retireField, setRetireField] = useState<CustomField | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  // Hooks
   const {
     data: listResponse,
     isLoading,
@@ -64,32 +63,24 @@ export function CustomFieldsAdminPage() {
   const userId = user?.id || "";
   const isAdmin = role === "admin";
 
-  // Toast management
   function pushToast(variant: "success" | "error", message: string) {
     setToasts((t) => [...t, { id: crypto.randomUUID(), variant, message }]);
   }
 
-  // Create flow
   function handleNewFieldConfirm(req: CreateCustomFieldRequest) {
-    // Set staged row for optimistic UI
     setStagedRow({ label: req.label, type: req.type });
 
     createField(req, {
       onSuccess: (field) => {
-        // Clear staged row
         setStagedRow(null);
-        // Close modal
         setNewCustomFieldOpen(false);
-        // Show success toast with exact message format
         pushToast(
           "success",
           `${field.label} is live on the 360, filters, export & API.`,
         );
       },
       onError: (error) => {
-        // Clear staged row on error
         setStagedRow(null);
-        // Show error toast
         const errorMessage =
           error instanceof Error ? error.message : "Failed to create field";
         pushToast("error", errorMessage);
@@ -97,7 +88,6 @@ export function CustomFieldsAdminPage() {
     });
   }
 
-  // Rename flow
   function handleRenameOpen(field: CustomField) {
     setRenameField(field);
     setRenameOpen(true);
@@ -125,7 +115,6 @@ export function CustomFieldsAdminPage() {
     );
   }
 
-  // Retire flow
   function handleRetireOpen(field: CustomField) {
     setRetireField(field);
     setRetireOpen(true);
@@ -150,7 +139,6 @@ export function CustomFieldsAdminPage() {
     });
   }
 
-  // Get display name for selected object
   const selectedObjectLabel =
     OBJECT_CHIPS.find((chip) => chip.value === selectedObject)?.label ||
     selectedObject;
@@ -175,7 +163,6 @@ export function CustomFieldsAdminPage() {
       </header>
 
       <main className="p-gf-lg space-y-gf-lg">
-        {/* Table area */}
         {isLoading ? (
           <div data-testid="table-skeleton">
             <Skeleton height="200px" />
@@ -195,10 +182,6 @@ export function CustomFieldsAdminPage() {
           />
         )}
 
-        {/* Object chip selector - embedded in table but shown here conceptually */}
-        {/* Actually, CustomFieldsTable renders the chips internally */}
-
-        {/* Audit card */}
         <CustomFieldAuditCard
           fields={fields}
           members={members}
@@ -208,7 +191,6 @@ export function CustomFieldsAdminPage() {
         />
       </main>
 
-      {/* Modals and dialogs */}
       {newCustomFieldOpen && (
         <NewCustomFieldModal
           open={newCustomFieldOpen}
@@ -248,7 +230,6 @@ export function CustomFieldsAdminPage() {
         />
       )}
 
-      {/* Toast container */}
       <ToastContainer
         toasts={toasts}
         onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))}

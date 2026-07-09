@@ -799,7 +799,8 @@ describe("NewCustomFieldModal", () => {
       const confirmBtn = screen.getByRole("button", { name: /confirm/i });
       await user.click(confirmBtn);
 
-      // Empty label guard should fire toast
+      // Confirm is natively disabled while the label is empty, so the click
+      // never reaches handleConfirm.
       expect(onConfirm).not.toHaveBeenCalled();
     });
   });

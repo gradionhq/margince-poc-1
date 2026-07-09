@@ -1,4 +1,5 @@
 import { Archive } from "lucide-react";
+import type { MouseEvent } from "react";
 import type {
   CustomField,
   Member,
@@ -41,22 +42,12 @@ export function CustomFieldsTable({
   const shouldShowEmpty = fields.length === 0 && !stagedRow;
   const isAdmin = role === "admin";
 
-  // Calculate the count badge value for the selected chip
   const countBadge = fields.length + (stagedRow ? 1 : 0);
 
-  function stopTriggerClick(...args: [unknown?]) {
-    const event = args[0];
-    if (
-      event &&
-      typeof event === "object" &&
-      "stopPropagation" in event &&
-      typeof event.stopPropagation === "function"
-    ) {
-      event.stopPropagation();
-    }
+  function stopTriggerClick(event?: MouseEvent<HTMLButtonElement>) {
+    event?.stopPropagation();
   }
 
-  // Build rows for the table: staged row first (if present), then real fields
   type TableRow =
     | { type: "staged"; id: string; staged: { label: string; type: string } }
     | { type: "field"; id: string; field: CustomField };
@@ -98,7 +89,6 @@ export function CustomFieldsTable({
           return <span className="font-mono">—</span>;
         }
         const field = row.field;
-        // For staged rows or when slug is empty, derive from label
         const slug = field.slug || "";
         const apiKey = buildApiKey(field.object, slug);
         return <span className="font-mono">{apiKey}</span>;
@@ -135,19 +125,16 @@ export function CustomFieldsTable({
       key: "actions",
       header: "",
       render: (row: TableRow) => {
-        // No actions for staged rows
         if (row.type === "staged") {
           return null;
         }
 
         const field = row.field;
 
-        // No actions for retired fields
         if (field.status === "retired") {
           return null;
         }
 
-        // No actions for non-admins
         if (!isAdmin) {
           return null;
         }
@@ -191,7 +178,6 @@ export function CustomFieldsTable({
 
   return (
     <div className="space-y-gf-md">
-      {/* Object chips header */}
       <div className="flex gap-gf-sm">
         {OBJECT_CHIPS.map((chip) => {
           const isSelected = chip.value === selectedObject;
@@ -222,12 +208,10 @@ export function CustomFieldsTable({
         })}
       </div>
 
-      {/* Explanatory note */}
       <div className="text-gf-body text-gf-secondary">
         Core fields are not shown — they aren't editable here.
       </div>
 
-      {/* Empty state or table */}
       {shouldShowEmpty ? (
         <EmptyState
           icon={Archive}

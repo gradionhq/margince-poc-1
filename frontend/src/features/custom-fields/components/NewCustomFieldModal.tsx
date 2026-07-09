@@ -78,13 +78,6 @@ export function NewCustomFieldModal({
     isLoading;
 
   const handleConfirm = async () => {
-    // Defensive: early return on empty label
-    if (isTrimmedLabelEmpty) {
-      onGuardToast?.("Give the field a label first");
-      return;
-    }
-
-    // Build the request
     const req: CreateCustomFieldRequest = {
       object,
       label: label.trim(),
@@ -93,12 +86,10 @@ export function NewCustomFieldModal({
       captured_by: `human:${userId ?? "unknown"}`,
     };
 
-    // Include currency code if applicable
     if (type === "currency" && currencyCode.trim()) {
       req.currency = currencyCode.trim();
     }
 
-    // Include picklist options if applicable
     if (type === "picklist" && picklistOptions.length > 0) {
       req.options = picklistOptions
         .map((opt) => opt.value)
