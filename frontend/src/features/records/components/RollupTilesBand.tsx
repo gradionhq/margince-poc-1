@@ -16,12 +16,14 @@ export function RollupTilesBand({
   rollup,
   isLoading,
   isError,
+  isForbidden,
   depth,
   nodeCount,
 }: {
   rollup: OrganizationHierarchyRollup | undefined;
   isLoading: boolean;
   isError: boolean;
+  isForbidden?: boolean;
   depth: number;
   nodeCount: number;
 }) {
@@ -34,6 +36,15 @@ export function RollupTilesBand({
         <Skeleton height="24px" />
         <Skeleton height="24px" />
         <Skeleton height="24px" />
+      </div>
+    );
+  }
+  // STATE-4: distinct from STATE-3's generic error card — checked before the generic isError
+  // branch below, since a 403 also sets isError=true.
+  if (isForbidden) {
+    return (
+      <div className="p-gf-md text-gf-caption text-gf-status-danger">
+        You don't have access to this account's roll-up.
       </div>
     );
   }

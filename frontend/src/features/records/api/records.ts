@@ -14,6 +14,17 @@ export const recordsKeys = {
   treeOrgs: () => ["records", "tree-orgs"] as const,
 };
 
+// STATE-4: a 403 on the rollup fetch is a distinct, honest "no permission" state, never lumped
+// in with STATE-3's generic error card. Thrown (rather than returned as data, unlike
+// useOrgPartner's 404-as-null pattern) because a 403 IS a genuine failure to render the roll-up —
+// callers distinguish it from other failures via `error instanceof HierarchyRollupForbiddenError`.
+export class HierarchyRollupForbiddenError extends Error {
+  constructor() {
+    super("You don't have access to this account's roll-up.");
+    this.name = "HierarchyRollupForbiddenError";
+  }
+}
+
 export function useOrganizationHierarchyRollup(
   rootId: string | undefined,
   scope: "tree" | "self",
@@ -22,10 +33,11 @@ export function useOrganizationHierarchyRollup(
     queryKey: recordsKeys.rollup(rootId, scope),
     enabled: !!rootId,
     queryFn: async () => {
-      const { data, error } = await apiClient.GET(
+      const { data, error, response } = await apiClient.GET(
         "/organizations/{id}/hierarchy-rollup",
         { params: { path: { id: rootId as string }, query: { scope } } },
       );
+      if (response?.status === 403) throw new HierarchyRollupForbiddenError();
       if (error) throw error;
       if (!data) throw new Error("empty response");
       return data;

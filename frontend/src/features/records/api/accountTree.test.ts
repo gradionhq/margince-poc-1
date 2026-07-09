@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { Organization } from "../../../lib/api-client/generated/index.js";
 import {
   buildAccountTree,
+  countTreeNodes,
   findSuggestedEdgeCandidates,
   flattenTree,
+  treeDepth,
 } from "./accountTree.js";
 
 function makeOrg(
@@ -119,6 +121,57 @@ describe("flattenTree", () => {
     expect(rootRow?.depth).toBe(0);
     expect(c1Row?.depth).toBe(1);
     expect(gc1Row?.depth).toBe(2);
+  });
+});
+
+describe("countTreeNodes", () => {
+  it("counts every node in a 3-level tree, regardless of expand/collapse state", () => {
+    const root = makeOrg("root", null);
+    const child1 = makeOrg("c1", "root");
+    const child2 = makeOrg("c2", "root");
+    const grandchild = makeOrg("gc1", "c1");
+    const orgs = [root, child1, child2, grandchild];
+    const tree = buildAccountTree(orgs, "root")!;
+
+    expect(countTreeNodes(tree)).toBe(4);
+
+    // Collapsing everything (or anything) must not change the full-tree count — AC-8's budget
+    // bar describes the whole tree, not currently-visible rows.
+    const mostlyCollapsedRows = flattenTree(tree, new Set());
+    expect(mostlyCollapsedRows).toHaveLength(1);
+    expect(countTreeNodes(tree)).toBe(4);
+
+    const partiallyExpandedRows = flattenTree(tree, new Set(["root"]));
+    expect(partiallyExpandedRows).toHaveLength(3);
+    expect(countTreeNodes(tree)).toBe(4);
+  });
+
+  it("counts a single-node tree as 1", () => {
+    const tree = buildAccountTree([makeOrg("root", null)], "root")!;
+    expect(countTreeNodes(tree)).toBe(1);
+  });
+});
+
+describe("treeDepth", () => {
+  it("reports the deepest full-tree level, regardless of expand/collapse state", () => {
+    const root = makeOrg("root", null);
+    const child1 = makeOrg("c1", "root");
+    const child2 = makeOrg("c2", "root");
+    const grandchild = makeOrg("gc1", "c1");
+    const orgs = [root, child1, child2, grandchild];
+    const tree = buildAccountTree(orgs, "root")!;
+
+    expect(treeDepth(tree)).toBe(2);
+
+    // Same invariant as countTreeNodes: collapsing hides rows, not tree structure.
+    const collapsedRows = flattenTree(tree, new Set());
+    expect(collapsedRows).toHaveLength(1);
+    expect(treeDepth(tree)).toBe(2);
+  });
+
+  it("is 0 for a single-node tree", () => {
+    const tree = buildAccountTree([makeOrg("root", null)], "root")!;
+    expect(treeDepth(tree)).toBe(0);
   });
 });
 

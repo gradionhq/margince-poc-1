@@ -65,6 +65,25 @@ export function flattenTree(
   return result;
 }
 
+// Counts every node in the FULL tree, independent of any expand/collapse UI state (AC-8's
+// budget bar — "depth N · M nodes · P% of P11 budget" — must describe the whole tree, not
+// whatever rows are currently visible; flattenTree's row count shrinks as subtrees collapse,
+// which is the wrong input for this).
+export function countTreeNodes(root: AccountTreeNode): number {
+  return (
+    1 + root.children.reduce((sum, child) => sum + countTreeNodes(child), 0)
+  );
+}
+
+// Deepest level in the FULL tree (root is depth 0), independent of expand/collapse UI state —
+// same rationale as countTreeNodes above.
+export function treeDepth(root: AccountTreeNode): number {
+  return root.children.reduce(
+    (max, child) => Math.max(max, 1 + treeDepth(child)),
+    0,
+  );
+}
+
 // Architecture design point 3: an orphan org sharing the root's normalized primary domain,
 // not already in the tree.
 export function findSuggestedEdgeCandidates(

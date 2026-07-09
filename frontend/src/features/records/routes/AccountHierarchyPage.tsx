@@ -9,10 +9,13 @@ import {
 } from "../../organizations/api/organizations.js";
 import {
   buildAccountTree,
+  countTreeNodes,
   findSuggestedEdgeCandidates,
   flattenTree,
+  treeDepth,
 } from "../api/accountTree.js";
 import {
+  HierarchyRollupForbiddenError,
   recordsKeys,
   useAccountTreeOrgs,
   useOrganizationHierarchyRollup,
@@ -90,7 +93,10 @@ export function AccountHierarchyPage() {
     data: rollup,
     isLoading: rollupLoading,
     isError: rollupError,
+    error: rollupErrorObj,
   } = useOrganizationHierarchyRollup(rootId, scope);
+  const rollupForbidden =
+    rollupErrorObj instanceof HierarchyRollupForbiddenError;
   const { data: selfRollup } = useOrganizationHierarchyRollup(rootId, "self");
   const { data: treeRollup } = useOrganizationHierarchyRollup(rootId, "tree");
   const { data: treeOrgs = [] } = useAccountTreeOrgs();
@@ -122,8 +128,10 @@ export function AccountHierarchyPage() {
         )
       : [];
 
-  const nodeCount = rows.length;
-  const depth = rows.reduce((max, r) => Math.max(max, r.depth), 0);
+  // AC-8's budget bar describes the whole tree, not just currently-expanded rows — computed
+  // from the full `tree`, never from the expand-dependent `rows` array.
+  const nodeCount = tree ? countTreeNodes(tree) : 0;
+  const depth = tree ? treeDepth(tree) : 0;
 
   // Derive explain-box figures from server rollups (never recomputed client-side).
   const selfFigure = selfRollup
@@ -169,6 +177,7 @@ export function AccountHierarchyPage() {
           rollup={rollup}
           isLoading={rollupLoading}
           isError={rollupError}
+          isForbidden={rollupForbidden}
           depth={depth}
           nodeCount={nodeCount}
         />

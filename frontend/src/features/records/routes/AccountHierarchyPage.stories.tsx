@@ -275,7 +275,12 @@ export const RollupError: Story = {
   },
 };
 
-// STATE-4: NoPermission — 403 from rollup fetch (renders same error card as STATE-3).
+// STATE-4: NoPermission — intended to demonstrate a 403 from the rollup fetch rendering its
+// own distinct "you don't have access" card (see RollupTilesBand's isForbidden branch and
+// AccountHierarchyPage.test.tsx's STATE-4 unit test for the real, deterministic proof of this).
+// This story can't force a real 403 status: Storybook doesn't mock apiClient (unlike
+// *.test.tsx's vi.mock), so this renders whatever the unmocked fetch to a nonexistent backend
+// actually resolves to — a real 403 must come from vi.mock'ing `response.status` in a jsdom test.
 export const NoPermission: Story = {
   args: {
     client: (() => {

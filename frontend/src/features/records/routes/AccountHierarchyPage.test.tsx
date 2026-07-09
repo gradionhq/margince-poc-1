@@ -157,6 +157,26 @@ describe("AccountHierarchyPage", () => {
     );
   });
 
+  it("STATE-4: a 403 from the rollup fetch renders a distinct no-permission state, not the generic error card", async () => {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    qc.setQueryData(recordsKeys.treeOrgs(), [rootOrg]);
+    qc.setQueryData(["organizations", "detail", ROOT_ID], rootOrg);
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: undefined,
+      error: { code: "forbidden" },
+      response: { status: 403 },
+    });
+    render(<AccountHierarchyPage />, { wrapper: wrapper(qc) });
+    await waitFor(() =>
+      expect(
+        screen.getByText(/you don't have access to this account's roll-up/i),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/failed to load/i)).not.toBeInTheDocument();
+  });
+
   it("renders tree scope tiles and tree nodes from seeded data", () => {
     const qc = makeClient();
     render(<AccountHierarchyPage />, { wrapper: wrapper(qc) });
@@ -234,5 +254,89 @@ describe("AccountHierarchyPage", () => {
     expect(screen.queryByText(/Orphan Corp/)).not.toBeInTheDocument();
     // No PATCH call was made
     expect(apiClient.PATCH).not.toHaveBeenCalled();
+  });
+
+  it("AC-6: accepting a suggested edge card fires the real write chain — apiClient.PATCH with parent_org_id set to the root", async () => {
+    const orphanOrg = {
+      id: "org-orphan",
+      workspace_id: "ws-1",
+      display_name: "Orphan Corp",
+      source: "test",
+      captured_by: "human:test",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      parent_org_id: null,
+      domains: [
+        {
+          id: "d2",
+          organization_id: "org-orphan",
+          domain: "rootcorp.com",
+          is_primary: true,
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+          archived_at: null,
+        },
+      ],
+      version: 1,
+    };
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    qc.setQueryData(recordsKeys.rollup(ROOT_ID, "tree"), treeRollup);
+    qc.setQueryData(recordsKeys.rollup(ROOT_ID, "self"), selfRollup);
+    qc.setQueryData(recordsKeys.treeOrgs(), [rootOrg, childOrg, orphanOrg]);
+    qc.setQueryData(["organizations", "detail", ROOT_ID], rootOrg);
+
+    (apiClient.PATCH as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { ...orphanOrg, parent_org_id: ROOT_ID, version: 2 },
+      error: undefined,
+    });
+    // Accepting invalidates treeOrgs/rollup queries, which triggers a background refetch — give
+    // apiClient.GET a route-aware implementation (rather than a blanket resolved value, and
+    // rather than leaving a prior test's error-mock leaking in) so the refetch reflects the
+    // post-accept world instead of clobbering the seeded fixtures with empty data.
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation(
+      async (
+        url: string,
+        opts?: { params?: { query?: { scope?: string } } },
+      ) => {
+        if (url === "/organizations/{id}/hierarchy-rollup") {
+          const scope = opts?.params?.query?.scope;
+          return {
+            data: scope === "self" ? selfRollup : treeRollup,
+            error: undefined,
+            response: { status: 200 },
+          };
+        }
+        if (url === "/organizations") {
+          return {
+            data: {
+              data: [
+                rootOrg,
+                childOrg,
+                { ...orphanOrg, parent_org_id: ROOT_ID },
+              ],
+            },
+            error: undefined,
+            response: { status: 200 },
+          };
+        }
+        return { data: undefined, error: undefined, response: { status: 200 } };
+      },
+    );
+
+    render(<AccountHierarchyPage />, { wrapper: wrapper(qc) });
+
+    expect(screen.getByText(/Orphan Corp/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /accept edge/i }));
+
+    await waitFor(() => expect(apiClient.PATCH).toHaveBeenCalled());
+    expect(apiClient.PATCH).toHaveBeenCalledWith(
+      "/organizations/{id}",
+      expect.objectContaining({
+        params: expect.objectContaining({ path: { id: "org-orphan" } }),
+        body: expect.objectContaining({ parent_org_id: ROOT_ID }),
+      }),
+    );
   });
 });

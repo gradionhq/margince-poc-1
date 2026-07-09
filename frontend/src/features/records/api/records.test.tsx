@@ -14,6 +14,7 @@ vi.mock("../../../lib/api-client/client.js", () => ({
 
 import { apiClient } from "../../../lib/api-client/client.js";
 import {
+  HierarchyRollupForbiddenError,
   useAccountTreeOrgs,
   useOrganizationHierarchyRollup,
 } from "./records.js";
@@ -68,6 +69,38 @@ describe("useOrganizationHierarchyRollup", () => {
       { wrapper },
     );
     expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("STATE-4: surfaces a distinct HierarchyRollupForbiddenError on a 403, not a generic error", async () => {
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: undefined,
+      error: { code: "forbidden" },
+      response: { status: 403 },
+    });
+
+    const { result } = renderHook(
+      () => useOrganizationHierarchyRollup("org-1", "tree"),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toBeInstanceOf(HierarchyRollupForbiddenError);
+  });
+
+  it("a non-403 failure still surfaces as a generic error, not HierarchyRollupForbiddenError", async () => {
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: undefined,
+      error: { code: "server_error" },
+      response: { status: 500 },
+    });
+
+    const { result } = renderHook(
+      () => useOrganizationHierarchyRollup("org-1", "tree"),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).not.toBeInstanceOf(
+      HierarchyRollupForbiddenError,
+    );
   });
 });
 

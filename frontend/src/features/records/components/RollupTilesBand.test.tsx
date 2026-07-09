@@ -88,6 +88,23 @@ describe("RollupTilesBand", () => {
     expect(screen.getByText(/failed to load/i)).toBeInTheDocument();
   });
 
+  it("STATE-4: shows a distinct no-permission message when isForbidden, not the generic error text", () => {
+    render(
+      <RollupTilesBand
+        rollup={undefined}
+        isLoading={false}
+        isError={true}
+        isForbidden={true}
+        depth={0}
+        nodeCount={0}
+      />,
+    );
+    expect(
+      screen.getByText(/you don't have access to this account's roll-up/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/failed to load/i)).not.toBeInTheDocument();
+  });
+
   it("renders the EUR · ISO-4217 · integer minor-units label", () => {
     render(
       <RollupTilesBand
