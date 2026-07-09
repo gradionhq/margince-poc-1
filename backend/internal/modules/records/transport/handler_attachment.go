@@ -17,6 +17,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/httpkit"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
+	"github.com/gradionhq/margince/backend/internal/shared/ports/extraction"
 )
 
 // attachmentStoreSeam is the subset of *adapters.AttachmentStore this handler needs.
@@ -35,13 +36,23 @@ type attachmentStoreSeam interface {
 // is *adapters.DownloadAuditWriter.
 type auditSeam interface {
 	WriteAudit(ctx context.Context, workspaceID, entityType, entityID, filename string) error
+	WriteRequestAccessAudit(ctx context.Context, workspaceID, entityType, entityID, filename string) error
+	WriteExtractionAcceptAudit(ctx context.Context, workspaceID, entityType, entityID, field, sourceQuote, capturedBy string) error
+}
+
+// dealFieldWriter persists accepted extraction fields onto the deal record
+// without making this transport package depend on the deals module directly.
+type dealFieldWriter interface {
+	UpdateFields(ctx context.Context, workspaceID, dealID string, updates map[string]any) error
 }
 
 // AttachmentHandler routes /attachments and /attachments/{id} requests.
 type AttachmentHandler struct {
-	store attachmentStoreSeam
-	blob  blobstore.Store
-	audit auditSeam
+	store      attachmentStoreSeam
+	blob       blobstore.Store
+	audit      auditSeam
+	extractor  extraction.Extractor
+	dealWriter dealFieldWriter
 	// isVisible combines LoadRolePermissions + RecordVisible (Constraint 6). When
 	// nil (unit tests without a real DB) every attachment is treated as visible.
 	isVisible func(ctx context.Context, wsID, entityType, entityID string, principal crmctx.Principal) (bool, error)
@@ -50,8 +61,8 @@ type AttachmentHandler struct {
 // NewAttachmentHandler returns an AttachmentHandler. db is used to load role
 // permissions and check bound-record visibility (Constraint 6); pass nil only
 // in unit tests — visibility defaults to true when db is nil.
-func NewAttachmentHandler(store attachmentStoreSeam, blob blobstore.Store, audit auditSeam, db *sql.DB) *AttachmentHandler {
-	h := &AttachmentHandler{store: store, blob: blob, audit: audit}
+func NewAttachmentHandler(store attachmentStoreSeam, blob blobstore.Store, audit auditSeam, db *sql.DB, extractor extraction.Extractor, dealWriter dealFieldWriter) *AttachmentHandler {
+	h := &AttachmentHandler{store: store, blob: blob, audit: audit, extractor: extractor, dealWriter: dealWriter}
 	if db != nil {
 		h.isVisible = func(ctx context.Context, wsID, entityType, entityID string, principal crmctx.Principal) (bool, error) {
 			perms, err := platformauth.LoadRolePermissions(ctx, db, wsID, principal.UserID)
@@ -66,6 +77,9 @@ func NewAttachmentHandler(store attachmentStoreSeam, blob blobstore.Store, audit
 
 // ServeHTTP dispatches /attachments and /attachments/{id}.
 func (h *AttachmentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h.serveSuffixRoutes(w, r) {
+		return
+	}
 	id := httpkit.PathID(r.URL.Path, "/attachments")
 	switch {
 	case r.Method == http.MethodGet && id == "":
@@ -95,6 +109,7 @@ type attachmentResponse struct {
 	StorageKey  string     `json:"storage_key"`
 	Checksum    *string    `json:"checksum,omitempty"`
 	ScanStatus  string     `json:"scan_status"`
+	Access      string     `json:"access"`
 	Source      string     `json:"source"`
 	CapturedBy  string     `json:"captured_by"`
 	CreatedAt   time.Time  `json:"created_at"`
@@ -103,11 +118,11 @@ type attachmentResponse struct {
 	DownloadURL *string    `json:"download_url,omitempty"`
 }
 
-func toResponse(a domain.Attachment, uploadURL, downloadURL *string) attachmentResponse {
+func toResponse(a domain.Attachment, uploadURL, downloadURL *string, access string) attachmentResponse {
 	return attachmentResponse{
 		ID: a.ID, WorkspaceID: a.WorkspaceID, EntityType: a.EntityType, EntityID: a.EntityID,
 		Filename: a.Filename, ContentType: a.ContentType, ByteSize: a.ByteSize,
-		StorageKey: a.StorageKey, Checksum: a.Checksum, ScanStatus: a.ScanStatus,
+		StorageKey: a.StorageKey, Checksum: a.Checksum, ScanStatus: a.ScanStatus, Access: access,
 		Source: a.Source, CapturedBy: a.CapturedBy, CreatedAt: a.CreatedAt, ArchivedAt: a.ArchivedAt,
 		UploadURL: uploadURL, DownloadURL: downloadURL,
 	}
@@ -130,6 +145,11 @@ const presignExpiry = 15 * time.Minute
 // fieldRequired is the FieldError code used for every "missing required
 // field" validation failure in this handler.
 const fieldRequired = "required"
+
+const (
+	accessVisible    = "visible"
+	accessRestricted = "restricted"
+)
 
 func (h *AttachmentHandler) create(w http.ResponseWriter, r *http.Request) {
 	wsID, ok := httpkit.RequireWorkspace(w, r)
@@ -196,7 +216,7 @@ func (h *AttachmentHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// download_url is always nil on create: a fresh row is scan_status='scanning'.
-	httpkit.JSONCreatedAt(w, toResponse(created, &uploadURL, nil), "/attachments/"+created.ID)
+	httpkit.JSONCreatedAt(w, toResponse(created, &uploadURL, nil, accessVisible), "/attachments/"+created.ID)
 }
 
 func (h *AttachmentHandler) get(w http.ResponseWriter, r *http.Request, id string) {
@@ -250,6 +270,7 @@ func (h *AttachmentHandler) list(w http.ResponseWriter, r *http.Request) {
 // record is not visible, the attachment is archived, or it is not yet
 // scan_status='clean'. Never drops the row or returns 404.
 func (h *AttachmentHandler) withURLs(r *http.Request, wsID string, a domain.Attachment) (attachmentResponse, error) {
+	access := accessVisible
 	if h.isVisible != nil {
 		principal, _ := crmctx.From(r.Context())
 		visible, err := h.isVisible(r.Context(), wsID, a.EntityType, a.EntityID, principal)
@@ -257,7 +278,9 @@ func (h *AttachmentHandler) withURLs(r *http.Request, wsID string, a domain.Atta
 			return attachmentResponse{}, err
 		}
 		if !visible {
-			return toResponse(a, nil, nil), nil
+			restricted := a
+			restricted.Checksum = nil
+			return toResponse(restricted, nil, nil, accessRestricted), nil
 		}
 	}
 
@@ -265,11 +288,11 @@ func (h *AttachmentHandler) withURLs(r *http.Request, wsID string, a domain.Atta
 	// (matches archiveAttachment's own response and the "no bytes access
 	// implied" convention).
 	if a.ArchivedAt != nil {
-		return toResponse(a, nil, nil), nil
+		return toResponse(a, nil, nil, access), nil
 	}
 
 	if a.ScanStatus != domain.ScanStatusClean {
-		return toResponse(a, nil, nil), nil
+		return toResponse(a, nil, nil, access), nil
 	}
 
 	downloadURL, err := h.blob.PresignedGetURL(r.Context(), a.StorageKey, presignExpiry)
@@ -279,7 +302,7 @@ func (h *AttachmentHandler) withURLs(r *http.Request, wsID string, a domain.Atta
 	if err := h.audit.WriteAudit(r.Context(), wsID, a.EntityType, a.EntityID, a.Filename); err != nil {
 		return attachmentResponse{}, err
 	}
-	return toResponse(a, nil, &downloadURL), nil
+	return toResponse(a, nil, &downloadURL, access), nil
 }
 
 func (h *AttachmentHandler) archive(w http.ResponseWriter, r *http.Request, id string) {
@@ -294,5 +317,5 @@ func (h *AttachmentHandler) archive(w http.ResponseWriter, r *http.Request, id s
 		return
 	}
 	// Archived attachments: both URLs nil — soft-deleted, no bytes access implied.
-	httpkit.JSONOK(w, toResponse(a, nil, nil))
+	httpkit.JSONOK(w, toResponse(a, nil, nil, accessVisible))
 }

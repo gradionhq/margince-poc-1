@@ -2565,6 +2565,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/attachments/{id}/extraction": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Staged AI-extraction for this attachment (pure read; zero writes; evidence-or-omit).
+         * @description Every returned field carries a non-empty source_quote/page_or_section/confidence, or is
+         *     listed in `omitted` with reason "not_stated_in_file" — never a guessed value (GATE-AI-1).
+         *     Backed by an injectable Extractor seam; the production default returns an honest
+         *     `{fields: [], omitted: []}` (no document-extraction/OCR/LLM pipeline exists or is built by
+         *     this ticket). Valid for any entity_type; a non-deal attachment or the empty-seam default
+         *     both honestly return zero fields.
+         */
+        get: operations["getAttachmentExtraction"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/attachments/{id}/extraction:accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept staged extraction fields onto the attachment's deal (deal-scoped attachments only).
+         * @description Persists the named fields to the target deal via the deals module's existing partial-update
+         *     path, one audit activity per accepted field carrying its source quote, provenance flips to
+         *     human for any field named in `edits`. Only valid on a deal-scoped attachment (entity_type ==
+         *     "deal") — 422 unsupported_entity_type otherwise.
+         */
+        post: operations["acceptAttachmentExtraction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/attachments/{id}/request-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request access to a restricted attachment (audit row only — no notification system). */
+        post: operations["requestAttachmentAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/organizations/{id}/hierarchy-rollup": {
         parameters: {
             query?: never;
@@ -4909,6 +4983,15 @@ export interface components {
             /** @description sha256 */
             checksum?: string | null;
             /**
+             * @description Computed at read time from the caller's RBAC role against the bound record —
+             *     reuses the same visibility check the record's own detail-read already applies
+             *     (RD-T10). "restricted" withholds checksum/download_url content detail below (both
+             *     already nullable); scan_status stays visible (coarse safety signal, not content —
+             *     Global Constraint 1a). The row itself is always disclosed, never omitted from the list.
+             * @enum {string}
+             */
+            readonly access?: "visible" | "restricted";
+            /**
              * @description RD-PARAM-5 virus-scan state. `blocked` = quarantined, not downloadable. Contract-only
              *     for now — not yet a DB column on `attachment`; the handler ticket decides whether it
              *     lands on the row itself or is computed/joined (either is acceptable at this layer).
@@ -4949,6 +5032,45 @@ export interface components {
         AttachmentListResponse: {
             data: components["schemas"]["Attachment"][];
             page: components["schemas"]["PageInfo"];
+        };
+        ExtractedField: {
+            field: string;
+            value: string;
+            /** @description Verbatim text the value was read from. */
+            source_quote: string;
+            page_or_section: string;
+            /** @enum {string} */
+            confidence: "high" | "medium";
+        };
+        OmittedExtractionField: {
+            field: string;
+            /** @enum {string} */
+            reason: "not_stated_in_file";
+        };
+        AttachmentExtraction: {
+            fields: components["schemas"]["ExtractedField"][];
+            omitted: components["schemas"]["OmittedExtractionField"][];
+        };
+        AcceptExtractionRequest: {
+            field_keys: string[];
+            /** @description field -> edited value, for fields the user typed-over before accepting. A key present here flips that field's audit provenance to human. */
+            edits?: {
+                [key: string]: unknown;
+            };
+        };
+        AcceptedExtractionField: {
+            field: string;
+            value: string;
+            /** @enum {string} */
+            provenance: "ai-extracted" | "human";
+        };
+        AttachmentExtractionAcceptResponse: {
+            /** Format: uuid */
+            deal_id: string;
+            accepted: components["schemas"]["AcceptedExtractionField"][];
+        };
+        RequestAccessResponse: {
+            requested: boolean;
         };
         /**
          * @description RD-FORM-1's tree roll-up over the organization hierarchy (`parent_org_id` self-FK,
@@ -11776,6 +11898,86 @@ export interface operations {
                     "application/json": components["schemas"]["Attachment"];
                 };
             };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getAttachmentExtraction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The staged extraction (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentExtraction"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    acceptAttachmentExtraction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptExtractionRequest"];
+            };
+        };
+        responses: {
+            /** @description The accepted fields, persisted to the deal. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentExtractionAcceptResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    requestAttachmentAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque resource id (UUID; ordering semantics are not exposed). */
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Request recorded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestAccessResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
     };

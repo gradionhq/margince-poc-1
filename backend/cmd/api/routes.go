@@ -36,6 +36,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/platform/toolgate"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/authz"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	"github.com/gradionhq/margince/backend/internal/shared/ports/extraction"
 )
 
 // routeKit carries the shared wiring every route group needs.
@@ -142,7 +143,18 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 	crud("/offer-templates", platformauth.ObjOfferTemplate, offerstransport.NewOfferTemplateHandler(offers.NewOfferTemplateStore(k.db)))
 	crud("/quotas", platformauth.ObjQuota, recordstransport.NewQuotaHandler(records.NewQuotaStore(k.db)))
 	activityStore := activities.NewActivityStore(k.db)
-	crud("/attachments", platformauth.ObjAttachment, recordstransport.NewAttachmentHandler(records.NewAttachmentStore(k.db), k.blob, recordsadapters.NewDownloadAuditWriter(activityStore), k.db))
+	attachmentHandler := recordstransport.NewAttachmentHandler(
+		records.NewAttachmentStore(k.db),
+		k.blob,
+		recordsadapters.NewDownloadAuditWriter(activityStore),
+		k.db,
+		extraction.NoOpExtractor{},
+		recordsadapters.NewDealFieldWriter(deals.NewDealStore(k.db)),
+	)
+	crud("/attachments", platformauth.ObjAttachment, attachmentHandler)
+	mux.Handle("GET /attachments/{id}/extraction", instrument("/attachments/extraction", k.domainWrap(platformauth.ObjAttachment, attachmentHandler)))
+	mux.Handle("POST /attachments/{id}/extraction:accept", instrument("/attachments/extraction-accept", k.domainWrap(platformauth.ObjAttachment, attachmentHandler)))
+	mux.Handle("POST /attachments/{id}/request-access", instrument("/attachments/request-access", k.domainWrap(platformauth.ObjAttachment, attachmentHandler)))
 	offerStore := offers.NewOfferStore(k.db).WithDealStore(deals.NewDealStore(k.db))
 	offerHandler := offerstransport.NewOfferHandler(offerStore, offers.NewOfferLineItemStore(k.db, offers.NewProductStore(k.db)), k.verifier, k.blob, offerstransport.NewNoOpRetriever())
 	mux.Handle("GET /deals/{id}/offers", instrument("/deals/offers", k.domainWrap(platformauth.ObjOffer, offerHandler)))

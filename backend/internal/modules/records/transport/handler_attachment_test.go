@@ -14,6 +14,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/platform/blobstore"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	"github.com/gradionhq/margince/backend/internal/shared/ports/extraction"
 )
 
 // ---------------------------------------------------------------------------
@@ -22,8 +23,16 @@ import (
 
 const testWS = "00000000-0000-0000-0000-000000000att"
 
+// testUserID is a bare user id, matching production: crmctx.Principal.UserID
+// is always populated with a bare app_user.id UUID (see auth_handler.go's
+// HandleLogin, which casts userID straight to Postgres $1::uuid), never a
+// "human:"-prefixed string. Fixtures here must not pre-bake the "human:"
+// prefix, or tests that assert on captured_by values would pass regardless
+// of whether the code under test actually prefixes it.
+const testUserID = "test-user-id"
+
 func withAttachWorkspace(r *http.Request) *http.Request {
-	ctx := crmctx.With(r.Context(), crmctx.Principal{TenantID: testWS, UserID: "human:test"})
+	ctx := crmctx.With(r.Context(), crmctx.Principal{TenantID: testWS, UserID: testUserID})
 	return r.WithContext(ctx)
 }
 
@@ -90,11 +99,36 @@ func (f *fakeAttachmentStore) Archive(_ context.Context, id, _ string) (domain.A
 	return domain.Attachment{}, errs.ErrNotFound
 }
 
-// fakeAudit records WriteAudit calls for assertion.
-type fakeAudit struct{ called int }
+// fakeAudit records attachment audit calls for assertion.
+type fakeAudit struct {
+	called              int
+	requestCalled       int
+	requestCapturedBy   string
+	extractionCalls     []auditExtractionCall
+	lastExtractionField string
+}
+
+type auditExtractionCall struct {
+	field       string
+	sourceQuote string
+	capturedBy  string
+}
 
 func (f *fakeAudit) WriteAudit(_ context.Context, _, _, _, _ string) error {
 	f.called++
+	return nil
+}
+
+func (f *fakeAudit) WriteRequestAccessAudit(ctx context.Context, _, _, _, _ string) error {
+	f.requestCalled++
+	principal, _ := crmctx.From(ctx)
+	f.requestCapturedBy = principal.UserID
+	return nil
+}
+
+func (f *fakeAudit) WriteExtractionAcceptAudit(_ context.Context, _, _, _, field, sourceQuote, capturedBy string) error {
+	f.extractionCalls = append(f.extractionCalls, auditExtractionCall{field: field, sourceQuote: sourceQuote, capturedBy: capturedBy})
+	f.lastExtractionField = field
 	return nil
 }
 
@@ -102,9 +136,13 @@ func (f *fakeAudit) WriteAudit(_ context.Context, _, _, _, _ string) error {
 // default) and a MemoryStore blobstore. The isVisible field may be overridden
 // after construction for visibility-gate tests.
 func newTestHandler(store attachmentStoreSeam, audit *fakeAudit) *AttachmentHandler {
+	return newTestHandlerWithSeams(store, audit, nil, nil)
+}
+
+func newTestHandlerWithSeams(store attachmentStoreSeam, audit auditSeam, extractor extraction.Extractor, dealWriter dealFieldWriter) *AttachmentHandler {
 	blob := blobstore.NewMemoryStore()
 	// db=nil → isVisible stays nil → withURLs treats every row as visible.
-	return NewAttachmentHandler(store, blob, audit, nil)
+	return NewAttachmentHandler(store, blob, audit, nil, extractor, dealWriter)
 }
 
 // seed places a ready-made attachment in the fake store and returns its ID.
@@ -167,6 +205,9 @@ func TestAttachmentHandler_Create_Returns201WithUploadURL(t *testing.T) {
 	if scanStatus, _ := resp["scan_status"].(string); scanStatus != domain.ScanStatusScanning {
 		t.Fatalf("want scan_status=scanning on create, got %q", scanStatus)
 	}
+	if access, _ := resp["access"].(string); access != accessVisible {
+		t.Fatalf("want access=visible on create, got %q", access)
+	}
 	if resp["download_url"] != nil {
 		t.Fatalf("download_url must be nil on create, got %v", resp["download_url"])
 	}
@@ -215,6 +256,9 @@ func TestAttachmentHandler_Get_ScanningRow_DownloadURLNull(t *testing.T) {
 	if resp["download_url"] != nil {
 		t.Fatalf("download_url must be nil for scanning row, got %v", resp["download_url"])
 	}
+	if access, _ := resp["access"].(string); access != accessVisible {
+		t.Fatalf("want access=visible for scanning row, got %q", access)
+	}
 }
 
 func TestAttachmentHandler_Get_CleanVisible_ReturnsDownloadURLAndTriggersAudit(t *testing.T) {
@@ -260,6 +304,9 @@ func TestAttachmentHandler_Get_BlockedRow_DownloadURLNull(t *testing.T) {
 	if resp["download_url"] != nil {
 		t.Fatalf("download_url must be nil for blocked row, got %v", resp["download_url"])
 	}
+	if access, _ := resp["access"].(string); access != accessVisible {
+		t.Fatalf("want access=visible for blocked row, got %q", access)
+	}
 	if audit.called != 0 {
 		t.Fatalf("want 0 audit writes for blocked row, got %d", audit.called)
 	}
@@ -268,6 +315,10 @@ func TestAttachmentHandler_Get_BlockedRow_DownloadURLNull(t *testing.T) {
 func TestAttachmentHandler_Get_NotVisible_DisclosedLocked(t *testing.T) {
 	store := newFakeAttachmentStore()
 	id := seed(store, domain.ScanStatusClean)
+	a := store.items[id]
+	checksum := "sha256:restricted"
+	a.Checksum = &checksum
+	store.items[id] = a
 	audit := &fakeAudit{}
 	h := newTestHandler(store, audit)
 	// Override visibility gate to report "not visible".
@@ -290,6 +341,15 @@ func TestAttachmentHandler_Get_NotVisible_DisclosedLocked(t *testing.T) {
 	}
 	if resp["upload_url"] != nil {
 		t.Fatalf("upload_url must be nil for not-visible row, got %v", resp["upload_url"])
+	}
+	if access, _ := resp["access"].(string); access != accessRestricted {
+		t.Fatalf("want access=restricted for not-visible row, got %q", access)
+	}
+	if _, present := resp["checksum"]; present {
+		t.Fatalf("checksum must be absent for restricted row, got %v", resp["checksum"])
+	}
+	if scanStatus, _ := resp["scan_status"].(string); scanStatus != domain.ScanStatusClean {
+		t.Fatalf("want scan_status preserved on restricted row, got %q", scanStatus)
 	}
 	// Full metadata still present.
 	if resp["id"] == nil || resp["filename"] == nil {
@@ -340,6 +400,9 @@ func TestAttachmentHandler_Get_Archived_Returns200WithArchivedAtAndNullURLs(t *t
 	}
 	if resp["archived_at"] == nil {
 		t.Fatal("want archived_at set for an archived row's GET response")
+	}
+	if access, _ := resp["access"].(string); access != accessVisible {
+		t.Fatalf("want access=visible for archived row, got %q", access)
 	}
 	if resp["download_url"] != nil {
 		t.Fatalf("download_url must be nil for an archived row, got %v", resp["download_url"])
@@ -464,7 +527,11 @@ func TestAttachmentHandler_List_CleanVisible_ReturnsDownloadURLNoSilentDrop(t *t
 
 func TestAttachmentHandler_List_NotVisible_DownloadURLNullNoAudit(t *testing.T) {
 	store := newFakeAttachmentStore()
-	seed(store, domain.ScanStatusClean)
+	id := seed(store, domain.ScanStatusClean)
+	a := store.items[id]
+	checksum := "sha256:restricted"
+	a.Checksum = &checksum
+	store.items[id] = a
 	audit := &fakeAudit{}
 	h := newTestHandler(store, audit)
 	h.isVisible = func(_ context.Context, _, _, _ string, _ crmctx.Principal) (bool, error) {
@@ -487,6 +554,15 @@ func TestAttachmentHandler_List_NotVisible_DownloadURLNullNoAudit(t *testing.T) 
 	}
 	if page.Data[0]["download_url"] != nil {
 		t.Fatalf("download_url must be nil for not-visible item, got %v", page.Data[0]["download_url"])
+	}
+	if access, _ := page.Data[0]["access"].(string); access != accessRestricted {
+		t.Fatalf("want access=restricted for not-visible item, got %q", access)
+	}
+	if _, present := page.Data[0]["checksum"]; present {
+		t.Fatalf("checksum must be absent for restricted item, got %v", page.Data[0]["checksum"])
+	}
+	if scanStatus, _ := page.Data[0]["scan_status"].(string); scanStatus != domain.ScanStatusClean {
+		t.Fatalf("want scan_status preserved on restricted item, got %q", scanStatus)
 	}
 	if audit.called != 0 {
 		t.Fatalf("want 0 audit writes for not-visible, got %d", audit.called)
@@ -516,5 +592,8 @@ func TestAttachmentHandler_Archive_Returns200WithArchivedAt(t *testing.T) {
 	}
 	if resp["download_url"] != nil || resp["upload_url"] != nil {
 		t.Fatal("both URLs must be nil in archive response")
+	}
+	if access, _ := resp["access"].(string); access != accessVisible {
+		t.Fatalf("want access=visible in archive response, got %q", access)
 	}
 }
