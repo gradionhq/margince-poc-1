@@ -432,6 +432,19 @@ describe("OfferBuilderPage", () => {
 
     await user.click(screen.getByRole("button", { name: /regenerate/i }));
     expect(await screen.findByTestId("staged-lines-panel")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Excludes 1 staged AI-proposed line\(s\) from this total\./i,
+      ),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: /explain this total/i }),
+    );
+    expect(
+      screen.getByText(
+        /1 staged AI-proposed line\(s\) and 0 unpriced line\(s\) are excluded from this total until accepted\/priced\./i,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("AI staged line")).toBeInTheDocument();
     expect(screen.getAllByText("Committed line").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /accept/i })).toBeInTheDocument();

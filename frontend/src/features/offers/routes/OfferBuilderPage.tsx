@@ -202,7 +202,7 @@ export function OfferBuilderPage() {
       />
 
       <LineItemEditor
-        lines={committedLines}
+        lines={lineItems}
         stagedLineIds={stagedLineIds}
         canMutateOffer={canEdit}
         onCreate={() =>
@@ -258,7 +258,7 @@ export function OfferBuilderPage() {
 
       <ExplainTotalPanel
         currency={offer.currency}
-        lines={committedLines}
+        lines={lineItems}
         stagedLineIds={stagedLineIds}
         grossMinor={offer.gross_minor}
       />
