@@ -224,6 +224,16 @@ func (f *fakeOfferLineItemStore) Delete(ctx context.Context, id, offerID, worksp
 	return nil
 }
 
+// newOfferFixture builds the "offer-1" fixture shared by the render/send/
+// regenerate handler tests below — same id/workspace/deal/offer-number every
+// time, varying only status and currency.
+func newOfferFixture(status, currency string) domain.Offer {
+	return domain.Offer{
+		ID: "offer-1", WorkspaceID: testWorkspaceID, DealID: "deal-1", OfferNumber: "ANG-001",
+		Status: status, Revision: 1, Version: 1, Currency: currency,
+	}
+}
+
 func validCreateOfferBody() map[string]any {
 	return map[string]any{
 		"offer_number": "ANG-001",
@@ -422,11 +432,9 @@ func TestOfferHandler_RoutingDispatch_UnknownSuffix_404(t *testing.T) {
 
 func TestOfferHandler_Render_SetsResult(t *testing.T) {
 	offerStore := newFakeOfferStore()
-	offerStore.offers["offer-1"] = domain.Offer{
-		ID: "offer-1", WorkspaceID: testWorkspaceID, DealID: "deal-1", OfferNumber: "ANG-001",
-		Status: domain.OfferStatusDraft, Revision: 1, Version: 1, Currency: "EUR",
-		NetMinor: 125000, TaxMinor: 23750, GrossMinor: 148750,
-	}
+	o := newOfferFixture(domain.OfferStatusDraft, "EUR")
+	o.NetMinor, o.TaxMinor, o.GrossMinor = 125000, 23750, 148750
+	offerStore.offers["offer-1"] = o
 	blob := blobstore.NewMemoryStore()
 	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blob)
 
@@ -459,10 +467,7 @@ func TestOfferHandler_Render_SetsResult(t *testing.T) {
 
 func TestOfferHandler_Send_HumanPrincipal_NoTokenNeeded(t *testing.T) {
 	offerStore := newFakeOfferStore()
-	offerStore.offers["offer-1"] = domain.Offer{
-		ID: "offer-1", WorkspaceID: testWorkspaceID, DealID: "deal-1", OfferNumber: "ANG-001",
-		Status: domain.OfferStatusDraft, Revision: 1, Version: 1, Currency: "EUR",
-	}
+	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusDraft, "EUR")
 	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/send", nil)
@@ -487,10 +492,7 @@ func TestOfferHandler_Send_HumanPrincipal_NoTokenNeeded(t *testing.T) {
 
 func TestOfferHandler_Send_AgentPrincipal_NoToken_403ApprovalRequired(t *testing.T) {
 	offerStore := newFakeOfferStore()
-	offerStore.offers["offer-1"] = domain.Offer{
-		ID: "offer-1", WorkspaceID: testWorkspaceID, DealID: "deal-1", OfferNumber: "ANG-001",
-		Status: domain.OfferStatusDraft, Revision: 1, Version: 1, Currency: "EUR",
-	}
+	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusDraft, "EUR")
 	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/send", nil)
@@ -509,10 +511,7 @@ func TestOfferHandler_Send_AgentPrincipal_NoToken_403ApprovalRequired(t *testing
 
 func TestOfferHandler_Send_FXRateUnavailable_422(t *testing.T) {
 	offerStore := newFakeOfferStore()
-	offerStore.offers["offer-1"] = domain.Offer{
-		ID: "offer-1", WorkspaceID: testWorkspaceID, DealID: "deal-1", OfferNumber: "ANG-001",
-		Status: domain.OfferStatusDraft, Revision: 1, Version: 1, Currency: "USD",
-	}
+	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusDraft, "USD")
 	offerStore.nextErr = &deals.FXRateUnavailableError{Currency: "USD", AsOf: time.Date(2026, 7, 8, 0, 0, 0, 0, time.UTC)}
 	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
 
@@ -536,10 +535,7 @@ func TestOfferHandler_Send_FXRateUnavailable_422(t *testing.T) {
 
 func TestOfferHandler_Regenerate_Success(t *testing.T) {
 	offerStore := newFakeOfferStore()
-	offerStore.offers["offer-1"] = domain.Offer{
-		ID: "offer-1", WorkspaceID: testWorkspaceID, DealID: "deal-1", OfferNumber: "ANG-001",
-		Status: domain.OfferStatusSent, Revision: 1, Version: 1, Currency: "EUR",
-	}
+	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusSent, "EUR")
 	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/regenerate", nil)

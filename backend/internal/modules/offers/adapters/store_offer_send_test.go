@@ -18,13 +18,7 @@ func TestOfferStore_Send_SameCurrency_NoFXLookupNeeded(t *testing.T) {
 	db := pgtest.OpenTestDB(t)
 	wsID, dealID := seedOfferWorkspace(t, db)
 	offerStore := adapters.NewOfferStore(db)
-
-	o := domain.NewOffer(dealID, "ANG-SND-"+wsID[:8], "EUR", provTestOffer())
-	o.WorkspaceID = wsID
-	created, err := offerStore.Create(context.Background(), o)
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
+	created := createTestOffer(t, db, dealID, wsID, "ANG-SND-", "EUR")
 
 	sent, err := offerStore.Send(context.Background(), created.ID, wsID)
 	if err != nil {
@@ -56,15 +50,9 @@ func TestOfferStore_Send_CrossCurrency_NoStoredRate_FXUnavailable(t *testing.T) 
 	db := pgtest.OpenTestDB(t)
 	wsID, dealID := seedOfferWorkspace(t, db)
 	offerStore := adapters.NewOfferStore(db)
+	created := createTestOffer(t, db, dealID, wsID, "ANG-SND2-", "USD")
 
-	o := domain.NewOffer(dealID, "ANG-SND2-"+ids.New(), "USD", provTestOffer())
-	o.WorkspaceID = wsID
-	created, err := offerStore.Create(context.Background(), o)
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-
-	_, err = offerStore.Send(context.Background(), created.ID, wsID)
+	_, err := offerStore.Send(context.Background(), created.ID, wsID)
 	var fxErr *deals.FXRateUnavailableError
 	if !errors.As(err, &fxErr) {
 		t.Fatalf("expected *deals.FXRateUnavailableError, got %v", err)
@@ -79,13 +67,7 @@ func TestOfferStore_Send_CrossCurrency_WithStoredRate_Freezes(t *testing.T) {
 		t.Fatalf("seed fx_rate: %v", err)
 	}
 	offerStore := adapters.NewOfferStore(db)
-
-	o := domain.NewOffer(dealID, "ANG-SND3-"+ids.New(), "USD", provTestOffer())
-	o.WorkspaceID = wsID
-	created, err := offerStore.Create(context.Background(), o)
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
+	created := createTestOffer(t, db, dealID, wsID, "ANG-SND3-", "USD")
 
 	sent, err := offerStore.Send(context.Background(), created.ID, wsID)
 	if err != nil {
@@ -100,17 +82,12 @@ func TestOfferStore_Send_NotDraft_Rejected(t *testing.T) {
 	db := pgtest.OpenTestDB(t)
 	wsID, dealID := seedOfferWorkspace(t, db)
 	offerStore := adapters.NewOfferStore(db)
+	created := createTestOffer(t, db, dealID, wsID, "ANG-SND4-", "EUR")
 
-	o := domain.NewOffer(dealID, "ANG-SND4-"+ids.New(), "EUR", provTestOffer())
-	o.WorkspaceID = wsID
-	created, err := offerStore.Create(context.Background(), o)
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
 	if _, err := offerStore.Send(context.Background(), created.ID, wsID); err != nil {
 		t.Fatalf("first send: %v", err)
 	}
-	_, err = offerStore.Send(context.Background(), created.ID, wsID)
+	_, err := offerStore.Send(context.Background(), created.ID, wsID)
 	if !errors.Is(err, adapters.ErrOfferNotDraft) {
 		t.Fatalf("expected ErrOfferNotDraft on a second send, got %v", err)
 	}

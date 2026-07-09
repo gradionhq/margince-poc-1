@@ -54,6 +54,21 @@ func provTestOffer() prov.Provenance {
 	return prov.Provenance{Source: "test", CapturedBy: "human:test"}
 }
 
+// createTestOffer builds and persists a draft offer for wsID/dealID via the
+// real OfferStore, using an offerNumberPrefix to keep offer_number unique
+// across tests that share a workspace.
+func createTestOffer(t *testing.T, db *sql.DB, dealID, wsID, offerNumberPrefix, currency string) domain.Offer {
+	t.Helper()
+	offerStore := adapters.NewOfferStore(db)
+	o := domain.NewOffer(dealID, offerNumberPrefix+wsID[:8], currency, provTestOffer())
+	o.WorkspaceID = wsID
+	created, err := offerStore.Create(context.Background(), o)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	return created
+}
+
 func TestOfferStore_CreateGetListUpdate_RoundTrip(t *testing.T) {
 	db := pgtest.OpenTestDB(t)
 	wsID, dealID := seedOfferWorkspace(t, db)

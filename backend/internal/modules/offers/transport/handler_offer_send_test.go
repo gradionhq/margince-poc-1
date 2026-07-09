@@ -178,15 +178,55 @@ func offerLineItems(t *testing.T, h *OfferHandler, wsID, offerID, userID string)
 	return data
 }
 
+// setupSeededOfferWithLineItem is the shared "seed workspace + handler +
+// draft offer + one line item" fixture chain used by nearly every send/
+// regenerate test below.
+func setupSeededOfferWithLineItem(t *testing.T, currency string) (db *sql.DB, h *OfferHandler, wsID, offerID, humanID, agentID string) {
+	t.Helper()
+	db = openTestDB(t)
+	wsID = ids.New()
+	buyerOrgID, dealID, humanID, agentID := seedOfferWorkspace(t, db, wsID)
+	h = offerHandlerForTest(db)
+	offerID = createDraftOffer(t, h, wsID, dealID, buyerOrgID, humanID, currency)
+	addLineItem(t, h, wsID, offerID, humanID)
+	return db, h, wsID, offerID, humanID, agentID
+}
+
+// signSendOfferToken builds and signs a single-use send_offer approval token
+// for offerID, failing the test on any signing error.
+func signSendOfferToken(t *testing.T, wsID, offerID string) string {
+	t.Helper()
+	diffHash := approvalsport.HashDiff(map[string]any{"offer_id": offerID})
+	token, err := crmapprovals.SignToken(crmapprovals.TokenClaims{
+		JTI: ids.New(), WorkspaceID: wsID, Tool: "send_offer", DiffHash: diffHash,
+		Exp: time.Now().Add(time.Hour), SingleUse: true,
+	})
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+	return token
+}
+
+// sendOfferAsAgentExpect200 sends offerID as an agent principal bearing
+// token, asserts a 200 response, and returns the decoded body.
+func sendOfferAsAgentExpect200(t *testing.T, h *OfferHandler, wsID, agentID, offerID, token string) map[string]any {
+	t.Helper()
+	agentCtx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID, UserID: agentID, IsAgent: true})
+	req := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/send", nil)
+	req = req.WithContext(agentCtx)
+	req.Header.Set("X-Approval-Token", token)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("agent send status = %d, want 200, body = %s", w.Code, w.Body.String())
+	}
+	return decodeJSONBody(t, w)
+}
+
 // UAT step 2: render a seeded draft offer with a real line item -> 200 and a
 // blob-backed PDF asset ref.
 func TestOfferHandler_Render_SetsRealPdfAssetRef(t *testing.T) {
-	db := openTestDB(t)
-	wsID := ids.New()
-	buyerOrgID, dealID, humanID, _ := seedOfferWorkspace(t, db, wsID)
-	h := offerHandlerForTest(db)
-	offerID := createDraftOffer(t, h, wsID, dealID, buyerOrgID, humanID, "EUR")
-	addLineItem(t, h, wsID, offerID, humanID)
+	_, h, wsID, offerID, humanID, _ := setupSeededOfferWithLineItem(t, "EUR")
 
 	got := getOffer(t, h, wsID, offerID, humanID)
 	if net, ok := got["net_minor"].(float64); !ok || int64(net) != 250000 {
@@ -233,12 +273,7 @@ func TestOfferHandler_Render_SetsRealPdfAssetRef(t *testing.T) {
 // with a valid single-use token -> 200 and frozen send fields populated.
 func TestOfferHandler_Send_AgentNoToken_403_ThenValidToken_200(t *testing.T) {
 	t.Setenv("APPROVAL_TOKEN_SIGNING_SECRET", "merge-handler-it-secret")
-	db := openTestDB(t)
-	wsID := ids.New()
-	buyerOrgID, dealID, humanID, agentID := seedOfferWorkspace(t, db, wsID)
-	h := offerHandlerForTest(db)
-	offerID := createDraftOffer(t, h, wsID, dealID, buyerOrgID, humanID, "EUR")
-	addLineItem(t, h, wsID, offerID, humanID)
+	_, h, wsID, offerID, _, agentID := setupSeededOfferWithLineItem(t, "EUR")
 
 	agentCtx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID, UserID: agentID, IsAgent: true})
 
@@ -254,24 +289,9 @@ func TestOfferHandler_Send_AgentNoToken_403_ThenValidToken_200(t *testing.T) {
 		t.Fatalf("expected code=approval_required, got %v", resp["code"])
 	}
 
-	diffHash := approvalsport.HashDiff(map[string]any{"offer_id": offerID})
-	token, err := crmapprovals.SignToken(crmapprovals.TokenClaims{
-		JTI: ids.New(), WorkspaceID: wsID, Tool: "send_offer", DiffHash: diffHash,
-		Exp: time.Now().Add(time.Hour), SingleUse: true,
-	})
-	if err != nil {
-		t.Fatalf("sign token: %v", err)
-	}
+	token := signSendOfferToken(t, wsID, offerID)
 
-	req2 := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/send", nil)
-	req2 = req2.WithContext(agentCtx)
-	req2.Header.Set("X-Approval-Token", token)
-	w2 := httptest.NewRecorder()
-	h.ServeHTTP(w2, req2)
-	if w2.Code != http.StatusOK {
-		t.Fatalf("valid-token status = %d, body = %s", w2.Code, w2.Body.String())
-	}
-	resp2 := decodeJSONBody(t, w2)
+	resp2 := sendOfferAsAgentExpect200(t, h, wsID, agentID, offerID, token)
 	if status, ok := resp2["status"].(string); !ok || status != "sent" {
 		t.Fatalf("expected status=sent, got %v", resp2["status"])
 	}
@@ -293,12 +313,7 @@ func TestOfferHandler_Send_AgentNoToken_403_ThenValidToken_200(t *testing.T) {
 // present exactly once for the original offer id.
 func TestOfferHandler_Send_EmitsOfferSentExactlyOnce(t *testing.T) {
 	t.Setenv("APPROVAL_TOKEN_SIGNING_SECRET", "merge-handler-it-secret")
-	db := openTestDB(t)
-	wsID := ids.New()
-	buyerOrgID, dealID, humanID, agentID := seedOfferWorkspace(t, db, wsID)
-	h := offerHandlerForTest(db)
-	offerID := createDraftOffer(t, h, wsID, dealID, buyerOrgID, humanID, "EUR")
-	addLineItem(t, h, wsID, offerID, humanID)
+	db, h, wsID, offerID, _, agentID := setupSeededOfferWithLineItem(t, "EUR")
 	agentCtx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID, UserID: agentID, IsAgent: true})
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/send", nil)
@@ -317,22 +332,8 @@ func TestOfferHandler_Send_EmitsOfferSentExactlyOnce(t *testing.T) {
 		t.Fatalf("expected zero offer.sent rows before approved send, got %d", count)
 	}
 
-	diffHash := approvalsport.HashDiff(map[string]any{"offer_id": offerID})
-	token, err := crmapprovals.SignToken(crmapprovals.TokenClaims{
-		JTI: ids.New(), WorkspaceID: wsID, Tool: "send_offer", DiffHash: diffHash,
-		Exp: time.Now().Add(time.Hour), SingleUse: true,
-	})
-	if err != nil {
-		t.Fatalf("sign token: %v", err)
-	}
-	req2 := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/send", nil)
-	req2 = req2.WithContext(agentCtx)
-	req2.Header.Set("X-Approval-Token", token)
-	w2 := httptest.NewRecorder()
-	h.ServeHTTP(w2, req2)
-	if w2.Code != http.StatusOK {
-		t.Fatalf("approved send status = %d, body = %s", w2.Code, w2.Body.String())
-	}
+	token := signSendOfferToken(t, wsID, offerID)
+	sendOfferAsAgentExpect200(t, h, wsID, agentID, offerID, token)
 
 	if err := db.QueryRow(`SELECT count(*) FROM event_outbox WHERE topic='offer.sent' AND entity_id=$1::uuid`, offerID).Scan(&count); err != nil {
 		t.Fatalf("count sent after approval: %v", err)
@@ -345,12 +346,7 @@ func TestOfferHandler_Send_EmitsOfferSentExactlyOnce(t *testing.T) {
 // UAT step 6: same-currency send freezes at the identity FX rate without any
 // fx_rate row present for the workspace.
 func TestOfferHandler_Send_SameCurrency_NoFXRowNeeded(t *testing.T) {
-	db := openTestDB(t)
-	wsID := ids.New()
-	buyerOrgID, dealID, humanID, _ := seedOfferWorkspace(t, db, wsID)
-	h := offerHandlerForTest(db)
-	offerID := createDraftOffer(t, h, wsID, dealID, buyerOrgID, humanID, "EUR")
-	addLineItem(t, h, wsID, offerID, humanID)
+	_, h, wsID, offerID, humanID, _ := setupSeededOfferWithLineItem(t, "EUR")
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/send", nil)
 	req = withOfferWorkspace(req, wsID, humanID)
@@ -368,12 +364,7 @@ func TestOfferHandler_Send_SameCurrency_NoFXRowNeeded(t *testing.T) {
 // UAT step 7: cross-currency send without a stored rate returns 422
 // fx_rate_unavailable.
 func TestOfferHandler_Send_CrossCurrency_NoStoredRate_422(t *testing.T) {
-	db := openTestDB(t)
-	wsID := ids.New()
-	buyerOrgID, dealID, humanID, _ := seedOfferWorkspace(t, db, wsID)
-	h := offerHandlerForTest(db)
-	offerID := createDraftOffer(t, h, wsID, dealID, buyerOrgID, humanID, "USD")
-	addLineItem(t, h, wsID, offerID, humanID)
+	_, h, wsID, offerID, humanID, _ := setupSeededOfferWithLineItem(t, "USD")
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/send", nil)
 	req = withOfferWorkspace(req, wsID, humanID)
@@ -391,30 +382,10 @@ func TestOfferHandler_Send_CrossCurrency_NoStoredRate_422(t *testing.T) {
 // UAT step 8: patching a sent offer still returns 409 offer_not_draft.
 func TestOfferHandler_PatchAfterSend_Still409OfferNotDraft(t *testing.T) {
 	t.Setenv("APPROVAL_TOKEN_SIGNING_SECRET", "merge-handler-it-secret")
-	db := openTestDB(t)
-	wsID := ids.New()
-	buyerOrgID, dealID, humanID, agentID := seedOfferWorkspace(t, db, wsID)
-	h := offerHandlerForTest(db)
-	offerID := createDraftOffer(t, h, wsID, dealID, buyerOrgID, humanID, "EUR")
-	addLineItem(t, h, wsID, offerID, humanID)
+	_, h, wsID, offerID, humanID, agentID := setupSeededOfferWithLineItem(t, "EUR")
 
-	agentCtx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID, UserID: agentID, IsAgent: true})
-	diffHash := approvalsport.HashDiff(map[string]any{"offer_id": offerID})
-	token, err := crmapprovals.SignToken(crmapprovals.TokenClaims{
-		JTI: ids.New(), WorkspaceID: wsID, Tool: "send_offer", DiffHash: diffHash,
-		Exp: time.Now().Add(time.Hour), SingleUse: true,
-	})
-	if err != nil {
-		t.Fatalf("sign token: %v", err)
-	}
-	reqSend := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/send", nil)
-	reqSend = reqSend.WithContext(agentCtx)
-	reqSend.Header.Set("X-Approval-Token", token)
-	wSend := httptest.NewRecorder()
-	h.ServeHTTP(wSend, reqSend)
-	if wSend.Code != http.StatusOK {
-		t.Fatalf("send status = %d, body = %s", wSend.Code, wSend.Body.String())
-	}
+	token := signSendOfferToken(t, wsID, offerID)
+	sendOfferAsAgentExpect200(t, h, wsID, agentID, offerID, token)
 
 	body := map[string]any{"intro_text": "hello"}
 	b, _ := json.Marshal(body)
@@ -435,31 +406,10 @@ func TestOfferHandler_PatchAfterSend_Still409OfferNotDraft(t *testing.T) {
 // prior row superseded.
 func TestOfferHandler_Regenerate_SentOffer_NewDraftRevisionSupersedesePrior(t *testing.T) {
 	t.Setenv("APPROVAL_TOKEN_SIGNING_SECRET", "merge-handler-it-secret")
-	db := openTestDB(t)
-	wsID := ids.New()
-	buyerOrgID, dealID, humanID, agentID := seedOfferWorkspace(t, db, wsID)
-	h := offerHandlerForTest(db)
-	offerID := createDraftOffer(t, h, wsID, dealID, buyerOrgID, humanID, "EUR")
-	addLineItem(t, h, wsID, offerID, humanID)
+	db, h, wsID, offerID, humanID, agentID := setupSeededOfferWithLineItem(t, "EUR")
 
-	agentCtx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID, UserID: agentID, IsAgent: true})
-	diffHash := approvalsport.HashDiff(map[string]any{"offer_id": offerID})
-	token, err := crmapprovals.SignToken(crmapprovals.TokenClaims{
-		JTI: ids.New(), WorkspaceID: wsID, Tool: "send_offer", DiffHash: diffHash,
-		Exp: time.Now().Add(time.Hour), SingleUse: true,
-	})
-	if err != nil {
-		t.Fatalf("sign token: %v", err)
-	}
-	reqSend := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/send", nil)
-	reqSend = reqSend.WithContext(agentCtx)
-	reqSend.Header.Set("X-Approval-Token", token)
-	wSend := httptest.NewRecorder()
-	h.ServeHTTP(wSend, reqSend)
-	if wSend.Code != http.StatusOK {
-		t.Fatalf("send status = %d, body = %s", wSend.Code, wSend.Body.String())
-	}
-	sent := decodeJSONBody(t, wSend)
+	token := signSendOfferToken(t, wsID, offerID)
+	sent := sendOfferAsAgentExpect200(t, h, wsID, agentID, offerID, token)
 	if status, ok := sent["status"].(string); !ok || status != "sent" {
 		t.Fatalf("expected sent status after send, got %v", sent["status"])
 	}
@@ -503,12 +453,7 @@ func TestOfferHandler_Regenerate_SentOffer_NewDraftRevisionSupersedesePrior(t *t
 
 // UAT step 10: regenerate a still-draft offer -> 409 offer_not_sent.
 func TestOfferHandler_Regenerate_DraftOffer_409OfferNotSent(t *testing.T) {
-	db := openTestDB(t)
-	wsID := ids.New()
-	buyerOrgID, dealID, humanID, _ := seedOfferWorkspace(t, db, wsID)
-	h := offerHandlerForTest(db)
-	offerID := createDraftOffer(t, h, wsID, dealID, buyerOrgID, humanID, "EUR")
-	addLineItem(t, h, wsID, offerID, humanID)
+	_, h, wsID, offerID, humanID, _ := setupSeededOfferWithLineItem(t, "EUR")
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/regenerate", nil)
 	req = withOfferWorkspace(req, wsID, humanID)

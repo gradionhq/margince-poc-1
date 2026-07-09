@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/gradionhq/margince/backend/internal/modules/offers/adapters"
-	"github.com/gradionhq/margince/backend/internal/modules/offers/domain"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 )
 
@@ -15,13 +14,7 @@ func TestOfferStore_PrepareRender_DraftNoBuyerOrg_OmitsBuyerBlock(t *testing.T) 
 	db := pgtest.OpenTestDB(t)
 	wsID, dealID := seedOfferWorkspace(t, db)
 	offerStore := adapters.NewOfferStore(db)
-
-	o := domain.NewOffer(dealID, "ANG-PR-"+wsID[:8], "EUR", provTestOffer())
-	o.WorkspaceID = wsID
-	created, err := offerStore.Create(context.Background(), o)
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
+	created := createTestOffer(t, db, dealID, wsID, "ANG-PR-", "EUR")
 
 	ing, err := offerStore.PrepareRender(context.Background(), created.ID, wsID)
 	if err != nil {
@@ -42,13 +35,8 @@ func TestOfferStore_PrepareRender_Sent_UsesFrozenBuyerSnapshot(t *testing.T) {
 	db := pgtest.OpenTestDB(t)
 	wsID, dealID := seedOfferWorkspace(t, db)
 	offerStore := adapters.NewOfferStore(db)
+	created := createTestOffer(t, db, dealID, wsID, "ANG-PR2-", "EUR")
 
-	o := domain.NewOffer(dealID, "ANG-PR2-"+wsID[:8], "EUR", provTestOffer())
-	o.WorkspaceID = wsID
-	created, err := offerStore.Create(context.Background(), o)
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
 	sent, err := offerStore.Send(context.Background(), created.ID, wsID)
 	if err != nil {
 		t.Fatalf("send: %v", err)
@@ -67,13 +55,7 @@ func TestOfferStore_SetPdfAssetRef_PersistsAndAudits(t *testing.T) {
 	db := pgtest.OpenTestDB(t)
 	wsID, dealID := seedOfferWorkspace(t, db)
 	offerStore := adapters.NewOfferStore(db)
-
-	o := domain.NewOffer(dealID, "ANG-PR3-"+wsID[:8], "EUR", provTestOffer())
-	o.WorkspaceID = wsID
-	created, err := offerStore.Create(context.Background(), o)
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
+	created := createTestOffer(t, db, dealID, wsID, "ANG-PR3-", "EUR")
 
 	updated, err := offerStore.SetPdfAssetRef(context.Background(), created.ID, wsID, "offers/"+wsID+"/"+created.ID+"/1.pdf")
 	if err != nil {
