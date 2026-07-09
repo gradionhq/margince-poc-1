@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { OfferLineItem } from "../../../lib/api-client/generated/index.js";
 import { LineItemEditor } from "./LineItemEditor.js";
@@ -66,5 +67,30 @@ describe("LineItemEditor", () => {
     );
 
     expect(screen.getByText(/no line items yet/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /add line/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still offers an Add line affordance on a zero-line draft when the user can mutate the offer", async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn();
+    render(
+      <LineItemEditor
+        lines={[]}
+        stagedLineIds={new Set()}
+        canMutateOffer={true}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/no line items yet/i)).toBeInTheDocument();
+    const addLineButton = screen.getByRole("button", { name: /add line/i });
+    expect(addLineButton).toBeInTheDocument();
+
+    await user.click(addLineButton);
+    expect(onCreate).toHaveBeenCalledTimes(1);
   });
 });

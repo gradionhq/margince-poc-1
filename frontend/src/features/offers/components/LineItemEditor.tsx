@@ -38,6 +38,13 @@ export function LineItemEditor({
         <p className="mt-gf-xs text-gf-caption text-gf-secondary">
           Add the first line to start building this offer.
         </p>
+        {canMutateOffer ? (
+          <div className="mt-gf-sm">
+            <Button type="button" onClick={onCreate}>
+              Add line
+            </Button>
+          </div>
+        ) : null}
       </div>
     );
   }
