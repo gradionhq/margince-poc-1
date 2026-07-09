@@ -71,24 +71,15 @@ func lockActivityForMutation(ctx context.Context, tx *sql.Tx, activityID, worksp
 
 // selectLinksByType reads the activity_link rows for one activity/entity_type pair.
 func (s *ActivityStore) selectLinksByType(ctx context.Context, tx *sql.Tx, activityID, entityType string) ([]domain.ActivityLink, error) {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT id, entity_type, coalesce(person_id, organization_id, deal_id)
-		 FROM activity_link
-		 WHERE activity_id=$1::uuid AND entity_type=$2`,
-		activityID, entityType)
+	all, err := s.selectLinks(ctx, tx, activityID)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
-
-	links := []domain.ActivityLink{}
-	for rows.Next() {
-		var l domain.ActivityLink
-		l.ActivityID = activityID
-		if err := rows.Scan(&l.ID, &l.EntityType, &l.EntityID); err != nil {
-			return nil, err
+	links := make([]domain.ActivityLink, 0, len(all))
+	for _, l := range all {
+		if l.EntityType == entityType {
+			links = append(links, l)
 		}
-		links = append(links, l)
 	}
-	return links, rows.Err()
+	return links, nil
 }

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // registers the "postgres" database/sql driver
 
 	actadapters "github.com/gradionhq/margince/backend/internal/modules/activities/adapters"
 	actdomain "github.com/gradionhq/margince/backend/internal/modules/activities/domain"
@@ -59,6 +59,21 @@ func seedRelinkHandlerFixtures(t *testing.T, db *sql.DB, tag string) (personA, p
 	return personA, personB, activityID
 }
 
+// decodeRelinkOK asserts w is a 200 response and decodes its body into an
+// Activity, failing the test on either a non-200 status or an undecodable
+// body — the boilerplate every relink-success test below shares.
+func decodeRelinkOK(t *testing.T, w *httptest.ResponseRecorder) actdomain.Activity {
+	t.Helper()
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	var a actdomain.Activity
+	if err := json.Unmarshal(w.Body.Bytes(), &a); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	return a
+}
+
 func TestActivityHandler_Relink_AddsLink(t *testing.T) {
 	db := openActivityHandlerTestDB(t)
 	personA, _, activityID := seedRelinkHandlerFixtures(t, db, "add")
@@ -69,13 +84,7 @@ func TestActivityHandler_Relink_AddsLink(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
-	}
-	var a actdomain.Activity
-	if err := json.Unmarshal(w.Body.Bytes(), &a); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	a := decodeRelinkOK(t, w)
 	if len(a.Links) != 1 || a.Links[0].EntityID != personA {
 		t.Fatalf("expected one link to %s, got %+v", personA, a.Links)
 	}
@@ -92,13 +101,7 @@ func TestActivityHandler_Relink_Replay_IsNoOp(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, withActivityWorkspace(httptest.NewRequest(http.MethodPost, "/activities/"+activityID+"/relink", bytes.NewReader(body))))
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
-	}
-	var a actdomain.Activity
-	if err := json.Unmarshal(w.Body.Bytes(), &a); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	a := decodeRelinkOK(t, w)
 	if len(a.Links) != 1 || a.Links[0].EntityID != personA {
 		t.Fatalf("expected the same single link to %s after replay, got %+v", personA, a.Links)
 	}
@@ -116,13 +119,7 @@ func TestActivityHandler_Relink_Move_ReplacesTarget(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, withActivityWorkspace(httptest.NewRequest(http.MethodPost, "/activities/"+activityID+"/relink", bytes.NewReader(secondBody))))
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
-	}
-	var a actdomain.Activity
-	if err := json.Unmarshal(w.Body.Bytes(), &a); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	a := decodeRelinkOK(t, w)
 	personLinks := 0
 	for _, l := range a.Links {
 		if l.EntityType == "person" {

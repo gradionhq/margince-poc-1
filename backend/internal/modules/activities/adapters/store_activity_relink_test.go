@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // registers the "postgres" database/sql driver
 
 	"github.com/gradionhq/margince/backend/internal/modules/activities/domain"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
