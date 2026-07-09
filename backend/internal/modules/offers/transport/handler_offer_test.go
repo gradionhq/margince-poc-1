@@ -441,6 +441,26 @@ func TestOfferHandler_RegenerateOffer_OK(t *testing.T) {
 	}
 }
 
+func TestOfferHandler_RegenerateOffer_NotDraft_409(t *testing.T) {
+	offerStore := newFakeOfferStore()
+	offerStore.offers["offer-1"] = domain.Offer{ID: "offer-1", DealID: "deal-1", Status: domain.OfferStatusDraft, Revision: 1, Version: 1}
+	offerStore.regenerateErr = adapters.ErrOfferNotDraft
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), NewNoOpRetriever())
+
+	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/regenerate", nil)
+	req = withWorkspace(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409, body=%s", w.Code, w.Body.String())
+	}
+	respBody := decodeJSONBody(t, w)
+	if code, ok := respBody["code"].(string); !ok || code != "offer_not_draft" {
+		t.Fatalf("expected code=offer_not_draft, got %v", respBody["code"])
+	}
+}
+
 // Compile-time assertions that fakeOfferStore and fakeOfferLineItemStore
 // implement the seam interfaces the handler uses.
 var (

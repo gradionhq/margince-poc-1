@@ -66,6 +66,15 @@ func TestOfferStore_Regenerate_GroundedAndUngroundedSignals(t *testing.T) {
 		}
 	}
 
+	// Consulting: qty=2 * unit_price_minor=500 = 1000; Onboarding: qty=1 *
+	// unit_price_minor=0 = 0. Neither signal carries a product_id, so
+	// tax_rate defaults to 0 on both lines, so net==gross==1000. This proves
+	// recomputeOfferTotals/computeLineTotals are exercised on a nonzero path.
+	const wantTotalMinor = 1000
+	if regenerated.NetMinor != wantTotalMinor || regenerated.GrossMinor != wantTotalMinor {
+		t.Fatalf("expected net_minor=gross_minor=%d from the two grounded lines, got net=%d gross=%d", wantTotalMinor, regenerated.NetMinor, regenerated.GrossMinor)
+	}
+
 	prior, err := s.Get(context.Background(), created.ID, wsID)
 	if err != nil {
 		t.Fatalf("get prior: %v", err)
