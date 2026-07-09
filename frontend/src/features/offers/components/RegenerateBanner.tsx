@@ -1,7 +1,8 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Offer } from "../../../lib/api-client/generated/index.js";
-import { useRegenerateOffer } from "../api/offers.js";
+import { offersKeys, useRegenerateOffer } from "../api/offers.js";
 import { AiDisclosureBanner } from "./AiDisclosureBanner.js";
 import { LineProvenanceBadge } from "./LineProvenanceBadge.js";
 
@@ -30,6 +31,7 @@ export function RegenerateBanner({
   onRegenerated: (newOfferId: string, aiLineIds: string[]) => void;
 }) {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const regenerate = useRegenerateOffer(dealId);
   const [result, setResult] = useState<Offer | null>(null);
   const [showDiff, setShowDiff] = useState(false);
@@ -37,12 +39,13 @@ export function RegenerateBanner({
   const canRegenerate =
     (userRole === "admin" || userRole === "rep" || userRole === "manager") &&
     offer.status === "sent";
+  const showResult = result != null && result.id === offer.id;
 
-  if (!canRegenerate) {
+  if (!canRegenerate && !showResult) {
     return null;
   }
 
-  const response = result;
+  const response = showResult ? result : null;
   const diff = response?.diff_from_previous ?? null;
   const counts = response?.diff_from_previous
     ? diffCounts(response.diff_from_previous)
@@ -62,25 +65,28 @@ export function RegenerateBanner({
               : `v${offer.revision} → v${offer.revision + 1}`}
           </p>
         </div>
-        <button
-          type="button"
-          disabled={regenerate.isPending}
-          onClick={async () => {
-            const next = await regenerate.mutateAsync({ offerId: offer.id });
-            setResult(next);
-            const aiLineIds = next.ai_generated
-              ? (next.diff_from_previous?.added ?? []).map((line) => line.id)
-              : [];
-            onRegenerated(next.id, aiLineIds);
-            navigate(`/deals/${dealId}/offers/${next.id}`);
-          }}
-          className="rounded-full border border-gf-accent px-gf-sm py-gf-xs text-gf-caption text-gf-accent disabled:opacity-50"
-        >
-          Regenerate
-        </button>
+        {canRegenerate ? (
+          <button
+            type="button"
+            disabled={regenerate.isPending}
+            onClick={async () => {
+              const next = await regenerate.mutateAsync({ offerId: offer.id });
+              setResult(next);
+              qc.setQueryData(offersKeys.detail(next.id), next);
+              const aiLineIds = next.ai_generated
+                ? (next.diff_from_previous?.added ?? []).map((line) => line.id)
+                : [];
+              onRegenerated(next.id, aiLineIds);
+              navigate(`/deals/${dealId}/offers/${next.id}`);
+            }}
+            className="rounded-full border border-gf-accent px-gf-sm py-gf-xs text-gf-caption text-gf-accent disabled:opacity-50"
+          >
+            Regenerate
+          </button>
+        ) : null}
       </div>
 
-      {response ? (
+      {showResult ? (
         <>
           <AiDisclosureBanner
             hasEvidenceLines={hasEvidenceLines}

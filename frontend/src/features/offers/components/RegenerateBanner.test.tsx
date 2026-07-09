@@ -19,12 +19,19 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
-vi.mock("../api/offers.js", () => ({
-  useRegenerateOffer: () => ({
-    mutateAsync,
-    isPending: false,
-  }),
-}));
+vi.mock("../api/offers.js", async () => {
+  const actual =
+    await vi.importActual<typeof import("../api/offers.js")>(
+      "../api/offers.js",
+    );
+  return {
+    ...actual,
+    useRegenerateOffer: () => ({
+      mutateAsync,
+      isPending: false,
+    }),
+  };
+});
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({
@@ -80,8 +87,8 @@ describe("RegenerateBanner", () => {
     ).toBeInTheDocument();
   });
 
-  it("navigates to the regenerated draft and uses the mutation response for the banner", async () => {
-    mutateAsync.mockResolvedValueOnce({
+  it("keeps the diff visible after rerendering on the regenerated draft", async () => {
+    const nextOffer = {
       id: "offer-2",
       deal_id: "deal-1",
       offer_number: "OFF-1",
@@ -144,9 +151,10 @@ describe("RegenerateBanner", () => {
           },
         ],
       },
-    });
+    };
+    mutateAsync.mockResolvedValueOnce(nextOffer);
 
-    render(
+    const { rerender } = render(
       <RegenerateBanner
         dealId="deal-1"
         offer={{
@@ -170,8 +178,24 @@ describe("RegenerateBanner", () => {
     await waitFor(() =>
       expect(navigateSpy).toHaveBeenCalledWith("/deals/deal-1/offers/offer-2"),
     );
+
+    rerender(
+      <RegenerateBanner
+        dealId="deal-1"
+        offer={{
+          id: "offer-2",
+          offer_number: "OFF-1",
+          revision: 2,
+          status: "draft",
+          currency: "EUR",
+        }}
+        userRole="admin"
+        onRegenerated={vi.fn()}
+      />,
+    );
+
     expect(
-      screen.getByText("v1 → v2 — 1 added, 1 removed, 1 changed"),
+      screen.getByText("v2 → v2 — 1 added, 1 removed, 1 changed"),
     ).toBeInTheDocument();
     expect(
       screen.getByText("AI disclosure from the server"),
@@ -179,6 +203,8 @@ describe("RegenerateBanner", () => {
     expect(
       screen.getByRole("button", { name: /view full diff/i }),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /regenerate/i })).toBeNull();
+
     fireEvent.click(screen.getByRole("button", { name: /view full diff/i }));
     expect(screen.getByText("Added line")).toBeInTheDocument();
     expect(screen.getByText("Before line → After line")).toBeInTheDocument();
@@ -217,6 +243,78 @@ describe("RegenerateBanner", () => {
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
     expect(screen.queryByText(/AI disclosure from the server/i)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /view full diff/i }),
+    ).toBeNull();
+  });
+
+  it("hides the diff panel again for an unrelated offer", async () => {
+    mutateAsync.mockResolvedValueOnce({
+      id: "offer-2",
+      deal_id: "deal-1",
+      offer_number: "OFF-1",
+      revision: 2,
+      status: "draft",
+      currency: "EUR",
+      ai_generated: true,
+      ai_disclosure: "AI disclosure from the server",
+      diff_from_previous: {
+        added: [
+          {
+            id: "li-3",
+            description: "Added line",
+            quantity: 1,
+            unit_price_minor: 1200,
+            discount_pct: 0,
+            tax_rate: 20,
+            source: "agent:regen",
+            captured_by: "agent:regen",
+            evidence: { snippet: "draft scope" },
+          },
+        ],
+        removed: [],
+        changed: [],
+      },
+    });
+
+    const { rerender } = render(
+      <RegenerateBanner
+        dealId="deal-1"
+        offer={{
+          id: "offer-1",
+          offer_number: "OFF-1",
+          revision: 1,
+          status: "sent",
+          currency: "EUR",
+        }}
+        userRole="admin"
+        onRegenerated={vi.fn()}
+      />,
+      { wrapper },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /regenerate/i }));
+
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({ offerId: "offer-1" }),
+    );
+
+    rerender(
+      <RegenerateBanner
+        dealId="deal-1"
+        offer={{
+          id: "offer-3",
+          offer_number: "OFF-9",
+          revision: 7,
+          status: "draft",
+          currency: "EUR",
+        }}
+        userRole="admin"
+        onRegenerated={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("AI disclosure from the server")).toBeNull();
     expect(
       screen.queryByRole("button", { name: /view full diff/i }),
     ).toBeNull();

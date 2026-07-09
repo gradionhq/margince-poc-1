@@ -96,6 +96,11 @@ vi.mock("../../identity/store/authStore.js", () => ({
 }));
 
 vi.mock("../api/offers.js", () => ({
+  offersKeys: {
+    dealOffers: (dealId?: string) => ["offers", "deal", dealId] as const,
+    detail: (offerId?: string) => ["offers", "detail", offerId] as const,
+    lineItems: (offerId?: string) => ["offers", "lineItems", offerId] as const,
+  },
   useOffer: () => ({
     data: mockOfferError ? undefined : mockOffer,
     isLoading: mockOfferLoading,
