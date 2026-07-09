@@ -1,9 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
 import { useMembers } from "../../custom-fields/api/members.js";
 import {
-  QuotaAttainmentComputationFailedError,
   QuotaAttainmentForbiddenError,
   QuotaAttainmentTargetZeroError,
   QuotaForbiddenError,
@@ -27,6 +26,7 @@ export function QuotaPage() {
   const { id } = useParams<{ id: string }>();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [toastSeq, setToastSeq] = useState(0);
+  const [lastGoodComputeAt, setLastGoodComputeAt] = useState<string | undefined>();
 
   const { data: quota, isLoading: quotaLoading, isError: quotaIsError, error: quotaError } =
     useQuota(id);
@@ -37,6 +37,15 @@ export function QuotaPage() {
     error: attainmentError,
   } = useQuotaAttainment(id);
   const { data: membersPage } = useMembers();
+
+  // F1: "honest failure card with cause + last successful compute time" — tracked as a plain
+  // timestamp, never the stale attainment object itself (the ring never renders attainment data
+  // on an error branch).
+  useEffect(() => {
+    if (attainment?.as_of_date) {
+      setLastGoodComputeAt(attainment.as_of_date);
+    }
+  }, [attainment?.as_of_date]);
 
   const memberNameById = useMemo(
     () =>
@@ -69,8 +78,6 @@ export function QuotaPage() {
   const quotaForbidden = quotaError instanceof QuotaForbiddenError;
   const attainmentForbidden = attainmentError instanceof QuotaAttainmentForbiddenError;
   const attainmentTargetZero = attainmentError instanceof QuotaAttainmentTargetZeroError;
-  const attainmentComputationFailed =
-    attainmentError instanceof QuotaAttainmentComputationFailedError;
 
   if (!quotaLoading && quotaForbidden) {
     return (
@@ -122,10 +129,12 @@ export function QuotaPage() {
           {!isLoading && attainment && (
             <QuotaExplainBox attainment={attainment} />
           )}
-          {!isLoading && attainmentComputationFailed && (
-            <div className="px-gf-lg pb-gf-lg text-gf-body text-gf-status-danger">
-              Couldn't recompute attainment.
-            </div>
+          {attainmentIsError && !attainmentForbidden && !attainmentTargetZero && (
+            <p className="px-gf-lg pb-gf-lg text-gf-caption text-gf-tertiary">
+              {lastGoodComputeAt
+                ? `Last successful compute: ${lastGoodComputeAt}.`
+                : "No successful compute yet."}
+            </p>
           )}
           {quota && (
             <div className="border-t border-gf-subtle px-gf-lg pb-gf-lg">

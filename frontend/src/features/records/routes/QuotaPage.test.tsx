@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -211,5 +211,193 @@ describe("QuotaPage", () => {
     await user.click(screen.getByRole("button", { name: /save target/i }));
     expect(screen.getByText(/enter a target amount in eur/i)).toBeInTheDocument();
     expect(apiClient.PATCH).not.toHaveBeenCalled();
+  });
+
+  // Names below are pinned verbatim — workspace/manual-test/rd-t12.md's `-t` filters match
+  // against these exact titles.
+
+  it("STATE-2: renders chrome immediately with a loading skeleton, then the ring once data resolves", async () => {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
+      if (path === "/quotas/{id}") {
+        return Promise.resolve({ data: quota, error: undefined, response: { status: 200 } });
+      }
+      if (path === "/quotas/{id}/attainment") {
+        return Promise.resolve({
+          data: attainment,
+          error: undefined,
+          response: { status: 200 },
+        });
+      }
+      if (path === "/members") {
+        return Promise.resolve({ data: { data: [] }, error: undefined });
+      }
+      if (path === "/quotas") {
+        return Promise.resolve({ data: { data: [quota] }, error: undefined });
+      }
+      if (path === "/deals/{id}") {
+        return Promise.resolve({
+          data: { id: "d1", name: "BÄR Pharma — Packaging QA", closed_at: "2026-08-14T00:00:00Z" },
+          error: undefined,
+        });
+      }
+      return Promise.resolve({ data: undefined, error: undefined });
+    });
+
+    render(<QuotaPage />, { wrapper: wrapper(qc) });
+
+    // Chrome (header) renders before/independent of the ring's own fetched data.
+    expect(screen.getByText(/quota & attainment/i)).toBeInTheDocument();
+    expect(screen.getByTestId("attainment-ring-skeleton")).toBeInTheDocument();
+
+    // 112.1 rounds to 112 — the ring once data resolves.
+    expect(await screen.findByText("112%")).toBeInTheDocument();
+  });
+
+  it("STATE-1: 422 attainment_target_zero renders the honest 'set a target' message, not the generic error", async () => {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
+      if (path === "/quotas/{id}") {
+        return Promise.resolve({
+          data: { ...quota, target_minor: 0 },
+          error: undefined,
+          response: { status: 200 },
+        });
+      }
+      if (path === "/quotas/{id}/attainment") {
+        return Promise.resolve({
+          data: undefined,
+          error: { code: "attainment_target_zero" },
+          response: { status: 422 },
+        });
+      }
+      if (path === "/members") {
+        return Promise.resolve({ data: { data: [] }, error: undefined });
+      }
+      return Promise.resolve({ data: { data: [] }, error: undefined });
+    });
+
+    render(<QuotaPage />, { wrapper: wrapper(qc) });
+
+    expect(await screen.findByText(/no target set/i)).toBeInTheDocument();
+    expect(screen.queryByText(/couldn't recompute/i)).not.toBeInTheDocument();
+  });
+
+  it("STATE-4: a 403 on attainment renders the honest no-access message", async () => {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
+      if (path === "/quotas/{id}") {
+        return Promise.resolve({ data: quota, error: undefined, response: { status: 200 } });
+      }
+      if (path === "/quotas/{id}/attainment") {
+        return Promise.resolve({
+          data: undefined,
+          error: { code: "forbidden" },
+          response: { status: 403 },
+        });
+      }
+      if (path === "/members") {
+        return Promise.resolve({ data: { data: [] }, error: undefined });
+      }
+      return Promise.resolve({ data: { data: [] }, error: undefined });
+    });
+
+    render(<QuotaPage />, { wrapper: wrapper(qc) });
+
+    expect(await screen.findByText(/don't have access/i)).toBeInTheDocument();
+  });
+
+  it("STATE-4 (PLAN-review finding): a 403 on GET /quotas/{id} itself renders the honest no-access message, never the generic 'quota not found' fallback", async () => {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
+      if (path === "/quotas/{id}") {
+        return Promise.resolve({
+          data: undefined,
+          error: { code: "forbidden" },
+          response: { status: 403 },
+        });
+      }
+      if (path === "/quotas/{id}/attainment") {
+        return Promise.resolve({
+          data: undefined,
+          error: { code: "forbidden" },
+          response: { status: 403 },
+        });
+      }
+      if (path === "/members") {
+        return Promise.resolve({ data: { data: [] }, error: undefined });
+      }
+      return Promise.resolve({ data: { data: [] }, error: undefined });
+    });
+
+    render(<QuotaPage />, { wrapper: wrapper(qc) });
+
+    expect(await screen.findByText(/don't have access/i)).toBeInTheDocument();
+    expect(screen.queryByText(/quota not found/i)).not.toBeInTheDocument();
+  });
+
+  it("STATE-3: once a prior successful fetch happened, a later generic attainment error states the last successful compute time, not stale attainment figures", async () => {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    let attainmentCalls = 0;
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
+      if (path === "/quotas/{id}") {
+        return Promise.resolve({ data: quota, error: undefined, response: { status: 200 } });
+      }
+      if (path === "/quotas/{id}/attainment") {
+        attainmentCalls += 1;
+        if (attainmentCalls === 1) {
+          return Promise.resolve({
+            data: attainment,
+            error: undefined,
+            response: { status: 200 },
+          });
+        }
+        // A generic (non-forbidden, non-target-zero) attainment error — proves the caption isn't
+        // gated behind the "attainment_computation_failed" code specifically.
+        return Promise.resolve({
+          data: undefined,
+          error: { code: "attainment_computation_failed" },
+          response: { status: 422 },
+        });
+      }
+      if (path === "/members") {
+        return Promise.resolve({ data: { data: [] }, error: undefined });
+      }
+      if (path === "/quotas") {
+        return Promise.resolve({ data: { data: [quota] }, error: undefined });
+      }
+      if (path === "/deals/{id}") {
+        return Promise.resolve({
+          data: { id: "d1", name: "BÄR Pharma — Packaging QA", closed_at: "2026-08-14T00:00:00Z" },
+          error: undefined,
+        });
+      }
+      return Promise.resolve({ data: undefined, error: undefined });
+    });
+
+    render(<QuotaPage />, { wrapper: wrapper(qc) });
+
+    expect(await screen.findByText("112%")).toBeInTheDocument();
+
+    await qc.invalidateQueries({ queryKey: ["quotas", "attainment", QUOTA_ID] });
+
+    const caption = await screen.findByText(/Last successful compute:/i);
+    expect(caption).toBeInTheDocument();
+    // Scoped to the attainment-ring panel itself: the honest error card replaces the ring's own
+    // figures rather than continuing to show a stale "112%" as if it were current (the team
+    // roll-up rail's own reuse of the last-known attainment is a separate, out-of-scope concern).
+    const ringPanel = caption.closest("section") as HTMLElement;
+    expect(within(ringPanel).getByText(/couldn't recompute attainment/i)).toBeInTheDocument();
+    expect(within(ringPanel).queryByText("112%")).not.toBeInTheDocument();
   });
 });
