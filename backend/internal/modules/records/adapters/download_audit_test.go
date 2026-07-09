@@ -11,11 +11,23 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/gradionhq/margince/backend/internal/modules/activities"
+	actdomain "github.com/gradionhq/margince/backend/internal/modules/activities/domain"
 	"github.com/gradionhq/margince/backend/internal/modules/records/adapters"
 	"github.com/gradionhq/margince/backend/internal/modules/records/domain"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/pgtest"
 )
+
+type recordingActivityCreator struct {
+	activity actdomain.Activity
+	called   int
+}
+
+func (r *recordingActivityCreator) Create(_ context.Context, a actdomain.Activity) (actdomain.Activity, bool, error) {
+	r.called++
+	r.activity = a
+	return a, true, nil
+}
 
 // seedDealForAudit seeds the minimum deal hierarchy (pipeline + stage + deal) and returns the dealID.
 func seedDealForAudit(ctx context.Context, t *testing.T, db *sql.DB, ws string) string {
@@ -132,5 +144,54 @@ func TestWriteDownloadAudit_LeadBound_AuditedButNotLinked(t *testing.T) {
 	}
 	if linkCount != 0 {
 		t.Fatalf("expected 0 activity_link rows for lead-bound download audit, got %d (documented gap: activity_link CHECK forbids lead)", linkCount)
+	}
+}
+
+func TestWriteRequestAccessAudit_WritesLinkedActivity(t *testing.T) {
+	// UserID is bare, matching production (crmctx.Principal.UserID never
+	// carries a pre-baked "human:" prefix — see auth_handler.go's HandleLogin,
+	// which casts the id straight into a Postgres $1::uuid). requestCapturedBy
+	// must add the prefix itself.
+	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "audit-test", TenantID: "ws-1"})
+	store := &recordingActivityCreator{}
+
+	if err := adapters.WriteRequestAccessAudit(ctx, store, "ws-1", domain.EntityTypeDeal, "deal-1", "report.pdf"); err != nil {
+		t.Fatalf("WriteRequestAccessAudit: %v", err)
+	}
+	if store.called != 1 {
+		t.Fatalf("expected 1 activity create, got %d", store.called)
+	}
+	if store.activity.CapturedBy != "human:audit-test" {
+		t.Fatalf("expected captured_by to follow the request principal, got %q", store.activity.CapturedBy)
+	}
+	if store.activity.Subject == nil || !strings.Contains(*store.activity.Subject, "Access requested: report.pdf") {
+		t.Fatalf("expected access-request subject, got %v", store.activity.Subject)
+	}
+	if len(store.activity.Links) != 1 || store.activity.Links[0].EntityType != domain.EntityTypeDeal || store.activity.Links[0].EntityID != "deal-1" {
+		t.Fatalf("expected deal link, got %+v", store.activity.Links)
+	}
+}
+
+func TestWriteExtractionAcceptAudit_WritesSourceQuoteAndCapturedBy(t *testing.T) {
+	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:audit-test", TenantID: "ws-1"})
+	store := &recordingActivityCreator{}
+
+	if err := adapters.WriteExtractionAcceptAudit(ctx, store, "ws-1", domain.EntityTypeDeal, "deal-1", "name", "Acme Corp", "human:audit-test"); err != nil {
+		t.Fatalf("WriteExtractionAcceptAudit: %v", err)
+	}
+	if store.called != 1 {
+		t.Fatalf("expected 1 activity create, got %d", store.called)
+	}
+	if store.activity.CapturedBy != "human:audit-test" {
+		t.Fatalf("expected captured_by to match caller-provided provenance, got %q", store.activity.CapturedBy)
+	}
+	if store.activity.Body == nil || *store.activity.Body != "Acme Corp" {
+		t.Fatalf("expected source quote in activity body, got %v", store.activity.Body)
+	}
+	if store.activity.Subject == nil || !strings.Contains(*store.activity.Subject, "Extraction accepted: name") {
+		t.Fatalf("expected extraction-accept subject, got %v", store.activity.Subject)
+	}
+	if len(store.activity.Links) != 1 || store.activity.Links[0].EntityType != domain.EntityTypeDeal || store.activity.Links[0].EntityID != "deal-1" {
+		t.Fatalf("expected deal link, got %+v", store.activity.Links)
 	}
 }
