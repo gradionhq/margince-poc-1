@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gradionhq/margince/backend/internal/modules/agents/adapters"
+	"github.com/gradionhq/margince/backend/internal/modules/agents/agentstest"
 	"github.com/gradionhq/margince/backend/internal/modules/agents/app"
 	"github.com/gradionhq/margince/backend/internal/modules/agents/domain"
 	"github.com/gradionhq/margince/backend/internal/modules/agents/ports"
@@ -19,30 +20,10 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 )
 
-type stageSpec struct {
-	name     string
-	position int
-	semantic string
-	winProb  int
-}
-
-func seedPipeline(t *testing.T, db *sql.DB, wsID string, stages []stageSpec) (string, []struct{ id string }) {
-	t.Helper()
-	var pipelineID string
-	if err := db.QueryRow(`INSERT INTO pipeline (workspace_id, name) VALUES ($1::uuid,$2) RETURNING id`, wsID, "agents-pipeline-"+ids.New()).Scan(&pipelineID); err != nil {
-		t.Fatalf("seed pipeline: %v", err)
-	}
-	out := make([]struct{ id string }, 0, len(stages))
-	for _, s := range stages {
-		var id string
-		if err := db.QueryRow(`INSERT INTO stage (workspace_id, pipeline_id, name, position, semantic, win_probability)
-			VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6) RETURNING id`, wsID, pipelineID, s.name, s.position, s.semantic, s.winProb).Scan(&id); err != nil {
-			t.Fatalf("seed stage %q: %v", s.name, err)
-		}
-		out = append(out, struct{ id string }{id: id})
-	}
-	return pipelineID, out
-}
+// agentstest.SeedPipeline/agentstest.StageSpec (used below) are the pipeline
+// seed fixture shared with agents/adapters' integration tests — see that
+// package's doc comment for why it is a separate, non-`_test.go` package
+// rather than a local helper.
 
 func seedOpenDealFull(t *testing.T, db *sql.DB, wsID, pipelineID, stageID string, expectedCloseDate *time.Time, forecastCategory *string, waitUntil *time.Time, lastActivityAt time.Time) string {
 	t.Helper()
@@ -135,11 +116,11 @@ func assertApprovalPayloadReason(t *testing.T, db *sql.DB, wsID, actionType, dea
 func TestRunPass_CloseDateHygiene_FullSweep_InvariantHoldsAcrossEveryTier(t *testing.T) {
 	db := testDB(t)
 	wsID := seedWorkspace(t, db)
-	pipelineID, stages := seedPipeline(t, db, wsID, []stageSpec{
-		{name: "Discovery", position: 1, semantic: "open", winProb: 20},
-		{name: "Negotiation", position: 2, semantic: "open", winProb: 60},
-		{name: "Won", position: 3, semantic: "won", winProb: 100},
-		{name: "Lost", position: 4, semantic: "lost", winProb: 0},
+	pipelineID, stages := agentstest.SeedPipeline(t, db, wsID, []agentstest.StageSpec{
+		{Name: "Discovery", Position: 1, Semantic: "open", WinProb: 20},
+		{Name: "Negotiation", Position: 2, Semantic: "open", WinProb: 60},
+		{Name: "Won", Position: 3, Semantic: "won", WinProb: 100},
+		{Name: "Lost", Position: 4, Semantic: "lost", WinProb: 0},
 	})
 	now := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
 	overdue := now.AddDate(0, 0, -12)
@@ -147,15 +128,15 @@ func TestRunPass_CloseDateHygiene_FullSweep_InvariantHoldsAcrossEveryTier(t *tes
 	waitUntil := now.AddDate(0, 0, 5)
 	healthyDate := now.AddDate(0, 0, 30)
 
-	autoApplyID := seedOpenDealFull(t, db, wsID, pipelineID, stages[0].id, &overdue, nil, nil, now.AddDate(0, 0, -3))
-	provisionalLateStageID := seedOpenDealFull(t, db, wsID, pipelineID, stages[1].id, &overdue, nil, nil, now.AddDate(0, 0, -3))
-	missingID := seedOpenDealFull(t, db, wsID, pipelineID, stages[0].id, nil, nil, nil, now.AddDate(0, 0, -3))
-	downgradeID := seedOpenDealFull(t, db, wsID, pipelineID, stages[0].id, &overdue, nil, nil, quiet)
-	waitSuppressedID := seedOpenDealFull(t, db, wsID, pipelineID, stages[1].id, &overdue, nil, &waitUntil, quiet)
-	wonID := seedClosedDealWithPastCloseDate(t, db, wsID, pipelineID, stages[2].id, "won", overdue, nil)
+	autoApplyID := seedOpenDealFull(t, db, wsID, pipelineID, stages[0].ID, &overdue, nil, nil, now.AddDate(0, 0, -3))
+	provisionalLateStageID := seedOpenDealFull(t, db, wsID, pipelineID, stages[1].ID, &overdue, nil, nil, now.AddDate(0, 0, -3))
+	missingID := seedOpenDealFull(t, db, wsID, pipelineID, stages[0].ID, nil, nil, nil, now.AddDate(0, 0, -3))
+	downgradeID := seedOpenDealFull(t, db, wsID, pipelineID, stages[0].ID, &overdue, nil, nil, quiet)
+	waitSuppressedID := seedOpenDealFull(t, db, wsID, pipelineID, stages[1].ID, &overdue, nil, &waitUntil, quiet)
+	wonID := seedClosedDealWithPastCloseDate(t, db, wsID, pipelineID, stages[2].ID, "won", overdue, nil)
 	lostReason := "budget cut"
-	lostID := seedClosedDealWithPastCloseDate(t, db, wsID, pipelineID, stages[3].id, "lost", overdue, &lostReason)
-	healthyID := seedOpenDealFull(t, db, wsID, pipelineID, stages[0].id, &healthyDate, nil, nil, now.AddDate(0, 0, -1))
+	lostID := seedClosedDealWithPastCloseDate(t, db, wsID, pipelineID, stages[3].ID, "lost", overdue, &lostReason)
+	healthyID := seedOpenDealFull(t, db, wsID, pipelineID, stages[0].ID, &healthyDate, nil, nil, now.AddDate(0, 0, -1))
 
 	// PROVISIONAL_CONFIRM (rep-set forecast_category="commit"): Discovery
 	// stage (early, <50%, so NOT late_stage), otherwise AUTO_APPLY-eligible
@@ -164,7 +145,7 @@ func TestRunPass_CloseDateHygiene_FullSweep_InvariantHoldsAcrossEveryTier(t *tes
 	// rep-override branch, distinct from the >=50-probability default this
 	// suite already covers via provisionalLateStageID.
 	commitOverride := "commit"
-	commitOverrideID := seedOpenDealFull(t, db, wsID, pipelineID, stages[0].id, &overdue, &commitOverride, nil, now.AddDate(0, 0, -3))
+	commitOverrideID := seedOpenDealFull(t, db, wsID, pipelineID, stages[0].ID, &overdue, &commitOverride, nil, now.AddDate(0, 0, -3))
 
 	reader := adapters.NewSQLDealReader(db)
 	dealStore := deals.NewDealStore(db)

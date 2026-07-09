@@ -25,66 +25,59 @@ import (
 // (topic/entityID capture), so they are reused too instead of file-local
 // doubles.
 
-func TestApplyGreen_EventTopic_FallsBackWhenEmpty(t *testing.T) {
-	db := testDB(t)
-	wsID := seedWorkspace(t, db)
-	effector := &spyEffector{rollbackHandle: "rollback"}
-	emitter := &spyEmitter{}
-	p := domain.RoutedProposal{
-		Proposal: domain.Proposal{
-			WorkspaceID:  wsID,
-			ActionType:   "close-date-auto-apply",
-			TargetEntity: "deal:" + seedDeal(t, db, wsID),
-			Effect:       json.RawMessage(`{}`),
+func TestApplyGreen_EventTopic(t *testing.T) {
+	cases := []struct {
+		name       string
+		actionType string
+		eventTopic string
+		wantTopic  string
+	}{
+		{
+			name:       "FallsBackWhenEmpty",
+			actionType: "close-date-auto-apply",
+			eventTopic: "",
+			wantTopic:  app.TopicOvernightApplied,
 		},
-		Tier: mcp.TierGreen,
-	}
-
-	tx, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	if _, err := app.ApplyGreen(context.Background(), tx, effector, emitter, p); err != nil {
-		_ = tx.Rollback()
-		t.Fatalf("ApplyGreen: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-	if len(emitter.emitted) != 1 || emitter.emitted[0].topic != app.TopicOvernightApplied {
-		t.Fatalf("expected fallback topic %q, got %+v", app.TopicOvernightApplied, emitter.emitted)
-	}
-}
-
-func TestApplyGreen_EventTopic_UsesProposalTopicWhenSet(t *testing.T) {
-	db := testDB(t)
-	wsID := seedWorkspace(t, db)
-	effector := &spyEffector{rollbackHandle: "rollback"}
-	emitter := &spyEmitter{}
-	p := domain.RoutedProposal{
-		Proposal: domain.Proposal{
-			WorkspaceID:  wsID,
-			ActionType:   "close-date-provisional-set",
-			TargetEntity: "deal:" + seedDeal(t, db, wsID),
-			Effect:       json.RawMessage(`{}`),
-			EventTopic:   "deal.updated",
+		{
+			name:       "UsesProposalTopicWhenSet",
+			actionType: "close-date-provisional-set",
+			eventTopic: "deal.updated",
+			wantTopic:  "deal.updated",
 		},
-		Tier: mcp.TierGreen,
 	}
 
-	tx, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	if _, err := app.ApplyGreen(context.Background(), tx, effector, emitter, p); err != nil {
-		_ = tx.Rollback()
-		t.Fatalf("ApplyGreen: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-	if len(emitter.emitted) != 1 || emitter.emitted[0].topic != "deal.updated" {
-		t.Fatalf("expected topic deal.updated, got %+v", emitter.emitted)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := testDB(t)
+			wsID := seedWorkspace(t, db)
+			effector := &spyEffector{rollbackHandle: "rollback"}
+			emitter := &spyEmitter{}
+			p := domain.RoutedProposal{
+				Proposal: domain.Proposal{
+					WorkspaceID:  wsID,
+					ActionType:   tc.actionType,
+					TargetEntity: "deal:" + seedDeal(t, db, wsID),
+					Effect:       json.RawMessage(`{}`),
+					EventTopic:   tc.eventTopic,
+				},
+				Tier: mcp.TierGreen,
+			}
+
+			tx, err := db.BeginTx(context.Background(), nil)
+			if err != nil {
+				t.Fatalf("begin: %v", err)
+			}
+			if _, err := app.ApplyGreen(context.Background(), tx, effector, emitter, p); err != nil {
+				_ = tx.Rollback()
+				t.Fatalf("ApplyGreen: %v", err)
+			}
+			if err := tx.Commit(); err != nil {
+				t.Fatalf("commit: %v", err)
+			}
+			if len(emitter.emitted) != 1 || emitter.emitted[0].topic != tc.wantTopic {
+				t.Fatalf("expected topic %q, got %+v", tc.wantTopic, emitter.emitted)
+			}
+		})
 	}
 }
 

@@ -175,6 +175,12 @@ components:
   agentsports:       { in: internal/modules/agents/ports }
   agentsapp:         { in: internal/modules/agents/app }
   agentsadapters:    { in: internal/modules/agents/adapters }
+  # agentstest is a non-test integration-test support library (like pgtest
+  # above): a plain package holding fixtures shared by agents/app's and
+  # agents/adapters' `_test` packages (two different Go packages, so they
+  # cannot import each other's test-only symbols directly). It is imported
+  # only from *_test.go files, which are excluded from the DAG above.
+  agentstest:        { in: internal/modules/agents/agentstest }
 deps:
   # Tier-0 seams + kernel are not listed -> may depend on nothing internal.
   # Exception: datasource aliases errs.ErrVersionSkew (ADR-0036/B-E18.1a) — both are Tier-0.
@@ -400,6 +406,8 @@ deps:
     mayDependOn: [agentsdomain, agentsports, approvals, audit, database, mcp, errs]
   agentsadapters:
     mayDependOn: [agentsdomain, agentsports, deals, database, errs, ids]
+  agentstest:
+    mayDependOn: [ids]
   toolgate:
     mayDependOn: [mcp, approvalsport, crmctx, ids]
   customfields:

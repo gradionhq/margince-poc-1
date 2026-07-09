@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gradionhq/margince/backend/internal/modules/agents/adapters"
+	"github.com/gradionhq/margince/backend/internal/modules/agents/agentstest"
 	"github.com/gradionhq/margince/backend/internal/modules/deals"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 )
@@ -16,8 +17,8 @@ import (
 func TestCloseDateEffector_Apply_UpdatesExpectedCloseDateWithIfMatch(t *testing.T) {
 	db := testDB(t)
 	wsID := seedWorkspace(t, db)
-	pipelineID, stages := seedPipeline(t, db, wsID, []stageSpec{{name: "Open", position: 1, semantic: "open", winProb: 50}})
-	dealID := seedOpenDeal(t, db, wsID, pipelineID, stages[0].id)
+	pipelineID, stages := agentstest.SeedPipeline(t, db, wsID, []agentstest.StageSpec{{Name: "Open", Position: 1, Semantic: "open", WinProb: 50}})
+	dealID := seedOpenDeal(t, db, wsID, pipelineID, stages[0].ID)
 
 	store := deals.NewDealStore(db)
 	before, err := store.Get(context.Background(), dealID, wsID)
@@ -62,8 +63,8 @@ func TestCloseDateEffector_Apply_UpdatesExpectedCloseDateWithIfMatch(t *testing.
 func TestCloseDateEffector_Apply_IfMatchZero_SkipsVersionCheck(t *testing.T) {
 	db := testDB(t)
 	wsID := seedWorkspace(t, db)
-	pipelineID, stages := seedPipeline(t, db, wsID, []stageSpec{{name: "Open", position: 1, semantic: "open", winProb: 50}})
-	dealID := seedOpenDeal(t, db, wsID, pipelineID, stages[0].id)
+	pipelineID, stages := agentstest.SeedPipeline(t, db, wsID, []agentstest.StageSpec{{Name: "Open", Position: 1, Semantic: "open", WinProb: 50}})
+	dealID := seedOpenDeal(t, db, wsID, pipelineID, stages[0].ID)
 
 	effector := adapters.NewCloseDateEffector(deals.NewDealStore(db))
 	payload, err := json.Marshal(map[string]any{
@@ -93,8 +94,8 @@ func TestCloseDateEffector_Apply_IfMatchZero_SkipsVersionCheck(t *testing.T) {
 func TestCloseDateEffector_Apply_VersionSkew_Rejected(t *testing.T) {
 	db := testDB(t)
 	wsID := seedWorkspace(t, db)
-	pipelineID, stages := seedPipeline(t, db, wsID, []stageSpec{{name: "Open", position: 1, semantic: "open", winProb: 50}})
-	dealID := seedOpenDeal(t, db, wsID, pipelineID, stages[0].id)
+	pipelineID, stages := agentstest.SeedPipeline(t, db, wsID, []agentstest.StageSpec{{Name: "Open", Position: 1, Semantic: "open", WinProb: 50}})
+	dealID := seedOpenDeal(t, db, wsID, pipelineID, stages[0].ID)
 
 	effector := adapters.NewCloseDateEffector(deals.NewDealStore(db))
 	payload, err := json.Marshal(map[string]any{
