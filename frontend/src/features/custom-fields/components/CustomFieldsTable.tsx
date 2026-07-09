@@ -14,6 +14,7 @@ export function CustomFieldsTable({
   onEdit,
   onRetire,
   stagedRow,
+  onObjectSelect,
 }: {
   fields: CustomField[];
   members: Member[];
@@ -22,6 +23,7 @@ export function CustomFieldsTable({
   onEdit?: (f: CustomField) => void;
   onRetire?: (f: CustomField) => void;
   stagedRow?: { label: string; type: string } | null;
+  onObjectSelect?: (obj: ObjectKey) => void;
 }) {
   const shouldShowEmpty = fields.length === 0 && !stagedRow;
   const isAdmin = role === "admin";
@@ -183,7 +185,8 @@ export function CustomFieldsTable({
               key={chip.value}
               data-selected={isSelected}
               data-testid={`chip-${chip.value}`}
-              className={isSelected ? "relative" : ""}
+              className={isSelected ? "relative cursor-pointer" : "cursor-pointer"}
+              onClick={() => onObjectSelect?.(chip.value)}
             >
               <Chip>{chip.label}</Chip>
               {isSelected && (
