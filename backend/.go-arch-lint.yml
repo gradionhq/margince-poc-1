@@ -52,6 +52,7 @@ vendors:
   yaml:    { in: "gopkg.in/yaml.v3" }
   crypto:  { in: "golang.org/x/crypto**" }
   text:    { in: "golang.org/x/text**" }
+  fpdf:    { in: "github.com/go-pdf/fpdf" }
 components:
   # Tier-0 shared kernel (dependency-free leaf layer)
   crmctx:       { in: internal/shared/kernel/crmctx }
@@ -232,7 +233,7 @@ deps:
   orgsports:
     mayDependOn: [orgsdomain]
   orgsadapters:
-    mayDependOn: [orgsdomain, errs, ids, prov, database, audit, dedupekern, strengthkern, sqlutil]
+    mayDependOn: [orgsdomain, errs, ids, prov, database, audit, dedupekern, strengthkern, sqlutil, customfields]
     canUse: [pq]
   organizations:
     mayDependOn: [orgsdomain, orgsadapters]
@@ -256,12 +257,12 @@ deps:
   offersports:
     mayDependOn: [offersdomain]
   offersadapters:
-    mayDependOn: [offersdomain, errs, ids, database, audit, sqlutil]
-    canUse: [pq]
+    mayDependOn: [offersdomain, errs, ids, database, audit, sqlutil, organizations, deals]
+    canUse: [pq, fpdf]
   offers:
     mayDependOn: [offersdomain, offersadapters, offerstransport]
   offerstransport:
-    mayDependOn: [offers, offersadapters, offersdomain, crmctx, errs, httpkit, prov]
+    mayDependOn: [offers, offersadapters, offersdomain, crmctx, errs, httpkit, prov, blobstore, mcp, toolgate, approvalsport, deals, retrieval]
   recordsdomain:
     mayDependOn: [prov, ids]
   recordsports:
@@ -351,7 +352,7 @@ deps:
   dealsports:
     mayDependOn: [dealsdomain]
   dealsadapters:
-    mayDependOn: [dealsdomain, errs, ids, audit, database, sqlutil]
+    mayDependOn: [dealsdomain, errs, ids, audit, database, sqlutil, customfields]
     canUse: [pq]
   # dealstransport now owns pipeline/stage AND deal-entity handlers (WS-E-b).
   dealstransport:
@@ -363,7 +364,7 @@ deps:
   peopleports:
     mayDependOn: [peopledomain, strengthkern]
   peopleadapters:
-    mayDependOn: [peopledomain, errs, ids, prov, dedupekern, strengthkern, audit, database, sqlutil]
+    mayDependOn: [peopledomain, errs, ids, prov, dedupekern, strengthkern, audit, database, sqlutil, customfields]
     canUse: [pq]
   people:
     mayDependOn: [peopledomain, peopleadapters, prov]

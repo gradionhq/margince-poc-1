@@ -13,10 +13,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
+
+	"github.com/lib/pq"
 
 	"github.com/gradionhq/margince/backend/internal/modules/people/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
+	"github.com/gradionhq/margince/backend/internal/platform/customfields"
 	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/dedupe"
@@ -76,15 +80,21 @@ func (s *PersonStore) Create(ctx context.Context, p domain.Person, emails []doma
 	}
 	social := sqlutil.MarshalJSON(p.Social)
 	address := sqlutil.MarshalJSON(p.Address)
+	active, err := customfields.ActiveColumns(ctx, s.db, p.WorkspaceID, "person")
+	if err != nil {
+		return domain.Person{}, err
+	}
+	customCols, customVals, customArgs := personCustomInsert(active, p.CustomFields, 12)
 	var reviewFlag *dedupe.ReviewFlag
-	err := database.WithWorkspaceTx(ctx, s.db, p.WorkspaceID, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `
+	err = database.WithWorkspaceTx(ctx, s.db, p.WorkspaceID, func(tx *sql.Tx) error {
+		args := []any{p.ID, p.WorkspaceID, p.FullName, p.FirstName, p.LastName, p.Title, p.OwnerID, social, address, p.Source, p.CapturedBy}
+		args = append(args, customArgs...)
+		//nolint:gosec // G202: customCols/customVals are quoted, catalog-derived identifiers + bound-param placeholders ($N), never user input; all values are passed via args
+		query := `
 			INSERT INTO person (id, workspace_id, full_name, first_name, last_name, title,
-			    owner_id, social, address, source, captured_by, version)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,1)`,
-			p.ID, p.WorkspaceID, p.FullName, p.FirstName, p.LastName, p.Title,
-			p.OwnerID, social, address,
-			p.Source, p.CapturedBy); err != nil {
+			    owner_id, social, address, source, captured_by` + customCols + `)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11` + customVals + `)`
+		if _, err := tx.ExecContext(ctx, query, args...); err != nil { // NOSONAR: query is a fixed literal + customCols/customVals's quoted, catalog-derived identifiers/$N placeholders only; all values are bound via args
 			return err
 		}
 		if err := insertPersonEmails(ctx, tx, p.WorkspaceID, p.ID, p.Source, p.CapturedBy, emails); err != nil {
@@ -149,25 +159,50 @@ func insertPersonEmails(ctx context.Context, tx *sql.Tx, workspaceID, personID, 
 	return nil
 }
 
-// Get returns a live person by ID + workspace.
-//
-//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
-func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (domain.Person, error) {
+// personDetailColumns is the fixed SELECT column list shared by Get and
+// GetAny — the only difference between the two reads is whether archived
+// rows are excluded, so both build their query by appending this same base
+// plus the active custom columns.
+const personDetailColumns = `
+			SELECT id, workspace_id, full_name, first_name, last_name, title,
+			       owner_id, social, address, merged_into_id, converted_from_lead_id`
+
+// personDetailScanArgs returns the ordered Scan() targets for
+// personDetailColumns (extended with the active custom-column destinations)
+// shared by Get and GetAny — the mechanical scan-target/column-list pairing
+// that is identical between the two reads, split out so neither
+// hand-duplicates it.
+func personDetailScanArgs(p *domain.Person, socialRaw, addrRaw *[]byte, dests []any) []any {
+	scanArgs := append([]any{
+		&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
+		&p.OwnerID, socialRaw, addrRaw, &p.MergedIntoID, &p.ConvertedFromLeadID,
+	}, dests...)
+	return append(scanArgs, &p.Version, &p.Source, &p.CapturedBy, &p.CreatedAt, &p.UpdatedAt, &p.ArchivedAt)
+}
+
+// getPerson is Get/GetAny's shared body: liveOnly toggles the "AND
+// archived_at IS NULL" predicate that is the only difference between the two
+// reads.
+func (s *PersonStore) getPerson(ctx context.Context, id, workspaceID string, liveOnly bool) (domain.Person, error) {
 	var p domain.Person
 	var socialRaw, addrRaw []byte
-	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		err := tx.QueryRowContext(ctx, `
-			SELECT id, workspace_id, full_name, first_name, last_name, title,
-			       owner_id, social, address, merged_into_id, converted_from_lead_id,
+	active, err := customfields.ActiveColumns(ctx, s.db, workspaceID, "person")
+	if err != nil {
+		return p, err
+	}
+	dests := customfields.ScanDests(active)
+	scanArgs := personDetailScanArgs(&p, &socialRaw, &addrRaw, dests)
+	where := "WHERE id=$1::uuid AND workspace_id=$2::uuid"
+	if liveOnly {
+		where += " AND archived_at IS NULL"
+	}
+	err = database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		//nolint:gosec // G201: customfields.SelectSuffix returns quoted, catalog-derived identifiers only, never user input
+		query := personDetailColumns + customfields.SelectSuffix(active) + `,
 			       version, source, captured_by, created_at, updated_at, archived_at
-			FROM person WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
-			id, workspaceID).Scan(
-			&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
-			&p.OwnerID, &socialRaw, &addrRaw, &p.MergedIntoID, &p.ConvertedFromLeadID,
-			&p.Version, &p.Source, &p.CapturedBy,
-			&p.CreatedAt, &p.UpdatedAt, &p.ArchivedAt,
-		)
-		if err != nil {
+			FROM person ` + where
+		row := tx.QueryRowContext(ctx, query, id, workspaceID) // NOSONAR: query is built from a fixed literal + customfields.SelectSuffix's quoted, catalog-derived identifiers only; id/workspaceID are bound params
+		if err := row.Scan(scanArgs...); err != nil {
 			return err
 		}
 		if err := s.attachStrength(ctx, tx, workspaceID, []*domain.Person{&p}); err != nil {
@@ -187,51 +222,21 @@ func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (domain.P
 		p.Address = map[string]any{}
 		sqlutil.UnmarshalJSON(addrRaw, &p.Address)
 	}
+	p.CustomFields = customfields.ExtractValues(active, dests)
 	return p, nil
+}
+
+// Get returns a live person by ID + workspace.
+func (s *PersonStore) Get(ctx context.Context, id, workspaceID string) (domain.Person, error) {
+	return s.getPerson(ctx, id, workspaceID, true)
 }
 
 // GetAny returns a person by ID + workspace regardless of archived state
 // (crm.yaml getPerson: "Fetchable by id even when archived"), mirroring
 // OrgStore.GetAny. Other callers (list/update/merge) keep using the
 // live-only Get — this is only for the single-record detail-read path.
-//
-//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
 func (s *PersonStore) GetAny(ctx context.Context, id, workspaceID string) (domain.Person, error) {
-	var p domain.Person
-	var socialRaw, addrRaw []byte
-	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		err := tx.QueryRowContext(ctx, `
-			SELECT id, workspace_id, full_name, first_name, last_name, title,
-			       owner_id, social, address, merged_into_id, converted_from_lead_id,
-			       version, source, captured_by, created_at, updated_at, archived_at
-			FROM person WHERE id=$1::uuid AND workspace_id=$2::uuid`,
-			id, workspaceID).Scan(
-			&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
-			&p.OwnerID, &socialRaw, &addrRaw, &p.MergedIntoID, &p.ConvertedFromLeadID,
-			&p.Version, &p.Source, &p.CapturedBy,
-			&p.CreatedAt, &p.UpdatedAt, &p.ArchivedAt,
-		)
-		if err != nil {
-			return err
-		}
-		if err := s.attachStrength(ctx, tx, workspaceID, []*domain.Person{&p}); err != nil {
-			return err
-		}
-		return s.attachLastActivity(ctx, tx, workspaceID, []*domain.Person{&p})
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return p, errs.ErrNotFound
-	}
-	if err != nil {
-		return p, err
-	}
-	p.Social = map[string]any{}
-	sqlutil.UnmarshalJSON(socialRaw, &p.Social)
-	if addrRaw != nil {
-		p.Address = map[string]any{}
-		sqlutil.UnmarshalJSON(addrRaw, &p.Address)
-	}
-	return p, nil
+	return s.getPerson(ctx, id, workspaceID, false)
 }
 
 // List returns a cursor-paginated slice of live persons.
@@ -239,44 +244,81 @@ func (s *PersonStore) List(ctx context.Context, workspaceID, cursor string, limi
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
+	active, err := customfields.ActiveColumns(ctx, s.db, workspaceID, "person")
+	if err != nil {
+		return nil, "", err
+	}
+	activeNames := make(map[string]struct{}, len(active))
+	for _, c := range active {
+		activeNames[c.ColumnName] = struct{}{}
+	}
 	switch sort {
 	case "", "id":
-		return s.listByID(ctx, workspaceID, cursor, limit)
+		return s.listByID(ctx, workspaceID, cursor, limit, active)
 	case "strength":
 		return s.listByStrength(ctx, workspaceID, cursor, limit, false)
 	case "-strength":
 		return s.listByStrength(ctx, workspaceID, cursor, limit, true)
 	default:
-		return s.listByID(ctx, workspaceID, cursor, limit)
+		key := strings.TrimPrefix(sort, "-")
+		if _, ok := activeNames[key]; ok {
+			return s.listByCustomColumn(ctx, workspaceID, cursor, limit, sort, active)
+		}
+		return s.listByID(ctx, workspaceID, cursor, limit, active)
 	}
 }
 
-func (s *PersonStore) listByID(ctx context.Context, workspaceID, cursor string, limit int) ([]domain.Person, string, error) {
+// personListColumns is the fixed SELECT column list shared by every
+// person-list query (listByID/listByCustomColumn here, and
+// scanAllLivePersons's strength-sort listing in store_strength.go); each
+// appends the active custom columns, then its own trailer/WHERE/ORDER BY.
+const personListColumns = `
+			SELECT id, workspace_id, full_name, first_name, last_name, title,
+			       owner_id, social`
+
+// scanPersonListRow scans one row from a person-list query (personListColumns
+// + every active custom column, in that order) into a domain.Person — the
+// per-row scan/unmarshal/attach glue that is identical across every list
+// variant, factored out so none of them hand-duplicates it.
+func scanPersonListRow(rows *sql.Rows, active []customfields.Column) (domain.Person, error) {
+	var p domain.Person
+	var socialRaw []byte
+	dests := customfields.ScanDests(active)
+	scanArgs := append([]any{
+		&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
+		&p.OwnerID, &socialRaw,
+	}, dests...)
+	scanArgs = append(scanArgs, &p.Version, &p.Source, &p.CapturedBy, &p.CreatedAt, &p.UpdatedAt)
+	if err := rows.Scan(scanArgs...); err != nil {
+		return p, err
+	}
+	p.Social = map[string]any{}
+	sqlutil.UnmarshalJSON(socialRaw, &p.Social)
+	p.CustomFields = customfields.ExtractValues(active, dests)
+	return p, nil
+}
+
+func (s *PersonStore) listByID(ctx context.Context, workspaceID, cursor string, limit int, active []customfields.Column) ([]domain.Person, string, error) {
 	// Non-nil so an empty result marshals to a JSON array ([]), never null.
 	out := []domain.Person{}
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `
-			SELECT id, workspace_id, full_name, first_name, last_name, title,
-			       owner_id, social, version, source, captured_by, created_at, updated_at
+		//nolint:gosec // G202: personListColumns/customfields.SelectSuffix return quoted, catalog-derived identifiers only, never user input; all values are bound params
+		query := personListColumns + customfields.SelectSuffix(active) + `,
+			       version, source, captured_by, created_at, updated_at
 			FROM person
 			WHERE workspace_id=$1::uuid AND archived_at IS NULL
 			  AND ($2 = '' OR id::text > $2)
-			ORDER BY id LIMIT $3`,
-			workspaceID, cursor, limit+1)
+			ORDER BY id LIMIT $3`
+		rows, err := tx.QueryContext(ctx, query, workspaceID, cursor, limit+1) // NOSONAR: query is built from a fixed literal + customfields.SelectSuffix's quoted, catalog-derived identifiers only; all values are bound params
 		if err != nil {
 			return err
 		}
 		defer func() { _ = rows.Close() }()
 		for rows.Next() {
-			var p domain.Person
-			var socialRaw []byte
-			if err := rows.Scan(&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
-				&p.OwnerID, &socialRaw, &p.Version, &p.Source, &p.CapturedBy,
-				&p.CreatedAt, &p.UpdatedAt); err != nil {
+			p, err := scanPersonListRow(rows, active)
+			if err != nil {
 				return err
 			}
-			p.Social = map[string]any{}
-			sqlutil.UnmarshalJSON(socialRaw, &p.Social)
 			out = append(out, p)
 		}
 		if err := rows.Err(); err != nil {
@@ -302,38 +344,95 @@ func (s *PersonStore) listByID(ctx context.Context, workspaceID, cursor string, 
 	return out, next, nil
 }
 
+// listByCustomColumn pages by a catalog-derived, non-unique, possibly-NULL
+// custom column: an id-keyset cursor cannot safely seek against such a
+// column (a later page could skip a row whose id sorts below the previous
+// page's last id but whose custom-field value sorts later), so this fetches
+// every matching row ordered by the custom column in one query and
+// offset-paginates in Go — mirrors OrgStore.listByCustomColumn's shape
+// exactly (store_org_list.go).
+func (s *PersonStore) listByCustomColumn(ctx context.Context, workspaceID, cursor string, limit int, sort string, active []customfields.Column) ([]domain.Person, string, error) {
+	column := strings.TrimPrefix(sort, "-")
+	desc := strings.HasPrefix(sort, "-")
+	offset := sqlutil.DecodeOffsetCursor(cursor)
+	// Non-nil so an empty result marshals to a JSON array ([]), never null.
+	all := []domain.Person{}
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		//nolint:gosec // G202: column is re-derived against the caller's own active-columns fetch (never trusted from the transport layer a second time) and pq.QuoteIdentifier-quoted; personListColumns/customfields.SelectSuffix return quoted, catalog-derived identifiers only
+		query := personListColumns + customfields.SelectSuffix(active) + `,
+			       version, source, captured_by, created_at, updated_at
+			FROM person
+			WHERE workspace_id=$1::uuid AND archived_at IS NULL
+			ORDER BY ` + pq.QuoteIdentifier(column) + func() string {
+			if desc {
+				return " DESC NULLS LAST, id"
+			}
+			return " ASC NULLS LAST, id"
+		}()
+		rows, err := tx.QueryContext(ctx, query, workspaceID) // NOSONAR: query is built from a fixed literal + customfields.SelectSuffix/pq.QuoteIdentifier's quoted, catalog-derived identifiers only; workspaceID is a bound param
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			p, err := scanPersonListRow(rows, active)
+			if err != nil {
+				return err
+			}
+			all = append(all, p)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	if offset > len(all) {
+		offset = len(all)
+	}
+	end := offset + limit
+	var next string
+	if end < len(all) {
+		next = sqlutil.EncodeOffsetCursor(end)
+	} else {
+		end = len(all)
+	}
+	return all[offset:end], next, nil
+}
+
 // Update applies partial updates to a person using optimistic concurrency.
 // When ifMatch==0 the version check is skipped (last-write-wins).
 func (s *PersonStore) Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (domain.Person, error) {
-	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+	active, err := customfields.ActiveColumns(ctx, s.db, workspaceID, "person")
+	if err != nil {
+		return domain.Person{}, err
+	}
+	err = database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		var res sql.Result
 		var err error
-		if ifMatch == 0 {
-			res, err = tx.ExecContext(ctx, `
+		customSet, customArgs := personCustomUpdate(active, updates, 6)
+		base := `
 				UPDATE person
 				SET full_name  = COALESCE($3, full_name),
 				    title      = COALESCE($4, title),
-				    owner_id   = COALESCE($5, owner_id),
-				    updated_at = now()
-				WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
-				id, workspaceID,
-				sqlutil.NullStr(updates, "full_name"),
-				sqlutil.NullStr(updates, "title"),
-				sqlutil.NullStr(updates, "owner_id"))
-		} else {
-			res, err = tx.ExecContext(ctx, `
-				UPDATE person
-				SET full_name  = COALESCE($3, full_name),
-				    title      = COALESCE($4, title),
-				    owner_id   = COALESCE($5, owner_id),
-				    updated_at = now()
-				WHERE id=$1::uuid AND workspace_id=$2::uuid AND version=$6 AND archived_at IS NULL`,
-				id, workspaceID,
-				sqlutil.NullStr(updates, "full_name"),
-				sqlutil.NullStr(updates, "title"),
-				sqlutil.NullStr(updates, "owner_id"),
-				ifMatch)
+				    owner_id   = COALESCE($5, owner_id)`
+		if customSet != "" {
+			base += ", " + customSet
 		}
+		base += ", updated_at = now()"
+		args := []any{
+			id, workspaceID,
+			sqlutil.NullStr(updates, "full_name"),
+			sqlutil.NullStr(updates, "title"),
+			sqlutil.NullStr(updates, "owner_id"),
+		}
+		args = append(args, customArgs...)
+		where := "WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL"
+		if ifMatch != 0 {
+			args = append(args, ifMatch)
+			where = "WHERE id=$1::uuid AND workspace_id=$2::uuid AND version=$" + strconv.Itoa(len(args)) + " AND archived_at IS NULL"
+		}
+		query := base + "\n\t\t\t\t" + where
+		res, err = tx.ExecContext(ctx, query, args...) // NOSONAR: base/where are quoted, catalog-derived identifiers ($N placeholders only) from personCustomUpdate/customfields.UpdateSetClauses; all values are bound via args
 		if err != nil {
 			return err
 		}

@@ -719,8 +719,9 @@ export interface paths {
          * @description The `draft_offer` MCP verb. Creates a new `draft` revision `n+1` from the offer's current
          *     state and flips the prior revision to `superseded` (OFFER-PARAM-6) — a sent offer is
          *     never edited in place (OFFER-AC-1). Non-destructive (nothing is lost, only superseded),
-         *     so this is 🟢 unlike `send`/`accept`. The response is the new draft revision itself, not a
-         *     diff object.
+         *     so this is 🟢 unlike `send`/`accept`. The response is the new draft revision itself, and
+         *     it carries the AI-authoring disclosure plus the diff-from-previous summary on that same
+         *     Offer object.
          */
         post: operations["regenerateOffer"];
         delete?: never;
@@ -4272,6 +4273,22 @@ export interface components {
             readonly pdf_asset_ref?: string | null;
             /** Format: date-time */
             readonly accepted_at?: string | null;
+            /**
+             * @description Art. 50 AI-assisted disclosure (GATE-AI-9). true only on the response of the regenerate call (OFFER-WIRE-6) that produced this revision; false on every other read — this ticket discloses AI authorship on the drafting call itself, not by persisting it across every future read.
+             * @default false
+             */
+            readonly ai_generated: boolean;
+            /** @description Human-readable Art. 50 disclosure text; non-null iff ai_generated=true. */
+            readonly ai_disclosure?: string | null;
+            /** @description Populated only on a regenerate response (OFFER-AC-11d/16) — added/removed/changed line items vs the immediately prior revision. Null on every other read (transient, never persisted). */
+            readonly diff_from_previous?: {
+                added?: components["schemas"]["OfferLineItem"][];
+                removed?: components["schemas"]["OfferLineItem"][];
+                changed?: {
+                    before?: components["schemas"]["OfferLineItem"];
+                    after?: components["schemas"]["OfferLineItem"];
+                }[];
+            } | null;
             source: string;
             captured_by: string;
             version: components["schemas"]["RowVersion"];
@@ -4347,7 +4364,7 @@ export interface components {
             quantity: number;
             /**
              * Format: int64
-             * @description Snapshot — never re-read from product after send. Never a float.
+             * @description Snapshot — never re-read from product after send. Never a float. Human-entered lines (createOfferLineItem) always supply a concrete value.
              */
             unit_price_minor: number;
             /** @default 0 */
@@ -4357,6 +4374,17 @@ export interface components {
              * @default 0
              */
             tax_rate: number;
+            /** @description Grounding citation for an AI-proposed line (evidence-or-omit, OFFER-AC-11a/13, GATE-AI-1); null for a human-entered line. */
+            readonly evidence?: {
+                snippet?: string;
+                /** Format: uuid */
+                source_id?: string;
+            } | null;
+            /**
+             * @description false only for an AI-proposed line the retriever/rate-card could not ground a price for (OFFER-AC-11b/14) — unit_price_minor is 0 in that case, an honest sentinel never a guessed value; true (the default) for every human-entered or rate-card/conversation-grounded line.
+             * @default true
+             */
+            readonly price_grounded: boolean;
             source: string;
             captured_by: string;
             /** Format: date-time */

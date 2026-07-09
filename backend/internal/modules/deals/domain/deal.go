@@ -56,10 +56,11 @@ type Deal struct {
 	Source            string     `json:"source"`
 	CapturedBy        string     `json:"captured_by"`
 	// Provenance is kept for internal use; not serialised directly.
-	Provenance prov.Provenance `json:"-"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
-	ArchivedAt *time.Time      `json:"archived_at"`
+	Provenance   prov.Provenance `json:"-"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
+	ArchivedAt   *time.Time      `json:"archived_at"`
+	CustomFields map[string]any  `json:"-"`
 }
 
 // AdvanceInput carries a validated advanceDeal request body.
@@ -81,6 +82,7 @@ type DealListFilter struct {
 	PartnerOrgID     string
 	PersonID         string
 	Sort             string
+	CustomFilters    map[string]string
 }
 
 // NewDeal returns a Deal with a fresh ID, open status, version 1, and copied provenance.

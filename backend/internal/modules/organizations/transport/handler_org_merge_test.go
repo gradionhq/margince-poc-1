@@ -51,7 +51,7 @@ func createTestOrg(t *testing.T, store *orgAdapters.OrgStore, ws, name string) o
 	ctx := crmctx.With(context.Background(), crmctx.Principal{UserID: "human:test", TenantID: ws})
 	created, err := store.Create(ctx, orgDomain.Organization{
 		WorkspaceID: ws, DisplayName: name, Source: "test", CapturedBy: "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create test org %s: %v", name, err)
 	}

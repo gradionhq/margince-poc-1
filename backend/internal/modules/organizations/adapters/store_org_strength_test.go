@@ -36,7 +36,7 @@ func TestOrgStore_List_AttachesAggregates(t *testing.T) {
 		WorkspaceID: orgAggTestWS, DisplayName: "OrgWithContacts-" + pgtest.Uniq(),
 		Source: "test", CapturedBy: "human:test",
 	}
-	orgWithContacts, err := orgStore.Create(ctx, orgWithContactsSeed)
+	orgWithContacts, err := orgStore.Create(ctx, orgWithContactsSeed, nil)
 	if err != nil {
 		t.Fatalf("create orgWithContacts: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestOrgStore_List_AttachesAggregates(t *testing.T) {
 		WorkspaceID: orgAggTestWS, DisplayName: "EmptyOrg-" + pgtest.Uniq(),
 		Source: "test", CapturedBy: "human:test",
 	}
-	emptyOrg, err := orgStore.Create(ctx, emptyOrgSeed)
+	emptyOrg, err := orgStore.Create(ctx, emptyOrgSeed, nil)
 	if err != nil {
 		t.Fatalf("create emptyOrg: %v", err)
 	}

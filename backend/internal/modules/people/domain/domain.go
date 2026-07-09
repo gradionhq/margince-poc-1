@@ -66,10 +66,11 @@ type Person struct {
 	Source              string          `json:"source"`
 	CapturedBy          string          `json:"captured_by"`
 	// Provenance is kept for internal use (audit etc.); not serialised directly.
-	Provenance prov.Provenance `json:"-"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
-	ArchivedAt *time.Time      `json:"archived_at"`
+	Provenance   prov.Provenance `json:"-"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
+	ArchivedAt   *time.Time      `json:"archived_at"`
+	CustomFields map[string]any  `json:"-"`
 	// ReviewFlag is PO-AC-19's non-blocking fuzzy-dedupe flag, computed fresh on
 	// every Create call and never persisted (dedupe.ReviewFlag).
 	ReviewFlag    *dedupe.ReviewFlag                 `json:"dedupe_review,omitempty"`

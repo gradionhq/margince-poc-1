@@ -31,6 +31,7 @@ type OfferStore interface {
 	Get(ctx context.Context, id, workspaceID string) (domain.Offer, error)
 	List(ctx context.Context, workspaceID, dealID, cursor string, limit int, includeArchived bool) ([]domain.Offer, string, error)
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (domain.Offer, error)
+	Regenerate(ctx context.Context, id, workspaceID string, signals []domain.OfferLineSignal) (domain.Offer, error)
 }
 
 // OfferLineItemStore is the offer_line_item repository seam.

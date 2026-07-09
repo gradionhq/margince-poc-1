@@ -50,7 +50,7 @@ func TestOrganizationHandler_Restore_HappyPath200(t *testing.T) {
 		DisplayName: "Handler Restorable Org",
 		Source:      "test",
 		CapturedBy:  "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create org: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestOrganizationHandler_Restore_LiveRecordReturns422(t *testing.T) {
 		DisplayName: "Already Live Handler Org",
 		Source:      "test",
 		CapturedBy:  "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create org: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestOrganizationHandler_Restore_RefusesMergedRecord(t *testing.T) {
 		DisplayName: "Survivor Handler Org",
 		Source:      "test",
 		CapturedBy:  "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create survivor org: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestOrganizationHandler_Restore_RefusesMergedRecord(t *testing.T) {
 		DisplayName: "Merged Handler Org",
 		Source:      "test",
 		CapturedBy:  "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create merged org: %v", err)
 	}

@@ -24,14 +24,14 @@ func TestOrgCreate_FuzzyReview_LegalSuffixNormalizedEqual(t *testing.T) {
 
 	existing := orgDomain.NewOrganization("Acme GmbH", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	existing.WorkspaceID = ws
-	createdExisting, err := orgs.Create(pgtest.AppCtx(ws), existing)
+	createdExisting, err := orgs.Create(pgtest.AppCtx(ws), existing, nil)
 	if err != nil {
 		t.Fatalf("create existing org: %v", err)
 	}
 
 	candidate := orgDomain.NewOrganization("Acme Inc", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	candidate.WorkspaceID = ws
-	created, err := orgs.Create(pgtest.AppCtx(ws), candidate)
+	created, err := orgs.Create(pgtest.AppCtx(ws), candidate, nil)
 	if err != nil {
 		t.Fatalf("create candidate org: %v", err)
 	}
@@ -56,13 +56,13 @@ func TestOrgCreate_NoReviewFlag_UnrelatedName(t *testing.T) {
 
 	existing := orgDomain.NewOrganization("Acme GmbH", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	existing.WorkspaceID = ws
-	if _, err := orgs.Create(pgtest.AppCtx(ws), existing); err != nil {
+	if _, err := orgs.Create(pgtest.AppCtx(ws), existing, nil); err != nil {
 		t.Fatalf("create existing org: %v", err)
 	}
 
 	unrelated := orgDomain.NewOrganization("Zephyr Robotics", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	unrelated.WorkspaceID = ws
-	created, err := orgs.Create(pgtest.AppCtx(ws), unrelated)
+	created, err := orgs.Create(pgtest.AppCtx(ws), unrelated, nil)
 	if err != nil {
 		t.Fatalf("create unrelated org: %v", err)
 	}

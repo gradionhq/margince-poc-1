@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ type activityStoreSeam interface {
 	Create(ctx context.Context, a actdomain.Activity) (actdomain.Activity, bool, error)
 	Get(ctx context.Context, id, workspaceID string) (actdomain.Activity, error)
 	List(ctx context.Context, workspaceID, entityType, entityID, cursor string, limit int) ([]actdomain.Activity, string, error)
+	ListFiltered(ctx context.Context, workspaceID, cursor string, limit int, filter actdomain.ActivityListFilter) ([]actdomain.Activity, string, error)
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (actdomain.Activity, error)
 	Archive(ctx context.Context, id, workspaceID string) (actdomain.Activity, error)
 	Relink(ctx context.Context, activityID, workspaceID, entityType, entityID string) (actdomain.Activity, error)
@@ -195,12 +197,41 @@ func (h *ActivityHandler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	items, next, err := h.store.List(r.Context(), wsID, q.Get("entity_type"), q.Get("entity_id"), q.Get("cursor"), httpkit.QueryLimit(r, 20))
+	sort := q.Get("sort")
+	for _, f := range strings.Split(sort, ",") {
+		f = strings.TrimSpace(strings.TrimPrefix(f, "-"))
+		if f != "" && !activitySortColumns[f] {
+			httpkit.JSONProblem(w, http.StatusUnprocessableEntity, "sort_field_not_allowed")
+			return
+		}
+	}
+
+	includeArchived := false
+	if s := q.Get("include_archived"); s != "" {
+		includeArchived, _ = strconv.ParseBool(s)
+	}
+
+	filter := actdomain.ActivityListFilter{
+		Kind:            q.Get("kind"),
+		EntityType:      q.Get("entity_type"),
+		EntityID:        q.Get("entity_id"),
+		AssigneeID:      q.Get("assignee_id"),
+		Q:               q.Get("q"),
+		IncludeArchived: includeArchived,
+		Sort:            sort,
+	}
+	items, next, err := h.store.ListFiltered(r.Context(), wsID, q.Get("cursor"), httpkit.QueryLimit(r, 20), filter)
 	if err != nil {
 		httpkit.JSONError(w, err)
 		return
 	}
 	httpkit.JSONOK(w, httpkit.PageResponse(items, next))
+}
+
+var activitySortColumns = map[string]bool{
+	"occurred_at": true,
+	"created_at":  true,
+	"due_at":      true,
 }
 
 func (h *ActivityHandler) get(w http.ResponseWriter, r *http.Request, id string) {

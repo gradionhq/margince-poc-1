@@ -62,7 +62,7 @@ func seedRelPersonOrg(t *testing.T, db *sql.DB) (personID, orgID string) {
 		Classification: strPtr("prospect"),
 		Source:         p0.Source,
 		CapturedBy:     p0.CapturedBy,
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("seed org: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestRelationshipStore_CreateDealStakeholder_DuplicateRoleConflicts(t *testi
 	ds := deals.NewDealStore(db)
 	dealSeed := deals.NewDeal("T08 Deal "+ids.New(), pl.ID, st.ID, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	dealSeed.WorkspaceID = wsRelStore
-	d, err := ds.Create(ctx, dealSeed, "")
+	d, err := ds.Create(ctx, dealSeed, "", nil)
 	if err != nil {
 		t.Fatalf("seed deal: %v", err)
 	}
@@ -272,7 +272,7 @@ func TestRelationshipStore_Create_DealStakeholder_AuditAndEventOnOwningStream(t 
 	ds := deals.NewDealStore(db)
 	dealSeed := deals.NewDeal("T08Audit Deal "+ids.New(), pl.ID, st.ID, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	dealSeed.WorkspaceID = wsRelStore
-	d, err := ds.Create(ctx, dealSeed, "")
+	d, err := ds.Create(ctx, dealSeed, "", nil)
 	if err != nil {
 		t.Fatalf("seed deal: %v", err)
 	}

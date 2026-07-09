@@ -9,7 +9,7 @@ import (
 
 // DealStorer is the persistence seam for deal rows.
 type DealStorer interface {
-	Create(ctx context.Context, d domain.Deal, idempotencyKey string) (domain.Deal, error)
+	Create(ctx context.Context, d domain.Deal, idempotencyKey string, rawExtra map[string]any) (domain.Deal, error)
 	Get(ctx context.Context, id, workspaceID string) (domain.Deal, error)
 	GetAny(ctx context.Context, id, workspaceID string) (domain.Deal, error)
 	FindByIdempotencyKey(ctx context.Context, workspaceID, key string) (domain.Deal, bool, error)
