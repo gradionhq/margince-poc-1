@@ -79,6 +79,25 @@ vi.mock("../features/custom-fields/api/members.js", () => ({
     isError: false,
   }),
 }));
+vi.mock("../features/records/api/quotas.js", () => ({
+  useQuota: () => ({
+    data: undefined,
+    isLoading: true,
+    isError: false,
+    error: null,
+  }),
+  useQuotaAttainment: () => ({
+    data: undefined,
+    isLoading: true,
+    isError: false,
+    error: null,
+  }),
+  useTeamRollup: () => ({ reps: [], isLoading: false, isError: false }),
+  QuotaForbiddenError: class extends Error {},
+  QuotaAttainmentForbiddenError: class extends Error {},
+  QuotaAttainmentTargetZeroError: class extends Error {},
+  QuotaAttainmentComputationFailedError: class extends Error {},
+}));
 
 import App from "./App.js";
 
@@ -123,5 +142,10 @@ describe("App routes", () => {
     expect(
       screen.getByRole("heading", { name: /custom fields/i }),
     ).toBeInTheDocument();
+  });
+
+  it("mounts QuotaPage at /quotas/:id", () => {
+    renderApp("/quotas/q1");
+    expect(screen.getByText(/quota & attainment/i)).toBeInTheDocument();
   });
 });

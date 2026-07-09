@@ -10,6 +10,7 @@ import { PeoplePage } from "../features/people/routes/PeoplePage.js";
 import { PersonDetailPage } from "../features/people/routes/PersonDetailPage.js";
 import { AccountHierarchyPage } from "../features/records/routes/AccountHierarchyPage.js";
 import { FieldHistoryPage } from "../features/records/routes/FieldHistoryPage.js";
+import { QuotaPage } from "../features/records/routes/QuotaPage.js";
 import { ProtectedRoute } from "./ProtectedRoute.js";
 import { ShellPlaceholderPage } from "./ShellPlaceholderPage.js";
 import { AppShell } from "./shell/AppShell.js";
@@ -41,6 +42,7 @@ export default function App() {
           path="/records/:entityType/:entityId/field-history"
           element={<FieldHistoryPage />}
         />
+        <Route path="/quotas/:id" element={<QuotaPage />} />
         <Route path="/leads" element={<ShellPlaceholderPage title="Leads" />} />
         <Route path="/deals" element={<PipelinePage />} />
         <Route path="/deals/:id" element={<DealDetailPage />} />
