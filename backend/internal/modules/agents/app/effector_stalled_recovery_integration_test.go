@@ -101,4 +101,67 @@ func TestHandleDecided_ApprovedRecoverySendUsesFetchedPayloadAndProvenance(t *te
 	if len(emitter.emitted) != 2 {
 		t.Fatalf("expected 2 overnight.applied emissions, got %d", len(emitter.emitted))
 	}
+
+	// Both crmapprovals.Stage (action="capture", no rollback_handle key) and
+	// HandleDecided (action="update", carries rollback_handle) write an
+	// audit_log row for the same workspace_id/actor_id/entity_id (Stage's
+	// RequestedBy is ActorOvernight here too) — filter on action="update" to
+	// deterministically select HandleDecided's own row, not Stage's.
+	var rollbackA, rollbackB string
+	if err := db.QueryRow(
+		`SELECT after->>'rollback_handle' FROM audit_log WHERE workspace_id = $1::uuid AND actor_id = $2 AND entity_id = $3::uuid AND action = 'update'`,
+		wsID, app.ActorOvernight, itemIDA,
+	).Scan(&rollbackA); err != nil {
+		t.Fatalf("query rollback A: %v", err)
+	}
+	if rollbackA != "activity-789" {
+		t.Errorf("audit rollback_handle for item A = %q, want activity-789 (the logged activity id)", rollbackA)
+	}
+	if err := db.QueryRow(
+		`SELECT after->>'rollback_handle' FROM audit_log WHERE workspace_id = $1::uuid AND actor_id = $2 AND entity_id = $3::uuid AND action = 'update'`,
+		wsID, app.ActorOvernight, itemIDB,
+	).Scan(&rollbackB); err != nil {
+		t.Fatalf("query rollback B: %v", err)
+	}
+	if rollbackB != "activity-789" {
+		t.Errorf("audit rollback_handle for item B = %q, want activity-789", rollbackB)
+	}
+}
+
+func TestHandleDecided_StalledRecoveryDraftlessPayloadNoOps(t *testing.T) {
+	db := testDB(t)
+	wsID := seedWorkspace(t, db)
+	repo := crmapprovals.NewRepository()
+
+	payload := json.RawMessage(`{"reason":"no_reply_14_days","evidence_activity_id":"act-c","deal_id":"deal-c","workspace_id":"` + wsID + `","draft":null}`)
+	tx, err := db.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	itemID, err := crmapprovals.Stage(context.Background(), tx, repo, crmapprovals.StageInput{
+		WorkspaceID: wsID, ActionType: "overnight.stalled_recovery", RequestedBy: app.ActorOvernight, Payload: payload,
+	})
+	if !errors.Is(err, apperrors.ErrRequiresApproval) {
+		_ = tx.Rollback()
+		t.Fatalf("stage: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit stage: %v", err)
+	}
+
+	logger := &fakeActivityLogger{id: "should-never-be-logged"}
+	tx2, err := db.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if err := app.HandleDecided(context.Background(), tx2, repo, app.StalledRecoveryEffector{Logger: logger}, &spyEmitter{}, app.DecidedEventPayload{Decision: "approved", ItemID: itemID}); err != nil {
+		_ = tx2.Rollback()
+		t.Fatalf("HandleDecided: %v", err)
+	}
+	if err := tx2.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	if len(logger.calls) != 0 {
+		t.Fatalf("expected Logger.LogFollowUp to never be called for a draft-less flag, got %+v", logger.calls)
+	}
 }

@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
+	"github.com/gradionhq/margince/backend/internal/modules/agents/ports"
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 )
 
@@ -34,10 +36,16 @@ type StalledRecoveryEffector struct {
 	Logger ActivityLogger
 }
 
+// Apply decodes payload and, if it carries a draft, logs the follow-up via
+// the injected ActivityLogger (attributed to ActorOvernight for both source
+// and capturedBy), returning the logged activity ID as a locate/correct
+// rollback handle. A draft-less payload (flag-only approval, nothing to
+// execute) is a safe no-op returning ("", nil). A malformed payload returns
+// an error.
 func (e StalledRecoveryEffector) Apply(ctx context.Context, tx crmapprovals.DBExec, _ string, payload json.RawMessage) (string, error) {
 	var effect stalledRecoveryEffectPayload
 	if err := json.Unmarshal(payload, &effect); err != nil {
-		return "", nil
+		return "", fmt.Errorf("stalled recovery effector: decode payload: %w", err)
 	}
 	if effect.Draft == nil || effect.Draft.Subject == "" || effect.Draft.Body == "" {
 		return "", nil
@@ -45,5 +53,8 @@ func (e StalledRecoveryEffector) Apply(ctx context.Context, tx crmapprovals.DBEx
 	if e.Logger == nil {
 		return "", nil
 	}
-	return e.Logger.LogFollowUp(ctx, tx, effect.WorkspaceID, effect.DealID, effect.Draft.Subject, effect.Draft.Body, "overnight.stalled_recovery", ActorOvernight)
+	return e.Logger.LogFollowUp(ctx, tx, effect.WorkspaceID, effect.DealID, effect.Draft.Subject, effect.Draft.Body, ActorOvernight, ActorOvernight)
 }
+
+// var _ proves StalledRecoveryEffector satisfies ports.Effector's exact shape.
+var _ ports.Effector = StalledRecoveryEffector{}

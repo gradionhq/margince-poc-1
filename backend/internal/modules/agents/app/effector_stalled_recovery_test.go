@@ -75,8 +75,8 @@ func TestStalledRecoveryEffector_ApprovedSendUsesDraftAndReturnsRollbackHandle(t
 	if call.subject != "Checking in" || call.body != "Hi, just following up." {
 		t.Fatalf("logger subject/body = %q/%q", call.subject, call.body)
 	}
-	if call.source != "overnight.stalled_recovery" {
-		t.Fatalf("logger source = %q, want overnight.stalled_recovery", call.source)
+	if call.source != app.ActorOvernight {
+		t.Fatalf("logger source = %q, want %q", call.source, app.ActorOvernight)
 	}
 	if call.capturedBy != app.ActorOvernight {
 		t.Fatalf("logger capturedBy = %q, want %q", call.capturedBy, app.ActorOvernight)
@@ -105,13 +105,17 @@ func TestStalledRecoveryEffector_ApprovedFlagOnlyWithoutDraftIsNoOp(t *testing.T
 	}
 }
 
-func TestStalledRecoveryEffector_MalformedPayloadSkipsSend(t *testing.T) {
-	effector := app.StalledRecoveryEffector{Logger: &fakeActivityLogger{id: "activity-123"}}
+func TestStalledRecoveryEffector_MalformedPayloadReturnsError(t *testing.T) {
+	logger := &fakeActivityLogger{id: "activity-123"}
+	effector := app.StalledRecoveryEffector{Logger: logger}
 	handle, err := effector.Apply(context.Background(), nil, "stalled_recovery", json.RawMessage(`not-json`))
-	if err != nil {
-		t.Fatalf("Apply: %v", err)
+	if err == nil {
+		t.Fatal("expected an error for a malformed payload")
 	}
 	if handle != "" {
 		t.Fatalf("rollback handle = %q, want empty on malformed payload", handle)
+	}
+	if len(logger.calls) != 0 {
+		t.Fatalf("expected no logger calls for a malformed payload, got %d", len(logger.calls))
 	}
 }

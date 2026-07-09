@@ -160,3 +160,33 @@ func TestStalledRecoveryProduce_MalformedClaimOrEvidenceYieldsZeroProposals(t *t
 		})
 	}
 }
+
+func TestStalledRecoveryProduce_MultipleEvidenceSignalsHighestConfidenceWins(t *testing.T) {
+	view := domain.AssembledView{Facts: []domain.Fact{
+		stalledRecoveryFact("9", `{"generic_reason":"no_activity_60_days","confidence":0.9}`, "capture:stalled:9"),
+		evidenceSignalFact("9", `{"specific_reason":"champion_quiet","evidence_activity_id":"act-9a","evidence_text":"low confidence guess","confidence":0.4}`, "capture:evidence:9a"),
+		evidenceSignalFact("9", `{"specific_reason":"no_reply_14_days","evidence_activity_id":"act-9b","evidence_text":"the real signal","confidence":0.82}`, "capture:evidence:9b"),
+	}}
+	out, err := app.StalledRecoveryProduce(view)
+	if err != nil {
+		t.Fatalf("StalledRecoveryProduce: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("expected 1 proposal, got %d", len(out))
+	}
+	if out[0].Confidence == nil || *out[0].Confidence != 0.82 {
+		t.Errorf("Confidence = %v, want 0.82 (the highest-confidence evidence signal)", out[0].Confidence)
+	}
+	if out[0].Source != "capture:evidence:9b" {
+		t.Errorf("Source = %q, want capture:evidence:9b", out[0].Source)
+	}
+	var effect struct {
+		EvidenceActivityID string `json:"evidence_activity_id"`
+	}
+	if err := json.Unmarshal(out[0].Effect, &effect); err != nil {
+		t.Fatalf("Effect unmarshal: %v", err)
+	}
+	if effect.EvidenceActivityID != "act-9b" {
+		t.Errorf("Effect.evidence_activity_id = %q, want act-9b", effect.EvidenceActivityID)
+	}
+}

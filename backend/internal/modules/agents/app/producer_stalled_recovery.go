@@ -75,77 +75,123 @@ func chooseHighestConfidence[T any](items []T, score func(T) float64) (T, bool) 
 // at most one staged recovery proposal per deal. The producer never invents a
 // reason, evidence, or draft; malformed claim/evidence input is skipped.
 func StalledRecoveryProduce(view domain.AssembledView) ([]domain.Proposal, error) {
+	claims, evidence, drafts := parseStalledRecoveryFacts(view.Facts)
+
+	out := make([]domain.Proposal, 0, len(claims))
+	processed := map[string]bool{}
+	for _, fact := range view.Facts {
+		if fact.EntityType != "deal_stalled_claim" {
+			continue
+		}
+		dealID := fact.EntityID
+		if processed[dealID] {
+			continue
+		}
+		processed[dealID] = true
+
+		if p, ok := buildStalledRecoveryProposal(view.WorkspaceID, dealID, claims, evidence, drafts); ok {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+// parseStalledRecoveryFacts groups view.Facts into per-deal claim/evidence/
+// draft candidates, decoding and validating each fact's Detail JSON.
+// Malformed or incomplete facts are skipped, not an error.
+func parseStalledRecoveryFacts(facts []domain.Fact) (map[string]stalledClaim, map[string][]stalledEvidenceCandidate, map[string][]stalledDraftCandidate) {
 	claims := map[string]stalledClaim{}
 	evidence := map[string][]stalledEvidenceCandidate{}
 	drafts := map[string][]stalledDraftCandidate{}
 
-	for _, fact := range view.Facts {
+	for _, fact := range facts {
 		switch fact.EntityType {
 		case "deal_stalled_claim":
-			var claim stalledClaim
-			if err := json.Unmarshal([]byte(fact.Detail), &claim); err != nil {
-				continue
+			if claim, ok := decodeStalledClaim(fact.Detail); ok {
+				claims[fact.EntityID] = claim
 			}
-			if claim.GenericReason == "" || claim.Confidence == nil {
-				continue
-			}
-			claims[fact.EntityID] = claim
 		case "recovery_evidence_signal":
-			var sig stalledEvidenceSignal
-			if err := json.Unmarshal([]byte(fact.Detail), &sig); err != nil {
-				continue
+			if sig, ok := decodeStalledEvidenceSignal(fact.Detail); ok {
+				evidence[fact.EntityID] = append(evidence[fact.EntityID], stalledEvidenceCandidate{stalledEvidenceSignal: sig, Source: fact.Source})
 			}
-			if sig.SpecificReason == "" || sig.EvidenceActivityID == "" || sig.EvidenceText == "" || sig.Confidence == nil {
-				continue
-			}
-			evidence[fact.EntityID] = append(evidence[fact.EntityID], stalledEvidenceCandidate{stalledEvidenceSignal: sig, Source: fact.Source})
 		case "recovery_draft_signal":
-			var sig stalledDraftSignal
-			if err := json.Unmarshal([]byte(fact.Detail), &sig); err != nil {
-				continue
+			if sig, ok := decodeStalledDraftSignal(fact.Detail); ok {
+				drafts[fact.EntityID] = append(drafts[fact.EntityID], stalledDraftCandidate{stalledDraftSignal: sig, Source: fact.Source})
 			}
-			if sig.Subject == "" || sig.Body == "" || sig.Confidence == nil {
-				continue
-			}
-			drafts[fact.EntityID] = append(drafts[fact.EntityID], stalledDraftCandidate{stalledDraftSignal: sig, Source: fact.Source})
 		}
 	}
+	return claims, evidence, drafts
+}
 
-	out := make([]domain.Proposal, 0, len(claims))
-	for dealID, claim := range claims {
-		if claim.WaitUntilActive {
-			continue
-		}
-		sigs := evidence[dealID]
-		bestEvidence, ok := chooseHighestConfidence(sigs, func(sig stalledEvidenceCandidate) float64 { return *sig.Confidence })
-		if !ok {
-			continue
-		}
-		var draft map[string]string
-		if bestDraft, ok := chooseHighestConfidence(drafts[dealID], func(sig stalledDraftCandidate) float64 { return *sig.Confidence }); ok {
-			draft = map[string]string{"subject": bestDraft.Subject, "body": bestDraft.Body}
-		}
-		effect, err := json.Marshal(stalledRecoveryEffect{
-			Reason:             bestEvidence.SpecificReason,
-			EvidenceActivityID: bestEvidence.EvidenceActivityID,
-			DealID:             dealID,
-			WorkspaceID:        view.WorkspaceID,
-			Draft:              draft,
-		})
-		if err != nil {
-			continue
-		}
-		out = append(out, domain.Proposal{
-			WorkspaceID:  view.WorkspaceID,
-			ActionType:   "stalled_recovery",
-			TargetEntity: "deal:" + dealID,
-			Effect:       effect,
-			Evidence:     bestEvidence.EvidenceText,
-			Confidence:   bestEvidence.Confidence,
-			Source:       bestEvidence.Source,
-		})
+func decodeStalledClaim(raw string) (stalledClaim, bool) {
+	var claim stalledClaim
+	if err := json.Unmarshal([]byte(raw), &claim); err != nil {
+		return stalledClaim{}, false
 	}
-	return out, nil
+	if claim.GenericReason == "" || claim.Confidence == nil {
+		return stalledClaim{}, false
+	}
+	return claim, true
+}
+
+func decodeStalledEvidenceSignal(raw string) (stalledEvidenceSignal, bool) {
+	var sig stalledEvidenceSignal
+	if err := json.Unmarshal([]byte(raw), &sig); err != nil {
+		return stalledEvidenceSignal{}, false
+	}
+	if sig.SpecificReason == "" || sig.EvidenceActivityID == "" || sig.EvidenceText == "" || sig.Confidence == nil {
+		return stalledEvidenceSignal{}, false
+	}
+	return sig, true
+}
+
+func decodeStalledDraftSignal(raw string) (stalledDraftSignal, bool) {
+	var sig stalledDraftSignal
+	if err := json.Unmarshal([]byte(raw), &sig); err != nil {
+		return stalledDraftSignal{}, false
+	}
+	if sig.Subject == "" || sig.Body == "" || sig.Confidence == nil {
+		return stalledDraftSignal{}, false
+	}
+	return sig, true
+}
+
+// buildStalledRecoveryProposal assembles the one Proposal for dealID, if a
+// well-formed, non-suppressed claim and a matching evidence signal both
+// exist. Returns ok=false for a suppressed (wait_until_active), malformed,
+// or evidence-less deal — never a fabricated reason/evidence/draft.
+func buildStalledRecoveryProposal(workspaceID, dealID string, claims map[string]stalledClaim, evidence map[string][]stalledEvidenceCandidate, drafts map[string][]stalledDraftCandidate) (domain.Proposal, bool) {
+	claim, ok := claims[dealID]
+	if !ok || claim.WaitUntilActive {
+		return domain.Proposal{}, false
+	}
+	bestEvidence, ok := chooseHighestConfidence(evidence[dealID], func(sig stalledEvidenceCandidate) float64 { return *sig.Confidence })
+	if !ok {
+		return domain.Proposal{}, false
+	}
+	var draft map[string]string
+	if bestDraft, ok := chooseHighestConfidence(drafts[dealID], func(sig stalledDraftCandidate) float64 { return *sig.Confidence }); ok {
+		draft = map[string]string{"subject": bestDraft.Subject, "body": bestDraft.Body}
+	}
+	effect, err := json.Marshal(stalledRecoveryEffect{
+		Reason:             bestEvidence.SpecificReason,
+		EvidenceActivityID: bestEvidence.EvidenceActivityID,
+		DealID:             dealID,
+		WorkspaceID:        workspaceID,
+		Draft:              draft,
+	})
+	if err != nil {
+		return domain.Proposal{}, false
+	}
+	return domain.Proposal{
+		WorkspaceID:  workspaceID,
+		ActionType:   "stalled_recovery",
+		TargetEntity: "deal:" + dealID,
+		Effect:       effect,
+		Evidence:     bestEvidence.EvidenceText,
+		Confidence:   bestEvidence.Confidence,
+		Source:       bestEvidence.Source,
+	}, true
 }
 
 var _ ports.Produce = StalledRecoveryProduce
