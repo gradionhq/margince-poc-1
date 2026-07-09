@@ -45,7 +45,10 @@ export function AttainmentRing({
 }) {
   if (isLoading) {
     return (
-      <div data-testid="attainment-ring-skeleton" className="flex gap-gf-xl p-gf-lg">
+      <div
+        data-testid="attainment-ring-skeleton"
+        className="flex gap-gf-xl p-gf-lg"
+      >
         <Skeleton variant="circle" width="160px" height="160px" />
         <div className="flex flex-1 flex-col gap-gf-md">
           <Skeleton height="20px" />
@@ -67,8 +70,8 @@ export function AttainmentRing({
   if (isTargetZero) {
     return (
       <div className="p-gf-lg text-gf-body text-gf-secondary">
-        No target set for this period. Set a target below to start tracking attainment from
-        closed-won deals.
+        No target set for this period. Set a target below to start tracking
+        attainment from closed-won deals.
       </div>
     );
   }
@@ -88,7 +91,15 @@ export function AttainmentRing({
   return (
     <div className="flex flex-wrap items-center gap-gf-xl p-gf-lg">
       <div className="relative h-[160px] w-[160px] flex-none">
-        <svg width="160" height="160" viewBox="0 0 160 160" className="-rotate-90">
+        {/* Decorative — the same percentage is already rendered as visible text in the center
+            below, so this SVG is marked aria-hidden rather than given a redundant <title>. */}
+        <svg
+          width="160"
+          height="160"
+          viewBox="0 0 160 160"
+          className="-rotate-90"
+          aria-hidden="true"
+        >
           <circle
             cx="80"
             cy="80"
@@ -111,7 +122,9 @@ export function AttainmentRing({
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-gf-xs">
-          <span className="font-mono text-gf-display font-medium text-gf-primary">{pct}%</span>
+          <span className="font-mono text-gf-display font-medium text-gf-primary">
+            {pct}%
+          </span>
           <span className="text-gf-micro uppercase tracking-wide text-gf-tertiary">
             attained
           </span>

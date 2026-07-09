@@ -29,7 +29,9 @@ describe("QuotaExplainBox", () => {
 
   it("AC-quota-4: toggling 'Explain this number' reveals the formula, the summed deal values, and the flagged human-set target", async () => {
     render(<QuotaExplainBox attainment={ATTAINMENT} />);
-    expect(screen.queryByTestId("quota-explain-box-content")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("quota-explain-box-content"),
+    ).not.toBeInTheDocument();
     await userEvent.click(screen.getByText(/explain this number/i));
     const box = screen.getByTestId("quota-explain-box-content");
     expect(box).toBeInTheDocument();

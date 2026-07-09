@@ -1,7 +1,7 @@
-import { useMembers } from "../../custom-fields/api/members.js";
 import { Skeleton } from "../../../shared/ui/forge.js";
-import { useTeamRollup } from "../api/quotas.js";
+import { useMembers } from "../../custom-fields/api/members.js";
 import type { Quota, QuotaAttainment } from "../api/quotas.js";
+import { useTeamRollup } from "../api/quotas.js";
 
 function barColorClass(pct: number): string {
   if (pct >= 100) return "bg-gf-status-success";
@@ -40,7 +40,9 @@ export function TeamRollupRail({
         Team attainment
       </h4>
       {reps.map((rep) => {
-        const pct = rep.attainment ? Math.round(rep.attainment.attainment_pct) : 0;
+        const pct = rep.attainment
+          ? Math.round(rep.attainment.attainment_pct)
+          : 0;
         const name =
           (rep.quota.owner_id && nameByUserId.get(rep.quota.owner_id)) ??
           "Unknown rep";

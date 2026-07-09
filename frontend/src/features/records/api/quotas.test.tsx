@@ -9,11 +9,11 @@ vi.mock("../../../lib/api-client/client.js", () => ({
 
 import { apiClient } from "../../../lib/api-client/client.js";
 import {
+  parseGermanIntegerEuros,
   QuotaAttainmentComputationFailedError,
   QuotaAttainmentForbiddenError,
   QuotaAttainmentTargetZeroError,
   QuotaForbiddenError,
-  parseGermanIntegerEuros,
   quotasKeys,
   shouldRetryQuotaAttainment,
   useContributingDealDetails,
@@ -143,10 +143,17 @@ describe("useQuotaAttainment", () => {
 
 describe("shouldRetryQuotaAttainment", () => {
   it("never retries sentinel errors", () => {
-    expect(shouldRetryQuotaAttainment(0, new QuotaAttainmentForbiddenError())).toBe(false);
-    expect(shouldRetryQuotaAttainment(0, new QuotaAttainmentTargetZeroError())).toBe(false);
     expect(
-      shouldRetryQuotaAttainment(0, new QuotaAttainmentComputationFailedError()),
+      shouldRetryQuotaAttainment(0, new QuotaAttainmentForbiddenError()),
+    ).toBe(false);
+    expect(
+      shouldRetryQuotaAttainment(0, new QuotaAttainmentTargetZeroError()),
+    ).toBe(false);
+    expect(
+      shouldRetryQuotaAttainment(
+        0,
+        new QuotaAttainmentComputationFailedError(),
+      ),
     ).toBe(false);
   });
 
@@ -162,7 +169,9 @@ describe("useUpdateQuotaTarget", () => {
       data: { id: "q1", target_minor: 28000000, version: 4 },
       error: undefined,
     });
-    const { result } = renderHook(() => useUpdateQuotaTarget("q1"), { wrapper });
+    const { result } = renderHook(() => useUpdateQuotaTarget("q1"), {
+      wrapper,
+    });
     result.current.mutate({ targetMinor: 28000000, version: 3 });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(apiClient.PATCH).toHaveBeenCalledWith(
@@ -197,10 +206,15 @@ describe("useContributingDealDetails", () => {
       },
       error: undefined,
     });
-    const { result } = renderHook(() => useContributingDealDetails(["d1", "d2"]), {
-      wrapper,
-    });
-    await waitFor(() => expect(result.current.every((r) => !r.isLoading)).toBe(true));
+    const { result } = renderHook(
+      () => useContributingDealDetails(["d1", "d2"]),
+      {
+        wrapper,
+      },
+    );
+    await waitFor(() =>
+      expect(result.current.every((r) => !r.isLoading)).toBe(true),
+    );
     expect(apiClient.GET).toHaveBeenCalledTimes(2);
     expect(result.current[0].data?.name).toBe("BAER Pharma - Packaging QA");
   });
@@ -218,43 +232,45 @@ describe("useTeamRollup", () => {
       currency: "EUR",
       version: 3,
     };
-    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
-      if (path === "/quotas") {
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation(
+      (path: string) => {
+        if (path === "/quotas") {
+          return Promise.resolve({
+            data: {
+              data: [
+                current,
+                {
+                  id: "q2",
+                  owner_id: "u2",
+                  team_id: null,
+                  period_start: "2026-07-01",
+                  period_end: "2026-09-30",
+                  target_minor: 27000000,
+                  currency: "EUR",
+                  version: 1,
+                },
+                {
+                  id: "q3",
+                  owner_id: "u3",
+                  team_id: null,
+                  period_start: "2026-04-01",
+                  period_end: "2026-06-30",
+                  target_minor: 24000000,
+                  currency: "EUR",
+                  version: 1,
+                },
+              ],
+            },
+            error: undefined,
+          });
+        }
         return Promise.resolve({
-          data: {
-            data: [
-              current,
-              {
-                id: "q2",
-                owner_id: "u2",
-                team_id: null,
-                period_start: "2026-07-01",
-                period_end: "2026-09-30",
-                target_minor: 27000000,
-                currency: "EUR",
-                version: 1,
-              },
-              {
-                id: "q3",
-                owner_id: "u3",
-                team_id: null,
-                period_start: "2026-04-01",
-                period_end: "2026-06-30",
-                target_minor: 24000000,
-                currency: "EUR",
-                version: 1,
-              },
-            ],
-          },
+          data: FIXTURE_ATTAINMENT,
           error: undefined,
+          response: { status: 200 },
         });
-      }
-      return Promise.resolve({
-        data: FIXTURE_ATTAINMENT,
-        error: undefined,
-        response: { status: 200 },
-      });
-    });
+      },
+    );
     const { result } = renderHook(
       () => useTeamRollup(current, FIXTURE_ATTAINMENT),
       { wrapper },

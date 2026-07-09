@@ -80,8 +80,18 @@ vi.mock("../features/custom-fields/api/members.js", () => ({
   }),
 }));
 vi.mock("../features/records/api/quotas.js", () => ({
-  useQuota: () => ({ data: undefined, isLoading: true, isError: false, error: null }),
-  useQuotaAttainment: () => ({ data: undefined, isLoading: true, isError: false, error: null }),
+  useQuota: () => ({
+    data: undefined,
+    isLoading: true,
+    isError: false,
+    error: null,
+  }),
+  useQuotaAttainment: () => ({
+    data: undefined,
+    isLoading: true,
+    isError: false,
+    error: null,
+  }),
   useTeamRollup: () => ({ reps: [], isLoading: false, isError: false }),
   QuotaForbiddenError: class extends Error {},
   QuotaAttainmentForbiddenError: class extends Error {},

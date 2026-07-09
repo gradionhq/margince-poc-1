@@ -61,12 +61,15 @@ export function ContributingDealsTable({
           {
             key: "status",
             header: "Status",
-            render: () => <ClosedWonBadge label="Closed-won" variant="success" />,
+            render: () => (
+              <ClosedWonBadge label="Closed-won" variant="success" />
+            ),
           },
           {
             key: "amount",
             header: "Counted amount",
-            render: (row) => formatMoneyDeDE(row.base_value_minor, attainment.currency),
+            render: (row) =>
+              formatMoneyDeDE(row.base_value_minor, attainment.currency),
           },
         ]}
         rows={rows}
@@ -81,7 +84,8 @@ export function ContributingDealsTable({
         </span>
       </div>
       <p className="mt-gf-xs text-right font-mono text-gf-micro text-gf-tertiary">
-        {attainment.currency} · amounts to the cent · open / lost / omitted deals excluded
+        {attainment.currency} · amounts to the cent · open / lost / omitted
+        deals excluded
       </p>
     </div>
   );

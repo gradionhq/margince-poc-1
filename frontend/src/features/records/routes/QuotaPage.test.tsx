@@ -46,7 +46,10 @@ const attainment = {
 };
 
 function wrapper(qc: QueryClient) {
-  return function Wrapper({ children }: { children: ReactNode }) {
+  // `children` (the <QuotaPage /> element RTL's render() passes in) is intentionally unused —
+  // the route below already renders its own <QuotaPage /> instance inside the router context
+  // it needs (:id param), so RTL's passed-in element would lack that context anyway.
+  return function Wrapper({ children: _children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={qc}>
         <MemoryRouter initialEntries={[`/quotas/${QUOTA_ID}`]}>
@@ -66,66 +69,84 @@ describe("QuotaPage", () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
-    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
-      if (path === "/quotas/{id}") {
-        return Promise.resolve({ data: quota, error: undefined, response: { status: 200 } });
-      }
-      if (path === "/quotas/{id}/attainment") {
-        return Promise.resolve({
-          data: attainment,
-          error: undefined,
-          response: { status: 200 },
-        });
-      }
-      if (path === "/members") {
-        return Promise.resolve({
-          data: { data: [{ user_id: "u1", display_name: "Riya Mehta" }] },
-          error: undefined,
-        });
-      }
-      if (path === "/quotas") {
-        return Promise.resolve({
-          data: { data: [quota] },
-          error: undefined,
-        });
-      }
-      if (path === "/deals/{id}") {
-        return Promise.resolve({
-          data: { id: "d1", name: "BÄR Pharma — Packaging QA", closed_at: "2026-08-14T00:00:00Z" },
-          error: undefined,
-        });
-      }
-      return Promise.resolve({ data: undefined, error: undefined });
-    });
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation(
+      (path: string) => {
+        if (path === "/quotas/{id}") {
+          return Promise.resolve({
+            data: quota,
+            error: undefined,
+            response: { status: 200 },
+          });
+        }
+        if (path === "/quotas/{id}/attainment") {
+          return Promise.resolve({
+            data: attainment,
+            error: undefined,
+            response: { status: 200 },
+          });
+        }
+        if (path === "/members") {
+          return Promise.resolve({
+            data: { data: [{ user_id: "u1", display_name: "Riya Mehta" }] },
+            error: undefined,
+          });
+        }
+        if (path === "/quotas") {
+          return Promise.resolve({
+            data: { data: [quota] },
+            error: undefined,
+          });
+        }
+        if (path === "/deals/{id}") {
+          return Promise.resolve({
+            data: {
+              id: "d1",
+              name: "BÄR Pharma — Packaging QA",
+              closed_at: "2026-08-14T00:00:00Z",
+            },
+            error: undefined,
+          });
+        }
+        return Promise.resolve({ data: undefined, error: undefined });
+      },
+    );
 
     render(<QuotaPage />, { wrapper: wrapper(qc) });
 
-    await waitFor(() => expect(screen.getByText(/quota & attainment/i)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/quota & attainment/i)).toBeInTheDocument(),
+    );
   });
 
   it("surfaces the target-zero state and keeps the target editor visible", async () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
-    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
-      if (path === "/quotas/{id}") {
-        return Promise.resolve({ data: quota, error: undefined, response: { status: 200 } });
-      }
-      if (path === "/quotas/{id}/attainment") {
-        return Promise.resolve({
-          data: undefined,
-          error: { code: "attainment_target_zero" },
-          response: { status: 422 },
-        });
-      }
-      if (path === "/members") {
-        return Promise.resolve({
-          data: { data: [{ user_id: "u1", display_name: "Riya Mehta" }] },
-          error: undefined,
-        });
-      }
-      return Promise.resolve({ data: undefined, error: undefined });
-    });
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation(
+      (path: string) => {
+        if (path === "/quotas/{id}") {
+          return Promise.resolve({
+            data: quota,
+            error: undefined,
+            response: { status: 200 },
+          });
+        }
+        if (path === "/quotas/{id}/attainment") {
+          return Promise.resolve({
+            data: undefined,
+            error: { code: "attainment_target_zero" },
+            response: { status: 422 },
+          });
+        }
+        if (path === "/members") {
+          return Promise.resolve({
+            data: { data: [{ user_id: "u1", display_name: "Riya Mehta" }] },
+            error: undefined,
+          });
+        }
+        return Promise.resolve({ data: undefined, error: undefined });
+      },
+    );
 
     render(<QuotaPage />, { wrapper: wrapper(qc) });
 
@@ -134,31 +155,37 @@ describe("QuotaPage", () => {
         screen.getByText(/set a target below to start tracking attainment/i),
       ).toBeInTheDocument(),
     );
-    expect(screen.getByRole("button", { name: /save target/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /save target/i }),
+    ).toBeInTheDocument();
   });
 
   it("shows the quota permission state for a 403", async () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
-    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
-      if (path === "/quotas/{id}") {
-        return Promise.resolve({
-          data: undefined,
-          error: { code: "forbidden" },
-          response: { status: 403 },
-        });
-      }
-      if (path === "/members") {
-        return Promise.resolve({ data: { data: [] }, error: undefined });
-      }
-      return Promise.resolve({ data: undefined, error: undefined });
-    });
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation(
+      (path: string) => {
+        if (path === "/quotas/{id}") {
+          return Promise.resolve({
+            data: undefined,
+            error: { code: "forbidden" },
+            response: { status: 403 },
+          });
+        }
+        if (path === "/members") {
+          return Promise.resolve({ data: { data: [] }, error: undefined });
+        }
+        return Promise.resolve({ data: undefined, error: undefined });
+      },
+    );
 
     render(<QuotaPage />, { wrapper: wrapper(qc) });
 
     await waitFor(() =>
-      expect(screen.getByText(/you don't have access to this quota/i)).toBeInTheDocument(),
+      expect(
+        screen.getByText(/you don't have access to this quota/i),
+      ).toBeInTheDocument(),
     );
   });
 
@@ -167,49 +194,65 @@ describe("QuotaPage", () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
-    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
-      if (path === "/quotas/{id}") {
-        return Promise.resolve({ data: quota, error: undefined, response: { status: 200 } });
-      }
-      if (path === "/quotas/{id}/attainment") {
-        return Promise.resolve({
-          data: attainment,
-          error: undefined,
-          response: { status: 200 },
-        });
-      }
-      if (path === "/members") {
-        return Promise.resolve({
-          data: { data: [{ user_id: "u1", display_name: "Riya Mehta" }] },
-          error: undefined,
-        });
-      }
-      if (path === "/quotas") {
-        return Promise.resolve({
-          data: { data: [quota] },
-          error: undefined,
-        });
-      }
-      if (path === "/deals/{id}") {
-        return Promise.resolve({
-          data: { id: "d1", name: "BÄR Pharma — Packaging QA", closed_at: "2026-08-14T00:00:00Z" },
-          error: undefined,
-        });
-      }
-      return Promise.resolve({ data: undefined, error: undefined });
-    });
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation(
+      (path: string) => {
+        if (path === "/quotas/{id}") {
+          return Promise.resolve({
+            data: quota,
+            error: undefined,
+            response: { status: 200 },
+          });
+        }
+        if (path === "/quotas/{id}/attainment") {
+          return Promise.resolve({
+            data: attainment,
+            error: undefined,
+            response: { status: 200 },
+          });
+        }
+        if (path === "/members") {
+          return Promise.resolve({
+            data: { data: [{ user_id: "u1", display_name: "Riya Mehta" }] },
+            error: undefined,
+          });
+        }
+        if (path === "/quotas") {
+          return Promise.resolve({
+            data: { data: [quota] },
+            error: undefined,
+          });
+        }
+        if (path === "/deals/{id}") {
+          return Promise.resolve({
+            data: {
+              id: "d1",
+              name: "BÄR Pharma — Packaging QA",
+              closed_at: "2026-08-14T00:00:00Z",
+            },
+            error: undefined,
+          });
+        }
+        return Promise.resolve({ data: undefined, error: undefined });
+      },
+    );
 
     render(<QuotaPage />, { wrapper: wrapper(qc) });
 
-    await waitFor(() => expect(screen.getByText("Q3 2026 · current")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("Q3 2026 · current")).toBeInTheDocument(),
+    );
     await user.click(screen.getByRole("button", { name: /q2 2026/i }));
-    expect(screen.getByText(/q2 2026 is closed — read-only/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/q2 2026 is closed — read-only/i),
+    ).toBeInTheDocument();
 
     const input = screen.getByRole("textbox");
     await user.clear(input);
     await user.type(input, "abc");
     await user.click(screen.getByRole("button", { name: /save target/i }));
-    expect(screen.getByText(/enter a target amount in eur/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/enter a target amount in eur/i),
+    ).toBeInTheDocument();
     expect(apiClient.PATCH).not.toHaveBeenCalled();
   });
 
@@ -220,31 +263,41 @@ describe("QuotaPage", () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
-    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
-      if (path === "/quotas/{id}") {
-        return Promise.resolve({ data: quota, error: undefined, response: { status: 200 } });
-      }
-      if (path === "/quotas/{id}/attainment") {
-        return Promise.resolve({
-          data: attainment,
-          error: undefined,
-          response: { status: 200 },
-        });
-      }
-      if (path === "/members") {
-        return Promise.resolve({ data: { data: [] }, error: undefined });
-      }
-      if (path === "/quotas") {
-        return Promise.resolve({ data: { data: [quota] }, error: undefined });
-      }
-      if (path === "/deals/{id}") {
-        return Promise.resolve({
-          data: { id: "d1", name: "BÄR Pharma — Packaging QA", closed_at: "2026-08-14T00:00:00Z" },
-          error: undefined,
-        });
-      }
-      return Promise.resolve({ data: undefined, error: undefined });
-    });
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation(
+      (path: string) => {
+        if (path === "/quotas/{id}") {
+          return Promise.resolve({
+            data: quota,
+            error: undefined,
+            response: { status: 200 },
+          });
+        }
+        if (path === "/quotas/{id}/attainment") {
+          return Promise.resolve({
+            data: attainment,
+            error: undefined,
+            response: { status: 200 },
+          });
+        }
+        if (path === "/members") {
+          return Promise.resolve({ data: { data: [] }, error: undefined });
+        }
+        if (path === "/quotas") {
+          return Promise.resolve({ data: { data: [quota] }, error: undefined });
+        }
+        if (path === "/deals/{id}") {
+          return Promise.resolve({
+            data: {
+              id: "d1",
+              name: "BÄR Pharma — Packaging QA",
+              closed_at: "2026-08-14T00:00:00Z",
+            },
+            error: undefined,
+          });
+        }
+        return Promise.resolve({ data: undefined, error: undefined });
+      },
+    );
 
     render(<QuotaPage />, { wrapper: wrapper(qc) });
 
@@ -260,26 +313,28 @@ describe("QuotaPage", () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
-    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
-      if (path === "/quotas/{id}") {
-        return Promise.resolve({
-          data: { ...quota, target_minor: 0 },
-          error: undefined,
-          response: { status: 200 },
-        });
-      }
-      if (path === "/quotas/{id}/attainment") {
-        return Promise.resolve({
-          data: undefined,
-          error: { code: "attainment_target_zero" },
-          response: { status: 422 },
-        });
-      }
-      if (path === "/members") {
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation(
+      (path: string) => {
+        if (path === "/quotas/{id}") {
+          return Promise.resolve({
+            data: { ...quota, target_minor: 0 },
+            error: undefined,
+            response: { status: 200 },
+          });
+        }
+        if (path === "/quotas/{id}/attainment") {
+          return Promise.resolve({
+            data: undefined,
+            error: { code: "attainment_target_zero" },
+            response: { status: 422 },
+          });
+        }
+        if (path === "/members") {
+          return Promise.resolve({ data: { data: [] }, error: undefined });
+        }
         return Promise.resolve({ data: { data: [] }, error: undefined });
-      }
-      return Promise.resolve({ data: { data: [] }, error: undefined });
-    });
+      },
+    );
 
     render(<QuotaPage />, { wrapper: wrapper(qc) });
 
@@ -291,22 +346,28 @@ describe("QuotaPage", () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
-    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
-      if (path === "/quotas/{id}") {
-        return Promise.resolve({ data: quota, error: undefined, response: { status: 200 } });
-      }
-      if (path === "/quotas/{id}/attainment") {
-        return Promise.resolve({
-          data: undefined,
-          error: { code: "forbidden" },
-          response: { status: 403 },
-        });
-      }
-      if (path === "/members") {
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation(
+      (path: string) => {
+        if (path === "/quotas/{id}") {
+          return Promise.resolve({
+            data: quota,
+            error: undefined,
+            response: { status: 200 },
+          });
+        }
+        if (path === "/quotas/{id}/attainment") {
+          return Promise.resolve({
+            data: undefined,
+            error: { code: "forbidden" },
+            response: { status: 403 },
+          });
+        }
+        if (path === "/members") {
+          return Promise.resolve({ data: { data: [] }, error: undefined });
+        }
         return Promise.resolve({ data: { data: [] }, error: undefined });
-      }
-      return Promise.resolve({ data: { data: [] }, error: undefined });
-    });
+      },
+    );
 
     render(<QuotaPage />, { wrapper: wrapper(qc) });
 
@@ -317,26 +378,28 @@ describe("QuotaPage", () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
-    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
-      if (path === "/quotas/{id}") {
-        return Promise.resolve({
-          data: undefined,
-          error: { code: "forbidden" },
-          response: { status: 403 },
-        });
-      }
-      if (path === "/quotas/{id}/attainment") {
-        return Promise.resolve({
-          data: undefined,
-          error: { code: "forbidden" },
-          response: { status: 403 },
-        });
-      }
-      if (path === "/members") {
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation(
+      (path: string) => {
+        if (path === "/quotas/{id}") {
+          return Promise.resolve({
+            data: undefined,
+            error: { code: "forbidden" },
+            response: { status: 403 },
+          });
+        }
+        if (path === "/quotas/{id}/attainment") {
+          return Promise.resolve({
+            data: undefined,
+            error: { code: "forbidden" },
+            response: { status: 403 },
+          });
+        }
+        if (path === "/members") {
+          return Promise.resolve({ data: { data: [] }, error: undefined });
+        }
         return Promise.resolve({ data: { data: [] }, error: undefined });
-      }
-      return Promise.resolve({ data: { data: [] }, error: undefined });
-    });
+      },
+    );
 
     render(<QuotaPage />, { wrapper: wrapper(qc) });
 
@@ -349,47 +412,59 @@ describe("QuotaPage", () => {
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
     let attainmentCalls = 0;
-    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
-      if (path === "/quotas/{id}") {
-        return Promise.resolve({ data: quota, error: undefined, response: { status: 200 } });
-      }
-      if (path === "/quotas/{id}/attainment") {
-        attainmentCalls += 1;
-        if (attainmentCalls === 1) {
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockImplementation(
+      (path: string) => {
+        if (path === "/quotas/{id}") {
           return Promise.resolve({
-            data: attainment,
+            data: quota,
             error: undefined,
             response: { status: 200 },
           });
         }
-        // A generic (non-forbidden, non-target-zero) attainment error — proves the caption isn't
-        // gated behind the "attainment_computation_failed" code specifically.
-        return Promise.resolve({
-          data: undefined,
-          error: { code: "attainment_computation_failed" },
-          response: { status: 422 },
-        });
-      }
-      if (path === "/members") {
-        return Promise.resolve({ data: { data: [] }, error: undefined });
-      }
-      if (path === "/quotas") {
-        return Promise.resolve({ data: { data: [quota] }, error: undefined });
-      }
-      if (path === "/deals/{id}") {
-        return Promise.resolve({
-          data: { id: "d1", name: "BÄR Pharma — Packaging QA", closed_at: "2026-08-14T00:00:00Z" },
-          error: undefined,
-        });
-      }
-      return Promise.resolve({ data: undefined, error: undefined });
-    });
+        if (path === "/quotas/{id}/attainment") {
+          attainmentCalls += 1;
+          if (attainmentCalls === 1) {
+            return Promise.resolve({
+              data: attainment,
+              error: undefined,
+              response: { status: 200 },
+            });
+          }
+          // A generic (non-forbidden, non-target-zero) attainment error — proves the caption isn't
+          // gated behind the "attainment_computation_failed" code specifically.
+          return Promise.resolve({
+            data: undefined,
+            error: { code: "attainment_computation_failed" },
+            response: { status: 422 },
+          });
+        }
+        if (path === "/members") {
+          return Promise.resolve({ data: { data: [] }, error: undefined });
+        }
+        if (path === "/quotas") {
+          return Promise.resolve({ data: { data: [quota] }, error: undefined });
+        }
+        if (path === "/deals/{id}") {
+          return Promise.resolve({
+            data: {
+              id: "d1",
+              name: "BÄR Pharma — Packaging QA",
+              closed_at: "2026-08-14T00:00:00Z",
+            },
+            error: undefined,
+          });
+        }
+        return Promise.resolve({ data: undefined, error: undefined });
+      },
+    );
 
     render(<QuotaPage />, { wrapper: wrapper(qc) });
 
     expect(await screen.findByText("112%")).toBeInTheDocument();
 
-    await qc.invalidateQueries({ queryKey: ["quotas", "attainment", QUOTA_ID] });
+    await qc.invalidateQueries({
+      queryKey: ["quotas", "attainment", QUOTA_ID],
+    });
 
     const caption = await screen.findByText(/Last successful compute:/i);
     expect(caption).toBeInTheDocument();
@@ -397,7 +472,9 @@ describe("QuotaPage", () => {
     // figures rather than continuing to show a stale "112%" as if it were current (the team
     // roll-up rail's own reuse of the last-known attainment is a separate, out-of-scope concern).
     const ringPanel = caption.closest("section") as HTMLElement;
-    expect(within(ringPanel).getByText(/couldn't recompute attainment/i)).toBeInTheDocument();
+    expect(
+      within(ringPanel).getByText(/couldn't recompute attainment/i),
+    ).toBeInTheDocument();
     expect(within(ringPanel).queryByText("112%")).not.toBeInTheDocument();
   });
 });

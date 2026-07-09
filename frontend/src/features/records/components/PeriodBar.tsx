@@ -3,7 +3,8 @@ import type { Quota } from "../api/quotas.js";
 // Quarter label ("Q3 2026") offset by whole quarters from a YYYY-MM-DD date.
 function quarterLabel(dateStr: string, offsetQuarters: number): string {
   const d = new Date(`${dateStr}T00:00:00Z`);
-  const totalMonths = d.getUTCFullYear() * 12 + d.getUTCMonth() + offsetQuarters * 3;
+  const totalMonths =
+    d.getUTCFullYear() * 12 + d.getUTCMonth() + offsetQuarters * 3;
   const year = Math.floor(totalMonths / 12);
   const quarter = Math.floor((totalMonths % 12) / 3) + 1;
   return `Q${quarter} ${year}`;

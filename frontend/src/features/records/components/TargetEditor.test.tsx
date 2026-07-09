@@ -8,6 +8,7 @@ import type { Quota } from "../api/quotas.js";
 vi.mock("../../../lib/api-client/client.js", () => ({
   apiClient: { GET: vi.fn(), POST: vi.fn(), DELETE: vi.fn(), PATCH: vi.fn() },
 }));
+
 import { apiClient } from "../../../lib/api-client/client.js";
 import { TargetEditor } from "./TargetEditor.js";
 

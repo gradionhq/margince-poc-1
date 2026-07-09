@@ -18,7 +18,10 @@ import { TeamRollupRail } from "../components/TeamRollupRail.js";
 
 type Toast = { id: string; variant: "success" | "error"; message: string };
 
-function quotaLabel(quotaOwnerId: string | null | undefined, members: Map<string, string>) {
+function quotaLabel(
+  quotaOwnerId: string | null | undefined,
+  members: Map<string, string>,
+) {
   return (quotaOwnerId && members.get(quotaOwnerId)) ?? "Unknown quota";
 }
 
@@ -26,10 +29,16 @@ export function QuotaPage() {
   const { id } = useParams<{ id: string }>();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [toastSeq, setToastSeq] = useState(0);
-  const [lastGoodComputeAt, setLastGoodComputeAt] = useState<string | undefined>();
+  const [lastGoodComputeAt, setLastGoodComputeAt] = useState<
+    string | undefined
+  >();
 
-  const { data: quota, isLoading: quotaLoading, isError: quotaIsError, error: quotaError } =
-    useQuota(id);
+  const {
+    data: quota,
+    isLoading: quotaLoading,
+    isError: quotaIsError,
+    error: quotaError,
+  } = useQuota(id);
   const {
     data: attainment,
     isLoading: attainmentLoading,
@@ -50,7 +59,10 @@ export function QuotaPage() {
   const memberNameById = useMemo(
     () =>
       new Map(
-        (membersPage?.data ?? []).map((member) => [member.user_id, member.display_name]),
+        (membersPage?.data ?? []).map((member) => [
+          member.user_id,
+          member.display_name,
+        ]),
       ),
     [membersPage],
   );
@@ -76,8 +88,10 @@ export function QuotaPage() {
   }
 
   const quotaForbidden = quotaError instanceof QuotaForbiddenError;
-  const attainmentForbidden = attainmentError instanceof QuotaAttainmentForbiddenError;
-  const attainmentTargetZero = attainmentError instanceof QuotaAttainmentTargetZeroError;
+  const attainmentForbidden =
+    attainmentError instanceof QuotaAttainmentForbiddenError;
+  const attainmentTargetZero =
+    attainmentError instanceof QuotaAttainmentTargetZeroError;
 
   if (!quotaLoading && quotaForbidden) {
     return (
@@ -109,8 +123,8 @@ export function QuotaPage() {
             </h2>
             {quota && (
               <p className="text-gf-caption text-gf-secondary">
-                {quotaLabel(quota.owner_id, memberNameById)} · {quota.currency} · {quota.period_start} to{" "}
-                {quota.period_end}
+                {quotaLabel(quota.owner_id, memberNameById)} · {quota.currency}{" "}
+                · {quota.period_start} to {quota.period_end}
               </p>
             )}
           </div>
@@ -129,19 +143,26 @@ export function QuotaPage() {
           {!isLoading && attainment && (
             <QuotaExplainBox attainment={attainment} />
           )}
-          {attainmentIsError && !attainmentForbidden && !attainmentTargetZero && (
-            <p className="px-gf-lg pb-gf-lg text-gf-caption text-gf-tertiary">
-              {lastGoodComputeAt
-                ? `Last successful compute: ${lastGoodComputeAt}.`
-                : "No successful compute yet."}
-            </p>
-          )}
+          {attainmentIsError &&
+            !attainmentForbidden &&
+            !attainmentTargetZero && (
+              <p className="px-gf-lg pb-gf-lg text-gf-caption text-gf-tertiary">
+                {lastGoodComputeAt
+                  ? `Last successful compute: ${lastGoodComputeAt}.`
+                  : "No successful compute yet."}
+              </p>
+            )}
           {quota && (
             <div className="border-t border-gf-subtle px-gf-lg pb-gf-lg">
-              <PeriodBar quota={quota} onToast={(message) => pushToast("error", message)} />
+              <PeriodBar
+                quota={quota}
+                onToast={(message) => pushToast("error", message)}
+              />
               <div className="mt-gf-lg grid gap-gf-lg md:grid-cols-[minmax(0,1fr)_280px]">
                 <div className="min-w-0">
-                  {attainment && <ContributingDealsTable attainment={attainment} />}
+                  {attainment && (
+                    <ContributingDealsTable attainment={attainment} />
+                  )}
                 </div>
                 <div className="rounded-lg border border-gf-subtle bg-gf-elevated p-gf-md">
                   <TargetEditor

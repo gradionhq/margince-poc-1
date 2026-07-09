@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Button, TextInput } from "../../../shared/ui/forge.js";
+import type { Quota } from "../api/quotas.js";
 import {
   parseGermanIntegerEuros,
   useUpdateQuotaTarget,
 } from "../api/quotas.js";
-import type { Quota } from "../api/quotas.js";
 
 export function TargetEditor({
   quota,
@@ -41,7 +41,8 @@ export function TargetEditor({
             "Target saved as human-typed — change logged, attainment recomputed",
           );
         },
-        onError: () => onToast("error", "Failed to save target. Please try again."),
+        onError: () =>
+          onToast("error", "Failed to save target. Please try again."),
       },
     );
   }

@@ -5,7 +5,10 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { apiClient } from "../../../lib/api-client/client.js";
-import type { Deal, components } from "../../../lib/api-client/generated/index.js";
+import type {
+  components,
+  Deal,
+} from "../../../lib/api-client/generated/index.js";
 
 export type Quota = components["schemas"]["Quota"];
 export type QuotaAttainment = components["schemas"]["QuotaAttainment"];
@@ -39,7 +42,9 @@ export class QuotaAttainmentForbiddenError extends Error {
 // or invented attainment.
 export class QuotaAttainmentTargetZeroError extends Error {
   constructor() {
-    super("This quota's target is zero; set a target to start tracking attainment.");
+    super(
+      "This quota's target is zero; set a target to start tracking attainment.",
+    );
     this.name = "QuotaAttainmentTargetZeroError";
   }
 }
@@ -165,9 +170,11 @@ export function useTeamRollup(
   currentQuota: Quota | undefined,
   currentAttainment: QuotaAttainment | undefined,
 ) {
-  const { data: page, isLoading: listLoading, isError: listError } = useQuery<
-    Quota[]
-  >({
+  const {
+    data: page,
+    isLoading: listLoading,
+    isError: listError,
+  } = useQuery<Quota[]>({
     queryKey: quotasKeys.list(),
     enabled: !!currentQuota,
     queryFn: async () => {
@@ -208,14 +215,23 @@ export function useTeamRollup(
   // caller (the ring), reused here rather than re-fetched.
   const currentRep =
     currentQuota && currentAttainment
-      ? [{ quota: currentQuota, attainment: currentAttainment, isCurrent: true }]
+      ? [
+          {
+            quota: currentQuota,
+            attainment: currentAttainment,
+            isCurrent: true,
+          },
+        ]
       : [];
 
   const reps = [
     ...currentRep,
     ...siblings.map((quota, i) => ({
       quota,
-      attainment: attainmentResults[i]?.data as QuotaAttainment | null | undefined,
+      attainment: attainmentResults[i]?.data as
+        | QuotaAttainment
+        | null
+        | undefined,
       isCurrent: false,
     })),
   ];

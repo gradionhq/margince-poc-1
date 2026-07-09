@@ -18,7 +18,13 @@ const ATTAINMENT: QuotaAttainment = {
 
 describe("AttainmentRing", () => {
   it("AC-quota-1: renders attainment %, closed-won, target, gap from the server response", () => {
-    render(<AttainmentRing attainment={ATTAINMENT} isLoading={false} isError={false} />);
+    render(
+      <AttainmentRing
+        attainment={ATTAINMENT}
+        isLoading={false}
+        isError={false}
+      />,
+    );
     expect(screen.getByText("112%")).toBeInTheDocument();
     expect(screen.getByText(/313\.872,00/)).toBeInTheDocument();
     expect(screen.getByText(/280\.000,00/)).toBeInTheDocument();
@@ -26,18 +32,34 @@ describe("AttainmentRing", () => {
   });
 
   it("AC-quota-3: pace line reads 'Target met' at >=100%", () => {
-    render(<AttainmentRing attainment={ATTAINMENT} isLoading={false} isError={false} />);
+    render(
+      <AttainmentRing
+        attainment={ATTAINMENT}
+        isLoading={false}
+        isError={false}
+      />,
+    );
     expect(screen.getByText(/target met/i)).toBeInTheDocument();
   });
 
   it("AC-quota-3: pace line reads 'Ahead of pace' when attainment_pct >= pace_pct but < 100", () => {
-    const a = { ...ATTAINMENT, attainment_pct: 70, band: "accent" as const, pace_pct: 64 };
+    const a = {
+      ...ATTAINMENT,
+      attainment_pct: 70,
+      band: "accent" as const,
+      pace_pct: 64,
+    };
     render(<AttainmentRing attainment={a} isLoading={false} isError={false} />);
     expect(screen.getByText(/ahead of pace/i)).toBeInTheDocument();
   });
 
   it("AC-quota-3: pace line reads 'Behind pace' when attainment_pct < pace_pct", () => {
-    const a = { ...ATTAINMENT, attainment_pct: 40, band: "behind" as const, pace_pct: 64 };
+    const a = {
+      ...ATTAINMENT,
+      attainment_pct: 40,
+      band: "behind" as const,
+      pace_pct: 64,
+    };
     render(<AttainmentRing attainment={a} isLoading={false} isError={false} />);
     expect(screen.getByText(/behind pace/i)).toBeInTheDocument();
   });
@@ -51,7 +73,13 @@ describe("AttainmentRing", () => {
   });
 
   it("STATE-2: shows a skeleton when isLoading", () => {
-    render(<AttainmentRing attainment={undefined} isLoading={true} isError={false} />);
+    render(
+      <AttainmentRing
+        attainment={undefined}
+        isLoading={true}
+        isError={false}
+      />,
+    );
     expect(screen.getByTestId("attainment-ring-skeleton")).toBeInTheDocument();
   });
 
@@ -82,7 +110,13 @@ describe("AttainmentRing", () => {
   });
 
   it("STATE-3: shows the generic honest error card otherwise", () => {
-    render(<AttainmentRing attainment={undefined} isLoading={false} isError={true} />);
+    render(
+      <AttainmentRing
+        attainment={undefined}
+        isLoading={false}
+        isError={true}
+      />,
+    );
     expect(screen.getByText(/couldn't recompute/i)).toBeInTheDocument();
   });
 });
