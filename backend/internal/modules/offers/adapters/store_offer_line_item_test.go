@@ -16,6 +16,7 @@ import (
 )
 
 func f64Ptr(f float64) *float64 { return &f }
+func i64Ptr(i int64) *int64     { return &i }
 
 func newDraftOffer(t *testing.T, db *sql.DB, wsID, dealID string) domain.Offer {
 	t.Helper()
@@ -49,16 +50,20 @@ func TestOfferLineItemStore_Create_ProductSnapshot(t *testing.T) {
 
 	li := domain.OfferLineItem{
 		WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
-		ProductID: &createdProduct.ID, Description: "placeholder", Quantity: 2, UnitPriceMinor: 1,
+		ProductID: &createdProduct.ID, Description: "placeholder", Quantity: 2, UnitPriceMinor: i64Ptr(1),
 		Source: "test", CapturedBy: "human:test",
 	}
 	created, err := lineStore.Create(context.Background(), li, nil)
 	if err != nil {
 		t.Fatalf("create line: %v", err)
 	}
-	if created.Description != "Consulting Day" || created.UnitPriceMinor != 150000 || created.TaxRate != 19.0 {
-		t.Fatalf("expected product snapshot copied onto the line, got description=%q unit_price_minor=%d tax_rate=%v",
-			created.Description, created.UnitPriceMinor, created.TaxRate)
+	if created.Description != "Consulting Day" || created.UnitPriceMinor == nil || *created.UnitPriceMinor != 150000 || created.TaxRate != 19.0 {
+		var price any = nil
+		if created.UnitPriceMinor != nil {
+			price = *created.UnitPriceMinor
+		}
+		t.Fatalf("expected product snapshot copied onto the line, got description=%q unit_price_minor=%v tax_rate=%v",
+			created.Description, price, created.TaxRate)
 	}
 
 	// Mutate the product's price after the line was written; the already-
@@ -71,8 +76,12 @@ func TestOfferLineItemStore_Create_ProductSnapshot(t *testing.T) {
 		t.Fatalf("list lines: %v", err)
 	}
 	for _, li := range reGot {
-		if li.ID == created.ID && li.UnitPriceMinor != 150000 {
-			t.Fatalf("expected line's snapshot price unchanged after product price mutation, got %d", li.UnitPriceMinor)
+		if li.ID == created.ID && (li.UnitPriceMinor == nil || *li.UnitPriceMinor != 150000) {
+			var price any = nil
+			if li.UnitPriceMinor != nil {
+				price = *li.UnitPriceMinor
+			}
+			t.Fatalf("expected line's snapshot price unchanged after product price mutation, got %v", price)
 		}
 	}
 }
@@ -104,7 +113,7 @@ func TestOfferLineItemStore_Reconciliation_RoundThenSum_DivergesFromSumThenRound
 	for pos := 1; pos <= 2; pos++ {
 		li := domain.OfferLineItem{
 			WorkspaceID: wsID, OfferID: offer.ID, Position: pos,
-			Description: "Divergence line", Quantity: 1, UnitPriceMinor: 201, DiscountPct: 50,
+			Description: "Divergence line", Quantity: 1, UnitPriceMinor: i64Ptr(201), DiscountPct: 50,
 			Source: "test", CapturedBy: "human:test",
 		}
 		if _, err := lineStore.Create(context.Background(), li, f64Ptr(50)); err != nil {
@@ -148,14 +157,14 @@ func TestOfferLineItemStore_Create_PositionConflict_Rejected(t *testing.T) {
 
 	base := domain.OfferLineItem{
 		WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
-		Description: "A", Quantity: 1, UnitPriceMinor: 100, Source: "test", CapturedBy: "human:test",
+		Description: "A", Quantity: 1, UnitPriceMinor: i64Ptr(100), Source: "test", CapturedBy: "human:test",
 	}
 	if _, err := lineStore.Create(context.Background(), base, nil); err != nil {
 		t.Fatalf("first create: %v", err)
 	}
 	dup := domain.OfferLineItem{
 		WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
-		Description: "B", Quantity: 1, UnitPriceMinor: 100, Source: "test", CapturedBy: "human:test",
+		Description: "B", Quantity: 1, UnitPriceMinor: i64Ptr(100), Source: "test", CapturedBy: "human:test",
 	}
 	_, err := lineStore.Create(context.Background(), dup, nil)
 	var posErr *adapters.ErrDuplicatePosition
@@ -172,7 +181,7 @@ func TestOfferLineItemStore_Mutations_RejectedWhenOfferNotDraft(t *testing.T) {
 
 	li := domain.OfferLineItem{
 		WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
-		Description: "A", Quantity: 1, UnitPriceMinor: 100, Source: "test", CapturedBy: "human:test",
+		Description: "A", Quantity: 1, UnitPriceMinor: i64Ptr(100), Source: "test", CapturedBy: "human:test",
 	}
 	created, err := lineStore.Create(context.Background(), li, nil)
 	if err != nil {
@@ -204,7 +213,7 @@ func TestOfferLineItemStore_Update_RecomputesOfferTotals(t *testing.T) {
 
 	li := domain.OfferLineItem{
 		WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
-		Description: "A", Quantity: 2, UnitPriceMinor: 1000,
+		Description: "A", Quantity: 2, UnitPriceMinor: i64Ptr(1000),
 		Source: "test", CapturedBy: "human:test",
 	}
 	created, err := lineStore.Create(context.Background(), li, f64Ptr(10))
@@ -242,7 +251,7 @@ func TestOfferLineItemStore_Delete_HardDeletes_And_RecomputesTotals(t *testing.T
 
 	li := domain.OfferLineItem{
 		WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
-		Description: "A", Quantity: 2, UnitPriceMinor: 500, Source: "test", CapturedBy: "human:test",
+		Description: "A", Quantity: 2, UnitPriceMinor: i64Ptr(500), Source: "test", CapturedBy: "human:test",
 	}
 	created, err := lineStore.Create(context.Background(), li, nil)
 	if err != nil {
@@ -275,7 +284,7 @@ func TestOfferLineItemStore_Create_MissingProvenance_Rejected(t *testing.T) {
 
 	li := domain.OfferLineItem{
 		WorkspaceID: wsID, OfferID: offer.ID, Position: 1,
-		Description: "A", Quantity: 1, UnitPriceMinor: 100,
+		Description: "A", Quantity: 1, UnitPriceMinor: i64Ptr(100),
 	}
 	_, err := lineStore.Create(context.Background(), li, nil)
 	if !errors.Is(err, errs.ErrNullProvenance) {

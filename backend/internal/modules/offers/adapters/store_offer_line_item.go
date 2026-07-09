@@ -128,7 +128,8 @@ func (s *OfferLineItemStore) applyProductSnapshot(ctx context.Context, li domain
 		} else {
 			li.Description = p.Name
 		}
-		li.UnitPriceMinor = p.UnitPriceMinor
+		price := p.UnitPriceMinor
+		li.UnitPriceMinor = &price
 		if explicitTaxRate == nil && p.DefaultTaxRate != nil {
 			li.TaxRate = *p.DefaultTaxRate
 		}

@@ -65,11 +65,15 @@ func recomputeOfferTotals(ctx context.Context, tx *sql.Tx, offerID, workspaceID 
 	var netMinor, taxMinor int64
 	for rows.Next() {
 		var quantity, discountPct, taxRate float64
-		var unitPriceMinor int64
+		var unitPriceMinor *int64
 		if err := rows.Scan(&quantity, &unitPriceMinor, &discountPct, &taxRate); err != nil {
 			return err
 		}
-		n, tx2 := computeLineTotals(quantity, unitPriceMinor, discountPct, taxRate)
+		price := int64(0)
+		if unitPriceMinor != nil {
+			price = *unitPriceMinor
+		}
+		n, tx2 := computeLineTotals(quantity, price, discountPct, taxRate)
 		netMinor += n
 		taxMinor += tx2
 	}
