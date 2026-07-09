@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { TextInput, Modal, Button } from "../../../shared/ui/forge.js";
 import type { CustomField } from "../../../lib/api-client/generated/index.js";
+import { Button, Modal, TextInput } from "../../../shared/ui/forge.js";
 
 export function RenameCustomFieldModal({
   open,
@@ -50,14 +50,14 @@ export function RenameCustomFieldModal({
       }
     >
       <div className="px-gf-xl py-gf-lg flex flex-col gap-gf-md">
-        <label className="flex flex-col gap-gf-xs">
+        <div className="flex flex-col gap-gf-xs">
           <span className="text-gf-caption text-gf-secondary">Field label</span>
           <TextInput
             value={newLabel}
             onChange={(v) => setNewLabel(v)}
             placeholder="e.g., Renewal date"
           />
-        </label>
+        </div>
       </div>
     </Modal>
   );

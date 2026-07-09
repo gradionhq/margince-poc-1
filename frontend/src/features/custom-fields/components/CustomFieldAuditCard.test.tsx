@@ -1,6 +1,11 @@
+// biome-ignore-all lint/a11y/useValidAriaRole: `role` is a domain prop of CustomFieldAuditCard, not the ARIA role attribute.
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import type { CustomField, Member } from "../../../lib/api-client/generated/index.js";
+import type { ReactNode } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+  CustomField,
+  Member,
+} from "../../../lib/api-client/generated/index.js";
 
 const mockDeriveAuditEntries = vi.fn();
 const mockResolveMemberName = vi.fn();
@@ -12,7 +17,13 @@ vi.mock("../lib/customFieldRules.js", () => ({
 }));
 
 vi.mock("../../../shared/ui/forge.js", () => ({
-  Skeleton: ({ height, "data-testid": testId }: any) => (
+  Skeleton: ({
+    height,
+    "data-testid": testId,
+  }: {
+    height?: string;
+    "data-testid"?: string;
+  }) => (
     <div data-testid={testId} style={{ height }}>
       Loading...
     </div>
@@ -20,10 +31,20 @@ vi.mock("../../../shared/ui/forge.js", () => ({
 }));
 
 vi.mock("../../../shared/ui/FieldGuard.tsx", () => ({
-  FieldGuard: ({ mode, children }: any) => {
+  FieldGuard: ({
+    mode,
+    children,
+  }: {
+    mode: "visible" | "masked" | "readonly";
+    children: ReactNode;
+  }) => {
     if (mode === "masked") {
       return (
-        <span data-testid={`field-guard-${mode}`} role="img" aria-label="Masked value">
+        <span
+          data-testid={`field-guard-${mode}`}
+          role="img"
+          aria-label="Masked value"
+        >
           ••••
         </span>
       );
@@ -98,7 +119,7 @@ describe("CustomFieldAuditCard", () => {
           role="admin"
           isLoading={true}
           isError={false}
-        />
+        />,
       );
 
       expect(screen.getByTestId("audit-card-skeleton")).toBeInTheDocument();
@@ -116,7 +137,7 @@ describe("CustomFieldAuditCard", () => {
           role="admin"
           isLoading={false}
           isError={true}
-        />
+        />,
       );
 
       expect(screen.getByText(/something went wrong/i)).toBeInTheDocument();
@@ -134,7 +155,7 @@ describe("CustomFieldAuditCard", () => {
           role="admin"
           isLoading={false}
           isError={false}
-        />
+        />,
       );
 
       expect(screen.getByText("No changes yet.")).toBeInTheDocument();
@@ -165,15 +186,18 @@ describe("CustomFieldAuditCard", () => {
           role="admin"
           isLoading={false}
           isError={false}
-        />
+        />,
       );
 
       expect(
-        screen.getByText((content, element) => {
-          return element &&
-            element.textContent === "Alice Smith added Renewal Date (date) to deal" &&
-            element.tagName === "P";
-        })
+        screen.getByText((_content, element) => {
+          return (
+            element &&
+            element.textContent ===
+              "Alice Smith added Renewal Date (date) to deal" &&
+            element.tagName === "P"
+          );
+        }),
       ).toBeInTheDocument();
     });
 
@@ -200,15 +224,17 @@ describe("CustomFieldAuditCard", () => {
           role="admin"
           isLoading={false}
           isError={false}
-        />
+        />,
       );
 
       expect(
-        screen.getByText((content, element) => {
-          return element &&
+        screen.getByText((_content, element) => {
+          return (
+            element &&
             element.textContent === "Bob Johnson retired Old Field" &&
-            element.tagName === "P";
-        })
+            element.tagName === "P"
+          );
+        }),
       ).toBeInTheDocument();
     });
 
@@ -245,22 +271,27 @@ describe("CustomFieldAuditCard", () => {
           role="admin"
           isLoading={false}
           isError={false}
-        />
+        />,
       );
 
       expect(
-        screen.getByText((content, element) => {
-          return element &&
+        screen.getByText((_content, element) => {
+          return (
+            element &&
             element.textContent === "Bob Johnson retired Old Field" &&
-            element.tagName === "P";
-        })
+            element.tagName === "P"
+          );
+        }),
       ).toBeInTheDocument();
       expect(
-        screen.getByText((content, element) => {
-          return element &&
-            element.textContent === "Bob Johnson added Old Field (text) to deal" &&
-            element.tagName === "P";
-        })
+        screen.getByText((_content, element) => {
+          return (
+            element &&
+            element.textContent ===
+              "Bob Johnson added Old Field (text) to deal" &&
+            element.tagName === "P"
+          );
+        }),
       ).toBeInTheDocument();
     });
   });
@@ -289,15 +320,16 @@ describe("CustomFieldAuditCard", () => {
           role="admin"
           isLoading={false}
           isError={false}
-        />
+        />,
       );
 
       // Date should be formatted - check caption paragraph
-      const captionText = screen.getByText((content, element) => {
-        return element &&
-          element.textContent?.includes("7/1/2026") &&
+      const captionText = screen.getByText((_content, element) => {
+        return (
+          element?.textContent?.includes("7/1/2026") &&
           element.textContent?.includes("audit#field1id-created") &&
-          element.tagName === "P";
+          element.tagName === "P"
+        );
       });
       expect(captionText).toBeInTheDocument();
     });
@@ -327,7 +359,7 @@ describe("CustomFieldAuditCard", () => {
           role="admin"
           isLoading={false}
           isError={false}
-        />
+        />,
       );
 
       expect(screen.getByTestId("field-guard-visible")).toBeInTheDocument();
@@ -359,7 +391,7 @@ describe("CustomFieldAuditCard", () => {
           role="rep"
           isLoading={false}
           isError={false}
-        />
+        />,
       );
 
       expect(screen.getByTestId("field-guard-masked")).toBeInTheDocument();
@@ -393,10 +425,12 @@ describe("CustomFieldAuditCard", () => {
           role="admin"
           isLoading={false}
           isError={false}
-        />
+        />,
       );
 
-      expect(mockDeriveAuditEntries).toHaveBeenCalledWith(mockFields.slice(0, 1));
+      expect(mockDeriveAuditEntries).toHaveBeenCalledWith(
+        mockFields.slice(0, 1),
+      );
 
       const ul = screen.getByRole("list");
       expect(ul).toBeInTheDocument();

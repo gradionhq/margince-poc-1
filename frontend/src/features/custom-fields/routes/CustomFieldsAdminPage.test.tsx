@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CustomField } from "../../../lib/api-client/generated/index.js";
 
 // Setup mocks with configurable behavior
@@ -22,7 +22,7 @@ let mockFieldsData: CustomField[] = [
 let mockFieldsIsLoading = false;
 let mockFieldsIsError = false;
 
-let mockMembersData = [
+const mockMembersData = [
   {
     user_id: "user1",
     display_name: "John Doe",
@@ -121,8 +121,12 @@ describe("CustomFieldsAdminPage", () => {
   describe("Structure and headers", () => {
     it("renders the main heading and description", () => {
       renderPage();
-      expect(screen.getByRole("heading", { name: /custom fields/i })).toBeInTheDocument();
-      expect(screen.getByText(/manage fields for deal, organization/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /custom fields/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/manage fields for deal, organization/i),
+      ).toBeInTheDocument();
     });
 
     it("renders the object chips", () => {
@@ -147,13 +151,17 @@ describe("CustomFieldsAdminPage", () => {
 
     it("shows Add field button for admins", () => {
       renderPage();
-      expect(screen.getByRole("button", { name: /add field/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /add field/i }),
+      ).toBeInTheDocument();
     });
 
     it("hides Add field button for non-admins", () => {
       mockAuthRole = "rep";
       renderPage();
-      expect(screen.queryByRole("button", { name: /add field/i })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /add field/i }),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -192,13 +200,17 @@ describe("CustomFieldsAdminPage", () => {
       const labelInputs = screen.getAllByRole("textbox");
       await user.type(labelInputs[0], "Renewal Date");
 
-      const confirmButton = screen.getByRole("button", { name: /confirm & create/i });
+      const confirmButton = screen.getByRole("button", {
+        name: /confirm & create/i,
+      });
       await user.click(confirmButton);
 
       await waitFor(() => {
         expect(createFieldMutate).toHaveBeenCalled();
         expect(
-          screen.getByText(/renewal date is live on the 360, filters, export & api/i),
+          screen.getByText(
+            /renewal date is live on the 360, filters, export & api/i,
+          ),
         ).toBeInTheDocument();
       });
     });
@@ -217,7 +229,9 @@ describe("CustomFieldsAdminPage", () => {
       const labelInputs = screen.getAllByRole("textbox");
       await user.type(labelInputs[0], "Test Field");
 
-      const confirmButton = screen.getByRole("button", { name: /confirm & create/i });
+      const confirmButton = screen.getByRole("button", {
+        name: /confirm & create/i,
+      });
       await user.click(confirmButton);
 
       await waitFor(() => {
@@ -235,7 +249,9 @@ describe("CustomFieldsAdminPage", () => {
       const labelInputs = screen.getAllByRole("textbox");
       await user.type(labelInputs[0], "link to company");
 
-      const confirmButton = screen.getByRole("button", { name: /confirm & create/i });
+      const confirmButton = screen.getByRole("button", {
+        name: /confirm & create/i,
+      });
       expect(confirmButton).toBeDisabled();
 
       expect(
@@ -381,13 +397,19 @@ describe("CustomFieldsAdminPage", () => {
 
       renderPage();
 
-      expect(screen.getByTestId("chip-deal")).toHaveAttribute("data-selected", "true");
+      expect(screen.getByTestId("chip-deal")).toHaveAttribute(
+        "data-selected",
+        "true",
+      );
 
       const orgChip = screen.getByTestId("chip-organization");
       await user.click(orgChip);
 
       expect(orgChip).toHaveAttribute("data-selected", "true");
-      expect(screen.getByTestId("chip-deal")).toHaveAttribute("data-selected", "false");
+      expect(screen.getByTestId("chip-deal")).toHaveAttribute(
+        "data-selected",
+        "false",
+      );
     });
   });
 
@@ -416,7 +438,9 @@ describe("CustomFieldsAdminPage", () => {
       const labelInputs = screen.getAllByRole("textbox");
       await user.type(labelInputs[0], "New Field");
 
-      const confirmButton = screen.getByRole("button", { name: /confirm & create/i });
+      const confirmButton = screen.getByRole("button", {
+        name: /confirm & create/i,
+      });
       await user.click(confirmButton);
 
       await waitFor(() => {

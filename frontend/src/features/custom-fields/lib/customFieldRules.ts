@@ -1,6 +1,14 @@
-import type { CustomField, Member } from "../../../lib/api-client/generated/index.js";
+import type {
+  CustomField,
+  Member,
+} from "../../../lib/api-client/generated/index.js";
 
-export type ObjectKey = "deal" | "organization" | "person" | "lead" | "activity";
+export type ObjectKey =
+  | "deal"
+  | "organization"
+  | "person"
+  | "lead"
+  | "activity";
 
 export const OBJECT_CHIPS = [
   { value: "deal" as ObjectKey, label: "Deal" },
@@ -11,12 +19,10 @@ export const OBJECT_CHIPS = [
 ] as const;
 
 export function slugify(label: string): string {
-  return (
-    label
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "")
-  );
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 export function buildApiKey(object: string, slug: string): string {
@@ -24,11 +30,20 @@ export function buildApiKey(object: string, slug: string): string {
   return `${object}.cf_${slug}`;
 }
 
-export function buildDdlPreview(object: string, slug: string, type: string): string {
+export function buildDdlPreview(
+  object: string,
+  slug: string,
+  type: string,
+): string {
   return `ALTER ${object} ADD COLUMN cf_${slug} (${type}) · backfilled NULL · reversible`;
 }
 
-const STRUCTURAL_WORDS = ["object", "relationship", "link to", "lookup to"] as const;
+const STRUCTURAL_WORDS = [
+  "object",
+  "relationship",
+  "link to",
+  "lookup to",
+] as const;
 
 export function detectStructuralWord(label: string): string | null {
   const lower = label.toLowerCase();
@@ -56,7 +71,9 @@ export interface CustomFieldAuditEntry {
   action: "added" | "retired";
 }
 
-export function deriveAuditEntries(fields: CustomField[]): CustomFieldAuditEntry[] {
+export function deriveAuditEntries(
+  fields: CustomField[],
+): CustomFieldAuditEntry[] {
   const entries: CustomFieldAuditEntry[] = [];
 
   for (const field of fields) {
@@ -87,5 +104,8 @@ export function deriveAuditEntries(fields: CustomField[]): CustomFieldAuditEntry
     }
   }
 
-  return entries.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+  return entries.sort(
+    (a, b) =>
+      new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
+  );
 }

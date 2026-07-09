@@ -1,12 +1,20 @@
 import { useState } from "react";
-import { Button, InlineErrorFallback, Skeleton } from "../../../shared/ui/forge.js";
-import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
+import type {
+  CreateCustomFieldRequest,
+  CustomField,
+} from "../../../lib/api-client/generated/index.js";
 import {
-  useCustomFields,
+  Button,
+  InlineErrorFallback,
+  Skeleton,
+} from "../../../shared/ui/forge.js";
+import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
+import { useAuthStore } from "../../identity/store/authStore.js";
+import {
   useCreateCustomField,
+  useCustomFields,
   useRenameCustomField,
   useRetireCustomField,
-  useUpdateCustomFieldOptions,
 } from "../api/customFields.js";
 import { useMembers } from "../api/members.js";
 import { CustomFieldAuditCard } from "../components/CustomFieldAuditCard.js";
@@ -15,8 +23,6 @@ import { NewCustomFieldModal } from "../components/NewCustomFieldModal.js";
 import { RenameCustomFieldModal } from "../components/RenameCustomFieldModal.js";
 import { RetireCustomFieldDialog } from "../components/RetireCustomFieldDialog.js";
 import { OBJECT_CHIPS, type ObjectKey } from "../lib/customFieldRules.js";
-import { useAuthStore } from "../../identity/store/authStore.js";
-import type { CustomField, CreateCustomFieldRequest } from "../../../lib/api-client/generated/index.js";
 
 interface Toast {
   id: string;
@@ -26,7 +32,10 @@ interface Toast {
 
 export function CustomFieldsAdminPage() {
   const [selectedObject, setSelectedObject] = useState<ObjectKey>("deal");
-  const [stagedRow, setStagedRow] = useState<{ label: string; type: string } | null>(null);
+  const [stagedRow, setStagedRow] = useState<{
+    label: string;
+    type: string;
+  } | null>(null);
   const [newCustomFieldOpen, setNewCustomFieldOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameField, setRenameField] = useState<CustomField | null>(null);
@@ -35,11 +44,21 @@ export function CustomFieldsAdminPage() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   // Hooks
-  const { data: fields = [], isLoading, isError, refetch } = useCustomFields(selectedObject);
-  const { data: members = [] } = useMembers();
-  const { mutate: createField, isPending: createPending } = useCreateCustomField();
-  const { mutate: renameFieldMutate, isPending: renamePending } = useRenameCustomField();
-  const { mutate: retireFieldMutate, isPending: retirePending } = useRetireCustomField();
+  const {
+    data: listResponse,
+    isLoading,
+    isError,
+    refetch,
+  } = useCustomFields(selectedObject);
+  const fields = listResponse?.data || [];
+  const { data: membersResponse } = useMembers();
+  const members = membersResponse?.data || [];
+  const { mutate: createField, isPending: createPending } =
+    useCreateCustomField();
+  const { mutate: renameFieldMutate, isPending: renamePending } =
+    useRenameCustomField();
+  const { mutate: retireFieldMutate, isPending: retirePending } =
+    useRetireCustomField();
 
   const { role = "rep", user } = useAuthStore();
   const userId = user?.id || "";
@@ -62,13 +81,17 @@ export function CustomFieldsAdminPage() {
         // Close modal
         setNewCustomFieldOpen(false);
         // Show success toast with exact message format
-        pushToast("success", `${field.label} is live on the 360, filters, export & API.`);
+        pushToast(
+          "success",
+          `${field.label} is live on the 360, filters, export & API.`,
+        );
       },
       onError: (error) => {
         // Clear staged row on error
         setStagedRow(null);
         // Show error toast
-        const errorMessage = error instanceof Error ? error.message : "Failed to create field";
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to create field";
         pushToast("error", errorMessage);
       },
     });
@@ -92,7 +115,8 @@ export function CustomFieldsAdminPage() {
           pushToast("success", "Field renamed");
         },
         onError: (error) => {
-          const errorMessage = error instanceof Error ? error.message : "Failed to rename field";
+          const errorMessage =
+            error instanceof Error ? error.message : "Failed to rename field";
           pushToast("error", errorMessage);
           setRenameOpen(false);
           setRenameField(null);
@@ -117,7 +141,8 @@ export function CustomFieldsAdminPage() {
         pushToast("success", "Field retired");
       },
       onError: (error) => {
-        const errorMessage = error instanceof Error ? error.message : "Failed to retire field";
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to retire field";
         pushToast("error", errorMessage);
         setRetireOpen(false);
         setRetireField(null);
@@ -127,15 +152,19 @@ export function CustomFieldsAdminPage() {
 
   // Get display name for selected object
   const selectedObjectLabel =
-    OBJECT_CHIPS.find((chip) => chip.value === selectedObject)?.label || selectedObject;
+    OBJECT_CHIPS.find((chip) => chip.value === selectedObject)?.label ||
+    selectedObject;
 
   return (
     <div className="min-h-screen bg-gf-page">
       <header className="flex items-center justify-between px-gf-lg py-gf-md border-b border-gf-subtle bg-gf-card">
         <div>
-          <h1 className="text-gf-title font-semibold text-gf-primary">Custom Fields</h1>
+          <h1 className="text-gf-title font-semibold text-gf-primary">
+            Custom Fields
+          </h1>
           <p className="text-gf-body text-gf-secondary">
-            Manage fields for deal, organization, contact, lead, and activity objects.
+            Manage fields for deal, organization, contact, lead, and activity
+            objects.
           </p>
         </div>
         {isAdmin && (

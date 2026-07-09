@@ -3,16 +3,37 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../../../shared/ui/forge.js", () => ({
-  ConfirmDialog: ({ open, onClose, onConfirm, title, description, confirmLabel, isLoading }: any) => {
+  ConfirmDialog: ({
+    open,
+    onClose,
+    onConfirm,
+    title,
+    description,
+    confirmLabel,
+    isLoading,
+  }: {
+    open: boolean;
+    onClose: () => void;
+    onConfirm: () => void;
+    title: string;
+    description: string;
+    confirmLabel?: string;
+    isLoading?: boolean;
+  }) => {
     if (!open) return null;
     return (
       <div data-testid="confirm-dialog">
         <h2>{title}</h2>
         <p>{description}</p>
-        <button onClick={onClose} aria-label="Close">
+        <button type="button" onClick={onClose} aria-label="Close">
           Cancel
         </button>
-        <button onClick={onConfirm} disabled={isLoading} aria-label={confirmLabel}>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={isLoading}
+          aria-label={confirmLabel}
+        >
           {confirmLabel}
         </button>
       </div>
@@ -32,7 +53,7 @@ describe("RetireCustomFieldDialog", () => {
           objectDisplayName="Deal"
           onConfirm={vi.fn()}
           onCancel={vi.fn()}
-        />
+        />,
       );
 
       expect(screen.getByText("Retire this field?")).toBeInTheDocument();
@@ -46,13 +67,13 @@ describe("RetireCustomFieldDialog", () => {
           objectDisplayName="Deal"
           onConfirm={vi.fn()}
           onCancel={vi.fn()}
-        />
+        />,
       );
 
       expect(
         screen.getByText(
-          "Renewal Date will be hidden from new Deal records. Every existing value stays in place and the field remains in the audit trail."
-        )
+          "Renewal Date will be hidden from new Deal records. Every existing value stays in place and the field remains in the audit trail.",
+        ),
       ).toBeInTheDocument();
     });
 
@@ -64,13 +85,13 @@ describe("RetireCustomFieldDialog", () => {
           objectDisplayName="Company"
           onConfirm={vi.fn()}
           onCancel={vi.fn()}
-        />
+        />,
       );
 
       expect(
         screen.getByText(
-          "Contact Name will be hidden from new Company records. Every existing value stays in place and the field remains in the audit trail."
-        )
+          "Contact Name will be hidden from new Company records. Every existing value stays in place and the field remains in the audit trail.",
+        ),
       ).toBeInTheDocument();
     });
   });
@@ -87,7 +108,7 @@ describe("RetireCustomFieldDialog", () => {
           objectDisplayName="Deal"
           onConfirm={onConfirm}
           onCancel={vi.fn()}
-        />
+        />,
       );
 
       const confirmBtn = screen.getByRole("button", { name: /confirm/i });
@@ -107,7 +128,7 @@ describe("RetireCustomFieldDialog", () => {
           objectDisplayName="Deal"
           onConfirm={vi.fn()}
           onCancel={onCancel}
-        />
+        />,
       );
 
       const cancelBtn = screen.getByRole("button", { name: /close/i });
@@ -127,7 +148,7 @@ describe("RetireCustomFieldDialog", () => {
           onConfirm={vi.fn()}
           onCancel={vi.fn()}
           isLoading={true}
-        />
+        />,
       );
 
       const confirmBtn = screen.getByRole("button", { name: /confirm/i });
@@ -144,7 +165,7 @@ describe("RetireCustomFieldDialog", () => {
           objectDisplayName="Deal"
           onConfirm={vi.fn()}
           onCancel={vi.fn()}
-        />
+        />,
       );
 
       expect(screen.queryByText("Retire this field?")).not.toBeInTheDocument();
@@ -158,7 +179,7 @@ describe("RetireCustomFieldDialog", () => {
           objectDisplayName="Deal"
           onConfirm={vi.fn()}
           onCancel={vi.fn()}
-        />
+        />,
       );
 
       expect(screen.getByText("Retire this field?")).toBeInTheDocument();

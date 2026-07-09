@@ -27,7 +27,7 @@ describe("RenameCustomFieldModal", () => {
           field={mockField}
           onClose={vi.fn()}
           onSave={vi.fn()}
-        />
+        />,
       );
 
       const textInput = screen.getByRole("textbox");
@@ -44,7 +44,7 @@ describe("RenameCustomFieldModal", () => {
           field={mockField}
           onClose={vi.fn()}
           onSave={vi.fn()}
-        />
+        />,
       );
 
       const textInput = screen.getByRole("textbox");
@@ -62,7 +62,7 @@ describe("RenameCustomFieldModal", () => {
           field={mockField}
           onClose={vi.fn()}
           onSave={vi.fn()}
-        />
+        />,
       );
 
       const textInput = screen.getByRole("textbox");
@@ -83,7 +83,7 @@ describe("RenameCustomFieldModal", () => {
           field={mockField}
           onClose={vi.fn()}
           onSave={vi.fn()}
-        />
+        />,
       );
 
       const textInput = screen.getByRole("textbox");
@@ -104,7 +104,7 @@ describe("RenameCustomFieldModal", () => {
           field={mockField}
           onClose={vi.fn()}
           onSave={vi.fn()}
-        />
+        />,
       );
 
       const textInput = screen.getByRole("textbox");
@@ -127,7 +127,7 @@ describe("RenameCustomFieldModal", () => {
           field={mockField}
           onClose={vi.fn()}
           onSave={onSave}
-        />
+        />,
       );
 
       const textInput = screen.getByRole("textbox");
@@ -152,7 +152,7 @@ describe("RenameCustomFieldModal", () => {
           field={mockField}
           onClose={onClose}
           onSave={vi.fn()}
-        />
+        />,
       );
 
       const cancelBtn = screen.getByRole("button", { name: /cancel/i });
@@ -171,7 +171,7 @@ describe("RenameCustomFieldModal", () => {
           onClose={vi.fn()}
           onSave={vi.fn()}
           isLoading={true}
-        />
+        />,
       );
 
       const saveBtn = screen.getByRole("button", { name: /save/i });
@@ -189,7 +189,7 @@ describe("RenameCustomFieldModal", () => {
           field={mockField}
           onClose={vi.fn()}
           onSave={vi.fn()}
-        />
+        />,
       );
 
       const textInput = screen.getByRole("textbox");

@@ -1,21 +1,30 @@
-import { useState, useEffect } from "react";
-import {
-  TextInput,
-  Modal,
-  Button,
-} from "../../../shared/ui/forge.js";
+import { useEffect, useState } from "react";
+import type { CreateCustomFieldRequest } from "../../../lib/api-client/generated/index.js";
+import { Button, Modal, TextInput } from "../../../shared/ui/forge.js";
 import {
   buildApiKey,
   buildDdlPreview,
   detectStructuralWord,
-  slugify,
   type ObjectKey,
+  slugify,
 } from "../lib/customFieldRules.js";
-import type { CreateCustomFieldRequest } from "../../../lib/api-client/generated/index.js";
 
-type FieldType = "text" | "number" | "date" | "currency" | "picklist" | "boolean";
+type FieldType =
+  | "text"
+  | "number"
+  | "date"
+  | "currency"
+  | "picklist"
+  | "boolean";
 
-const FIELD_TYPES: FieldType[] = ["text", "number", "date", "currency", "picklist", "boolean"];
+const FIELD_TYPES: FieldType[] = [
+  "text",
+  "number",
+  "date",
+  "currency",
+  "picklist",
+  "boolean",
+];
 
 export function NewCustomFieldModal({
   open,
@@ -37,7 +46,9 @@ export function NewCustomFieldModal({
   const [label, setLabel] = useState("");
   const [type, setType] = useState<FieldType>("text");
   const [currencyCode, setCurrencyCode] = useState("");
-  const [picklistOptions, setPicklistOptions] = useState<string[]>([""]);
+  const [picklistOptions, setPicklistOptions] = useState<
+    Array<{ id: string; value: string }>
+  >([{ id: crypto.randomUUID(), value: "" }]);
   const [structuralWord, setStructuralWord] = useState<string | null>(null);
 
   const slug = slugify(label);
@@ -56,11 +67,15 @@ export function NewCustomFieldModal({
 
   // Check if confirm should be disabled
   const isTrimmedLabelEmpty = label.trim() === "";
-  const isCurrencyCodeMissing = type === "currency" && currencyCode.trim() === "";
+  const isCurrencyCodeMissing =
+    type === "currency" && currencyCode.trim() === "";
   const hasStructuralWord = structuralWord !== null;
 
   const isConfirmDisabled =
-    isTrimmedLabelEmpty || isCurrencyCodeMissing || hasStructuralWord || isLoading;
+    isTrimmedLabelEmpty ||
+    isCurrencyCodeMissing ||
+    hasStructuralWord ||
+    isLoading;
 
   const handleConfirm = async () => {
     // Defensive: early return on empty label
@@ -85,30 +100,36 @@ export function NewCustomFieldModal({
 
     // Include picklist options if applicable
     if (type === "picklist" && picklistOptions.length > 0) {
-      req.options = picklistOptions.filter((opt) => opt.trim() !== "");
+      req.options = picklistOptions
+        .map((opt) => opt.value)
+        .filter((value) => value.trim() !== "");
     }
 
     onConfirm(req);
   };
 
   const handleAddOption = () => {
-    setPicklistOptions([...picklistOptions, ""]);
+    setPicklistOptions([
+      ...picklistOptions,
+      { id: crypto.randomUUID(), value: "" },
+    ]);
   };
 
-  const handleRemoveOption = (index: number) => {
+  const handleRemoveOption = (id: string) => {
     // Check if this is the last option
     if (picklistOptions.length === 1) {
       onGuardToast?.("A picklist needs at least one option");
       return;
     }
 
-    const updated = picklistOptions.filter((_, i) => i !== index);
+    const updated = picklistOptions.filter((opt) => opt.id !== id);
     setPicklistOptions(updated);
   };
 
-  const handleOptionChange = (index: number, value: string) => {
-    const updated = [...picklistOptions];
-    updated[index] = value;
+  const handleOptionChange = (id: string, value: string) => {
+    const updated = picklistOptions.map((opt) =>
+      opt.id === id ? { ...opt, value } : opt,
+    );
     setPicklistOptions(updated);
   };
 
@@ -151,24 +172,24 @@ export function NewCustomFieldModal({
         )}
 
         {/* Label input */}
-        <label className="flex flex-col gap-gf-xs">
+        <div className="flex flex-col gap-gf-xs">
           <span className="text-gf-caption text-gf-secondary">Field label</span>
           <TextInput
             value={label}
             onChange={(v) => setLabel(v)}
             placeholder="e.g., Renewal date"
           />
-        </label>
+        </div>
 
         {/* API key display */}
-        <label className="flex flex-col gap-gf-xs">
+        <div className="flex flex-col gap-gf-xs">
           <span className="text-gf-caption text-gf-secondary">API key</span>
           <TextInput
             value={apiKey}
             onChange={() => {}} // read-only
             disabled
           />
-        </label>
+        </div>
 
         {/* DDL preview */}
         <div className="flex flex-col gap-gf-xs">
@@ -199,7 +220,7 @@ export function NewCustomFieldModal({
 
         {/* Currency code field (conditional) */}
         {type === "currency" && (
-          <label className="flex flex-col gap-gf-xs">
+          <div className="flex flex-col gap-gf-xs">
             <span className="text-gf-caption text-gf-secondary">
               ISO-4217 code
             </span>
@@ -211,28 +232,28 @@ export function NewCustomFieldModal({
             <span className="text-gf-caption text-gf-secondary">
               Stored as integer minor-units (e.g. cents).
             </span>
-          </label>
+          </div>
         )}
 
         {/* Picklist options editor (conditional) */}
         {type === "picklist" && (
           <div className="flex flex-col gap-gf-md">
-            <label className="flex flex-col gap-gf-xs">
+            <div className="flex flex-col gap-gf-xs">
               <span className="text-gf-caption text-gf-secondary">
                 Picklist options
               </span>
               <div className="flex flex-col gap-gf-xs">
                 {picklistOptions.map((option, index) => (
-                  <div key={index} className="flex gap-gf-xs items-center">
+                  <div key={option.id} className="flex gap-gf-xs items-center">
                     <TextInput
-                      value={option}
-                      onChange={(v) => handleOptionChange(index, v)}
+                      value={option.value}
+                      onChange={(v) => handleOptionChange(option.id, v)}
                       placeholder={`Option ${index + 1}`}
                       className="flex-1"
                     />
                     <button
                       type="button"
-                      onClick={() => handleRemoveOption(index)}
+                      onClick={() => handleRemoveOption(option.id)}
                       className="px-gf-md py-gf-xs rounded-md bg-gf-elevated border border-gf-subtle text-gf-body text-gf-secondary hover:bg-gf-hover"
                     >
                       Remove
@@ -240,7 +261,7 @@ export function NewCustomFieldModal({
                   </div>
                 ))}
               </div>
-            </label>
+            </div>
             <button
               type="button"
               onClick={handleAddOption}

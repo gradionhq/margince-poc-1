@@ -1,7 +1,13 @@
-import type { CustomField, Member } from "../../../lib/api-client/generated/index.js";
-import { deriveAuditEntries, resolveMemberName } from "../lib/customFieldRules.js";
-import { Skeleton } from "../../../shared/ui/forge.js";
+import type {
+  CustomField,
+  Member,
+} from "../../../lib/api-client/generated/index.js";
 import { FieldGuard } from "../../../shared/ui/FieldGuard.js";
+import { Skeleton } from "../../../shared/ui/forge.js";
+import {
+  deriveAuditEntries,
+  resolveMemberName,
+} from "../lib/customFieldRules.js";
 
 export function CustomFieldAuditCard({
   fields,
@@ -44,12 +50,9 @@ export function CustomFieldAuditCard({
               className="py-gf-xs border-b border-gf-subtle last:border-b-0"
             >
               <p className="text-gf-body text-gf-primary">
-                <FieldGuard
-                  mode={role === "admin" ? "visible" : "masked"}
-                >
+                <FieldGuard mode={role === "admin" ? "visible" : "masked"}>
                   {resolveMemberName(members, entry.actorId)}
-                </FieldGuard>
-                {" "}
+                </FieldGuard>{" "}
                 {entry.action === "added"
                   ? `added ${entry.label} (${entry.type}) to ${entry.object}`
                   : `retired ${entry.label}`}

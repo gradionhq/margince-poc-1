@@ -14,8 +14,8 @@ vi.mock("../../../lib/api-client/client.js", () => ({
 import { apiClient } from "../../../lib/api-client/client.js";
 import {
   customFieldsKeys,
-  useCustomFields,
   useCreateCustomField,
+  useCustomFields,
   useRenameCustomField,
   useRetireCustomField,
   useUpdateCustomFieldOptions,
@@ -163,7 +163,12 @@ describe("useRenameCustomField", () => {
 describe("useRetireCustomField", () => {
   it("posts retire endpoint and returns the retired field", async () => {
     (apiClient.POST as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      data: { id: "cf1", label: "Field 1", object: "deal", retired_at: "2026-07-09T00:00:00Z" },
+      data: {
+        id: "cf1",
+        label: "Field 1",
+        object: "deal",
+        retired_at: "2026-07-09T00:00:00Z",
+      },
       error: undefined,
     });
     const qc = new QueryClient();
@@ -187,7 +192,12 @@ describe("useRetireCustomField", () => {
     const qc = new QueryClient();
     const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
     (apiClient.POST as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      data: { id: "cf1", label: "Field 1", object: "deal", retired_at: "2026-07-09T00:00:00Z" },
+      data: {
+        id: "cf1",
+        label: "Field 1",
+        object: "deal",
+        retired_at: "2026-07-09T00:00:00Z",
+      },
       error: undefined,
     });
     function localWrapper({ children }: { children: ReactNode }) {

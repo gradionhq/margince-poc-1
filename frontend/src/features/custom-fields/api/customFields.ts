@@ -44,19 +44,12 @@ export function useCreateCustomField() {
 
 export function useRenameCustomField() {
   const qc = useQueryClient();
-  return useMutation<
-    CustomField,
-    unknown,
-    { id: string; label: string }
-  >({
+  return useMutation<CustomField, unknown, { id: string; label: string }>({
     mutationFn: async ({ id, label }) => {
-      const { data, error } = await apiClient.PATCH(
-        "/custom-fields/{id}",
-        {
-          params: { path: { id } },
-          body: { label },
-        },
-      );
+      const { data, error } = await apiClient.PATCH("/custom-fields/{id}", {
+        params: { path: { id } },
+        body: { label },
+      });
       if (error) throw error;
       if (!data) throw new Error("empty response");
       return data;
@@ -93,11 +86,7 @@ export function useRetireCustomField() {
 
 export function useUpdateCustomFieldOptions() {
   const qc = useQueryClient();
-  return useMutation<
-    CustomField,
-    unknown,
-    { id: string; options: string[] }
-  >({
+  return useMutation<CustomField, unknown, { id: string; options: string[] }>({
     mutationFn: async ({ id, options }) => {
       const { data, error } = await apiClient.PATCH(
         "/custom-fields/{id}/options",

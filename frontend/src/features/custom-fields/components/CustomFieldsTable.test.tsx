@@ -1,7 +1,27 @@
+// biome-ignore-all lint/a11y/useValidAriaRole: `role` is a domain prop of CustomFieldsTable, not the ARIA role attribute.
 import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { CustomField, Member } from "../../../lib/api-client/generated/index.js";
+import type {
+  CustomField,
+  Member,
+} from "../../../lib/api-client/generated/index.js";
 import { CustomFieldsTable } from "./CustomFieldsTable.js";
+
+// Mirrors the row shape CustomFieldsTable.tsx builds for the real DataTable.
+type MockRow = {
+  id: string;
+  field?: CustomField;
+  staged?: { label: string; type: string };
+};
+
+type MockColumn = {
+  key: string;
+  header: string;
+  render: (row: MockRow) => ReactNode;
+};
+
+type MockMenuItem = { id: string; label: string; onSelect: () => void };
 
 // Mock all external components and utilities
 vi.mock("../lib/customFieldRules.js", () => ({
@@ -23,17 +43,27 @@ vi.mock("../lib/customFieldRules.js", () => ({
 }));
 
 vi.mock("../../../shared/ui/DataTable.js", () => ({
-  DataTable: ({ rows, columns, getRowKey, getRowProps }: any) => (
+  DataTable: ({
+    rows,
+    columns,
+    getRowKey,
+    getRowProps,
+  }: {
+    rows: MockRow[];
+    columns: MockColumn[];
+    getRowKey: (row: MockRow) => string;
+    getRowProps?: (row: MockRow) => Record<string, string>;
+  }) => (
     <table data-testid="data-table">
       <thead>
         <tr>
-          {columns.map((col: any) => (
+          {columns.map((col) => (
             <th key={col.key}>{col.header}</th>
           ))}
         </tr>
       </thead>
       <tbody>
-        {rows.map((row: any) => {
+        {rows.map((row) => {
           const rowKey = getRowKey(row);
           const rowProps = getRowProps?.(row) || {};
           return (
@@ -41,9 +71,11 @@ vi.mock("../../../shared/ui/DataTable.js", () => ({
               key={rowKey}
               data-testid={`table-row-${rowKey}`}
               className={rowProps.className}
-              {...(rowProps["data-staged"] && { "data-staged": rowProps["data-staged"] })}
+              {...(rowProps["data-staged"] && {
+                "data-staged": rowProps["data-staged"],
+              })}
             >
-              {columns.map((col: any) => (
+              {columns.map((col) => (
                 <td key={col.key} data-testid={`cell-${rowKey}-${col.key}`}>
                   {col.render(row)}
                 </td>
@@ -57,33 +89,52 @@ vi.mock("../../../shared/ui/DataTable.js", () => ({
 }));
 
 vi.mock("../../../shared/ui/forge.js", () => ({
-  Chip: ({ children, className }: any) => (
+  Chip: ({
+    children,
+    className,
+  }: {
+    children: ReactNode;
+    className?: string;
+  }) => (
     <span data-testid="chip" className={className}>
       {children}
     </span>
   ),
   EmptyState: () => <div data-testid="empty-state">No custom fields</div>,
-  StatusBadge: ({ children }: any) => (
+  StatusBadge: ({ children }: { children: ReactNode }) => (
     <span data-testid="status-badge">{children}</span>
   ),
   Icon: () => <span data-testid="icon" />,
-  IconButton: ({ onClick, ...props }: any) => (
-    <button onClick={onClick} data-testid="icon-button" {...props} />
+  IconButton: ({
+    onClick,
+    ...props
+  }: { onClick?: () => void } & Record<string, unknown>) => (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid="icon-button"
+      {...props}
+    />
   ),
 }));
 
 vi.mock("../../../shared/ui/FieldGuard.tsx", () => ({
-  FieldGuard: ({ mode, children }: any) => (
-    <span data-testid={`field-guard-${mode}`}>{children}</span>
-  ),
+  FieldGuard: ({
+    mode,
+    children,
+  }: {
+    mode: "visible" | "masked" | "readonly";
+    children: ReactNode;
+  }) => <span data-testid={`field-guard-${mode}`}>{children}</span>,
 }));
 
 vi.mock("../../../shared/ui/ContextMenu.js", () => ({
-  ContextMenu: ({ items }: any) => (
+  ContextMenu: ({ items }: { items: MockMenuItem[] }) => (
     <div data-testid="context-menu">
-      {items.map((item: any) => (
+      {items.map((item) => (
         <button
           key={item.id}
+          type="button"
           data-testid={`context-menu-item-${item.id}`}
           onClick={item.onSelect}
         >
@@ -164,7 +215,7 @@ describe("CustomFieldsTable", () => {
           members={mockMembers}
           selectedObject="deal"
           role="admin"
-        />
+        />,
       );
       const chips = screen.getAllByTestId("chip");
       expect(chips).toHaveLength(5);
@@ -177,7 +228,7 @@ describe("CustomFieldsTable", () => {
           members={mockMembers}
           selectedObject="deal"
           role="admin"
-        />
+        />,
       );
       const selectedChip = screen.getByTestId("chip-deal");
       expect(selectedChip).toHaveAttribute("data-selected", "true");
@@ -190,7 +241,7 @@ describe("CustomFieldsTable", () => {
           members={mockMembers}
           selectedObject="deal"
           role="admin"
-        />
+        />,
       );
       const nonSelectedChips = ["organization", "person", "lead", "activity"];
       for (const objKey of nonSelectedChips) {
@@ -213,7 +264,7 @@ describe("CustomFieldsTable", () => {
           selectedObject="deal"
           role="admin"
           stagedRow={null}
-        />
+        />,
       );
       const countBadge = screen.getByTestId("object-count");
       expect(countBadge).toHaveTextContent("3");
@@ -227,7 +278,7 @@ describe("CustomFieldsTable", () => {
           selectedObject="deal"
           role="admin"
           stagedRow={{ label: "Test Field", type: "text" }}
-        />
+        />,
       );
       const countBadge = screen.getByTestId("object-count");
       expect(countBadge).toHaveTextContent("4");
@@ -242,7 +293,7 @@ describe("CustomFieldsTable", () => {
           members={mockMembers}
           selectedObject="deal"
           role="admin"
-        />
+        />,
       );
       const cell = screen.getByTestId("cell-field-1-label");
       expect(cell).toHaveTextContent("Renewal Date");
@@ -255,7 +306,7 @@ describe("CustomFieldsTable", () => {
           members={mockMembers}
           selectedObject="deal"
           role="admin"
-        />
+        />,
       );
       const cell = screen.getByTestId("cell-field-1-apiKey");
       expect(cell).toHaveTextContent("deal.cf_renewal_date");
@@ -270,7 +321,7 @@ describe("CustomFieldsTable", () => {
           members={mockMembers}
           selectedObject="deal"
           role="admin"
-        />
+        />,
       );
       const typeCell = screen.getByTestId("cell-field-1-type");
       expect(typeCell).toHaveTextContent("date");
@@ -283,9 +334,9 @@ describe("CustomFieldsTable", () => {
           members={mockMembers}
           selectedObject="deal"
           role="admin"
-        />
+        />,
       );
-      const addedByCell = screen.getByTestId("cell-field-1-addedBy");
+      screen.getByTestId("cell-field-1-addedBy");
       const fieldGuard = screen.getByTestId("field-guard-visible");
       expect(fieldGuard).toHaveTextContent("Alice Smith");
     });
@@ -297,7 +348,7 @@ describe("CustomFieldsTable", () => {
           members={mockMembers}
           selectedObject="deal"
           role="rep"
-        />
+        />,
       );
       const fieldGuard = screen.getByTestId("field-guard-masked");
       expect(fieldGuard).toBeInTheDocument();
@@ -316,7 +367,7 @@ describe("CustomFieldsTable", () => {
           role="admin"
           onEdit={onEdit}
           onRetire={onRetire}
-        />
+        />,
       );
       const contextMenu = screen.getByTestId("context-menu");
       expect(contextMenu).toBeInTheDocument();
@@ -329,7 +380,7 @@ describe("CustomFieldsTable", () => {
           members={mockMembers}
           selectedObject="deal"
           role="rep"
-        />
+        />,
       );
       // For non-admin, context menu should not be rendered in active fields
       // (we check this by ensuring no Edit/Archive actions appear)
@@ -349,7 +400,7 @@ describe("CustomFieldsTable", () => {
           selectedObject="deal"
           role="admin"
           onEdit={onEdit}
-        />
+        />,
       );
       const editButton = screen.getByTestId("context-menu-item-edit");
       await user.click(editButton);
@@ -368,7 +419,7 @@ describe("CustomFieldsTable", () => {
           selectedObject="deal"
           role="admin"
           onRetire={onRetire}
-        />
+        />,
       );
       const archiveButton = screen.getByTestId("context-menu-item-archive");
       await user.click(archiveButton);
@@ -384,7 +435,7 @@ describe("CustomFieldsTable", () => {
           members={mockMembers}
           selectedObject="deal"
           role="admin"
-        />
+        />,
       );
       const row = screen.getByTestId("table-row-field-3");
       expect(row).toHaveClass("opacity-60");
@@ -397,7 +448,7 @@ describe("CustomFieldsTable", () => {
           members={mockMembers}
           selectedObject="deal"
           role="admin"
-        />
+        />,
       );
       const statusBadge = screen.getByTestId("status-badge");
       expect(statusBadge).toHaveTextContent("Retired");
@@ -410,11 +461,13 @@ describe("CustomFieldsTable", () => {
           members={mockMembers}
           selectedObject="deal"
           role="admin"
-        />
+        />,
       );
       // Retired row should not have context menu
       const retiredRow = screen.getByTestId("table-row-field-3");
-      const contextMenuInRow = retiredRow.querySelector("[data-testid='context-menu']");
+      const contextMenuInRow = retiredRow.querySelector(
+        "[data-testid='context-menu']",
+      );
       expect(contextMenuInRow).not.toBeInTheDocument();
     });
   });
@@ -427,9 +480,11 @@ describe("CustomFieldsTable", () => {
           members={mockMembers}
           selectedObject="deal"
           role="admin"
-        />
+        />,
       );
-      expect(screen.getByText(/Core fields are not shown/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Core fields are not shown/i),
+      ).toBeInTheDocument();
     });
 
     it("renders note even with empty fields", () => {
@@ -439,9 +494,11 @@ describe("CustomFieldsTable", () => {
           members={mockMembers}
           selectedObject="deal"
           role="admin"
-        />
+        />,
       );
-      expect(screen.getByText(/Core fields are not shown/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Core fields are not shown/i),
+      ).toBeInTheDocument();
     });
   });
 
@@ -454,7 +511,7 @@ describe("CustomFieldsTable", () => {
           selectedObject="deal"
           role="admin"
           stagedRow={{ label: "New Field", type: "text" }}
-        />
+        />,
       );
       const stagedRow = screen.getByTestId("table-row-staged");
       expect(stagedRow).toHaveAttribute("data-staged", "true");
@@ -471,7 +528,7 @@ describe("CustomFieldsTable", () => {
           selectedObject="deal"
           role="admin"
           stagedRow={{ label: "New Field", type: "text" }}
-        />
+        />,
       );
       const stagedCell = screen.getByTestId("cell-staged-label");
       expect(stagedCell).toHaveTextContent("writing…");
@@ -485,7 +542,7 @@ describe("CustomFieldsTable", () => {
           selectedObject="deal"
           role="admin"
           stagedRow={{ label: "New Field", type: "text" }}
-        />
+        />,
       );
       const stagedApiKeyCell = screen.getByTestId("cell-staged-apiKey");
       expect(stagedApiKeyCell).toHaveTextContent("—");
@@ -499,7 +556,7 @@ describe("CustomFieldsTable", () => {
           selectedObject="deal"
           role="admin"
           stagedRow={{ label: "New Field", type: "currency" }}
-        />
+        />,
       );
       const stagedTypeCell = screen.getByTestId("cell-staged-type");
       expect(stagedTypeCell).toHaveTextContent("currency");
@@ -513,10 +570,12 @@ describe("CustomFieldsTable", () => {
           selectedObject="deal"
           role="admin"
           stagedRow={{ label: "New Field", type: "text" }}
-        />
+        />,
       );
       const stagedRow = screen.getByTestId("table-row-staged");
-      const contextMenuInRow = stagedRow.querySelector("[data-testid='context-menu']");
+      const contextMenuInRow = stagedRow.querySelector(
+        "[data-testid='context-menu']",
+      );
       expect(contextMenuInRow).not.toBeInTheDocument();
     });
   });
@@ -530,7 +589,7 @@ describe("CustomFieldsTable", () => {
           selectedObject="deal"
           role="admin"
           stagedRow={null}
-        />
+        />,
       );
       const emptyState = screen.getByTestId("empty-state");
       expect(emptyState).toBeInTheDocument();
@@ -544,7 +603,7 @@ describe("CustomFieldsTable", () => {
           selectedObject="deal"
           role="admin"
           stagedRow={null}
-        />
+        />,
       );
       const emptyState = screen.queryByTestId("empty-state");
       expect(emptyState).not.toBeInTheDocument();
@@ -558,7 +617,7 @@ describe("CustomFieldsTable", () => {
           selectedObject="deal"
           role="admin"
           stagedRow={{ label: "New Field", type: "text" }}
-        />
+        />,
       );
       const emptyState = screen.queryByTestId("empty-state");
       expect(emptyState).not.toBeInTheDocument();
@@ -573,7 +632,7 @@ describe("CustomFieldsTable", () => {
           members={mockMembers}
           selectedObject="deal"
           role="admin"
-        />
+        />,
       );
       const activeRow1 = screen.getByTestId("table-row-field-1");
       const activeRow2 = screen.getByTestId("table-row-field-2");
@@ -592,7 +651,7 @@ describe("CustomFieldsTable", () => {
           selectedObject="deal"
           role="admin"
           stagedRow={{ label: "Future Field", type: "numeric" }}
-        />
+        />,
       );
       const countBadge = screen.getByTestId("object-count");
       expect(countBadge).toHaveTextContent("3"); // 2 active + 1 staged

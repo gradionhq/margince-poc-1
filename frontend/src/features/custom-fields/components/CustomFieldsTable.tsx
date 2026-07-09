@@ -1,10 +1,22 @@
-import type { CustomField, Member } from "../../../lib/api-client/generated/index.js";
-import type { ObjectKey } from "../lib/customFieldRules.js";
-import { OBJECT_CHIPS, buildApiKey, resolveMemberName } from "../lib/customFieldRules.js";
-import { Chip, EmptyState, StatusBadge, IconButton } from "../../../shared/ui/forge.js";
+import type {
+  CustomField,
+  Member,
+} from "../../../lib/api-client/generated/index.js";
+import { ContextMenu } from "../../../shared/ui/ContextMenu.js";
 import { DataTable } from "../../../shared/ui/DataTable.js";
 import { FieldGuard } from "../../../shared/ui/FieldGuard.js";
-import { ContextMenu } from "../../../shared/ui/ContextMenu.js";
+import {
+  Chip,
+  EmptyState,
+  IconButton,
+  StatusBadge,
+} from "../../../shared/ui/forge.js";
+import type { ObjectKey } from "../lib/customFieldRules.js";
+import {
+  buildApiKey,
+  OBJECT_CHIPS,
+  resolveMemberName,
+} from "../lib/customFieldRules.js";
 
 export function CustomFieldsTable({
   fields,
@@ -44,7 +56,11 @@ export function CustomFieldsTable({
   }
 
   // Build rows for the table: staged row first (if present), then real fields
-  const tableRows: Array<{ type: "staged" | "field"; id: string; field?: CustomField; staged?: { label: string; type: string } }> = [];
+  type TableRow =
+    | { type: "staged"; id: string; staged: { label: string; type: string } }
+    | { type: "field"; id: string; field: CustomField };
+
+  const tableRows: TableRow[] = [];
 
   if (stagedRow) {
     tableRows.push({
@@ -66,21 +82,21 @@ export function CustomFieldsTable({
     {
       key: "label",
       header: "Label",
-      render: (row: (typeof tableRows)[0]) => {
+      render: (row: TableRow) => {
         if (row.type === "staged") {
           return <span>writing…</span>;
         }
-        return <span>{row.field!.label}</span>;
+        return <span>{row.field.label}</span>;
       },
     },
     {
       key: "apiKey",
       header: "API Key",
-      render: (row: (typeof tableRows)[0]) => {
+      render: (row: TableRow) => {
         if (row.type === "staged") {
           return <span className="font-mono">—</span>;
         }
-        const field = row.field!;
+        const field = row.field;
         // For staged rows or when slug is empty, derive from label
         const slug = field.slug || "";
         const apiKey = buildApiKey(field.object, slug);
@@ -90,11 +106,11 @@ export function CustomFieldsTable({
     {
       key: "type",
       header: "Type",
-      render: (row: (typeof tableRows)[0]) => {
+      render: (row: TableRow) => {
         if (row.type === "staged") {
-          return <Chip>{row.staged!.type}</Chip>;
+          return <Chip>{row.staged.type}</Chip>;
         }
-        const field = row.field!;
+        const field = row.field;
         if (field.status === "retired") {
           return <StatusBadge>Retired</StatusBadge>;
         }
@@ -104,11 +120,11 @@ export function CustomFieldsTable({
     {
       key: "addedBy",
       header: "Added by",
-      render: (row: (typeof tableRows)[0]) => {
+      render: (row: TableRow) => {
         if (row.type === "staged") {
           return <span>—</span>;
         }
-        const field = row.field!;
+        const field = row.field;
         const memberName = resolveMemberName(members, field.created_by);
         const mode = isAdmin ? "visible" : "masked";
         return <FieldGuard mode={mode}>{memberName}</FieldGuard>;
@@ -117,13 +133,13 @@ export function CustomFieldsTable({
     {
       key: "actions",
       header: "",
-      render: (row: (typeof tableRows)[0]) => {
+      render: (row: TableRow) => {
         // No actions for staged rows
         if (row.type === "staged") {
           return null;
         }
 
-        const field = row.field!;
+        const field = row.field;
 
         // No actions for retired fields
         if (field.status === "retired") {
@@ -162,12 +178,12 @@ export function CustomFieldsTable({
     },
   ];
 
-  const getRowProps = (row: (typeof tableRows)[0]) => {
-    const props: Record<string, any> = {};
+  const getRowProps = (row: TableRow): Record<string, string> => {
+    const props: Record<string, string> = {};
 
     if (row.type === "staged") {
       props["data-staged"] = "true";
-    } else if (row.field!.status === "retired") {
+    } else if (row.field.status === "retired") {
       props.className = "opacity-60";
     }
 
@@ -181,11 +197,16 @@ export function CustomFieldsTable({
         {OBJECT_CHIPS.map((chip) => {
           const isSelected = chip.value === selectedObject;
           return (
-            <div
+            <button
               key={chip.value}
+              type="button"
               data-selected={isSelected}
               data-testid={`chip-${chip.value}`}
-              className={isSelected ? "relative cursor-pointer" : "cursor-pointer"}
+              className={
+                isSelected
+                  ? "relative cursor-pointer bg-transparent border-0 p-0"
+                  : "cursor-pointer bg-transparent border-0 p-0"
+              }
               onClick={() => onObjectSelect?.(chip.value)}
             >
               <Chip>{chip.label}</Chip>
@@ -197,7 +218,7 @@ export function CustomFieldsTable({
                   {countBadge}
                 </span>
               )}
-            </div>
+            </button>
           );
         })}
       </div>

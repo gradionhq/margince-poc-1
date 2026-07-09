@@ -1,15 +1,17 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockBuildApiKey = vi.fn((object: string, slug: string) => {
   if (!slug) return "";
   return `${object}.cf_${slug}`;
 });
 
-const mockBuildDdlPreview = vi.fn((object: string, slug: string, type: string) => {
-  return `ALTER ${object} ADD COLUMN cf_${slug} (${type}) · backfilled NULL · reversible`;
-});
+const mockBuildDdlPreview = vi.fn(
+  (object: string, slug: string, type: string) => {
+    return `ALTER ${object} ADD COLUMN cf_${slug} (${type}) · backfilled NULL · reversible`;
+  },
+);
 
 const mockDetectStructuralWord = vi.fn((label: string): string | null => {
   const lower = label.toLowerCase();
@@ -83,7 +85,9 @@ describe("NewCustomFieldModal", () => {
 
       // After typing, verify buildApiKey was called with the right slug
       const calls = mockBuildApiKey.mock.calls;
-      const hasCorrectCall = calls.some(([obj, slug]) => obj === "deal" && slug === "renewal_date");
+      const hasCorrectCall = calls.some(
+        ([obj, slug]) => obj === "deal" && slug === "renewal_date",
+      );
       expect(hasCorrectCall).toBe(true);
 
       const apiKeyInputs = screen.getAllByRole("textbox");
@@ -143,10 +147,9 @@ describe("NewCustomFieldModal", () => {
     it("updates DDL preview on every keystroke", async () => {
       const user = userEvent.setup();
       mockSlugify.mockReturnValue("contact");
-      mockBuildDdlPreview
-        .mockReturnValueOnce(
-          "ALTER organization ADD COLUMN cf_contact (text) · backfilled NULL · reversible",
-        );
+      mockBuildDdlPreview.mockReturnValueOnce(
+        "ALTER organization ADD COLUMN cf_contact (text) · backfilled NULL · reversible",
+      );
 
       render(
         <NewCustomFieldModal
@@ -311,10 +314,13 @@ describe("NewCustomFieldModal", () => {
       await user.selectOptions(typeSelect, "currency");
 
       // Find and fill currency code field
-      const currencyInput = screen.getAllByRole("textbox").find((box) =>
-        box !== labelInput &&
-        (box.getAttribute("placeholder") || "").includes("e.g., USD")
-      );
+      const currencyInput = screen
+        .getAllByRole("textbox")
+        .find(
+          (box) =>
+            box !== labelInput &&
+            (box.getAttribute("placeholder") || "").includes("e.g., USD"),
+        );
 
       if (currencyInput) {
         await user.type(currencyInput, "USD");
@@ -355,9 +361,7 @@ describe("NewCustomFieldModal", () => {
         />,
       );
 
-      expect(
-        screen.queryByText("Picklist options"),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText("Picklist options")).not.toBeInTheDocument();
     });
 
     it("shows picklist options editor when type === picklist", async () => {
@@ -375,7 +379,9 @@ describe("NewCustomFieldModal", () => {
       await user.selectOptions(typeSelect, "picklist");
 
       expect(screen.getByText("Picklist options")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /add option/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /add option/i }),
+      ).toBeInTheDocument();
     });
 
     it("prevents deleting the last remaining option with exact message", async () => {
@@ -444,7 +450,9 @@ describe("NewCustomFieldModal", () => {
       const removeButtons = screen.getAllByRole("button", { name: /remove/i });
       await user.click(removeButtons[0]); // Remove first option
 
-      const remainingRemoveButtons = screen.getAllByRole("button", { name: /remove/i });
+      const remainingRemoveButtons = screen.getAllByRole("button", {
+        name: /remove/i,
+      });
       expect(remainingRemoveButtons.length).toBe(1); // Should have 1 option left
     });
   });
@@ -700,11 +708,13 @@ describe("NewCustomFieldModal", () => {
       await user.selectOptions(typeSelect, "currency");
 
       // Find and fill currency code
-      const currencyInput = screen.getAllByRole("textbox").find(
-        (box) =>
-          box !== labelInput &&
-          (box.getAttribute("placeholder") || "").includes("e.g., USD"),
-      );
+      const currencyInput = screen
+        .getAllByRole("textbox")
+        .find(
+          (box) =>
+            box !== labelInput &&
+            (box.getAttribute("placeholder") || "").includes("e.g., USD"),
+        );
 
       if (currencyInput) {
         await user.type(currencyInput, "USD");
@@ -749,7 +759,9 @@ describe("NewCustomFieldModal", () => {
       // Fill first option
       const optionInputs = screen.getAllByRole("textbox");
       const firstOptionInput = optionInputs.find(
-        (box) => box !== labelInput && (box.getAttribute("placeholder") || "").includes("Option"),
+        (box) =>
+          box !== labelInput &&
+          (box.getAttribute("placeholder") || "").includes("Option"),
       );
 
       if (firstOptionInput) {

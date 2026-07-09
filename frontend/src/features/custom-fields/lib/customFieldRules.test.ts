@@ -1,14 +1,17 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import type {
+  CustomField,
+  Member,
+} from "../../../lib/api-client/generated/index.js";
 import {
-  OBJECT_CHIPS,
-  slugify,
   buildApiKey,
   buildDdlPreview,
-  detectStructuralWord,
-  resolveMemberName,
   deriveAuditEntries,
+  detectStructuralWord,
+  OBJECT_CHIPS,
+  resolveMemberName,
+  slugify,
 } from "./customFieldRules.js";
-import type { CustomField, Member } from "../../../lib/api-client/generated/index.js";
 
 describe("customFieldRules", () => {
   describe("OBJECT_CHIPS", () => {
@@ -56,20 +59,22 @@ describe("customFieldRules", () => {
     });
 
     it('returns "organization.cf_budget_code" for organization and "budget_code" slug', () => {
-      expect(buildApiKey("organization", "budget_code")).toBe("organization.cf_budget_code");
+      expect(buildApiKey("organization", "budget_code")).toBe(
+        "organization.cf_budget_code",
+      );
     });
   });
 
   describe("buildDdlPreview", () => {
     it("returns correct DDL format for deal and text type", () => {
       expect(buildDdlPreview("deal", "renewal_date", "text")).toBe(
-        "ALTER deal ADD COLUMN cf_renewal_date (text) · backfilled NULL · reversible"
+        "ALTER deal ADD COLUMN cf_renewal_date (text) · backfilled NULL · reversible",
       );
     });
 
     it("returns correct DDL format for organization and currency type", () => {
       expect(buildDdlPreview("organization", "budget_code", "currency")).toBe(
-        "ALTER organization ADD COLUMN cf_budget_code (currency) · backfilled NULL · reversible"
+        "ALTER organization ADD COLUMN cf_budget_code (currency) · backfilled NULL · reversible",
       );
     });
   });
