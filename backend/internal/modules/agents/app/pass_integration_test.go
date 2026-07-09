@@ -15,6 +15,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/modules/agents/domain"
 	"github.com/gradionhq/margince/backend/internal/modules/agents/ports"
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
+	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 )
 
 func TestRunPass_NoisyFixtureEndToEndThroughTheRealAssembler(t *testing.T) {
@@ -24,9 +25,15 @@ func TestRunPass_NoisyFixtureEndToEndThroughTheRealAssembler(t *testing.T) {
 
 	view := domain.AssembledView{WorkspaceID: wsID, WindowStart: time.Now().Add(-24 * time.Hour), WindowEnd: time.Now()}
 	conf9, conf5, conf0 := 0.9, 0.5, 0.0
+	// "log_link" is the 🟢 path (ApplyGreen), which now writes a real
+	// audit_log.entity_id (uuid) — so its fixture target must itself be a
+	// real uuid, not the arbitrary "1" (ONA-T02 live-UAT fix). The 🟡 "send"
+	// fixtures below only ever reach crmapprovals.Stage, which never writes
+	// audit_log, so they're free to stay as arbitrary strings.
+	activityID := ids.New()
 	produce := func(domain.AssembledView) ([]domain.Proposal, error) {
 		return []domain.Proposal{
-			{WorkspaceID: wsID, ActionType: "log_link", TargetEntity: "activity:1", Evidence: "e1", Confidence: &conf9, Source: "s1", Effect: json.RawMessage(`{}`)},
+			{WorkspaceID: wsID, ActionType: "log_link", TargetEntity: "activity:" + activityID, Evidence: "e1", Confidence: &conf9, Source: "s1", Effect: json.RawMessage(`{}`)},
 			{WorkspaceID: wsID, ActionType: "send", TargetEntity: "deal:1", Evidence: "e2", Confidence: &conf5, Source: "s2", Effect: json.RawMessage(`{}`)},
 			{WorkspaceID: wsID, ActionType: "send", TargetEntity: "deal:2", Evidence: "", Confidence: &conf0, Source: "s3", Effect: json.RawMessage(`{}`)}, // no-guess drop: empty evidence
 		}, nil

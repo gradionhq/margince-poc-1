@@ -26,7 +26,9 @@ var d4FloorActionTypes = map[string]bool{
 // action type is the first real caller for mcp.TierDynamic + a
 // TierResolver; not needed by any action type this ticket declares.
 var greenActionTypes = map[string]bool{
-	"log_link": true, // fixture: a reversible activity-to-record link
+	"log_link":                   true, // fixture: a reversible activity-to-record link
+	"close-date-auto-apply":      true, // FCAST-FORM-3 AUTO_APPLY: reversible, rollback-carrying
+	"close-date-provisional-set": true, // always-green invariant placeholder (OVN-AC-1)
 }
 
 // toolSpecFor is the ONE place a Proposal's tier is decided. The D4 map is
