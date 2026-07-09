@@ -4913,6 +4913,9 @@ type OfferLineItem struct {
 	// Position Display order; unique per offer.
 	Position int `json:"position"`
 
+	// PriceGrounded false only for an AI-proposed line the retriever/rate-card could not ground a price for (OFFER-AC-11b/14) — unit_price_minor is 0 in that case, an honest sentinel never a guessed value; true (the default) for every human-entered or rate-card/conversation-grounded line.
+	PriceGrounded *bool `json:"price_grounded,omitempty"`
+
 	// ProductId Optional rate-card reference; price/description are copied onto the line as a snapshot on pick.
 	ProductId *openapi_types.UUID `json:"product_id,omitempty"`
 
@@ -4924,8 +4927,8 @@ type OfferLineItem struct {
 	TaxRate float32 `json:"tax_rate"`
 	Unit    string  `json:"unit"`
 
-	// UnitPriceMinor Snapshot — never re-read from product after send. Never a float. Null when the AI-drafting path could not ground a price (OFFER-AC-11b/14); never fabricated. Human-entered lines (createOfferLineItem) always supply a concrete value.
-	UnitPriceMinor       *int64                 `json:"unit_price_minor"`
+	// UnitPriceMinor Snapshot — never re-read from product after send. Never a float. Human-entered lines (createOfferLineItem) always supply a concrete value.
+	UnitPriceMinor       int64                  `json:"unit_price_minor"`
 	UpdatedAt            time.Time              `json:"updated_at"`
 	WorkspaceId          openapi_types.UUID     `json:"workspace_id"`
 	AdditionalProperties map[string]interface{} `json:"-"`
@@ -10701,6 +10704,14 @@ func (a *OfferLineItem) UnmarshalJSON(b []byte) error {
 		delete(object, "position")
 	}
 
+	if raw, found := object["price_grounded"]; found {
+		err = json.Unmarshal(raw, &a.PriceGrounded)
+		if err != nil {
+			return fmt.Errorf("error reading 'price_grounded': %w", err)
+		}
+		delete(object, "price_grounded")
+	}
+
 	if raw, found := object["product_id"]; found {
 		err = json.Unmarshal(raw, &a.ProductId)
 		if err != nil {
@@ -10831,6 +10842,11 @@ func (a OfferLineItem) MarshalJSON() ([]byte, error) {
 	object["position"], err = json.Marshal(a.Position)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'position': %w", err)
+	}
+
+	object["price_grounded"], err = json.Marshal(a.PriceGrounded)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'price_grounded': %w", err)
 	}
 
 	if a.ProductId != nil {

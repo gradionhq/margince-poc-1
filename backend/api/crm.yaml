@@ -6407,7 +6407,7 @@ components:
         A typed line item on an offer; price is a snapshot copied from product (never
         re-read after send). Mirrors the offer_line_item table. Line totals
         (line_net/line_tax/line_total) are DERIVED — never wire fields (API-ERR-15).
-      required: [id, workspace_id, offer_id, position, description, unit, quantity, unit_price_minor, discount_pct, tax_rate, source, captured_by, created_at, updated_at]
+      required: [id, workspace_id, offer_id, position, description, unit, quantity, unit_price_minor, discount_pct, tax_rate, price_grounded, source, captured_by, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         workspace_id: { type: string, format: uuid }
@@ -6417,7 +6417,7 @@ components:
         description: { type: string, description: 'Snapshot — free-typed or copied from the referenced product.' }
         unit: { type: string, default: unit }
         quantity: { type: number, minimum: 0, description: 'numeric(14,3); must be > 0 (handler-enforced).' }
-        unit_price_minor: { type: [integer, 'null'], format: int64, description: 'Snapshot — never re-read from product after send. Never a float. Null when the AI-drafting path could not ground a price (OFFER-AC-11b/14); never fabricated. Human-entered lines (createOfferLineItem) always supply a concrete value.' }
+        unit_price_minor: { type: integer, format: int64, description: 'Snapshot — never re-read from product after send. Never a float. Human-entered lines (createOfferLineItem) always supply a concrete value.' }
         discount_pct: { type: number, minimum: 0, maximum: 100, default: 0 }
         tax_rate: { type: number, default: 0, description: 'Percent (e.g. 19.00 = DE USt.); defaults from the referenced product''s default_tax_rate on pick, per-line override allowed.' }
         evidence:
@@ -6427,6 +6427,11 @@ components:
             snippet: { type: string }
             source_id: { type: string, format: uuid }
           description: 'Grounding citation for an AI-proposed line (evidence-or-omit, OFFER-AC-11a/13, GATE-AI-1); null for a human-entered line.'
+        price_grounded:
+          type: boolean
+          readOnly: true
+          default: true
+          description: 'false only for an AI-proposed line the retriever/rate-card could not ground a price for (OFFER-AC-11b/14) — unit_price_minor is 0 in that case, an honest sentinel never a guessed value; true (the default) for every human-entered or rate-card/conversation-grounded line.'
         source: { type: string }
         captured_by: { type: string }
         created_at: { type: string, format: date-time }
