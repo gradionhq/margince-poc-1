@@ -1,9 +1,12 @@
 import { useState } from "react";
-import type { Offer, OfferLineItem } from "../../../lib/api-client/generated/index.js";
+import type {
+  Offer,
+  OfferLineItem,
+} from "../../../lib/api-client/generated/index.js";
 import { Button } from "../../../shared/ui/forge.js";
 import { useRenderOffer } from "../api/offers.js";
-import { getOfferCopy } from "../lib/offerCopy.js";
 import { formatMoneyForLocale } from "../lib/money.js";
+import { getOfferCopy } from "../lib/offerCopy.js";
 import { computeLineNet } from "../lib/offerMath.js";
 
 export function OfferPreviewPanel({
@@ -42,10 +45,18 @@ export function OfferPreviewPanel({
           <p className="text-gf-caption text-gf-secondary">{dealName}</p>
         </div>
         <div className="flex gap-gf-xs">
-          <Button type="button" variant={locale === "de" ? "primary" : "secondary"} onClick={() => setLocale("de")}>
+          <Button
+            type="button"
+            variant={locale === "de" ? "primary" : "secondary"}
+            onClick={() => setLocale("de")}
+          >
             DE
           </Button>
-          <Button type="button" variant={locale === "en" ? "primary" : "secondary"} onClick={() => setLocale("en")}>
+          <Button
+            type="button"
+            variant={locale === "en" ? "primary" : "secondary"}
+            onClick={() => setLocale("en")}
+          >
             EN
           </Button>
         </div>
@@ -59,7 +70,9 @@ export function OfferPreviewPanel({
           <dd className="text-gf-primary">{offer.offer_number}</dd>
         </div>
         <div>
-          <dt className="text-gf-caption text-gf-secondary">{copy.meta.deal}</dt>
+          <dt className="text-gf-caption text-gf-secondary">
+            {copy.meta.deal}
+          </dt>
           <dd className="text-gf-primary">{dealName}</dd>
         </div>
         <div>
@@ -74,7 +87,9 @@ export function OfferPreviewPanel({
         <table className="min-w-full text-left text-gf-body">
           <thead>
             <tr className="text-gf-secondary">
-              <th className="py-gf-xs pr-gf-sm">{copy.lineTable.description}</th>
+              <th className="py-gf-xs pr-gf-sm">
+                {copy.lineTable.description}
+              </th>
               <th className="py-gf-xs pr-gf-sm">{copy.lineTable.quantity}</th>
               <th className="py-gf-xs pr-gf-sm">{copy.lineTable.unit}</th>
               <th className="py-gf-xs pr-gf-sm">{copy.lineTable.unitPrice}</th>
@@ -97,7 +112,11 @@ export function OfferPreviewPanel({
                   <td className="py-gf-xs pr-gf-sm">{line.quantity}</td>
                   <td className="py-gf-xs pr-gf-sm">{line.unit}</td>
                   <td className="py-gf-xs pr-gf-sm">
-                    {formatMoneyForLocale(line.unit_price_minor, offer.currency, locale)}
+                    {formatMoneyForLocale(
+                      line.unit_price_minor,
+                      offer.currency,
+                      locale,
+                    )}
                   </td>
                   <td className="py-gf-xs pr-gf-sm">{line.discount_pct}%</td>
                   <td className="py-gf-xs pr-gf-sm">{line.tax_rate}%</td>
@@ -113,16 +132,28 @@ export function OfferPreviewPanel({
 
       <dl className="mt-gf-md grid gap-gf-sm text-gf-body sm:grid-cols-3">
         <div>
-          <dt className="text-gf-caption text-gf-secondary">{copy.totals.net}</dt>
-          <dd>{formatMoneyForLocale(offer.net_minor, offer.currency, locale)}</dd>
+          <dt className="text-gf-caption text-gf-secondary">
+            {copy.totals.net}
+          </dt>
+          <dd>
+            {formatMoneyForLocale(offer.net_minor, offer.currency, locale)}
+          </dd>
         </div>
         <div>
-          <dt className="text-gf-caption text-gf-secondary">{copy.totals.tax}</dt>
-          <dd>{formatMoneyForLocale(offer.tax_minor, offer.currency, locale)}</dd>
+          <dt className="text-gf-caption text-gf-secondary">
+            {copy.totals.tax}
+          </dt>
+          <dd>
+            {formatMoneyForLocale(offer.tax_minor, offer.currency, locale)}
+          </dd>
         </div>
         <div>
-          <dt className="text-gf-caption text-gf-secondary">{copy.totals.gross}</dt>
-          <dd>{formatMoneyForLocale(offer.gross_minor, offer.currency, locale)}</dd>
+          <dt className="text-gf-caption text-gf-secondary">
+            {copy.totals.gross}
+          </dt>
+          <dd>
+            {formatMoneyForLocale(offer.gross_minor, offer.currency, locale)}
+          </dd>
         </div>
       </dl>
 

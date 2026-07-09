@@ -74,8 +74,7 @@ const offerCopy: Record<OfferLocale, OfferCopy> = {
       tax: "Tax",
       gross: "Gross",
     },
-    legal:
-      "This offer is non-binding and remains valid until the listed date.",
+    legal: "This offer is non-binding and remains valid until the listed date.",
     pdfButton: "Generate PDF",
     viewPdf: "View PDF",
   },

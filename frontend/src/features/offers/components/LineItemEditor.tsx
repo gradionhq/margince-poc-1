@@ -98,7 +98,9 @@ export function LineItemEditor({
         <p>Tax minor units: {totals.taxMinor}</p>
         <p>Gross minor units: {totals.grossMinor}</p>
         {stagedCount > 0 ? (
-          <p>Excludes {stagedCount} staged AI-proposed line(s) from this total.</p>
+          <p>
+            Excludes {stagedCount} staged AI-proposed line(s) from this total.
+          </p>
         ) : null}
       </div>
     </section>

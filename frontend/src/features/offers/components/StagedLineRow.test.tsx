@@ -56,11 +56,18 @@ describe("StagedLineRow", () => {
       captured_by: "human:u1",
       source: "ui",
     });
-    expect(screen.getByText(/accepted — now part of your draft/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/accepted — now part of your draft/i),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /edit/i }));
-    await user.clear(screen.getByRole("spinbutton", { name: /qty ai proposed line/i }));
-    await user.type(screen.getByRole("spinbutton", { name: /qty ai proposed line/i }), "3");
+    await user.clear(
+      screen.getByRole("spinbutton", { name: /qty ai proposed line/i }),
+    );
+    await user.type(
+      screen.getByRole("spinbutton", { name: /qty ai proposed line/i }),
+      "3",
+    );
     await user.click(screen.getByRole("button", { name: /save edits/i }));
     expect(onAccept).toHaveBeenCalledWith("li-1", {
       quantity: 3,
@@ -73,7 +80,9 @@ describe("StagedLineRow", () => {
 
     await user.click(screen.getByRole("button", { name: /dismiss/i }));
     expect(onDismiss).toHaveBeenCalledWith("li-1");
-    expect(screen.getByText(/dismissed — removed from this draft/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/dismissed — removed from this draft/i),
+    ).toBeInTheDocument();
   });
 
   it("requires a positive price before accepting an unpriced line", async () => {
@@ -114,7 +123,11 @@ describe("StagedLineRow", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: /accept/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /dismiss/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /accept/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /dismiss/i }),
+    ).not.toBeInTheDocument();
   });
 });

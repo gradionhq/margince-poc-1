@@ -17,7 +17,11 @@ describe("LineProvenanceBadge", () => {
 
   it("shows a typed-by-you chip for a human-captured line", () => {
     render(
-      <LineProvenanceBadge source="ui" capturedBy="human:018f3a1b" evidence={null} />,
+      <LineProvenanceBadge
+        source="ui"
+        capturedBy="human:018f3a1b"
+        evidence={null}
+      />,
     );
 
     expect(screen.getByText(/typed by you/i)).toBeInTheDocument();
@@ -25,7 +29,11 @@ describe("LineProvenanceBadge", () => {
 
   it("falls back to the source chip for other provenance", () => {
     render(
-      <LineProvenanceBadge source="email:abc" capturedBy="connector:sync" evidence={null} />,
+      <LineProvenanceBadge
+        source="email:abc"
+        capturedBy="connector:sync"
+        evidence={null}
+      />,
     );
 
     expect(screen.getByText(/connector/i)).toBeInTheDocument();

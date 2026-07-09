@@ -56,10 +56,16 @@ export function SendCard({
         <div>
           <h2 className="text-gf-body font-medium text-gf-primary">Send</h2>
           <p className="text-gf-caption text-gf-secondary">
-            Sending queues this offer to the approval inbox for an automated or agent send; your own click here is the approval and sends immediately.
+            Sending queues this offer to the approval inbox for an automated or
+            agent send; your own click here is the approval and sends
+            immediately.
           </p>
         </div>
-        <Button type="button" onClick={() => setOpen(true)} disabled={sendOffer.isPending}>
+        <Button
+          type="button"
+          onClick={() => setOpen(true)}
+          disabled={sendOffer.isPending}
+        >
           Send offer
         </Button>
       </div>

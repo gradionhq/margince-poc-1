@@ -73,6 +73,8 @@ describe("StagedLinesPanel", () => {
     );
 
     expect(screen.getByText("AI proposed line")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /accept/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /accept/i }),
+    ).not.toBeInTheDocument();
   });
 });

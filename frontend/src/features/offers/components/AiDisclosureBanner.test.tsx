@@ -5,7 +5,10 @@ import { AiDisclosureBanner } from "./AiDisclosureBanner.js";
 describe("AiDisclosureBanner", () => {
   it("renders nothing when there are no evidence lines", () => {
     const { container } = render(
-      <AiDisclosureBanner hasEvidenceLines={false} aiDisclosureText="ignored" />,
+      <AiDisclosureBanner
+        hasEvidenceLines={false}
+        aiDisclosureText="ignored"
+      />,
     );
 
     expect(container).toBeEmptyDOMElement();

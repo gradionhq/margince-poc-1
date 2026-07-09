@@ -46,7 +46,9 @@ describe("LineItemEditor", () => {
 
     expect(screen.getByText("Discovery")).toBeInTheDocument();
     expect(screen.queryByText("AI proposed")).not.toBeInTheDocument();
-    expect(screen.getByText(/excludes 1 staged ai-proposed line/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/excludes 1 staged ai-proposed line/i),
+    ).toBeInTheDocument();
     expect(screen.getByText("1,200")).toBeInTheDocument();
   });
 

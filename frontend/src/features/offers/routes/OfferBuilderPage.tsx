@@ -1,10 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Skeleton } from "../../../shared/ui/forge.js";
+import { Icon, Skeleton } from "../../../shared/ui/forge.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
-import { useAuthStore } from "../../identity/store/authStore.js";
 import { useDeal, useDealOffers } from "../../deals/api/deals.js";
+import { useAuthStore } from "../../identity/store/authStore.js";
 import {
   offersKeys,
   useCreateLineItem,
@@ -45,9 +45,14 @@ export function OfferBuilderPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { role, user } = useAuthStore();
-  const [toasts, setToasts] = useState<{ id: string; variant: "success" | "error"; message: string }[]>([]);
+  const [toasts, setToasts] = useState<
+    { id: string; variant: "success" | "error"; message: string }[]
+  >([]);
   const pushToast = (variant: "success" | "error", message: string) =>
-    setToasts((current) => [...current, { id: crypto.randomUUID(), variant, message }]);
+    setToasts((current) => [
+      ...current,
+      { id: crypto.randomUUID(), variant, message },
+    ]);
   const {
     data: offer,
     isLoading,
@@ -114,11 +119,11 @@ export function OfferBuilderPage() {
             </h1>
             <button
               type="button"
-            onClick={() => {
-              refetch();
-              refetchDealOffers();
-              qc.invalidateQueries({ queryKey: ["offers"] });
-            }}
+              onClick={() => {
+                refetch();
+                refetchDealOffers();
+                qc.invalidateQueries({ queryKey: ["offers"] });
+              }}
               className="mt-gf-sm text-gf-accent underline"
             >
               Try again
@@ -173,7 +178,11 @@ export function OfferBuilderPage() {
                       : "border-gf-subtle text-gf-secondary"
                   }`}
                 >
-                  {isLocked ? "🔒" : null}
+                  {isLocked ? (
+                    <span data-testid="locked-revision-icon">
+                      <Icon name="Lock" size={12} />
+                    </span>
+                  ) : null}
                   v{revision.revision}
                 </Link>
               </li>
@@ -182,7 +191,11 @@ export function OfferBuilderPage() {
         </ul>
       </section>
 
-      <RegenerateBanner dealId={id ?? ""} offer={offer} canMutateOffer={canEdit} />
+      <RegenerateBanner
+        dealId={id ?? ""}
+        offer={offer}
+        canMutateOffer={canEdit}
+      />
 
       <LineItemEditor
         lines={committedLines}
@@ -199,9 +212,7 @@ export function OfferBuilderPage() {
             captured_by: `human:${user?.id ?? "unknown"}`,
           })
         }
-        onUpdate={(lineId, patch) =>
-          updateLineItem.mutate({ lineId, patch })
-        }
+        onUpdate={(lineId, patch) => updateLineItem.mutate({ lineId, patch })}
         onDelete={(lineId) => deleteLineItem.mutate({ lineId })}
       />
 
@@ -236,7 +247,12 @@ export function OfferBuilderPage() {
         pushToast={pushToast}
       />
 
-      <ToastContainer toasts={toasts} onDismiss={(toastId) => setToasts((current) => current.filter((t) => t.id !== toastId))} />
+      <ToastContainer
+        toasts={toasts}
+        onDismiss={(toastId) =>
+          setToasts((current) => current.filter((t) => t.id !== toastId))
+        }
+      />
 
       <section data-testid="offer-builder-shell">
         <p className="text-gf-body text-gf-secondary">

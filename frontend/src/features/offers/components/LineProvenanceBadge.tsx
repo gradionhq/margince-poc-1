@@ -1,5 +1,8 @@
-import { SourceChip, classifySource } from "../../people/components/SourceChip.js";
 import { Chip, Icon } from "../../../shared/ui/forge.js";
+import {
+  classifySource,
+  SourceChip,
+} from "../../people/components/SourceChip.js";
 
 export function LineProvenanceBadge({
   source,

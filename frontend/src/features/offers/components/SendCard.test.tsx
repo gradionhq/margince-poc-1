@@ -122,7 +122,9 @@ describe("SendCard", () => {
     await user.click(screen.getByRole("button", { name: /confirm send/i }));
 
     expect(mutateAsync).toHaveBeenCalledOnce();
-    expect(onSent).toHaveBeenCalledWith(expect.objectContaining({ status: "sent" }));
+    expect(onSent).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "sent" }),
+    );
     expect(pushToast).toHaveBeenCalledWith(
       "success",
       expect.stringMatching(/offer sent — locked/i),
@@ -136,7 +138,9 @@ describe("SendCard", () => {
     mutateAsync.mockRejectedValueOnce({ status: 403 });
     return user
       .click(screen.getByRole("button", { name: /send offer/i }))
-      .then(() => user.click(screen.getByRole("button", { name: /confirm send/i })))
+      .then(() =>
+        user.click(screen.getByRole("button", { name: /confirm send/i })),
+      )
       .then(() => {
         expect(
           screen.getByText(/approval required unexpectedly/i),

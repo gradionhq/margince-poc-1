@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { OfferBuilderPage, canMutateOffer } from "./OfferBuilderPage.js";
+import { canMutateOffer, OfferBuilderPage } from "./OfferBuilderPage.js";
 
 const refetchOffer = vi.fn();
 const refetchDealOffers = vi.fn();
@@ -14,7 +14,7 @@ const deleteLineItemMutate = vi.fn();
 
 let mockRole: string | null = "admin";
 let mockUserId = "u1";
-let mockDeal = {
+const mockDeal = {
   id: "d1",
   name: "Acme Renewal",
   workspace_id: "w1",
@@ -270,7 +270,9 @@ describe("OfferBuilderPage", () => {
     mockRole = "admin";
     renderPage();
     expect(screen.getByTestId("offer-builder-error-card")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /try again/i }),
+    ).toBeInTheDocument();
   });
 
   it("renders a permission card for ops", () => {
@@ -286,24 +288,33 @@ describe("OfferBuilderPage", () => {
   it("renders header, parent link, status pill, and locked versions", () => {
     renderPage();
 
-    expect(screen.getByRole("heading", { name: /off-1 v2/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /off-1 v2/i }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /back to deal/i })).toHaveAttribute(
       "href",
       "/deals/d1",
     );
     expect(screen.getByText("draft")).toBeInTheDocument();
     expect(screen.getByTestId("offer-versions-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("locked-revision-icon")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /v1/i })).toBeInTheDocument();
   });
 
   it("composes the full offer builder and shows the send card on drafts", () => {
     renderPage();
 
-    expect(screen.getByRole("heading", { name: /regenerate/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /regenerate/i }),
+    ).toBeInTheDocument();
     expect(screen.getAllByText(/Committed line/i)).toHaveLength(2);
-    expect(screen.getByRole("heading", { name: /staged ai lines/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /staged ai lines/i }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Explain this total/i)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /angebot/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /angebot/i }),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("send-card")).toBeInTheDocument();
     expect(
       screen.getByText(/your own click here is the approval/i),
@@ -316,7 +327,9 @@ describe("OfferBuilderPage", () => {
     renderPage();
 
     expect(screen.queryByTestId("send-card")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /add line/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /add line/i }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/this revision is locked/i)).toBeInTheDocument();
   });
 
@@ -325,7 +338,9 @@ describe("OfferBuilderPage", () => {
     renderPage();
 
     await user.click(screen.getByRole("link", { name: /v1/i }));
-    expect(screen.getByRole("heading", { name: /off-1 v2/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /off-1 v2/i }),
+    ).toBeInTheDocument();
   });
 
   it("wires the composed editor and staged panel to the real line item mutations", async () => {

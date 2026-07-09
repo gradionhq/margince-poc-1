@@ -42,14 +42,6 @@ const stagedPricedLine: OfferLineItem = {
   price_grounded: true,
 };
 
-const stagedUnpricedLine: OfferLineItem = {
-  ...stagedPricedLine,
-  id: "line-staged-unpriced",
-  quantity: 3,
-  unit_price_minor: 0,
-  price_grounded: false,
-};
-
 const humanUnpricedLine: OfferLineItem = {
   ...humanLine,
   id: "line-human-unpriced",
@@ -73,23 +65,45 @@ describe("ExplainTotalPanel", () => {
     expect(toggle).toBeInTheDocument();
     await user.click(toggle);
     expect(screen.getByText("Discovery workshop")).toBeInTheDocument();
-    expect(screen.getByText(/2 × 2500 × \(1 - 10%\) = 4500/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/2 × 2500 × \(1 - 10%\) = 4500/),
+    ).toBeInTheDocument();
     expect(screen.getByText(/4500 × 20% = 900/)).toBeInTheDocument();
     expect(screen.queryByText("AI suggested scope")).not.toBeInTheDocument();
     expect(
-      screen.getByText(/1 staged AI-proposed line\(s\) and 1 unpriced line\(s\) are excluded/i),
+      screen.getByText(
+        /1 staged AI-proposed line\(s\) and 1 unpriced line\(s\) are excluded/i,
+      ),
     ).toBeInTheDocument();
-    expect(screen.getByText(/persisted record still carries 1 pending AI line\(s\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/amounts in USD minor units \(cents\); ISO 4217/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /persisted record still carries 1 pending AI line\(s\)/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/amounts in USD minor units \(cents\); ISO 4217/i),
+    ).toBeInTheDocument();
   });
 
   it("marks the gross caption as computed server-side once no staged lines remain", async () => {
     const user = userEvent.setup();
-    render(<ExplainTotalPanel currency="EUR" lines={[humanLine]} grossMinor={5400} />);
-    await user.click(screen.getByRole("button", { name: /explain this total/i }));
+    render(
+      <ExplainTotalPanel
+        currency="EUR"
+        lines={[humanLine]}
+        grossMinor={5400}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: /explain this total/i }),
+    );
 
-    expect(screen.getByText(/gross minor units are computed server-side/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/gross minor units are computed server-side/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/gross minor units: 5400/i)).toBeInTheDocument();
-    expect(screen.getByText(/persisted record total: 5400/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/persisted record total: 5400/i),
+    ).toBeInTheDocument();
   });
 });

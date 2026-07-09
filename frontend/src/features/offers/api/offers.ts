@@ -5,7 +5,6 @@ import type {
   CreateOfferRequest,
   Offer,
   OfferLineItem,
-  OfferLineItemListResponse,
   OfferListResponse,
   UpdateOfferLineItemRequest,
 } from "../../../lib/api-client/generated/index.js";
@@ -162,13 +161,10 @@ export function useRegenerateOffer(dealId: string | undefined) {
   const qc = useQueryClient();
   return useMutation<Offer, unknown, { offerId: string }>({
     mutationFn: async ({ offerId }) => {
-      const { data, error } = await apiClient.POST(
-        "/offers/{id}/regenerate",
-        {
-          params: { path: { id: offerId } },
-          headers: { "Idempotency-Key": newIdempotencyKey() },
-        },
-      );
+      const { data, error } = await apiClient.POST("/offers/{id}/regenerate", {
+        params: { path: { id: offerId } },
+        headers: { "Idempotency-Key": newIdempotencyKey() },
+      });
       if (error) throw error;
       if (!data) throw new Error("empty response");
       return data;

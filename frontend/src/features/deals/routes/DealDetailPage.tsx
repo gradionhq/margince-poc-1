@@ -11,6 +11,7 @@ import { Button, Skeleton } from "../../../shared/ui/forge.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
 import { AttachmentsPanel } from "../../attachments/index.js";
 import { useAuthStore } from "../../identity/store/authStore.js";
+import { useCreateOffer, useDealOffers } from "../../offers/api/offers.js";
 import {
   dealsKeys,
   useAdvanceDeal,
@@ -36,7 +37,6 @@ import { StageStepper } from "../components/StageStepper.js";
 import { StakeholdersRail } from "../components/StakeholdersRail.js";
 import { TasksCard } from "../components/TasksCard.js";
 import { WeightedValueExplainer } from "../components/WeightedValueExplainer.js";
-import { useCreateOffer, useDealOffers } from "../../offers/api/offers.js";
 
 type Toast = { id: string; variant: "success" | "error"; message: string };
 

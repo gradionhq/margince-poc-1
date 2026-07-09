@@ -9,9 +9,10 @@ const navigateSpy = vi.fn();
 const mutateAsync = vi.fn();
 
 vi.mock("react-router-dom", async () => {
-  const actual = await vi.importActual<typeof import("react-router-dom")>(
-    "react-router-dom",
-  );
+  const actual =
+    await vi.importActual<typeof import("react-router-dom")>(
+      "react-router-dom",
+    );
   return {
     ...actual,
     useNavigate: () => navigateSpy,
@@ -139,13 +140,21 @@ describe("RegenerateBanner", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /regenerate/i }));
 
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ offerId: "offer-1" }));
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({ offerId: "offer-1" }),
+    );
     await waitFor(() =>
       expect(navigateSpy).toHaveBeenCalledWith("/deals/deal-1/offers/offer-2"),
     );
-    expect(screen.getByText("v1 → v2 — 1 added, 1 removed, 1 changed")).toBeInTheDocument();
-    expect(screen.getByText("AI disclosure from the server")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /view full diff/i })).toBeInTheDocument();
+    expect(
+      screen.getByText("v1 → v2 — 1 added, 1 removed, 1 changed"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("AI disclosure from the server"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /view full diff/i }),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /view full diff/i }));
     expect(screen.getByText("Added line")).toBeInTheDocument();
     expect(screen.getByText("Before line → After line")).toBeInTheDocument();
@@ -183,6 +192,8 @@ describe("RegenerateBanner", () => {
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
     expect(screen.queryByText(/AI disclosure from the server/i)).toBeNull();
-    expect(screen.queryByRole("button", { name: /view full diff/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /view full diff/i }),
+    ).toBeNull();
   });
 });

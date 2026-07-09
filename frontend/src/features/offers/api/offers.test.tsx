@@ -15,7 +15,6 @@ vi.mock("../../../lib/api-client/client.js", () => ({
 import { apiClient } from "../../../lib/api-client/client.js";
 import type {
   Offer,
-  OfferLineItem,
   OfferLineItemListResponse,
 } from "../../../lib/api-client/generated/index.js";
 import {
@@ -352,7 +351,9 @@ describe("offers write API", () => {
       ai_disclosure: "AI disclosure",
       diff_from_previous: { added: [], removed: [], changed: [] },
     };
-    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("uuid-regenerate");
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+      "uuid-regenerate",
+    );
     (apiClient.POST as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       data: response,
       error: undefined,
@@ -366,7 +367,9 @@ describe("offers write API", () => {
       "/offers/{id}/regenerate",
       expect.objectContaining({
         params: { path: { id: "o1" } },
-        headers: expect.objectContaining({ "Idempotency-Key": "uuid-regenerate" }),
+        headers: expect.objectContaining({
+          "Idempotency-Key": "uuid-regenerate",
+        }),
       }),
     );
     expect(invalidateSpy).toHaveBeenCalledWith({
@@ -459,7 +462,9 @@ describe("offers write API", () => {
     expect(apiClient.POST).not.toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        headers: expect.objectContaining({ "X-Approval-Token": expect.anything() }),
+        headers: expect.objectContaining({
+          "X-Approval-Token": expect.anything(),
+        }),
       }),
     );
   });

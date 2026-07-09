@@ -125,7 +125,11 @@ export function LineItemRow({
       <td className="py-gf-xs pr-gf-sm">{formatMinor(netMinor)}</td>
       <td className="py-gf-xs pr-gf-sm">
         {canMutateOffer ? (
-          <Button type="button" variant="secondary" onClick={() => onDelete(line.id)}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => onDelete(line.id)}
+          >
             Delete
           </Button>
         ) : null}

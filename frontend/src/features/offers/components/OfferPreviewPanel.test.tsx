@@ -1,6 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { Offer, OfferLineItem } from "../../../lib/api-client/generated/index.js";
+import type {
+  Offer,
+  OfferLineItem,
+} from "../../../lib/api-client/generated/index.js";
 import { OfferPreviewPanel } from "./OfferPreviewPanel.js";
 
 vi.mock("../api/offers.js", () => ({
@@ -71,10 +74,14 @@ describe("OfferPreviewPanel", () => {
     expect(screen.getByText("01.08.26")).toBeInTheDocument();
     expect(screen.getByText("Discovery workshop")).toBeInTheDocument();
     expect(
-      screen.getByText((content) => content.includes("25,00") && content.includes("€")),
+      screen.getByText(
+        (content) => content.includes("25,00") && content.includes("€"),
+      ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText((content) => content.includes("45,00") && content.includes("€")),
+      screen.getByText(
+        (content) => content.includes("45,00") && content.includes("€"),
+      ),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "EN" }));
@@ -84,10 +91,14 @@ describe("OfferPreviewPanel", () => {
     expect(screen.getByText("8/1/26")).toBeInTheDocument();
     expect(screen.getByText("Discovery workshop")).toBeInTheDocument();
     expect(
-      screen.getByText((content) => content.includes("25.00") && content.includes("€")),
+      screen.getByText(
+        (content) => content.includes("25.00") && content.includes("€"),
+      ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText((content) => content.includes("45.00") && content.includes("€")),
+      screen.getByText(
+        (content) => content.includes("45.00") && content.includes("€"),
+      ),
     ).toBeInTheDocument();
   });
 
@@ -104,10 +115,9 @@ describe("OfferPreviewPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /pdf erzeugen/i }));
 
     await waitFor(() =>
-      expect(screen.getByRole("link", { name: /pdf ansehen/i })).toHaveAttribute(
-        "href",
-        "https://example.com/offer.pdf",
-      ),
+      expect(
+        screen.getByRole("link", { name: /pdf ansehen/i }),
+      ).toHaveAttribute("href", "https://example.com/offer.pdf"),
     );
   });
 

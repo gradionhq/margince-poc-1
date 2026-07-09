@@ -31,7 +31,9 @@ export function StagedLineRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [quantity, setQuantity] = useState(String(line.quantity));
-  const [unitPriceMinor, setUnitPriceMinor] = useState(String(line.unit_price_minor));
+  const [unitPriceMinor, setUnitPriceMinor] = useState(
+    String(line.unit_price_minor),
+  );
   const [discountPct, setDiscountPct] = useState(String(line.discount_pct));
   const [taxRate, setTaxRate] = useState(String(line.tax_rate));
   const [message, setMessage] = useState<string | null>(null);

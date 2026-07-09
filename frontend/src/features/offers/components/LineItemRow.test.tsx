@@ -1,5 +1,4 @@
-import { render, screen } from "@testing-library/react";
-import { fireEvent } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { OfferLineItem } from "../../../lib/api-client/generated/index.js";
@@ -37,7 +36,9 @@ describe("LineItemRow", () => {
 
     expect(screen.getByText("Consulting")).toBeInTheDocument();
     expect(screen.getByText("3,498")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /delete/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /delete/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("lets a mutable row recompute on keystroke and patch on blur", async () => {

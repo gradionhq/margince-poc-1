@@ -31,7 +31,9 @@ export function StagedLinesPanel({
       data-testid="staged-lines-panel"
       className="rounded-gf-lg border border-gf-subtle bg-gf-card p-gf-lg"
     >
-      <h3 className="text-gf-body font-medium text-gf-primary">Staged AI lines</h3>
+      <h3 className="text-gf-body font-medium text-gf-primary">
+        Staged AI lines
+      </h3>
       <AiDisclosureBanner hasEvidenceLines aiDisclosureText={null} />
       <div className="overflow-x-auto">
         <table className="min-w-full text-left text-gf-body">
