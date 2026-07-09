@@ -257,6 +257,22 @@ type organizationDetailResponse struct {
 	Activities    []domain.ActivityRef     `json:"activities"`
 }
 
+func (r organizationDetailResponse) MarshalJSON() ([]byte, error) {
+	type alias organizationDetailResponse
+	base, err := json.Marshal(alias(r))
+	if err != nil {
+		return nil, err
+	}
+	var out map[string]json.RawMessage
+	if err := json.Unmarshal(base, &out); err != nil {
+		return nil, err
+	}
+	out["relationships"], _ = json.Marshal(r.Relationships)
+	out["deals"], _ = json.Marshal(r.Deals)
+	out["activities"], _ = json.Marshal(r.Activities)
+	return json.Marshal(out)
+}
+
 func (h *OrganizationHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	wsID := httpkit.WorkspaceID(r)
 	o, err := h.store.GetAny(r.Context(), id, wsID)
@@ -434,7 +450,17 @@ func (h *OrganizationHandler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sortVal := r.URL.Query().Get("sort")
-	if !orgSortAllowed[sortVal] {
+	allowed := make(map[string]bool, len(orgSortAllowed))
+	for k, v := range orgSortAllowed {
+		allowed[k] = v
+	}
+	if names, err := h.store.ActiveCustomFieldNames(r.Context(), wsID); err == nil {
+		for _, n := range names {
+			allowed[n] = true
+			allowed["-"+n] = true
+		}
+	}
+	if !allowed[sortVal] {
 		httpkit.JSONProblem(w, http.StatusUnprocessableEntity, "sort_field_not_allowed")
 		return
 	}
@@ -443,11 +469,18 @@ func (h *OrganizationHandler) list(w http.ResponseWriter, r *http.Request) {
 		Classification: q.Get("classification"),
 		Domain:         q.Get("domain"),
 		OwnerID:        q.Get("owner_id"),
+		CustomFilters:  map[string]string{},
 	}
 	if s := q.Get("relevance_gte"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil {
 			filter.RelevanceGTE = &n
 		}
+	}
+	for key, values := range q {
+		if !strings.HasPrefix(key, "cf_") || len(values) == 0 {
+			continue
+		}
+		filter.CustomFilters[key] = values[0]
 	}
 	cursor := r.URL.Query().Get("cursor")
 	limit := httpkit.QueryLimit(r, 20)

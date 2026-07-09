@@ -12,6 +12,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
 	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
+	"github.com/lib/pq"
 )
 
 func buildOrgListWhere(f domain.OrgListFilter, args []any, n int) (string, []any) {
@@ -38,6 +39,11 @@ func buildOrgListWhere(f domain.OrgListFilter, args []any, n int) (string, []any
 			  AND rg.subject_type = 'user' AND rg.subject_id = $%d::uuid
 			  AND (rg.expires_at IS NULL OR rg.expires_at > now())))`, ownerArg, n)
 	}
+	for name, value := range f.CustomFilters {
+		n++
+		args = append(args, value)
+		where += fmt.Sprintf(` AND %s::text = $%d`, pq.QuoteIdentifier(name), n)
+	}
 	if domainVal := strings.ToLower(strings.TrimSpace(f.Domain)); domainVal != "" {
 		n++
 		args = append(args, domainVal)
@@ -56,6 +62,19 @@ func (s *OrgStore) List(ctx context.Context, workspaceID, cursor string, limit i
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
+	if sortVal != "" && sortVal != "id" && sortVal != "strength" && sortVal != "-strength" {
+		names, err := s.ActiveCustomFieldNames(ctx, workspaceID)
+		if err == nil {
+			allowed := make(map[string]bool, len(names))
+			for _, n := range names {
+				allowed[n] = true
+				allowed["-"+n] = true
+			}
+			if allowed[sortVal] {
+				return s.listByCustomColumn(ctx, workspaceID, cursor, limit, sortVal, filter)
+			}
+		}
+	}
 	switch sortVal {
 	case "strength":
 		return s.listByOrgStrength(ctx, workspaceID, cursor, limit, false, filter)
@@ -64,6 +83,59 @@ func (s *OrgStore) List(ctx context.Context, workspaceID, cursor string, limit i
 	default:
 		return s.listByOrgID(ctx, workspaceID, cursor, limit, filter)
 	}
+}
+
+func (s *OrgStore) listByCustomColumn(ctx context.Context, workspaceID, cursor string, limit int, sortVal string, filter domain.OrgListFilter) ([]domain.Organization, string, error) {
+	col := strings.TrimPrefix(sortVal, "-")
+	desc := strings.HasPrefix(sortVal, "-")
+	offset := sqlutil.DecodeOffsetCursor(cursor)
+	all := []domain.Organization{}
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		args := []any{workspaceID}
+		extraWhere, args := buildOrgListWhere(filter, args, 1)
+		rows, err := tx.QueryContext(ctx, `
+			SELECT id, workspace_id, name, website, classification, relevance,
+			       owner_id, social, version, source, captured_by, created_at, updated_at
+			FROM organization
+			WHERE workspace_id=$1::uuid AND archived_at IS NULL`+extraWhere+`
+			ORDER BY `+pq.QuoteIdentifier(col)+` `+func() string {
+			if desc {
+				return "DESC"
+			}
+			return "ASC"
+		}()+`, id`,
+			args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var o domain.Organization
+			var socialRaw []byte
+			if err := rows.Scan(&o.ID, &o.WorkspaceID, &o.DisplayName, &o.Website, &o.Classification, &o.Relevance,
+				&o.OwnerID, &socialRaw, &o.Version, &o.Source, &o.CapturedBy, &o.CreatedAt, &o.UpdatedAt); err != nil {
+				return err
+			}
+			o.Social = map[string]any{}
+			sqlutil.UnmarshalJSON(socialRaw, &o.Social)
+			all = append(all, o)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	if offset > len(all) {
+		offset = len(all)
+	}
+	end := offset + limit
+	var next string
+	if end < len(all) {
+		next = sqlutil.EncodeOffsetCursor(end)
+	} else {
+		end = len(all)
+	}
+	return all[offset:end], next, nil
 }
 
 func (s *OrgStore) listByOrgID(ctx context.Context, workspaceID, cursor string, limit int, filter domain.OrgListFilter) ([]domain.Organization, string, error) {

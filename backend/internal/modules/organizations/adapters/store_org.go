@@ -179,6 +179,9 @@ func (s *OrgStore) Get(ctx context.Context, id, workspaceID string) (domain.Orga
 		o.Address = map[string]any{}
 		sqlutil.UnmarshalJSON(addrRaw, &o.Address)
 	}
+	if err := attachOrgCustomFields(ctx, s.db, workspaceID, &o); err != nil {
+		return o, err
+	}
 	return o, nil
 }
 
