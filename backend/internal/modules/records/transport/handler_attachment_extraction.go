@@ -122,8 +122,13 @@ func (h *AttachmentHandler) acceptExtraction(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
+	dealID, err := uuid.Parse(a.EntityID)
+	if err != nil {
+		httpkit.JSONProblem(w, http.StatusInternalServerError, "invalid_deal_id")
+		return
+	}
 	httpkit.JSONOK(w, types.AttachmentExtractionAcceptResponse{
-		DealId:   openapi_types.UUID(uuid.MustParse(a.EntityID)),
+		DealId:   openapi_types.UUID(dealID),
 		Accepted: plan.accepted,
 	})
 }

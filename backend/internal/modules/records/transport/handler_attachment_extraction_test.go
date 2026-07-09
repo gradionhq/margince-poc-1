@@ -189,6 +189,41 @@ func TestAttachmentHandler_AcceptExtraction_EditedFieldFlipsProvenanceAndCapture
 	}
 }
 
+func TestAttachmentHandler_AcceptExtraction_MalformedDealIDReturns500NotPanic(t *testing.T) {
+	store := newFakeAttachmentStore()
+	id := seed(store, domain.ScanStatusClean)
+	a := store.items[id]
+	a.EntityID = "not-a-uuid"
+	store.items[id] = a
+	audit := &fakeAudit{}
+	writer := &fakeDealWriter{}
+	fixture := extraction.FixtureExtractor{Fields: map[string][]extraction.ExtractedField{
+		id: {
+			{Field: "name", Value: "Acme Corp", SourceQuote: "Acme Corp", Confidence: "high"},
+		},
+	}}
+	h := newTestHandlerWithSeams(store, audit, fixture, writer)
+
+	body := types.AcceptExtractionRequest{FieldKeys: []string{"name"}}
+	raw, _ := json.Marshal(body)
+	req := withAttachWorkspace(httptest.NewRequest(http.MethodPost, "/attachments/"+id+"/extraction:accept", bytes.NewReader(raw)))
+	w := httptest.NewRecorder()
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("handler panicked instead of returning an error response: %v", r)
+		}
+	}()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500, body=%s", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/problem+json" {
+		t.Fatalf("content-type = %q, want application/problem+json", ct)
+	}
+}
+
 func TestAttachmentHandler_AcceptExtraction_NonDealReturns422(t *testing.T) {
 	store := newFakeAttachmentStore()
 	id := seed(store, domain.ScanStatusClean)
