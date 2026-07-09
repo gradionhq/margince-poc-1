@@ -4,6 +4,7 @@ package adapters_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
@@ -18,6 +19,7 @@ func TestOfferStore_Regenerate_GroundedAndUngroundedSignals(t *testing.T) {
 	wsID, dealID := seedOfferWorkspace(t, db)
 	s := adapters.NewOfferStore(db)
 	created := newDraftOffer(t, db, wsID, dealID)
+	forceOfferSent(t, db, created.ID)
 
 	price := int64(500)
 	signals := []domain.OfferLineSignal{
@@ -109,6 +111,7 @@ func TestOfferStore_Regenerate_NoContextFixture_EmptyDraft(t *testing.T) {
 	wsID, dealID := seedOfferWorkspace(t, db)
 	s := adapters.NewOfferStore(db)
 	created := newDraftOffer(t, db, wsID, dealID)
+	forceOfferSent(t, db, created.ID)
 
 	regenerated, err := s.Regenerate(context.Background(), created.ID, wsID, nil)
 	if err != nil {
@@ -127,17 +130,41 @@ func TestOfferStore_Regenerate_NoContextFixture_EmptyDraft(t *testing.T) {
 	}
 }
 
-func TestOfferStore_Regenerate_NotDraft_Rejected(t *testing.T) {
+// TestOfferStore_Regenerate_NotSent_Rejected covers both non-sent states a
+// regenerate call must reject: a still-draft offer, and an already-
+// superseded one — regenerate's precondition is requireSent (crm.yaml's
+// regenerateOffer: "regenerate a sent offer"; OFFER-AC-10d), not
+// requireDraft (draft is a *destination*, never a precondition, for this
+// verb).
+func TestOfferStore_Regenerate_NotSent_Rejected(t *testing.T) {
 	db := pgtest.OpenTestDB(t)
-	wsID, dealID := seedOfferWorkspace(t, db)
 	s := adapters.NewOfferStore(db)
-	created := newDraftOffer(t, db, wsID, dealID)
-	if _, err := db.Exec(`UPDATE offer SET status='superseded' WHERE id=$1::uuid`, created.ID); err != nil {
+
+	// newDraftOffer derives a deterministic offer_number from its
+	// (wsID, dealID) pair, so the two fixtures below each need their own
+	// seedOfferWorkspace call to avoid an offer_number+revision collision.
+	wsID1, dealID1 := seedOfferWorkspace(t, db)
+	stillDraft := newDraftOffer(t, db, wsID1, dealID1)
+	if _, err := s.Regenerate(context.Background(), stillDraft.ID, wsID1, nil); !errors.Is(err, adapters.ErrOfferNotSent) {
+		t.Fatalf("expected ErrOfferNotSent for a still-draft offer, got %v", err)
+	}
+
+	wsID2, dealID2 := seedOfferWorkspace(t, db)
+	superseded := newDraftOffer(t, db, wsID2, dealID2)
+	if _, err := db.Exec(`UPDATE offer SET status='superseded' WHERE id=$1::uuid`, superseded.ID); err != nil {
 		t.Fatalf("force status=superseded: %v", err)
 	}
-	_, err := s.Regenerate(context.Background(), created.ID, wsID, nil)
-	if !errors.Is(err, adapters.ErrOfferNotDraft) {
-		t.Fatalf("expected ErrOfferNotDraft, got %v", err)
+	if _, err := s.Regenerate(context.Background(), superseded.ID, wsID2, nil); !errors.Is(err, adapters.ErrOfferNotSent) {
+		t.Fatalf("expected ErrOfferNotSent, got %v", err)
+	}
+}
+
+// forceOfferSent flips id's status straight to sent for tests that need a
+// regenerate-eligible fixture without exercising the full Send flow.
+func forceOfferSent(t *testing.T, db *sql.DB, id string) {
+	t.Helper()
+	if _, err := db.Exec(`UPDATE offer SET status='sent' WHERE id=$1::uuid`, id); err != nil {
+		t.Fatalf("force status=sent: %v", err)
 	}
 }
 
@@ -157,6 +184,7 @@ func TestOfferStore_Regenerate_RateCardFallback_WhenSignalHasNoPrice(t *testing.
 
 	s := adapters.NewOfferStore(db)
 	created := newDraftOffer(t, db, wsID, dealID)
+	forceOfferSent(t, db, created.ID)
 	signals := []domain.OfferLineSignal{
 		{Description: "Consulting Day", Quantity: 1, ProductID: &createdProduct.ID, Snippet: "wants a consulting day", SourceID: "activity-1"},
 	}
@@ -180,6 +208,7 @@ func TestOfferStore_Regenerate_OnlyGroundedSignalsPersist(t *testing.T) {
 	wsID, dealID := seedOfferWorkspace(t, db)
 	s := adapters.NewOfferStore(db)
 	created := newDraftOffer(t, db, wsID, dealID)
+	forceOfferSent(t, db, created.ID)
 
 	good := domain.OfferLineSignal{Description: "Consulting", Quantity: 1, Snippet: "consulting mention", SourceID: "activity-1"}
 	bad := domain.OfferLineSignal{Description: "Ignore me", Quantity: 1}
@@ -202,6 +231,7 @@ func TestOfferStore_Regenerate_ChangeDiff_TracksCoreFields(t *testing.T) {
 	wsID, dealID := seedOfferWorkspace(t, db)
 	s := adapters.NewOfferStore(db)
 	created := newDraftOffer(t, db, wsID, dealID)
+	forceOfferSent(t, db, created.ID)
 
 	first := int64(100)
 	second := int64(200)
@@ -212,6 +242,7 @@ func TestOfferStore_Regenerate_ChangeDiff_TracksCoreFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first regenerate: %v", err)
 	}
+	forceOfferSent(t, db, firstRegenerated.ID)
 
 	updated := []domain.OfferLineSignal{
 		{Description: "Consulting", Quantity: 2, UnitPriceMinor: &second, Snippet: "consulting updated", SourceID: "activity-2"},

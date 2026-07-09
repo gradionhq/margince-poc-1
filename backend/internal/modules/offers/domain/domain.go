@@ -79,6 +79,9 @@ func NewOfferTemplate(name string, p prov.Provenance) OfferTemplate {
 // ever accept a mutation against (OFFER-WIRE-4 draft-only guard).
 const OfferStatusDraft = "draft"
 
+// OfferStatusSent marks an offer that has been frozen and sent.
+const OfferStatusSent = "sent"
+
 // OfferStatusSuperseded is the status a draft revision flips to once a
 // regenerate call has produced its replacement (OFFER-WIRE-6). The DB CHECK
 // constraint already admits it (000071); this ticket is the first to write it.
