@@ -63,22 +63,52 @@ type Story = StoryObj<typeof CustomFieldAuditCard>;
 // Admin sees the real actor name (FieldGuard visible) on both an "added" and
 // a "retired" entry (a retired field derives both).
 export const WithEntries: Story = {
-  args: { fields: FIELDS, members: MEMBERS, role: "admin", isLoading: false, isError: false },
+  args: {
+    fields: FIELDS,
+    members: MEMBERS,
+    role: "admin",
+    isLoading: false,
+    isError: false,
+  },
 };
 
 // Non-admin: actor name masked via FieldGuard.
 export const Masked: Story = {
-  args: { fields: FIELDS, members: MEMBERS, role: "rep", isLoading: false, isError: false },
+  args: {
+    fields: FIELDS,
+    members: MEMBERS,
+    role: "rep",
+    isLoading: false,
+    isError: false,
+  },
 };
 
 export const Empty: Story = {
-  args: { fields: [], members: MEMBERS, role: "admin", isLoading: false, isError: false },
+  args: {
+    fields: [],
+    members: MEMBERS,
+    role: "admin",
+    isLoading: false,
+    isError: false,
+  },
 };
 
 export const Loading: Story = {
-  args: { fields: [], members: MEMBERS, role: "admin", isLoading: true, isError: false },
+  args: {
+    fields: [],
+    members: MEMBERS,
+    role: "admin",
+    isLoading: true,
+    isError: false,
+  },
 };
 
 export const ErrorState: Story = {
-  args: { fields: [], members: MEMBERS, role: "admin", isLoading: false, isError: true },
+  args: {
+    fields: [],
+    members: MEMBERS,
+    role: "admin",
+    isLoading: false,
+    isError: true,
+  },
 };

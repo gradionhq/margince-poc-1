@@ -76,12 +76,22 @@ type Story = StoryObj<typeof CustomFieldsTable>;
 // Admin sees the row-action menu and the actual "Added by" name (FieldGuard
 // visible).
 export const Default: Story = {
-  args: { fields: FIELDS, members: MEMBERS, selectedObject: "deal", role: "admin" },
+  args: {
+    fields: FIELDS,
+    members: MEMBERS,
+    selectedObject: "deal",
+    role: "admin",
+  },
 };
 
 // Non-admin: row actions omitted entirely (not disabled) and "Added by" masked.
 export const NonAdmin: Story = {
-  args: { fields: FIELDS, members: MEMBERS, selectedObject: "deal", role: "rep" },
+  args: {
+    fields: FIELDS,
+    members: MEMBERS,
+    selectedObject: "deal",
+    role: "rep",
+  },
 };
 
 // No fields on the selected object and no staged row → EmptyState.
