@@ -142,7 +142,7 @@ func TestRelationshipList_DealStakeholders_P95AndExplain(t *testing.T) {
 	ds := deals.NewDealStore(db)
 	dSeed := deals.NewDeal("RelPerf Deal "+pgtest.Uniq(), pl.ID, st.ID, p0)
 	dSeed.WorkspaceID = wsRelPerf
-	d, err := ds.Create(ctx, dSeed, "")
+	d, err := ds.Create(ctx, dSeed, "", nil)
 	if err != nil {
 		t.Fatalf("seed deal: %v", err)
 	}

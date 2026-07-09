@@ -372,7 +372,7 @@ func TestDealStore_ListFiltered_ForecastCategoryPartnerOrgSort(t *testing.T) {
 	d1.AmountMinor = &amt1
 	partnerOrg1 := fix.org1
 	d1.PartnerOrgID = &partnerOrg1
-	created1, err := ds.Create(ctx, d1, "")
+	created1, err := ds.Create(ctx, d1, "", nil)
 	if err != nil {
 		t.Fatalf("create d1: %v", err)
 	}
@@ -383,7 +383,7 @@ func TestDealStore_ListFiltered_ForecastCategoryPartnerOrgSort(t *testing.T) {
 	d2.AmountMinor = &amt2
 	partnerOrg2 := fix.org2
 	d2.PartnerOrgID = &partnerOrg2
-	if _, err := ds.Create(ctx, d2, ""); err != nil {
+	if _, err := ds.Create(ctx, d2, "", nil); err != nil {
 		t.Fatalf("create d2: %v", err)
 	}
 

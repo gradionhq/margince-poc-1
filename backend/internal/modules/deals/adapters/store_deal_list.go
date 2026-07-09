@@ -21,7 +21,7 @@ import (
 var dealSortColumns = map[string]bool{
 	"created_at":          true,
 	"updated_at":          true,
-	"amount_minor":        true,
+	fieldAmountMinor:      true,
 	"expected_close_date": true,
 	"last_activity_at":    true,
 }
@@ -149,6 +149,50 @@ func buildDealListWhere(workspaceID, cursor string, limit int, f domain.DealList
 	return where, args, n
 }
 
+// dealListQuery builds ListFiltered's SELECT, appending one quoted identifier
+// per active custom column to both the fixed column list and the ORDER BY
+// candidates.
+func dealListQuery(where string, activeCols []customfields.Column, sort string, active map[string]bool) string {
+	query := `SELECT id, workspace_id, name, pipeline_id, stage_id,
+		        organization_id, owner_id, partner_org_id,
+		        amount_minor, currency, status, wait_until, last_activity_at,
+		        version, source, captured_by, created_at, updated_at,
+		        (SELECT max(occurred_at) FROM deal_stage_history WHERE deal_id=deal.id) AS stage_entered_at,
+		        (SELECT count(*) FROM relationship WHERE deal_id=deal.id AND kind='deal_stakeholder' AND archived_at IS NULL) AS stakeholder_count`
+	for _, c := range activeCols {
+		query += ", " + pq.QuoteIdentifier(c.ColumnName)
+	}
+	query += `
+		 FROM deal
+		 WHERE ` + where + `
+		 ` + dealOrderBy(sort, active) + ` LIMIT $3`
+	return query
+}
+
+// scanDealListRow scans one ListFiltered row (fixed columns + every active
+// custom column appended by dealListQuery) into a domain.Deal.
+func scanDealListRow(rows *sql.Rows, activeCols []customfields.Column) (domain.Deal, error) {
+	var d domain.Deal
+	var stageEnteredAt sql.NullTime
+	dests := []any{
+		&d.ID, &d.WorkspaceID, &d.Name, &d.PipelineID, &d.StageID,
+		&d.OrganizationID, &d.OwnerID, &d.PartnerOrgID,
+		&d.AmountMinor, &d.Currency, &d.Status, &d.WaitUntil, &d.LastActivityAt, &d.Version,
+		&d.Source, &d.CapturedBy,
+		&d.CreatedAt, &d.UpdatedAt,
+		&stageEnteredAt, &d.StakeholderCount,
+	}
+	dests = append(dests, customfields.ScanDests(activeCols)...)
+	if err := rows.Scan(dests...); err != nil {
+		return domain.Deal{}, err
+	}
+	if stageEnteredAt.Valid {
+		d.StageEnteredAt = &stageEnteredAt.Time
+	}
+	d.CustomFields = customfields.ExtractValues(activeCols, dests[len(dests)-len(activeCols):])
+	return d, nil
+}
+
 // ListFiltered returns cursor-keyed, workspace-scoped deals matching f.
 // Predicates are AND-ed; all filter values are bound params.
 func (s *DealStore) ListFiltered(ctx context.Context, workspaceID, cursor string, limit int, f domain.DealListFilter) ([]domain.Deal, string, error) {
@@ -168,44 +212,16 @@ func (s *DealStore) ListFiltered(ctx context.Context, workspaceID, cursor string
 		for _, c := range activeCols {
 			active[c.ColumnName] = true
 		}
-		//nolint:gosec // G202: `where` injects only bound-param indices ($N), never user input; all filter values are passed via args
-		query := `SELECT id, workspace_id, name, pipeline_id, stage_id,
-			        organization_id, owner_id, partner_org_id,
-			        amount_minor, currency, status, wait_until, last_activity_at,
-			        version, source, captured_by, created_at, updated_at,
-			        (SELECT max(occurred_at) FROM deal_stage_history WHERE deal_id=deal.id) AS stage_entered_at,
-			        (SELECT count(*) FROM relationship WHERE deal_id=deal.id AND kind='deal_stakeholder' AND archived_at IS NULL) AS stakeholder_count`
-		for _, c := range activeCols {
-			query += ", " + pq.QuoteIdentifier(c.ColumnName)
-		}
-		query += `
-			 FROM deal
-			 WHERE ` + where + `
-			 ` + dealOrderBy(f.Sort, active) + ` LIMIT $3`
-		rows, err := tx.QueryContext(ctx, query, args...)
+		rows, err := tx.QueryContext(ctx, dealListQuery(where, activeCols, f.Sort, active), args...)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = rows.Close() }()
 		for rows.Next() {
-			var d domain.Deal
-			var stageEnteredAt sql.NullTime
-			dests := []any{
-				&d.ID, &d.WorkspaceID, &d.Name, &d.PipelineID, &d.StageID,
-				&d.OrganizationID, &d.OwnerID, &d.PartnerOrgID,
-				&d.AmountMinor, &d.Currency, &d.Status, &d.WaitUntil, &d.LastActivityAt, &d.Version,
-				&d.Source, &d.CapturedBy,
-				&d.CreatedAt, &d.UpdatedAt,
-				&stageEnteredAt, &d.StakeholderCount,
-			}
-			dests = append(dests, customfields.ScanDests(activeCols)...)
-			if err := rows.Scan(dests...); err != nil {
+			d, err := scanDealListRow(rows, activeCols)
+			if err != nil {
 				return err
 			}
-			if stageEnteredAt.Valid {
-				d.StageEnteredAt = &stageEnteredAt.Time
-			}
-			d.CustomFields = customfields.ExtractValues(activeCols, dests[len(dests)-len(activeCols):])
 			out = append(out, d)
 		}
 		return rows.Err()

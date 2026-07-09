@@ -25,7 +25,7 @@ func ActiveColumns(ctx context.Context, db *sql.DB, workspaceID, object string) 
 		if err != nil {
 			return fmt.Errorf("customfields: select active columns: %w", err)
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var c Column
 			if err := rows.Scan(&c.ColumnName, &c.Slug, &c.Type); err != nil {
@@ -62,39 +62,49 @@ func ExtractValues(active []Column, dests []any) map[string]any {
 		if !ok || p == nil || *p == nil {
 			continue
 		}
-		switch c.Type {
-		case TypeCurrency:
-			if v, ok := (*p).(int64); ok {
-				out[c.ColumnName] = v
-			}
-		case TypeBoolean:
-			if v, ok := (*p).(bool); ok {
-				out[c.ColumnName] = v
-			}
-		case TypeText, TypePicklist:
-			switch v := (*p).(type) {
-			case []byte:
-				out[c.ColumnName] = string(v)
-			case string:
-				out[c.ColumnName] = v
-			}
-		case TypeDate:
-			switch v := (*p).(type) {
-			case time.Time:
-				out[c.ColumnName] = v.Format("2006-01-02")
-			case string:
-				out[c.ColumnName] = v
-			}
-		case TypeNumber:
-			switch v := (*p).(type) {
-			case []byte:
-				out[c.ColumnName] = json.Number(string(v))
-			case string:
-				out[c.ColumnName] = json.Number(v)
-			}
+		if v, ok := extractOne(c.Type, *p); ok {
+			out[c.ColumnName] = v
 		}
 	}
 	return out
+}
+
+// extractOne converts one raw driver-scanned value v into its wire
+// representation for column type t, per the type-specific conversion rules
+// ExtractValues documents (currency/boolean passthrough, text/picklist
+// []byte->string, date bare "2006-01-02" string, number arbitrary-precision
+// json.Number). ok=false when v's Go type doesn't match t's expected shape.
+func extractOne(t string, v any) (any, bool) {
+	switch t {
+	case TypeCurrency:
+		n, ok := v.(int64)
+		return n, ok
+	case TypeBoolean:
+		b, ok := v.(bool)
+		return b, ok
+	case TypeText, TypePicklist:
+		switch s := v.(type) {
+		case []byte:
+			return string(s), true
+		case string:
+			return s, true
+		}
+	case TypeDate:
+		switch d := v.(type) {
+		case time.Time:
+			return d.Format("2006-01-02"), true
+		case string:
+			return d, true
+		}
+	case TypeNumber:
+		switch n := v.(type) {
+		case []byte:
+			return json.Number(string(n)), true
+		case string:
+			return json.Number(n), true
+		}
+	}
+	return nil, false
 }
 
 // SQLValue converts one JSON-decoded value into a database bind value.
