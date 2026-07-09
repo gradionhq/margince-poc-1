@@ -25,10 +25,11 @@ export function OfferPreviewPanel({
   const renderOffer = useRenderOffer(offer.id);
   const copy = getOfferCopy(locale);
 
-  const validUntil = new Intl.DateTimeFormat(
-    locale === "de" ? "de-DE" : "en-US",
-    { dateStyle: "short" },
-  ).format(new Date(offer.valid_until));
+  const validUntil = offer.valid_until
+    ? new Intl.DateTimeFormat(locale === "de" ? "de-DE" : "en-US", {
+        dateStyle: "short",
+      }).format(new Date(offer.valid_until))
+    : "—";
 
   const generatePdf = async () => {
     const next = await renderOffer.mutateAsync();

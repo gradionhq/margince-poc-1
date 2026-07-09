@@ -86,7 +86,7 @@ export function RegenerateBanner({
         ) : null}
       </div>
 
-      {showResult ? (
+      {response ? (
         <>
           <AiDisclosureBanner
             hasEvidenceLines={hasEvidenceLines}

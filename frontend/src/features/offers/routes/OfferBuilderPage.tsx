@@ -210,6 +210,7 @@ export function OfferBuilderPage() {
           createLineItem.mutate({
             position: nextLinePosition,
             description: "New line",
+            unit: "ea",
             quantity: 1,
             unit_price_minor: 0,
             discount_pct: 0,

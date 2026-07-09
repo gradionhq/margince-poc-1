@@ -2,12 +2,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Offer } from "../../../lib/api-client/generated/index.js";
 import { SendCard } from "./SendCard.js";
 
 const mutateAsync = vi.fn();
 
 let mockCanMutateOffer = true;
-let mockOffer = {
+let mockOffer: Pick<Offer, "id" | "status" | "offer_number" | "revision"> & {
+  currency: string;
+  deal_id: string;
+} = {
   id: "o1",
   status: "draft",
   currency: "EUR",
@@ -108,7 +112,7 @@ describe("SendCard", () => {
   });
 
   it("does not render for sent offers", () => {
-    mockOffer.status = "sent";
+    mockOffer = { ...mockOffer, status: "sent" };
     renderCard();
     expect(screen.queryByTestId("send-card")).not.toBeInTheDocument();
   });

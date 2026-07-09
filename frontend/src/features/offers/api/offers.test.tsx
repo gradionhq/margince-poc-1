@@ -65,6 +65,8 @@ describe("offers read API", () => {
       currency: "EUR",
       source: "test",
       captured_by: "human:test",
+      version: 1,
+      ai_generated: false,
       created_at: "2026-07-01T00:00:00Z",
       updated_at: "2026-07-01T00:00:00Z",
       line_items: [],
@@ -125,7 +127,7 @@ describe("offers read API", () => {
           price_grounded: true,
         },
       ],
-      page: {},
+      page: { has_more: false },
     };
     (apiClient.GET as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       data: lineItems,
@@ -150,8 +152,8 @@ describe("offers write API", () => {
     );
     const uuidSpy = vi
       .spyOn(globalThis.crypto, "randomUUID")
-      .mockReturnValueOnce("uuid-1")
-      .mockReturnValueOnce("uuid-2");
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000001")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000002");
     (apiClient.POST as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       data: {
         id: "o2",
@@ -207,7 +209,9 @@ describe("offers write API", () => {
       "/deals/{id}/offers",
       expect.objectContaining({
         params: { path: { id: "d1" } },
-        headers: expect.objectContaining({ "Idempotency-Key": "uuid-1" }),
+        headers: expect.objectContaining({
+          "Idempotency-Key": "00000000-0000-0000-0000-000000000001",
+        }),
       }),
     );
     expect(invalidateSpy).toHaveBeenCalledWith({
@@ -225,7 +229,9 @@ describe("offers write API", () => {
       2,
       "/deals/{id}/offers",
       expect.objectContaining({
-        headers: expect.objectContaining({ "Idempotency-Key": "uuid-2" }),
+        headers: expect.objectContaining({
+          "Idempotency-Key": "00000000-0000-0000-0000-000000000002",
+        }),
       }),
     );
     uuidSpy.mockRestore();
@@ -352,7 +358,7 @@ describe("offers write API", () => {
       diff_from_previous: { added: [], removed: [], changed: [] },
     };
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
-      "uuid-regenerate",
+      "00000000-0000-0000-0000-0000000000aa",
     );
     (apiClient.POST as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       data: response,
@@ -368,7 +374,7 @@ describe("offers write API", () => {
       expect.objectContaining({
         params: { path: { id: "o1" } },
         headers: expect.objectContaining({
-          "Idempotency-Key": "uuid-regenerate",
+          "Idempotency-Key": "00000000-0000-0000-0000-0000000000aa",
         }),
       }),
     );

@@ -547,6 +547,7 @@ describe("OfferBuilderPage", () => {
     expect(createLineItemMutate).toHaveBeenCalledWith({
       position: 3,
       description: "New line",
+      unit: "ea",
       quantity: 1,
       unit_price_minor: 0,
       discount_pct: 0,
