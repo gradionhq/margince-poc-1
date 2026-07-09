@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/lib/pq"
@@ -48,7 +49,7 @@ func personCustomInsert(active []customfields.Column, values map[string]any, sta
 			continue
 		}
 		cols = append(cols, pq.QuoteIdentifier(c.ColumnName))
-		holders = append(holders, "$"+itoa(start+len(args)))
+		holders = append(holders, "$"+strconv.Itoa(start+len(args)))
 		args = append(args, val)
 	}
 	if len(cols) == 0 {
@@ -70,22 +71,10 @@ func personCustomUpdate(active []customfields.Column, updates map[string]any, st
 			continue
 		}
 		args = append(args, val)
-		sets = append(sets, pq.QuoteIdentifier(c.ColumnName)+" = $"+itoa(start+len(args)-1))
+		sets = append(sets, pq.QuoteIdentifier(c.ColumnName)+" = $"+strconv.Itoa(start+len(args)-1))
 	}
 	if len(sets) == 0 {
 		return "", nil
 	}
 	return strings.Join(sets, ", "), args
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	buf := make([]byte, 0, 20)
-	for n > 0 {
-		buf = append([]byte{byte('0' + n%10)}, buf...)
-		n /= 10
-	}
-	return string(buf)
 }
