@@ -69,42 +69,10 @@ export function AttachmentList({
     );
   }
 
-  if (!data || data.length === 0) {
-    return (
-      <div className="flex flex-col gap-gf-sm">
-        <VisibilityRail />
-        <div className="rounded-lg border border-gf-subtle bg-gf-card p-gf-md">
-          <div className="flex items-center justify-between gap-gf-sm">
-            <div
-              role="tablist"
-              aria-label="Attachment visibility filter"
-              className="inline-flex rounded-md border border-gf-subtle bg-gf-page p-1"
-            >
-              {FILTERS.map((option) => (
-                <button
-                  key={option.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={filter === option.key}
-                  onClick={() => setFilter(option.key)}
-                  className={`rounded-sm px-gf-sm py-gf-xs text-gf-caption ${
-                    filter === option.key
-                      ? "bg-gf-card text-gf-primary shadow-sm"
-                      : "text-gf-secondary"
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <p className="mt-gf-md text-gf-body text-gf-secondary">
-            No files attached yet
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const noAttachmentsAtAll = !data || data.length === 0;
+  const emptyStateCopy = noAttachmentsAtAll
+    ? "No files attached yet"
+    : "No visible files";
 
   return (
     <div className="flex flex-col gap-gf-sm">
@@ -136,7 +104,7 @@ export function AttachmentList({
         </div>
         {filteredAttachments.length === 0 ? (
           <p className="mt-gf-md text-gf-body text-gf-secondary">
-            No visible files
+            {emptyStateCopy}
           </p>
         ) : (
           <ul className="flex flex-col">
