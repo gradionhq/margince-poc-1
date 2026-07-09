@@ -79,6 +79,11 @@ func NewOfferTemplate(name string, p prov.Provenance) OfferTemplate {
 // ever accept a mutation against (OFFER-WIRE-4 draft-only guard).
 const OfferStatusDraft = "draft"
 
+// OfferStatusSuperseded is the status a draft revision flips to once a
+// regenerate call has produced its replacement (OFFER-WIRE-6). The DB CHECK
+// constraint already admits it (000071); this ticket is the first to write it.
+const OfferStatusSuperseded = "superseded"
+
 // Evidence is the grounding citation for one AI-proposed line — mirrors
 // retrieval.Result's Snippet/SourceID (ADR-0007). Non-nil only for an
 // AI-authored line; nil for a human-entered one (never fabricated,
