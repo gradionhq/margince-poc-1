@@ -64,7 +64,7 @@ func InForecastCommit(forecastCategory *string, winProbability int) bool {
 	if forecastCategory != nil {
 		return *forecastCategory == "commit" || *forecastCategory == "best_case"
 	}
-	return winProbability >= ForecastCommitMinProb
+	return winProbability >= ForecastBestcaseMinProb
 }
 
 type CloseDateAction string

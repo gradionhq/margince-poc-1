@@ -107,11 +107,14 @@ func TestCloseDateHygiene_InForecastCommit(t *testing.T) {
 	commit := "commit"
 	pipeline := "pipeline"
 
-	if app.InForecastCommit(nil, 89) {
-		t.Fatal("nil category, 89 should not be commit")
+	if app.InForecastCommit(nil, 49) {
+		t.Fatal("nil category, 49 should not be commit")
 	}
-	if !app.InForecastCommit(nil, 90) {
-		t.Fatal("nil category, 90 should be commit")
+	if !app.InForecastCommit(nil, 50) {
+		t.Fatal("nil category, 50 should be commit")
+	}
+	if !app.InForecastCommit(nil, 60) {
+		t.Fatal("nil category, 60 (defaults to best_case) should be in forecast commit")
 	}
 	if !app.InForecastCommit(strPtr(commit), 10) {
 		t.Fatal("commit category should win regardless of probability")
