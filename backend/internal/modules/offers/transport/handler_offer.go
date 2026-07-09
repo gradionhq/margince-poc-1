@@ -212,12 +212,18 @@ func (h *OfferHandler) update(w http.ResponseWriter, r *http.Request, id string)
 }
 
 func (h *OfferHandler) regenerate(w http.ResponseWriter, r *http.Request, id string) {
-	assembled, err := h.retriever.AssembleContext(r.Context(), id)
+	wsID := httpkit.WorkspaceID(r)
+	offer, err := h.offers.Get(r.Context(), id, wsID)
 	if err != nil {
 		httpkit.JSONError(w, err)
 		return
 	}
-	o, err := h.offers.Regenerate(r.Context(), id, httpkit.WorkspaceID(r), decodeOfferLineSignals(assembled))
+	assembled, err := h.retriever.AssembleContext(r.Context(), offer.DealID)
+	if err != nil {
+		httpkit.JSONError(w, err)
+		return
+	}
+	o, err := h.offers.Regenerate(r.Context(), id, wsID, decodeOfferLineSignals(assembled))
 	if errors.Is(err, adapters.ErrOfferNotDraft) {
 		httpkit.JSONProblem(w, http.StatusConflict, "offer_not_draft")
 		return

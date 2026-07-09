@@ -429,8 +429,8 @@ func TestOfferHandler_RegenerateOffer_OK(t *testing.T) {
 	if offerStore.regenerateID != "offer-1" || offerStore.regenerateWSID != testWorkspaceID {
 		t.Fatalf("expected Regenerate to receive the route offer id and workspace id, got id=%q workspace=%q", offerStore.regenerateID, offerStore.regenerateWSID)
 	}
-	if !retriever.called || retriever.entityID != "offer-1" {
-		t.Fatalf("expected AssembleContext to be called with the route offer id, got called=%t entityID=%q", retriever.called, retriever.entityID)
+	if !retriever.called || retriever.entityID != "deal-1" {
+		t.Fatalf("expected AssembleContext to be called with the offer's deal id, got called=%t entityID=%q", retriever.called, retriever.entityID)
 	}
 	if len(offerStore.regenerateSignals) != 1 || offerStore.regenerateSignals[0].Description != "Consulting" {
 		t.Fatalf("expected the decoded signal slice to reach the store, got %+v", offerStore.regenerateSignals)
