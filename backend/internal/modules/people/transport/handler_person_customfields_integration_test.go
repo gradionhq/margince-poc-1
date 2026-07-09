@@ -178,3 +178,73 @@ func TestPersonHandler_Get_CompositeKeepsArrays(t *testing.T) {
 		}
 	}
 }
+
+func TestPersonHandler_CustomFields_RetiredFieldHiddenAndSortRefused(t *testing.T) {
+	db := openTestDB(t)
+	wsID := "00000000-0000-0000-0000-000000000053"
+	seedWorkspace(t, db, wsID)
+	setRLS(t, db, wsID)
+	field := seedPersonCustomField(t, db, wsID, "Tier")
+
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID, UserID: "human:test"})
+	store := people.NewPersonStore(db)
+	h := personHandlerForTest(db, store)
+
+	createBody := map[string]any{
+		"full_name":   "Retired Field Person",
+		"source":      "test",
+		"captured_by": "human:test",
+		"cf_tier":     9,
+	}
+	b, _ := json.Marshal(createBody)
+	req := httptest.NewRequest(http.MethodPost, "/people", bytes.NewReader(b))
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("POST /people: got %d: %s", w.Code, w.Body.String())
+	}
+
+	var created map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created["cf_tier"] != float64(9) {
+		t.Fatalf("created cf_tier = %#v, want 9", created["cf_tier"])
+	}
+	id, _ := created["id"].(string)
+
+	if _, err := customfields.Retire(ctx, db, field.ID); err != nil {
+		t.Fatalf("retire custom field: %v", err)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/people/"+id, nil)
+	getReq = getReq.WithContext(ctx)
+	getW := httptest.NewRecorder()
+	h.ServeHTTP(getW, getReq)
+	if getW.Code != http.StatusOK {
+		t.Fatalf("GET /people/{id}: got %d: %s", getW.Code, getW.Body.String())
+	}
+	var body map[string]any
+	if err := json.NewDecoder(getW.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := body["cf_tier"]; ok {
+		t.Fatalf("retired field cf_tier still present in response: %s", getW.Body.String())
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/people?sort=cf_tier", nil)
+	listReq = listReq.WithContext(ctx)
+	listW := httptest.NewRecorder()
+	h.ServeHTTP(listW, listReq)
+	if listW.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("GET /people?sort=cf_tier: got %d, want 422: %s", listW.Code, listW.Body.String())
+	}
+	var problem map[string]any
+	if err := json.NewDecoder(listW.Body).Decode(&problem); err != nil {
+		t.Fatal(err)
+	}
+	if problem["code"] != "sort_field_not_allowed" {
+		t.Fatalf("problem code = %#v, want sort_field_not_allowed: %s", problem["code"], listW.Body.String())
+	}
+}
