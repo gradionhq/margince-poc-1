@@ -78,13 +78,18 @@ func TestCreateCustomField_MalformedBody_400_NeverTouchesDB(t *testing.T) {
 	}
 }
 
-func TestCreateCustomField_GET_501(t *testing.T) {
+// TestListCustomFields_MissingObject_400 proves the listCustomFields read
+// (CUSTOM-FIELDS-WIRE-1) requires the `object` query parameter — the admin
+// field table is always scoped to one object. The guard runs before any DB
+// access, so this is a pure-handler unit test (db is nil).
+func TestListCustomFields_MissingObject_400(t *testing.T) {
 	h := NewHandler(nil, fakeVerifier{})
-	req := httptest.NewRequest(http.MethodGet, "/custom-fields?object=deal", nil)
+	req := httptest.NewRequest(http.MethodGet, "/custom-fields", nil)
+	req = withCFPrincipal(req, false, "00000000-0000-0000-0000-0000000c0001", "00000000-0000-0000-0000-0000000c0099")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
-	if w.Code != http.StatusNotImplemented {
-		t.Fatalf("expected 501 (listCustomFields out of scope), got %d", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 (object query param required), got %d: %s", w.Code, w.Body.String())
 	}
 }
 
