@@ -4,10 +4,8 @@ package app_test
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
-	"os"
 	"testing"
 
 	_ "github.com/lib/pq"
@@ -16,92 +14,27 @@ import (
 	"github.com/gradionhq/margince/backend/internal/modules/agents/domain"
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	apperrors "github.com/gradionhq/margince/backend/internal/shared/apperrors"
-	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 	"github.com/gradionhq/margince/backend/internal/shared/ports/mcp"
 )
 
-type eventTopicEmitter struct {
-	emitted []struct {
-		topic string
-		id    string
-	}
-}
-
-func (e *eventTopicEmitter) Emit(_ context.Context, _ crmapprovals.DBExec, topic, _ string, entityID string, _ json.RawMessage) error {
-	e.emitted = append(e.emitted, struct {
-		topic string
-		id    string
-	}{topic: topic, id: entityID})
-	return nil
-}
-
-type eventTopicEffector struct{}
-
-func (eventTopicEffector) Apply(context.Context, crmapprovals.DBExec, string, json.RawMessage) (string, error) {
-	return "rollback", nil
-}
-
-func eventTopicTestDB(t *testing.T) *sql.DB {
-	t.Helper()
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		url = "postgres://margince:margince@localhost:5432/margince_test?sslmode=disable"
-	}
-	db, err := sql.Open("postgres", url)
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	return db
-}
-
-func seedWorkspaceEventTopic(t *testing.T, db *sql.DB) string {
-	t.Helper()
-	wsID := ids.New()
-	if _, err := db.Exec(
-		`INSERT INTO workspace (id, name, slug, base_currency) VALUES ($1::uuid,$2,$3,'EUR')`,
-		wsID, "agents-"+wsID, "agents-"+wsID,
-	); err != nil {
-		t.Fatalf("seed workspace: %v", err)
-	}
-	return wsID
-}
-
-func seedDealEventTopic(t *testing.T, db *sql.DB, wsID string) string {
-	t.Helper()
-	var pipelineID, stageID string
-	if err := db.QueryRow(
-		`INSERT INTO pipeline (workspace_id, name) VALUES ($1, $2) RETURNING id`,
-		wsID, "agents-pipeline-"+ids.New(),
-	).Scan(&pipelineID); err != nil {
-		t.Fatalf("seed pipeline: %v", err)
-	}
-	if err := db.QueryRow(
-		`INSERT INTO stage (workspace_id, pipeline_id, name, position) VALUES ($1, $2, 'Open', 1) RETURNING id`,
-		wsID, pipelineID,
-	).Scan(&stageID); err != nil {
-		t.Fatalf("seed stage: %v", err)
-	}
-	var dealID string
-	if err := db.QueryRow(
-		`INSERT INTO deal (workspace_id, name, pipeline_id, stage_id, source, captured_by) VALUES ($1, $2, $3, $4, 'fixture', 'agent:overnight') RETURNING id`,
-		wsID, "agents-deal-"+ids.New(), pipelineID, stageID,
-	).Scan(&dealID); err != nil {
-		t.Fatalf("seed deal: %v", err)
-	}
-	return dealID
-}
+// testDB, seedWorkspace, and seedDeal (used below) are defined once in
+// stage_apply_integration_test.go and reused here — this file is the same
+// app_test package, so there is no symbol collision to dodge. spyEffector
+// and spyEmitter (also defined there) already satisfy ports.Effector and
+// crmapprovals.EventEmitter with the exact shape these tests need
+// (topic/entityID capture), so they are reused too instead of file-local
+// doubles.
 
 func TestApplyGreen_EventTopic_FallsBackWhenEmpty(t *testing.T) {
-	db := eventTopicTestDB(t)
-	wsID := seedWorkspaceEventTopic(t, db)
-	effector := eventTopicEffector{}
-	emitter := &eventTopicEmitter{}
+	db := testDB(t)
+	wsID := seedWorkspace(t, db)
+	effector := &spyEffector{rollbackHandle: "rollback"}
+	emitter := &spyEmitter{}
 	p := domain.RoutedProposal{
 		Proposal: domain.Proposal{
 			WorkspaceID:  wsID,
 			ActionType:   "close-date-auto-apply",
-			TargetEntity: "deal:" + seedDealEventTopic(t, db, wsID),
+			TargetEntity: "deal:" + seedDeal(t, db, wsID),
 			Effect:       json.RawMessage(`{}`),
 		},
 		Tier: mcp.TierGreen,
@@ -124,15 +57,15 @@ func TestApplyGreen_EventTopic_FallsBackWhenEmpty(t *testing.T) {
 }
 
 func TestApplyGreen_EventTopic_UsesProposalTopicWhenSet(t *testing.T) {
-	db := eventTopicTestDB(t)
-	wsID := seedWorkspaceEventTopic(t, db)
-	effector := eventTopicEffector{}
-	emitter := &eventTopicEmitter{}
+	db := testDB(t)
+	wsID := seedWorkspace(t, db)
+	effector := &spyEffector{rollbackHandle: "rollback"}
+	emitter := &spyEmitter{}
 	p := domain.RoutedProposal{
 		Proposal: domain.Proposal{
 			WorkspaceID:  wsID,
 			ActionType:   "close-date-provisional-set",
-			TargetEntity: "deal:" + seedDealEventTopic(t, db, wsID),
+			TargetEntity: "deal:" + seedDeal(t, db, wsID),
 			Effect:       json.RawMessage(`{}`),
 			EventTopic:   "deal.updated",
 		},
@@ -156,8 +89,8 @@ func TestApplyGreen_EventTopic_UsesProposalTopicWhenSet(t *testing.T) {
 }
 
 func TestHandleDecided_EventTopic_DecodedFromPayload(t *testing.T) {
-	db := eventTopicTestDB(t)
-	wsID := seedWorkspaceEventTopic(t, db)
+	db := testDB(t)
+	wsID := seedWorkspace(t, db)
 	repo := crmapprovals.NewRepository()
 	itemID := ""
 
@@ -179,8 +112,8 @@ func TestHandleDecided_EventTopic_DecodedFromPayload(t *testing.T) {
 		t.Fatalf("commit stage: %v", err)
 	}
 
-	emitter := &eventTopicEmitter{}
-	effector := eventTopicEffector{}
+	emitter := &spyEmitter{}
+	effector := &spyEffector{rollbackHandle: "rollback"}
 	tx2, err := db.BeginTx(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("begin handle: %v", err)
