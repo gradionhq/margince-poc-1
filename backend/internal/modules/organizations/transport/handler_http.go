@@ -8,11 +8,12 @@ package transport
 import "github.com/gradionhq/margince/backend/internal/shared/kernel/httpkit"
 
 const (
-	fieldExistingID = "existing_id"
-	codeBadRequest  = "bad_request"
-	codeRequired    = "required"
-	fieldCapturedBy = "captured_by"
-	fieldSource     = "source"
+	fieldExistingID       = "existing_id"
+	codeBadRequest        = "bad_request"
+	codeRequired          = "required"
+	fieldCapturedBy       = "captured_by"
+	fieldSource           = "source"
+	codeOrganizationCycle = "organization_cycle"
 )
 
 // fieldError is the module-local spelling of the shared validation-error entry.
