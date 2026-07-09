@@ -1,4 +1,6 @@
-import type { ComputedField } from "../../../lib/api-client/generated/index.js";
+import type { components } from "../../../lib/api-client/generated/crm.js";
+
+type ComputedField = components["schemas"]["ComputedField"];
 
 export function FieldDefinitionRail({ field }: { field: ComputedField }) {
   return (
@@ -32,7 +34,7 @@ export function FieldDefinitionRail({ field }: { field: ComputedField }) {
             data-testid="formula-dependencies"
             className="mt-gf-xs flex flex-wrap gap-gf-xs"
           >
-            {field.dependencies.map((dependency) => (
+            {field.dependencies.map((dependency: string) => (
               <li
                 key={dependency}
                 className="rounded-full border border-gf-subtle bg-gf-elevated px-gf-xs py-0.5 font-mono text-gf-caption text-gf-primary"
