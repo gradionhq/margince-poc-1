@@ -150,7 +150,7 @@ func TestStageStore_Update_WinProbabilitySuccess_ReflectsLiveOnDeal(t *testing.T
 	deal := NewDeal("Retune Deal "+pgtest.Uniq(), pl.ID, qualified.ID,
 		prov.Provenance{Source: "unit-test", CapturedBy: "unit-test"})
 	deal.WorkspaceID = wsID
-	created, err := dealStore.Create(ctx, deal, "")
+	created, err := dealStore.Create(ctx, deal, "", nil)
 	if err != nil {
 		t.Fatal("create deal:", err)
 	}

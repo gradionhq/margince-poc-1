@@ -233,7 +233,7 @@ deps:
   orgsports:
     mayDependOn: [orgsdomain]
   orgsadapters:
-    mayDependOn: [orgsdomain, errs, ids, prov, database, audit, dedupekern, strengthkern, sqlutil]
+    mayDependOn: [orgsdomain, errs, ids, prov, database, audit, dedupekern, strengthkern, sqlutil, customfields]
     canUse: [pq]
   organizations:
     mayDependOn: [orgsdomain, orgsadapters]
@@ -352,7 +352,7 @@ deps:
   dealsports:
     mayDependOn: [dealsdomain]
   dealsadapters:
-    mayDependOn: [dealsdomain, errs, ids, audit, database, sqlutil]
+    mayDependOn: [dealsdomain, errs, ids, audit, database, sqlutil, customfields]
     canUse: [pq]
   # dealstransport now owns pipeline/stage AND deal-entity handlers (WS-E-b).
   dealstransport:
@@ -364,7 +364,7 @@ deps:
   peopleports:
     mayDependOn: [peopledomain, strengthkern]
   peopleadapters:
-    mayDependOn: [peopledomain, errs, ids, prov, dedupekern, strengthkern, audit, database, sqlutil]
+    mayDependOn: [peopledomain, errs, ids, prov, dedupekern, strengthkern, audit, database, sqlutil, customfields]
     canUse: [pq]
   people:
     mayDependOn: [peopledomain, peopleadapters, prov]

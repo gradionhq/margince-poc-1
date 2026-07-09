@@ -111,8 +111,8 @@ func (s *DealStore) advanceSideEffects(ctx context.Context, tx *sql.Tx, workspac
 	}
 
 	e := crmaudit.EntryFromPrincipal(ctx, "advance_stage", entityTypeDeal, &id,
-		map[string]any{"stage_id": fromStageID, "status": fromStatus},
-		map[string]any{"stage_id": toStageID, "status": toSemantic})
+		map[string]any{fieldStageID: fromStageID, fieldStatus: fromStatus},
+		map[string]any{fieldStageID: toStageID, fieldStatus: toSemantic})
 	e.WorkspaceID = workspaceID
 	if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
 		return fmt.Errorf("deal advance audit: %w", err)
@@ -136,7 +136,7 @@ func (s *DealStore) advanceSideEffects(ctx context.Context, tx *sql.Tx, workspac
 		"to_stage_id":     toStageID,
 		"from_status":     fromStatus,
 		"to_status":       toSemantic,
-		"amount_minor":    amountMinorPtr,
+		fieldAmountMinor:  amountMinorPtr,
 		"currency":        currencyPtr,
 		"win_probability": winProbability,
 	})

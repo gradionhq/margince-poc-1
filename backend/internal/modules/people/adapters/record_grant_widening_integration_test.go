@@ -135,7 +135,7 @@ func seedGrantTestDeal(ctx context.Context, t *testing.T, db *sql.DB, ws, ownerA
 	d := deals.NewDeal(dealName, pl.ID, st.ID, prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	d.WorkspaceID = ws
 	d.OwnerID = &ownerA
-	deal, err := deals.NewDealStore(db).Create(ctx, d, "")
+	deal, err := deals.NewDealStore(db).Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("create deal: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestRecordGrant_OrganizationWidensThenRevokes(t *testing.T) {
 	org := orgdomain.NewOrganization("Org-"+nonce, prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	org.WorkspaceID = ws
 	org.OwnerID = &ownerA
-	org, err := organizations.NewOrgStore(db).Create(ctx, org)
+	org, err := organizations.NewOrgStore(db).Create(ctx, org, nil)
 	if err != nil {
 		t.Fatalf("create org: %v", err)
 	}

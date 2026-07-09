@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { CustomFieldsAdminPage } from "../features/custom-fields/routes/CustomFieldsAdminPage.js";
 import { DealDetailPage } from "../features/deals/routes/DealDetailPage.js";
 import { PipelinePage } from "../features/deals/routes/PipelinePage.js";
 import { LoginPage } from "../features/identity/routes/LoginPage.js";
@@ -49,6 +50,10 @@ export default function App() {
         <Route
           path="/admin/members"
           element={<ShellPlaceholderPage title="Members" />}
+        />
+        <Route
+          path="/admin/custom-fields"
+          element={<CustomFieldsAdminPage />}
         />
       </Route>
 

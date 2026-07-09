@@ -25,7 +25,7 @@ func TestDealHandler_Restore_HappyPath200(t *testing.T) {
 		Source: "test", CapturedBy: "human:test",
 	})
 	d.WorkspaceID = dealTestWorkspaceID
-	d, err := dealStore.Create(ctx, d, "")
+	d, err := dealStore.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("create deal: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestDealHandler_Restore_LiveRecordReturns422(t *testing.T) {
 		Source: "test", CapturedBy: "human:test",
 	})
 	d.WorkspaceID = dealTestWorkspaceID
-	d, err := dealStore.Create(ctx, d, "")
+	d, err := dealStore.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("create deal: %v", err)
 	}
