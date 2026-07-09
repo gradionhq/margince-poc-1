@@ -212,7 +212,7 @@ func (s *DealStore) ListFiltered(ctx context.Context, workspaceID, cursor string
 		for _, c := range activeCols {
 			active[c.ColumnName] = true
 		}
-		rows, err := tx.QueryContext(ctx, dealListQuery(where, activeCols, f.Sort, active), args...)
+		rows, err := tx.QueryContext(ctx, dealListQuery(where, activeCols, f.Sort, active), args...) // NOSONAR: dealListQuery injects only pq.QuoteIdentifier'd catalog-derived column names; where/args are $N-bound params built by buildDealListWhere
 		if err != nil {
 			return err
 		}

@@ -87,7 +87,8 @@ func (s *DealStore) applyUpdate(ctx context.Context, tx *sql.Tx, id, workspaceID
 
 	// The optimistic-concurrency guard is folded into the WHERE: ifMatch==0 skips the
 	// version check (last-write-wins); a non-zero ifMatch requires the row version to match.
-	res, err := tx.ExecContext(ctx, fmt.Sprintf(`
+	//nolint:gosec // G201: customSet is dealUpdateCustomSet's quoted, catalog-derived identifiers ($N placeholders only); every other %d/%s substitution is a bound-param index, never user input
+	query := fmt.Sprintf(`
 		UPDATE deal
 		SET name                = COALESCE($3, name),
 		    stage_id            = COALESCE($4::uuid, stage_id),
@@ -101,8 +102,8 @@ func (s *DealStore) applyUpdate(ctx context.Context, tx *sql.Tx, id, workspaceID
 		    partner_org_id      = COALESCE($11::uuid, partner_org_id)%s,
 		    updated_at          = now()
 		WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL
-		  AND ($%d = 0 OR version = $%d)`, customSet, ifMatchIdx, ifMatchIdx),
-		args...)
+		  AND ($%d = 0 OR version = $%d)`, customSet, ifMatchIdx, ifMatchIdx)
+	res, err := tx.ExecContext(ctx, query, args...) // NOSONAR: customSet is dealUpdateCustomSet's quoted, catalog-derived identifiers ($N placeholders only); every other %d/%s substitution is a bound-param index, never user input
 	if err != nil {
 		return err
 	}

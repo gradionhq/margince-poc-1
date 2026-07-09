@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lib/pq"
-
 	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	"github.com/gradionhq/margince/backend/internal/platform/customfields"
@@ -111,7 +109,7 @@ func (s *DealStore) Create(ctx context.Context, d domain.Deal, idempotencyKey st
 		for i := range cols {
 			placeholders[i] = fmt.Sprintf("$%d", i+1)
 		}
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf( // NOSONAR: cols/placeholders are dealCreateInsertColsArgs's fixed columns + catalog-derived custom-column names/$N placeholders, never user input; all values are bound via args
 			`INSERT INTO deal (%s) VALUES (%s)`,
 			strings.Join(cols, ", "), strings.Join(placeholders, ","),
 		), args...); err != nil {
@@ -317,9 +315,7 @@ func (s *DealStore) loadDeal(ctx context.Context, id, workspaceID string, includ
 			       version, source, captured_by, created_at, updated_at, archived_at,
 			       (SELECT max(occurred_at) FROM deal_stage_history WHERE deal_id=deal.id) AS stage_entered_at,
 			       (SELECT count(*) FROM relationship WHERE deal_id=deal.id AND kind='deal_stakeholder' AND archived_at IS NULL) AS stakeholder_count`
-		for _, c := range active {
-			query += ", " + pq.QuoteIdentifier(c.ColumnName)
-		}
+		query += customfields.SelectSuffix(active)
 		query += `
 			FROM deal WHERE id=$1::uuid AND workspace_id=$2::uuid`
 		if !includeArchived {
@@ -336,7 +332,7 @@ func (s *DealStore) loadDeal(ctx context.Context, id, workspaceID string, includ
 			&stageEnteredAt, &d.StakeholderCount,
 		}
 		dests = append(dests, customfields.ScanDests(active)...)
-		if err := tx.QueryRowContext(ctx, query, id, workspaceID).Scan(dests...); err != nil {
+		if err := tx.QueryRowContext(ctx, query, id, workspaceID).Scan(dests...); err != nil { // NOSONAR: query is built from a fixed literal + customfields.SelectSuffix's quoted, catalog-derived identifiers only; id/workspaceID are bound params
 			return err
 		}
 		d.CustomFields = customfields.ExtractValues(active, dests[len(dests)-len(active):])
