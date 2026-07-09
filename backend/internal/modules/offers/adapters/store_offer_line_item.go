@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -70,19 +71,19 @@ func (s *OfferLineItemStore) checkPositionConflict(ctx context.Context, tx *sql.
 // ProductStore's analogous comment in store_product.go). source/captured_by
 // are validated (RequireProvenance) but not DB-backed (no column in the
 // DDL) — echoed back from the input on create only, mirroring OfferTemplate's
-// same pattern.
+// same pattern. evidence is stored in the jsonb column and round-tripped.
 const offerLineItemInsertQuery = `
 	INSERT INTO offer_line_item (id, workspace_id, offer_id, position, product_id,
-	    description, unit, quantity, unit_price_minor, discount_pct, tax_rate)
-	VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+	    description, unit, quantity, unit_price_minor, discount_pct, tax_rate, evidence)
+	VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 	RETURNING
 	id, workspace_id, offer_id, position, product_id, description, unit,
-	quantity, unit_price_minor, discount_pct, tax_rate,
+	quantity, unit_price_minor, discount_pct, tax_rate, evidence,
 	created_at, updated_at, archived_at`
 
 const offerLineItemListQuery = `SELECT
 	id, workspace_id, offer_id, position, product_id, description, unit,
-	quantity, unit_price_minor, discount_pct, tax_rate,
+	quantity, unit_price_minor, discount_pct, tax_rate, evidence,
 	created_at, updated_at, archived_at
 	FROM offer_line_item WHERE offer_id=$1::uuid AND workspace_id=$2::uuid
 	ORDER BY position`
@@ -96,19 +97,68 @@ const offerLineItemUpdateQuery = `
 	    quantity         = COALESCE($9, quantity),
 	    unit_price_minor = COALESCE($10, unit_price_minor),
 	    discount_pct     = COALESCE($11, discount_pct),
-	    tax_rate         = COALESCE($12, tax_rate)
+	    tax_rate         = COALESCE($12, tax_rate),
+	    evidence         = COALESCE($13, evidence)
 	WHERE id=$1::uuid AND offer_id=$2::uuid AND workspace_id=$3::uuid
 	RETURNING
 	id, workspace_id, offer_id, position, product_id, description, unit,
-	quantity, unit_price_minor, discount_pct, tax_rate,
+	quantity, unit_price_minor, discount_pct, tax_rate, evidence,
 	created_at, updated_at, archived_at`
 
 func scanOfferLineItem(row interface{ Scan(dest ...any) error }) (domain.OfferLineItem, error) {
 	var li domain.OfferLineItem
+	var evidenceBytes []byte
 	err := row.Scan(&li.ID, &li.WorkspaceID, &li.OfferID, &li.Position, &li.ProductID,
 		&li.Description, &li.Unit, &li.Quantity, &li.UnitPriceMinor, &li.DiscountPct,
-		&li.TaxRate, &li.CreatedAt, &li.UpdatedAt, &li.ArchivedAt)
+		&li.TaxRate, &evidenceBytes, &li.CreatedAt, &li.UpdatedAt, &li.ArchivedAt)
+	if err != nil {
+		return li, err
+	}
+	if len(evidenceBytes) > 0 {
+		var ev domain.Evidence
+		if jsonErr := json.Unmarshal(evidenceBytes, &ev); jsonErr == nil {
+			li.Evidence = &ev
+		}
+	}
 	return li, err
+}
+
+func evidenceJSON(e *domain.Evidence) any {
+	if e == nil {
+		return nil
+	}
+	return sqlutil.MarshalJSON(e)
+}
+
+func evidenceFromUpdate(updates map[string]any) *domain.Evidence {
+	raw, ok := updates["evidence"]
+	if !ok || raw == nil {
+		return nil
+	}
+	switch v := raw.(type) {
+	case *domain.Evidence:
+		return v
+	case domain.Evidence:
+		return &v
+	case json.RawMessage:
+		var ev domain.Evidence
+		if err := json.Unmarshal(v, &ev); err == nil {
+			return &ev
+		}
+	case []byte:
+		var ev domain.Evidence
+		if err := json.Unmarshal(v, &ev); err == nil {
+			return &ev
+		}
+	default:
+		if b, err := json.Marshal(v); err == nil {
+			var ev domain.Evidence
+			if err := json.Unmarshal(b, &ev); err == nil {
+				return &ev
+			}
+		}
+	}
+	return nil
 }
 
 // applyProductSnapshot resolves li's product-snapshot fields (OFFER-AC-9b):
@@ -146,7 +196,8 @@ func (s *OfferLineItemStore) applyProductSnapshot(ctx context.Context, li domain
 // offer's totals, and writes one audit_log entry, all in one tx locked
 // against a concurrent offer status flip (OFFER-WIRE-4).
 // source/captured_by are validated but not persisted (no DB column) —
-// echoed back on the returned struct only, mirroring OfferTemplate.
+// echoed back on the returned struct only, mirroring OfferTemplate. evidence
+// is persisted when present and returned by the INSERT round-trip.
 func (s *OfferLineItemStore) Create(ctx context.Context, li domain.OfferLineItem, explicitTaxRate *float64) (domain.OfferLineItem, error) {
 	if err := sqlutil.RequireProvenance(li.Source, li.CapturedBy); err != nil {
 		return domain.OfferLineItem{}, err
@@ -192,7 +243,7 @@ func (s *OfferLineItemStore) createTx(ctx context.Context, tx *sql.Tx, li domain
 	}
 	row := tx.QueryRowContext(ctx, offerLineItemInsertQuery,
 		li.ID, li.WorkspaceID, li.OfferID, li.Position, li.ProductID,
-		li.Description, li.Unit, li.Quantity, li.UnitPriceMinor, li.DiscountPct, li.TaxRate)
+		li.Description, li.Unit, li.Quantity, li.UnitPriceMinor, li.DiscountPct, li.TaxRate, evidenceJSON(li.Evidence))
 	out, err := scanOfferLineItem(row)
 	if err != nil {
 		return domain.OfferLineItem{}, fmt.Errorf("offer_line_item create: %w", err)
@@ -274,7 +325,8 @@ func (s *OfferLineItemStore) updateTx(ctx context.Context, tx *sql.Tx, id, offer
 		nullFloat64(updates, "quantity"),
 		nullInt64(updates, "unit_price_minor"),
 		nullFloat64(updates, "discount_pct"),
-		nullFloat64(updates, "tax_rate"))
+		nullFloat64(updates, "tax_rate"),
+		evidenceJSON(evidenceFromUpdate(updates)))
 	out, err := scanOfferLineItem(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.OfferLineItem{}, errs.ErrNotFound

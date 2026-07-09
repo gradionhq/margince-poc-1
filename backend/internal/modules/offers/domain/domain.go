@@ -79,6 +79,43 @@ func NewOfferTemplate(name string, p prov.Provenance) OfferTemplate {
 // ever accept a mutation against (OFFER-WIRE-4 draft-only guard).
 const OfferStatusDraft = "draft"
 
+// Evidence is the grounding citation for one AI-proposed line — mirrors
+// retrieval.Result's Snippet/SourceID (ADR-0007). Non-nil only for an
+// AI-authored line; nil for a human-entered one (never fabricated,
+// OFFER-AC-11a).
+type Evidence struct {
+	Snippet  string `json:"snippet"`
+	SourceID string `json:"source_id"`
+}
+
+// OfferLineSignal is a candidate AI-proposed line, decoded by the transport
+// layer from retrieval.Context.Raw (Global Constraint 7). UnitPriceMinor is
+// the conversation-extracted price, if any was mentioned; nil if the AI has
+// no groundable price for this line (OFFER-AC-11b/14) — a rate-card lookup
+// (via ProductID) is a separate, later fallback the store performs.
+type OfferLineSignal struct {
+	Description    string
+	Quantity       float64
+	ProductID      *string
+	UnitPriceMinor *int64
+	Snippet        string
+	SourceID       string
+}
+
+// FilterGroundedSignals drops any signal missing non-empty evidence
+// (Snippet+SourceID) — evidence-or-omit (OFFER-AC-11a/13, GATE-AI-1). Pure,
+// no I/O.
+func FilterGroundedSignals(signals []OfferLineSignal) []OfferLineSignal {
+	out := make([]OfferLineSignal, 0, len(signals))
+	for _, s := range signals {
+		if s.Snippet == "" || s.SourceID == "" {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
 // Offer is a versioned Angebot bound to one deal (OFFER-DDL-2). net_minor/
 // tax_minor/gross_minor are DERIVED server-side from line items
 // (OFFER-PARAM-4) — never accepted from the client (API-ERR-15).
@@ -86,33 +123,36 @@ const OfferStatusDraft = "draft"
 // are all owned by the out-of-scope send/render/accept verbs and stay nil/
 // zero through this ticket's entire lifecycle.
 type Offer struct {
-	ID             string                 `json:"id"`
-	WorkspaceID    string                 `json:"workspace_id"`
-	DealID         string                 `json:"deal_id"`
-	OfferNumber    string                 `json:"offer_number"`
-	Revision       int64                  `json:"revision"`
-	Status         string                 `json:"status"`
-	Currency       string                 `json:"currency"`
-	BuyerOrgID     *string                `json:"buyer_org_id"`
-	BuyerSnapshot  map[string]interface{} `json:"buyer_snapshot"`
-	IssuerSnapshot map[string]interface{} `json:"issuer_snapshot"`
-	ValidUntil     *time.Time             `json:"valid_until"`
-	IntroText      *string                `json:"intro_text"`
-	TermsText      *string                `json:"terms_text"`
-	NetMinor       int64                  `json:"net_minor"`
-	TaxMinor       int64                  `json:"tax_minor"`
-	GrossMinor     int64                  `json:"gross_minor"`
-	FxRateToBase   *string                `json:"fx_rate_to_base"`
-	FxRateDate     *time.Time             `json:"fx_rate_date"`
-	TemplateID     *string                `json:"template_id"`
-	PdfAssetRef    *string                `json:"pdf_asset_ref"`
-	AcceptedAt     *time.Time             `json:"accepted_at"`
-	Version        int64                  `json:"version"`
-	Source         string                 `json:"source"`
-	CapturedBy     string                 `json:"captured_by"`
-	CreatedAt      time.Time              `json:"created_at"`
-	UpdatedAt      time.Time              `json:"updated_at"`
-	ArchivedAt     *time.Time             `json:"archived_at"`
+	ID               string                 `json:"id"`
+	WorkspaceID      string                 `json:"workspace_id"`
+	DealID           string                 `json:"deal_id"`
+	OfferNumber      string                 `json:"offer_number"`
+	Revision         int64                  `json:"revision"`
+	Status           string                 `json:"status"`
+	Currency         string                 `json:"currency"`
+	BuyerOrgID       *string                `json:"buyer_org_id"`
+	BuyerSnapshot    map[string]interface{} `json:"buyer_snapshot"`
+	IssuerSnapshot   map[string]interface{} `json:"issuer_snapshot"`
+	ValidUntil       *time.Time             `json:"valid_until"`
+	IntroText        *string                `json:"intro_text"`
+	TermsText        *string                `json:"terms_text"`
+	NetMinor         int64                  `json:"net_minor"`
+	TaxMinor         int64                  `json:"tax_minor"`
+	GrossMinor       int64                  `json:"gross_minor"`
+	FxRateToBase     *string                `json:"fx_rate_to_base"`
+	FxRateDate       *time.Time             `json:"fx_rate_date"`
+	TemplateID       *string                `json:"template_id"`
+	PdfAssetRef      *string                `json:"pdf_asset_ref"`
+	AcceptedAt       *time.Time             `json:"accepted_at"`
+	AIGenerated      bool                   `json:"ai_generated"`
+	AIDisclosure     *string                `json:"ai_disclosure"`
+	DiffFromPrevious *OfferDiff             `json:"diff_from_previous"`
+	Version          int64                  `json:"version"`
+	Source           string                 `json:"source"`
+	CapturedBy       string                 `json:"captured_by"`
+	CreatedAt        time.Time              `json:"created_at"`
+	UpdatedAt        time.Time              `json:"updated_at"`
+	ArchivedAt       *time.Time             `json:"archived_at"`
 }
 
 // NewOffer returns an Offer with a fresh ID, status=draft, revision=1,
@@ -140,6 +180,7 @@ type OfferLineItem struct {
 	UnitPriceMinor *int64     `json:"unit_price_minor"`
 	DiscountPct    float64    `json:"discount_pct"`
 	TaxRate        float64    `json:"tax_rate"`
+	Evidence       *Evidence  `json:"evidence"`
 	Source         string     `json:"source"`
 	CapturedBy     string     `json:"captured_by"`
 	CreatedAt      time.Time  `json:"created_at"`
@@ -155,4 +196,19 @@ func NewOfferLineItem(offerID string, position int, description string, quantity
 		Unit: "unit", Quantity: quantity, UnitPriceMinor: &unitPriceMinor,
 		Source: p.Source, CapturedBy: p.CapturedBy,
 	}
+}
+
+// OfferLineItemChange is one "changed" entry in an OfferDiff.
+type OfferLineItemChange struct {
+	Before OfferLineItem `json:"before"`
+	After  OfferLineItem `json:"after"`
+}
+
+// OfferDiff surfaces a regenerate call's added/removed/changed lines vs the
+// immediately prior revision (OFFER-AC-11d/16) — computed fresh on every
+// regenerate call, never persisted.
+type OfferDiff struct {
+	Added   []OfferLineItem       `json:"added"`
+	Removed []OfferLineItem       `json:"removed"`
+	Changed []OfferLineItemChange `json:"changed"`
 }
