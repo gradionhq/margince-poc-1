@@ -18,7 +18,8 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
 )
 
-// entity-type constants used in the List activity_link JOIN.
+// entity-type constants used in the List/ListFiltered activity_link EXISTS
+// branches (see store_activity_list.go).
 const (
 	entityTypePerson       = "person"
 	entityTypeOrganization = "organization"
@@ -28,8 +29,6 @@ const (
 	fieldOrganizationID    = "organization_id"
 	colDealID              = "deal_id"
 	fieldIsDone            = "is_done"
-	sortColOccurredAt      = "occurred_at"
-	dueAtSortExpr          = "COALESCE(due_at, 'infinity'::timestamptz)"
 )
 
 // entityLinkColumn maps an activity_link entity_type to its FK column —
