@@ -4,6 +4,7 @@ package app_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"testing"
 	"time"
@@ -16,24 +17,12 @@ import (
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 )
 
-func TestRunPass_StalledRecoveryProduceStagesOnlySupportedDeal(t *testing.T) {
-	db := testDB(t)
-	wsID := seedWorkspace(t, db)
-	repo := crmapprovals.NewRepository()
-
-	view := domain.AssembledView{
-		WorkspaceID: wsID,
-		WindowStart: time.Now().Add(-24 * time.Hour),
-		WindowEnd:   time.Now(),
-		Facts: []domain.Fact{
-			{EntityType: "deal_stalled_claim", EntityID: "1", Detail: `{"generic_reason":"no_activity_60_days","wait_until_active":true,"confidence":0.9}`, Source: "capture:stalled:1"},
-			{EntityType: "recovery_evidence_signal", EntityID: "1", Detail: `{"specific_reason":"no_reply_14_days","evidence_activity_id":"act-1","evidence_text":"no reply since last email","confidence":0.8}`, Source: "capture:evidence:1"},
-			{EntityType: "deal_stalled_claim", EntityID: "2", Detail: `{"generic_reason":"no_activity_60_days","confidence":0.85}`, Source: "capture:stalled:2"},
-			{EntityType: "recovery_evidence_signal", EntityID: "2", Detail: `{"specific_reason":"champion_quiet","evidence_activity_id":"act-2","evidence_text":"champion has been quiet","confidence":0.7}`, Source: "capture:evidence:2"},
-			{EntityType: "recovery_draft_signal", EntityID: "2", Detail: `{"subject":"Checking in","body":"Hi, just checking in on this.","confidence":0.6}`, Source: "capture:draft:2"},
-		},
-	}
-
+// runStalledRecoveryPass drives one RunPass invocation against a fake
+// FixtureAssembler-backed view, committing on success — the shared
+// boilerplate all three tests in this file need (extracted to clear
+// SonarCloud's new-code duplication gate; no behavior change).
+func runStalledRecoveryPass(t *testing.T, db *sql.DB, wsID string, repo crmapprovals.Repository, view domain.AssembledView) domain.RunResult {
+	t.Helper()
 	tx, err := db.BeginTx(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
@@ -55,6 +44,28 @@ func TestRunPass_StalledRecoveryProduceStagesOnlySupportedDeal(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatalf("commit: %v", err)
 	}
+	return result
+}
+
+func TestRunPass_StalledRecoveryProduceStagesOnlySupportedDeal(t *testing.T) {
+	db := testDB(t)
+	wsID := seedWorkspace(t, db)
+	repo := crmapprovals.NewRepository()
+
+	view := domain.AssembledView{
+		WorkspaceID: wsID,
+		WindowStart: time.Now().Add(-24 * time.Hour),
+		WindowEnd:   time.Now(),
+		Facts: []domain.Fact{
+			{EntityType: "deal_stalled_claim", EntityID: "1", Detail: `{"generic_reason":"no_activity_60_days","wait_until_active":true,"confidence":0.9}`, Source: "capture:stalled:1"},
+			{EntityType: "recovery_evidence_signal", EntityID: "1", Detail: `{"specific_reason":"no_reply_14_days","evidence_activity_id":"act-1","evidence_text":"no reply since last email","confidence":0.8}`, Source: "capture:evidence:1"},
+			{EntityType: "deal_stalled_claim", EntityID: "2", Detail: `{"generic_reason":"no_activity_60_days","confidence":0.85}`, Source: "capture:stalled:2"},
+			{EntityType: "recovery_evidence_signal", EntityID: "2", Detail: `{"specific_reason":"champion_quiet","evidence_activity_id":"act-2","evidence_text":"champion has been quiet","confidence":0.7}`, Source: "capture:evidence:2"},
+			{EntityType: "recovery_draft_signal", EntityID: "2", Detail: `{"subject":"Checking in","body":"Hi, just checking in on this.","confidence":0.6}`, Source: "capture:draft:2"},
+		},
+	}
+
+	result := runStalledRecoveryPass(t, db, wsID, repo, view)
 
 	if result.State != domain.RunNormal {
 		t.Fatalf("state = %v, want RunNormal", result.State)
@@ -103,27 +114,7 @@ func TestStalledRecoveryProduce_SuppressedFixtureAloneYieldsRunQuiet(t *testing.
 	}}
 	repo := crmapprovals.NewRepository()
 
-	tx, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	result, err := app.RunPass(context.Background(), tx, app.PassInput{
-		WorkspaceID: wsID,
-		Assembler:   ports.FixtureAssembler{View: view},
-		Since:       view.WindowStart,
-		Produce:     app.StalledRecoveryProduce,
-		Stage:       crmapprovals.Stage,
-		Repo:        repo,
-		Effector:    &spyEffector{},
-		Emitter:     &spyEmitter{},
-	})
-	if err != nil {
-		_ = tx.Rollback()
-		t.Fatalf("RunPass: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	result := runStalledRecoveryPass(t, db, wsID, repo, view)
 	if result.State != domain.RunQuiet {
 		t.Fatalf("state = %v, want RunQuiet (an asked-to-wait deal must never be falsely flagged, OVN-AC-6)", result.State)
 	}
@@ -138,27 +129,7 @@ func TestStalledRecoveryProduce_StalledWithNoDraftFixtureStillStagesWithNullDraf
 	}}
 	repo := crmapprovals.NewRepository()
 
-	tx, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	result, err := app.RunPass(context.Background(), tx, app.PassInput{
-		WorkspaceID: wsID,
-		Assembler:   ports.FixtureAssembler{View: view},
-		Since:       view.WindowStart,
-		Produce:     app.StalledRecoveryProduce,
-		Stage:       crmapprovals.Stage,
-		Repo:        repo,
-		Effector:    &spyEffector{},
-		Emitter:     &spyEmitter{},
-	})
-	if err != nil {
-		_ = tx.Rollback()
-		t.Fatalf("RunPass: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	result := runStalledRecoveryPass(t, db, wsID, repo, view)
 	if result.State != domain.RunNormal {
 		t.Fatalf("state = %v, want RunNormal", result.State)
 	}
