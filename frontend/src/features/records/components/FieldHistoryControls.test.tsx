@@ -13,9 +13,15 @@ describe("FieldHistoryControls", () => {
     const onActorChange = vi.fn();
     render(
       <FieldHistoryControls
-        actor="all" onActorChange={onActorChange} field={null} onFieldChange={vi.fn()}
-        fieldOptions={FIELD_OPTIONS} search="" onSearchChange={vi.fn()}
-        hasActiveFilters={false} onClearFilters={vi.fn()}
+        actor="all"
+        onActorChange={onActorChange}
+        field={null}
+        onFieldChange={vi.fn()}
+        fieldOptions={FIELD_OPTIONS}
+        search=""
+        onSearchChange={vi.fn()}
+        hasActiveFilters={false}
+        onClearFilters={vi.fn()}
       />,
     );
     await userEvent.click(screen.getByRole("radio", { name: /agent/i }));
@@ -26,9 +32,15 @@ describe("FieldHistoryControls", () => {
     const onFieldChange = vi.fn();
     render(
       <FieldHistoryControls
-        actor="all" onActorChange={vi.fn()} field={null} onFieldChange={onFieldChange}
-        fieldOptions={FIELD_OPTIONS} search="" onSearchChange={vi.fn()}
-        hasActiveFilters={false} onClearFilters={vi.fn()}
+        actor="all"
+        onActorChange={vi.fn()}
+        field={null}
+        onFieldChange={onFieldChange}
+        fieldOptions={FIELD_OPTIONS}
+        search=""
+        onSearchChange={vi.fn()}
+        hasActiveFilters={false}
+        onClearFilters={vi.fn()}
       />,
     );
     await userEvent.click(screen.getByRole("button", { name: "Stage" }));
@@ -39,9 +51,15 @@ describe("FieldHistoryControls", () => {
     const onFieldChange = vi.fn();
     render(
       <FieldHistoryControls
-        actor="all" onActorChange={vi.fn()} field="stage_id" onFieldChange={onFieldChange}
-        fieldOptions={FIELD_OPTIONS} search="" onSearchChange={vi.fn()}
-        hasActiveFilters onClearFilters={vi.fn()}
+        actor="all"
+        onActorChange={vi.fn()}
+        field="stage_id"
+        onFieldChange={onFieldChange}
+        fieldOptions={FIELD_OPTIONS}
+        search=""
+        onSearchChange={vi.fn()}
+        hasActiveFilters
+        onClearFilters={vi.fn()}
       />,
     );
     await userEvent.click(screen.getByRole("button", { name: "All fields" }));
@@ -52,9 +70,15 @@ describe("FieldHistoryControls", () => {
     const onSearchChange = vi.fn();
     render(
       <FieldHistoryControls
-        actor="all" onActorChange={vi.fn()} field={null} onFieldChange={vi.fn()}
-        fieldOptions={FIELD_OPTIONS} search="" onSearchChange={onSearchChange}
-        hasActiveFilters={false} onClearFilters={vi.fn()}
+        actor="all"
+        onActorChange={vi.fn()}
+        field={null}
+        onFieldChange={vi.fn()}
+        fieldOptions={FIELD_OPTIONS}
+        search=""
+        onSearchChange={onSearchChange}
+        hasActiveFilters={false}
+        onClearFilters={vi.fn()}
       />,
     );
     await userEvent.type(screen.getByPlaceholderText(/search fields/i), "x");
@@ -65,20 +89,36 @@ describe("FieldHistoryControls", () => {
     const onClearFilters = vi.fn();
     const { rerender } = render(
       <FieldHistoryControls
-        actor="all" onActorChange={vi.fn()} field={null} onFieldChange={vi.fn()}
-        fieldOptions={FIELD_OPTIONS} search="" onSearchChange={vi.fn()}
-        hasActiveFilters={false} onClearFilters={onClearFilters}
+        actor="all"
+        onActorChange={vi.fn()}
+        field={null}
+        onFieldChange={vi.fn()}
+        fieldOptions={FIELD_OPTIONS}
+        search=""
+        onSearchChange={vi.fn()}
+        hasActiveFilters={false}
+        onClearFilters={onClearFilters}
       />,
     );
-    expect(screen.queryByRole("button", { name: /clear filters/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /clear filters/i }),
+    ).not.toBeInTheDocument();
     rerender(
       <FieldHistoryControls
-        actor="agent" onActorChange={vi.fn()} field={null} onFieldChange={vi.fn()}
-        fieldOptions={FIELD_OPTIONS} search="" onSearchChange={vi.fn()}
-        hasActiveFilters onClearFilters={onClearFilters}
+        actor="agent"
+        onActorChange={vi.fn()}
+        field={null}
+        onFieldChange={vi.fn()}
+        fieldOptions={FIELD_OPTIONS}
+        search=""
+        onSearchChange={vi.fn()}
+        hasActiveFilters
+        onClearFilters={onClearFilters}
       />,
     );
-    await userEvent.click(screen.getByRole("button", { name: /clear filters/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /clear filters/i }),
+    );
     expect(onClearFilters).toHaveBeenCalled();
   });
 });

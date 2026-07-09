@@ -9,36 +9,122 @@ const ENTITY_TYPE = "deal";
 const ENTITY_ID = "deal-baer-pharma";
 
 const DEAL = {
-  id: ENTITY_ID, workspace_id: "ws-storybook", name: "BÄR Pharma — Packaging QA",
-  amount_minor: 17707200, currency: "EUR", stage_id: "s-proposal", owner_id: "u-anna",
-  version: 6, source: "test", captured_by: "human:demo",
-  created_at: "2026-05-29T16:08:00Z", updated_at: "2026-06-18T09:42:00Z",
+  id: ENTITY_ID,
+  workspace_id: "ws-storybook",
+  name: "BÄR Pharma — Packaging QA",
+  amount_minor: 17707200,
+  currency: "EUR",
+  stage_id: "s-proposal",
+  owner_id: "u-anna",
+  version: 6,
+  source: "test",
+  captured_by: "human:demo",
+  created_at: "2026-05-29T16:08:00Z",
+  updated_at: "2026-06-18T09:42:00Z",
 };
 
 const ENTRIES = [
-  { id: "e1", entity_type: ENTITY_TYPE, entity_id: ENTITY_ID, field: "amount_minor", old_value: "21200000", new_value: "17707200", changed_at: "2026-06-18T09:42:00Z", actor_type: "agent", actor_id: "a1", passport_id: "psp_7Q3f", evidence: { quote: "offer.accepted · offer_id=of_8842 · gross_minor=17707200 · currency=EUR", source_url: "https://example.com/offer/8842", confidence: "high", confidence_note: "computed, not inferred" } },
-  { id: "e2", entity_type: ENTITY_TYPE, entity_id: ENTITY_ID, field: "amount_minor", old_value: null, new_value: "21200000", changed_at: "2026-05-29T16:08:00Z", actor_type: "human", actor_id: "u-anna", passport_id: null, evidence: null },
-  { id: "e3", entity_type: ENTITY_TYPE, entity_id: ENTITY_ID, field: "stage_id", old_value: "Qualified", new_value: "Proposal sent", changed_at: "2026-06-12T11:20:00Z", actor_type: "human", actor_id: "u-anna", passport_id: null, evidence: null },
-  { id: "e4", entity_type: ENTITY_TYPE, entity_id: ENTITY_ID, field: "stage_id", old_value: null, new_value: "Discovery", changed_at: "2026-05-29T16:09:00Z", actor_type: "human", actor_id: "u-anna", passport_id: null, evidence: null },
+  {
+    id: "e1",
+    entity_type: ENTITY_TYPE,
+    entity_id: ENTITY_ID,
+    field: "amount_minor",
+    old_value: "21200000",
+    new_value: "17707200",
+    changed_at: "2026-06-18T09:42:00Z",
+    actor_type: "agent",
+    actor_id: "a1",
+    passport_id: "psp_7Q3f",
+    evidence: {
+      quote:
+        "offer.accepted · offer_id=of_8842 · gross_minor=17707200 · currency=EUR",
+      source_url: "https://example.com/offer/8842",
+      confidence: "high",
+      confidence_note: "computed, not inferred",
+    },
+  },
+  {
+    id: "e2",
+    entity_type: ENTITY_TYPE,
+    entity_id: ENTITY_ID,
+    field: "amount_minor",
+    old_value: null,
+    new_value: "21200000",
+    changed_at: "2026-05-29T16:08:00Z",
+    actor_type: "human",
+    actor_id: "u-anna",
+    passport_id: null,
+    evidence: null,
+  },
+  {
+    id: "e3",
+    entity_type: ENTITY_TYPE,
+    entity_id: ENTITY_ID,
+    field: "stage_id",
+    old_value: "Qualified",
+    new_value: "Proposal sent",
+    changed_at: "2026-06-12T11:20:00Z",
+    actor_type: "human",
+    actor_id: "u-anna",
+    passport_id: null,
+    evidence: null,
+  },
+  {
+    id: "e4",
+    entity_type: ENTITY_TYPE,
+    entity_id: ENTITY_ID,
+    field: "stage_id",
+    old_value: null,
+    new_value: "Discovery",
+    changed_at: "2026-05-29T16:09:00Z",
+    actor_type: "human",
+    actor_id: "u-anna",
+    passport_id: null,
+    evidence: null,
+  },
 ];
 
-function makeClient(opts: { entries?: typeof ENTRIES; deal?: typeof DEAL } = {}) {
-  const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
-  qc.setQueryData(fieldHistoryKeys.list(ENTITY_TYPE, ENTITY_ID), opts.entries ?? ENTRIES);
-  qc.setQueryData(fieldHistoryKeys.entity(ENTITY_TYPE, ENTITY_ID), opts.deal ?? DEAL);
+function makeClient(
+  opts: { entries?: typeof ENTRIES; deal?: typeof DEAL } = {},
+) {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+  });
+  qc.setQueryData(
+    fieldHistoryKeys.list(ENTITY_TYPE, ENTITY_ID),
+    opts.entries ?? ENTRIES,
+  );
+  qc.setQueryData(
+    fieldHistoryKeys.entity(ENTITY_TYPE, ENTITY_ID),
+    opts.deal ?? DEAL,
+  );
   return qc;
 }
 
 function Demo({ client }: { client: QueryClient }) {
   setAuth(
-    { id: "user-demo", workspace_id: "ws-storybook", email: "demo@acme.com", display_name: "Demo User", timezone: "UTC", status: "active", is_agent: false },
-    "admin", ["admin"],
+    {
+      id: "user-demo",
+      workspace_id: "ws-storybook",
+      email: "demo@acme.com",
+      display_name: "Demo User",
+      timezone: "UTC",
+      status: "active",
+      is_agent: false,
+    },
+    "admin",
+    ["admin"],
   );
   return (
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/records/${ENTITY_TYPE}/${ENTITY_ID}/field-history`]}>
+      <MemoryRouter
+        initialEntries={[`/records/${ENTITY_TYPE}/${ENTITY_ID}/field-history`]}
+      >
         <Routes>
-          <Route path="/records/:entityType/:entityId/field-history" element={<FieldHistoryPage />} />
+          <Route
+            path="/records/:entityType/:entityId/field-history"
+            element={<FieldHistoryPage />}
+          />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -56,9 +142,15 @@ type Story = StoryObj<typeof Demo>;
 export const AllFields: Story = { args: { client: makeClient() } };
 
 export const HonestEmptyField: Story = {
-  args: { client: makeClient({ entries: ENTRIES.filter((e) => e.field !== "stage_id") }) },
+  args: {
+    client: makeClient({
+      entries: ENTRIES.filter((e) => e.field !== "stage_id"),
+    }),
+  },
 };
 
 export const Loading: Story = {
-  args: { client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
+  args: {
+    client: new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  },
 };

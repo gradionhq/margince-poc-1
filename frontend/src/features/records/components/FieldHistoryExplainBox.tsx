@@ -32,12 +32,22 @@ export function FieldHistoryExplainBox({
           className="mt-gf-sm rounded-md border border-gf-subtle bg-gf-card p-gf-md font-mono text-gf-caption text-gf-secondary"
         >
           <p>
-            net <b className="text-gf-primary">{formatMoneyDeDE(netMinor, currency)}</b> + 19%
-            MwSt. <b className="text-gf-primary">{formatMoneyDeDE(taxMinor, currency)}</b> ={" "}
-            <b className="text-gf-primary">{formatMoneyDeDE(grossMinor, currency)}</b>
+            net{" "}
+            <b className="text-gf-primary">
+              {formatMoneyDeDE(netMinor, currency)}
+            </b>{" "}
+            + 19% MwSt.{" "}
+            <b className="text-gf-primary">
+              {formatMoneyDeDE(taxMinor, currency)}
+            </b>{" "}
+            ={" "}
+            <b className="text-gf-primary">
+              {formatMoneyDeDE(grossMinor, currency)}
+            </b>
           </p>
           <p className="mt-gf-xs text-gf-tertiary">
-            money is computed to the cent, in integer minor units — never free-typed
+            money is computed to the cent, in integer minor units — never
+            free-typed
           </p>
         </div>
       )}

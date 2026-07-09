@@ -5,20 +5,37 @@ import { useFieldHistoryView } from "./useFieldHistoryView.js";
 
 function entry(overrides: Partial<FieldHistoryEntry>): FieldHistoryEntry {
   return {
-    id: "e1", entity_type: "deal", entity_id: "d1", field: "amount_minor",
-    old_value: null, new_value: "1000", changed_at: "2026-01-01T00:00:00Z",
-    actor_type: "human", actor_id: "u1", passport_id: null, evidence: null,
+    id: "e1",
+    entity_type: "deal",
+    entity_id: "d1",
+    field: "amount_minor",
+    old_value: null,
+    new_value: "1000",
+    changed_at: "2026-01-01T00:00:00Z",
+    actor_type: "human",
+    actor_id: "u1",
+    passport_id: null,
+    evidence: null,
     ...overrides,
   };
 }
 
-const RECORD = { id: "d1", amount_minor: 17707200, stage_id: "s1", owner_id: "u1" };
+const RECORD = {
+  id: "d1",
+  amount_minor: 17707200,
+  stage_id: "s1",
+  owner_id: "u1",
+};
 
 describe("useFieldHistoryView", () => {
   it("AC-1: header counts the full field catalog and total changes, unaffected by filters", () => {
     const entries = [
       entry({ id: "e1", field: "amount_minor" }),
-      entry({ id: "e2", field: "amount_minor", changed_at: "2026-02-01T00:00:00Z" }),
+      entry({
+        id: "e2",
+        field: "amount_minor",
+        changed_at: "2026-02-01T00:00:00Z",
+      }),
       entry({ id: "e3", field: "stage_id" }),
     ];
     const { result } = renderHook(() => useFieldHistoryView(entries, RECORD));
@@ -58,12 +75,19 @@ describe("useFieldHistoryView", () => {
   });
 
   it("AC-4: selecting a field chip narrows to exactly one group; All fields restores every group", () => {
-    const entries = [entry({ id: "e1", field: "amount_minor" }), entry({ id: "e2", field: "stage_id" })];
+    const entries = [
+      entry({ id: "e1", field: "amount_minor" }),
+      entry({ id: "e2", field: "stage_id" }),
+    ];
     const { result } = renderHook(() => useFieldHistoryView(entries, RECORD));
     act(() => result.current.setField("stage_id"));
-    expect(result.current.filteredGroups.map((g) => g.field)).toEqual(["stage_id"]);
+    expect(result.current.filteredGroups.map((g) => g.field)).toEqual([
+      "stage_id",
+    ]);
     act(() => result.current.setField(null));
-    expect(result.current.filteredGroups.length).toBe(result.current.groups.length);
+    expect(result.current.filteredGroups.length).toBe(
+      result.current.groups.length,
+    );
   });
 
   it("AC-5: a search matching no field label hides every group", () => {

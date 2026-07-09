@@ -42,7 +42,7 @@ export function FieldHistoryControls({
           onClick={() => onFieldChange(null)}
           className={`rounded-full border px-gf-sm py-gf-xs text-gf-caption ${
             field === null
-              ? "border-gf-accent bg-gf-accent-subtle text-gf-accent"
+              ? "border-gf-accent bg-gf-accent-light text-gf-accent"
               : "border-gf-subtle text-gf-secondary"
           }`}
         >
@@ -55,7 +55,7 @@ export function FieldHistoryControls({
             onClick={() => onFieldChange(opt.field)}
             className={`rounded-full border px-gf-sm py-gf-xs text-gf-caption ${
               field === opt.field
-                ? "border-gf-accent bg-gf-accent-subtle text-gf-accent"
+                ? "border-gf-accent bg-gf-accent-light text-gf-accent"
                 : "border-gf-subtle text-gf-secondary"
             }`}
           >
@@ -64,7 +64,11 @@ export function FieldHistoryControls({
         ))}
       </div>
       <div className="min-w-[220px]">
-        <SearchField value={search} onChange={onSearchChange} placeholder="Search fields…" />
+        <SearchField
+          value={search}
+          onChange={onSearchChange}
+          placeholder="Search fields…"
+        />
       </div>
       {hasActiveFilters && (
         <Button variant="ghost" size="sm" onClick={onClearFilters}>
