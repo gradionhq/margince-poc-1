@@ -3,6 +3,7 @@ import { CustomFieldsAdminPage } from "../features/custom-fields/routes/CustomFi
 import { DealDetailPage } from "../features/deals/routes/DealDetailPage.js";
 import { PipelinePage } from "../features/deals/routes/PipelinePage.js";
 import { LoginPage } from "../features/identity/routes/LoginPage.js";
+import { OfferBuilderPage } from "../features/offers/index.js";
 import { CompaniesPage } from "../features/organizations/routes/CompaniesPage.js";
 import { CompanyDetailPage } from "../features/organizations/routes/CompanyDetailPage.js";
 import { PeoplePage } from "../features/people/routes/PeoplePage.js";
@@ -33,6 +34,10 @@ export default function App() {
         <Route path="/leads" element={<ShellPlaceholderPage title="Leads" />} />
         <Route path="/deals" element={<PipelinePage />} />
         <Route path="/deals/:id" element={<DealDetailPage />} />
+        <Route
+          path="/deals/:id/offers/:offerId"
+          element={<OfferBuilderPage />}
+        />
         <Route path="/tasks" element={<ShellPlaceholderPage title="Tasks" />} />
         <Route path="/inbox" element={<ShellPlaceholderPage title="Inbox" />} />
         <Route
