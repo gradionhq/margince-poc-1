@@ -73,6 +73,7 @@ components:
   connector:    { in: internal/shared/ports/connector }
   model:        { in: internal/shared/ports/model }
   retrieval:    { in: internal/shared/ports/retrieval }
+  extraction:   { in: internal/shared/ports/extraction }
   jurisdiction: { in: pkg/shared/ports/jurisdiction }
   migrate:      { in: internal/shared/ports/migrate }
   approvalsport: { in: internal/shared/ports/approvals }
@@ -287,7 +288,7 @@ deps:
     mayDependOn: [recordsdomain, recordsadapters, recordstransport, blobstore]
     canUse: [pq]
   recordstransport:
-    mayDependOn: [records, recordsadapters, recordsdomain, recordsports, crmctx, errs, httpkit, prov, blobstore, auth]
+    mayDependOn: [records, recordsadapters, recordsdomain, recordsports, crmctx, errs, httpkit, prov, blobstore, auth, extraction]
   # recordsfieldhistory is the field-level change history projection over audit_log
   # before/after diffs (RD-WIRE-5 / RD-AC-5 / RD-AC-11).
   recordsfieldhistory:
