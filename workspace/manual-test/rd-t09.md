@@ -119,19 +119,37 @@ Expected:
 
 ## Step 7: Suggested edge card
 
-1. Create a new org with `parent_org_id: null` but sharing the same primary domain as the root org (e.g. `acme.com`).
-2. Navigate back to the root org's hierarchy page.
+`organization_domain` has an unconditional `UNIQUE (workspace_id, domain)` constraint
+(`backend/migrations/000006_org_gaps_person_phone.up.sql`), so two live organizations can never
+share a domain in this system — confirmed live, `POST /organizations` with a duplicate domain
+returns `409 duplicate_domain`, and a direct DB insert against an archived domain-holder still
+violates the constraint. There is no live-network path to a same-domain orphan; this step is
+`[live]` against Storybook instead of the full backend stack, exercising the
+`SuggestedEdgeStaged` / `SuggestedEdgeAccepted` / `SuggestedEdgeDismissed` stories in
+`AccountHierarchyPage.stories.tsx` (each pre-wires a `FIXTURE_ORPHAN` sharing the root org's
+`acme.com` domain):
+
+```bash
+make storybook
+```
+
+1. Open `http://localhost:6006` and navigate to the `AccountHierarchyPage` stories.
+2. Open the **SuggestedEdgeStaged** story.
 
 Expected:
-- A **"Suggested connections"** section appears with a card for the orphan org.
+- A **"Suggested connections"** section appears with a card for the orphan org (`Acme Ventures LLC`).
 - The card shows the candidate's name and "Accept edge" + "Dismiss" buttons.
 
-Click **Accept edge**:
-- The card flips to "edge written · audited" text.
+3. Open the **SuggestedEdgeAccepted** story.
+
+Expected:
+- The card shows "edge written · audited" text.
 - The treeOrgs cache is invalidated; the newly linked org appears in the tree on next render.
 
-Click **Dismiss** on a different candidate card:
-- The card disappears immediately.
+4. Open the **SuggestedEdgeDismissed** story.
+
+Expected:
+- The candidate card is gone.
 - No PATCH request is sent.
 
 ---
@@ -149,7 +167,7 @@ Expected:
 ## Step 9: Full gate
 
 ```bash
-pnpm --dir frontend biome check
+pnpm exec biome check .   # from repo root — frontend/package.json has no biome script (matches Makefile's fe-lint target)
 pnpm --dir frontend test
 make check-go
 make test-it DIR=backend/internal/modules/organizations/adapters

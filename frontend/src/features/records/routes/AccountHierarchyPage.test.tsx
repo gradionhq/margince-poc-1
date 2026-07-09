@@ -151,9 +151,13 @@ describe("AccountHierarchyPage", () => {
       error: new Error("Server error"),
     });
     render(<AccountHierarchyPage />, { wrapper: wrapper(qc) });
-    // Wait for the error state to render after the async query fails
-    await waitFor(() =>
-      expect(screen.getByText(/failed to load/i)).toBeInTheDocument(),
+    // Wait for the error state to render after the async query fails. The rollup query's own
+    // `retry` option (bounded, non-403-only — see shouldRetryHierarchyRollup) takes precedence
+    // over this QueryClient's `retry: false` default, so a generic error still retries a couple
+    // of times with backoff before settling into the error state; give it room.
+    await waitFor(
+      () => expect(screen.getByText(/failed to load/i)).toBeInTheDocument(),
+      { timeout: 5000 },
     );
   });
 

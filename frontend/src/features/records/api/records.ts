@@ -25,6 +25,19 @@ export class HierarchyRollupForbiddenError extends Error {
   }
 }
 
+// A 403 (HierarchyRollupForbiddenError) is a genuine permission failure, never transient —
+// retrying it just delays STATE-4 behind React Query's default 3-attempt exponential backoff
+// (~7.5s wall time) for no benefit. Scoped to this one query only: other errors (network blips,
+// 5xx) still get a small bounded retry, and every other query in the app keeps the library
+// default via the app-wide QueryClient.
+export function shouldRetryHierarchyRollup(
+  failureCount: number,
+  error: unknown,
+): boolean {
+  if (error instanceof HierarchyRollupForbiddenError) return false;
+  return failureCount < 2;
+}
+
 export function useOrganizationHierarchyRollup(
   rootId: string | undefined,
   scope: "tree" | "self",
@@ -32,6 +45,7 @@ export function useOrganizationHierarchyRollup(
   return useQuery<OrganizationHierarchyRollup>({
     queryKey: recordsKeys.rollup(rootId, scope),
     enabled: !!rootId,
+    retry: shouldRetryHierarchyRollup,
     queryFn: async () => {
       const { data, error, response } = await apiClient.GET(
         "/organizations/{id}/hierarchy-rollup",

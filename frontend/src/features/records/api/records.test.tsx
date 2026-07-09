@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../../lib/api-client/client.js", () => ({
   apiClient: {
@@ -15,9 +15,14 @@ vi.mock("../../../lib/api-client/client.js", () => ({
 import { apiClient } from "../../../lib/api-client/client.js";
 import {
   HierarchyRollupForbiddenError,
+  shouldRetryHierarchyRollup,
   useAccountTreeOrgs,
   useOrganizationHierarchyRollup,
 } from "./records.js";
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({
@@ -87,7 +92,7 @@ describe("useOrganizationHierarchyRollup", () => {
   });
 
   it("a non-403 failure still surfaces as a generic error, not HierarchyRollupForbiddenError", async () => {
-    (apiClient.GET as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockResolvedValue({
       data: undefined,
       error: { code: "server_error" },
       response: { status: 500 },
@@ -97,10 +102,44 @@ describe("useOrganizationHierarchyRollup", () => {
       () => useOrganizationHierarchyRollup("org-1", "tree"),
       { wrapper },
     );
-    await waitFor(() => expect(result.current.isError).toBe(true));
+    await waitFor(() => expect(result.current.isError).toBe(true), {
+      timeout: 5000,
+    });
     expect(result.current.error).not.toBeInstanceOf(
       HierarchyRollupForbiddenError,
     );
+  });
+
+  it("a 403 never triggers a retry — the request fires exactly once", async () => {
+    (apiClient.GET as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: undefined,
+      error: { code: "forbidden" },
+      response: { status: 403 },
+    });
+
+    const { result } = renderHook(
+      () => useOrganizationHierarchyRollup("org-1", "tree"),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    // A genuine 403 can never succeed on retry — retrying it only delays STATE-4 behind
+    // React Query's default exponential backoff for no benefit (the live-UAT-reproduced bug).
+    expect(apiClient.GET).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("shouldRetryHierarchyRollup", () => {
+  it("never retries a HierarchyRollupForbiddenError (a 403 will never succeed on retry)", () => {
+    const forbidden = new HierarchyRollupForbiddenError();
+    expect(shouldRetryHierarchyRollup(0, forbidden)).toBe(false);
+    expect(shouldRetryHierarchyRollup(1, forbidden)).toBe(false);
+  });
+
+  it("bounds retries for any other error", () => {
+    const generic = new Error("network blip");
+    expect(shouldRetryHierarchyRollup(0, generic)).toBe(true);
+    expect(shouldRetryHierarchyRollup(1, generic)).toBe(true);
+    expect(shouldRetryHierarchyRollup(2, generic)).toBe(false);
   });
 });
 
