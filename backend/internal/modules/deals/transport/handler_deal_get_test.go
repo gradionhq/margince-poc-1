@@ -64,7 +64,7 @@ func TestDealHandler_Get_Composite360(t *testing.T) {
 
 	d := domain.NewDeal("Deal360 Test Deal", pl.ID, st.ID, p0)
 	d.WorkspaceID = dealGetTestWS
-	created, err := dealStore.Create(ctx, d, "")
+	created, err := dealStore.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("seed deal: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestDealHandler_Get_Composite360(t *testing.T) {
 
 	other := domain.NewDeal("Other Deal", pl.ID, st.ID, p0)
 	other.WorkspaceID = dealGetTestWS
-	otherCreated, err := dealStore.Create(ctx, other, "")
+	otherCreated, err := dealStore.Create(ctx, other, "", nil)
 	if err != nil {
 		t.Fatalf("seed other deal: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestDealHandler_Get_ArchivedStillFetchable(t *testing.T) {
 
 	d := domain.NewDeal("Archive Me Deal", pl.ID, st.ID, p0)
 	d.WorkspaceID = dealGetTestWS
-	created, err := dealStore.Create(ctx, d, "")
+	created, err := dealStore.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestDealHandler_Get_ForeignWorkspaceID_Returns404(t *testing.T) {
 
 	d := domain.NewDeal("Tenant A Deal", pl.ID, st.ID, p0)
 	d.WorkspaceID = dealGetTestWS
-	created, err := dealStore.Create(ctx, d, "")
+	created, err := dealStore.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("seed deal: %v", err)
 	}
@@ -275,7 +275,7 @@ func TestDealHandler_Get_Composite360_P95Under100ms(t *testing.T) {
 
 	d := domain.NewDeal("Perf Deal", pl.ID, st.ID, p0)
 	d.WorkspaceID = ws
-	created, err := dealStore.Create(ctx, d, "")
+	created, err := dealStore.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("seed deal: %v", err)
 	}

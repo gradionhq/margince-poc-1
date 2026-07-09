@@ -63,7 +63,7 @@ func TestPersonHandler_Get_Composite360(t *testing.T) {
 	}
 	d := deals.NewDeal("Composite Deal", pl.ID, st.ID, p0)
 	d.WorkspaceID = personCompositeWS
-	created, err := dealStore.Create(ctx, d, "")
+	created, err := dealStore.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("seed deal: %v", err)
 	}

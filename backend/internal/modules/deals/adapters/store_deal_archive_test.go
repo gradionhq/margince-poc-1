@@ -53,7 +53,7 @@ func createArchivableDeal(ctx context.Context, t *testing.T, store *adapters.Dea
 	t.Helper()
 	d := domain.NewDeal(name, pipelineID, stageID, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	d.WorkspaceID = dealArchiveWS
-	d, err := store.Create(ctx, d, "")
+	d, err := store.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

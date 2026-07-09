@@ -97,7 +97,7 @@ func TestStoreRLSCrossWorkspaceWriteDenied(t *testing.T) {
 
 	dB := deals.NewDeal("CrossTenantDeal", pipeID, stageID, prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	dB.WorkspaceID = wsB
-	if _, err := dealStore.Create(appCtx(wsB), dB, ""); err == nil {
+	if _, err := dealStore.Create(appCtx(wsB), dB, "", nil); err == nil {
 		t.Fatal("cross-workspace deal create referencing another tenant's pipeline/stage must be denied under RLS")
 	}
 }

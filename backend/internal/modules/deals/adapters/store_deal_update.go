@@ -6,10 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+
+	"github.com/lib/pq"
 
 	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
+	"github.com/gradionhq/margince/backend/internal/platform/customfields"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
 )
@@ -36,7 +40,7 @@ func (s *DealStore) Update(ctx context.Context, id, workspaceID string, updates 
 // and the stage-history / partner-reassignment side effects. Split out of
 // Update to keep the outer function's cognitive complexity within budget.
 func (s *DealStore) applyUpdate(ctx context.Context, tx *sql.Tx, id, workspaceID string, updates map[string]any, ifMatch int64) error {
-	if stageID, ok := updates["stage_id"].(string); ok && stageID != "" {
+	if stageID, ok := updates[fieldStageID].(string); ok && stageID != "" {
 		if err := s.checkStageInPipeline(ctx, tx, id, workspaceID, stageID); err != nil {
 			return err
 		}
@@ -54,14 +58,36 @@ func (s *DealStore) applyUpdate(ctx context.Context, tx *sql.Tx, id, workspaceID
 		}
 	}
 
-	newStatus, _ := updates["status"].(string)
+	newStatus, _ := updates[fieldStatus].(string)
 
 	// If closing (won/lost), freeze the FX rate against the deal's current currency.
 	fxRate, fxRateDate := s.freezeDealFX(ctx, tx, workspaceID, id, newStatus)
 
+	active, err := customfields.ActiveColumns(ctx, s.db, workspaceID, entityTypeDeal)
+	if err != nil {
+		return err
+	}
+
+	args := []any{
+		id, workspaceID,
+		sqlutil.NullStr(updates, "name"),
+		sqlutil.NullStr(updates, fieldStageID),
+		sqlutil.NullStr(updates, fieldStatus),
+		sqlutil.NullStr(updates, "lost_reason"),
+		fxRate,
+		fxRateDate,
+		sqlutil.NullStr(updates, "expected_close_date"),
+		sqlutil.NullStr(updates, "owner_id"),
+		sqlutil.NullStr(updates, fieldPartnerOrgID),
+	}
+	customSet, args, n := dealUpdateCustomSet(updates, active, args, len(args))
+	n++
+	args = append(args, ifMatch)
+	ifMatchIdx := n
+
 	// The optimistic-concurrency guard is folded into the WHERE: ifMatch==0 skips the
 	// version check (last-write-wins); a non-zero ifMatch requires the row version to match.
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, fmt.Sprintf(`
 		UPDATE deal
 		SET name                = COALESCE($3, name),
 		    stage_id            = COALESCE($4::uuid, stage_id),
@@ -72,21 +98,11 @@ func (s *DealStore) applyUpdate(ctx context.Context, tx *sql.Tx, id, workspaceID
 		    fx_rate_date        = COALESCE($8, fx_rate_date),
 		    expected_close_date = COALESCE($9, expected_close_date),
 		    owner_id            = COALESCE($10::uuid, owner_id),
-		    partner_org_id      = COALESCE($11::uuid, partner_org_id),
+		    partner_org_id      = COALESCE($11::uuid, partner_org_id)%s,
 		    updated_at          = now()
 		WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL
-		  AND ($12 = 0 OR version = $12)`,
-		id, workspaceID,
-		sqlutil.NullStr(updates, "name"),
-		sqlutil.NullStr(updates, "stage_id"),
-		sqlutil.NullStr(updates, "status"),
-		sqlutil.NullStr(updates, "lost_reason"),
-		fxRate,
-		fxRateDate,
-		sqlutil.NullStr(updates, "expected_close_date"),
-		sqlutil.NullStr(updates, "owner_id"),
-		sqlutil.NullStr(updates, fieldPartnerOrgID),
-		ifMatch)
+		  AND ($%d = 0 OR version = $%d)`, customSet, ifMatchIdx, ifMatchIdx),
+		args...)
 	if err != nil {
 		return err
 	}
@@ -109,12 +125,38 @@ func (s *DealStore) applyUpdate(ctx context.Context, tx *sql.Tx, id, workspaceID
 	return nil
 }
 
+// dealUpdateCustomSet appends one `<quoted col> = $N` clause per active custom
+// column present as a key in updates (value converted via customfields.SQLValue;
+// a shape mismatch simply skips that key, mirroring Create's rawExtra handling),
+// returning the SET-clause fragment (empty, or comma-prefixed), the extended
+// args slice, and the next $N index.
+func dealUpdateCustomSet(updates map[string]any, active []customfields.Column, args []any, n int) (string, []any, int) {
+	var clauses []string
+	for _, c := range active {
+		v, ok := updates[c.ColumnName]
+		if !ok {
+			continue
+		}
+		val, ok := customfields.SQLValue(c, v)
+		if !ok {
+			continue
+		}
+		n++
+		args = append(args, val)
+		clauses = append(clauses, fmt.Sprintf("%s = $%d", pq.QuoteIdentifier(c.ColumnName), n))
+	}
+	if len(clauses) == 0 {
+		return "", args, n
+	}
+	return ", " + strings.Join(clauses, ", "), args, n
+}
+
 // writeStageHistoryOnChange inserts a deal_stage_history row when updates
 // carries a non-empty stage_id, recording the deal's stage before the UPDATE
 // ran as from_stage_id. Best-effort: history-write failures do not fail the
 // surrounding update, matching the pre-refactor inline behavior.
 func (s *DealStore) writeStageHistoryOnChange(ctx context.Context, tx *sql.Tx, id, workspaceID string, updates map[string]any) {
-	stageID := sqlutil.NullStr(updates, "stage_id")
+	stageID := sqlutil.NullStr(updates, fieldStageID)
 	if stageID == nil {
 		return
 	}
