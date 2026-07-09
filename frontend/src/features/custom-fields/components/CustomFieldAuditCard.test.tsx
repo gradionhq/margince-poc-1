@@ -191,11 +191,11 @@ describe("CustomFieldAuditCard", () => {
 
       expect(
         screen.getByText((_content, element) => {
-          return (
+          return Boolean(
             element &&
-            element.textContent ===
-              "Alice Smith added Renewal Date (date) to deal" &&
-            element.tagName === "P"
+              element.textContent ===
+                "Alice Smith added Renewal Date (date) to deal" &&
+              element.tagName === "P",
           );
         }),
       ).toBeInTheDocument();
@@ -229,10 +229,10 @@ describe("CustomFieldAuditCard", () => {
 
       expect(
         screen.getByText((_content, element) => {
-          return (
+          return Boolean(
             element &&
-            element.textContent === "Bob Johnson retired Old Field" &&
-            element.tagName === "P"
+              element.textContent === "Bob Johnson retired Old Field" &&
+              element.tagName === "P",
           );
         }),
       ).toBeInTheDocument();
@@ -276,20 +276,20 @@ describe("CustomFieldAuditCard", () => {
 
       expect(
         screen.getByText((_content, element) => {
-          return (
+          return Boolean(
             element &&
-            element.textContent === "Bob Johnson retired Old Field" &&
-            element.tagName === "P"
+              element.textContent === "Bob Johnson retired Old Field" &&
+              element.tagName === "P",
           );
         }),
       ).toBeInTheDocument();
       expect(
         screen.getByText((_content, element) => {
-          return (
+          return Boolean(
             element &&
-            element.textContent ===
-              "Bob Johnson added Old Field (text) to deal" &&
-            element.tagName === "P"
+              element.textContent ===
+                "Bob Johnson added Old Field (text) to deal" &&
+              element.tagName === "P",
           );
         }),
       ).toBeInTheDocument();
@@ -325,10 +325,10 @@ describe("CustomFieldAuditCard", () => {
 
       // Date should be formatted - check caption paragraph
       const captionText = screen.getByText((_content, element) => {
-        return (
+        return Boolean(
           element?.textContent?.includes("7/1/2026") &&
-          element.textContent?.includes("audit#field1id-created") &&
-          element.tagName === "P"
+            element.textContent?.includes("audit#field1id-created") &&
+            element.tagName === "P",
         );
       });
       expect(captionText).toBeInTheDocument();

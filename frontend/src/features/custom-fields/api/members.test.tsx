@@ -33,12 +33,7 @@ describe("members read API", () => {
     });
     const { result } = renderHook(() => useMembers(), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(apiClient.GET).toHaveBeenCalledWith(
-      "/members",
-      expect.objectContaining({
-        params: { query: {} },
-      }),
-    );
+    expect(apiClient.GET).toHaveBeenCalledWith("/members");
     expect(result.current.data?.data).toHaveLength(2);
   });
 });

@@ -1,3 +1,4 @@
+import { Archive } from "lucide-react";
 import type {
   CustomField,
   Member,
@@ -112,7 +113,7 @@ export function CustomFieldsTable({
         }
         const field = row.field;
         if (field.status === "retired") {
-          return <StatusBadge>Retired</StatusBadge>;
+          return <StatusBadge label="Retired" variant="neutral" />;
         }
         return <Chip>{field.type}</Chip>;
       },
@@ -178,16 +179,14 @@ export function CustomFieldsTable({
     },
   ];
 
-  const getRowProps = (row: TableRow): Record<string, string> => {
-    const props: Record<string, string> = {};
-
+  const getRowProps = (row: TableRow) => {
     if (row.type === "staged") {
-      props["data-staged"] = "true";
-    } else if (row.field.status === "retired") {
-      props.className = "opacity-60";
+      return { "data-staged": "true" };
     }
-
-    return props;
+    if (row.field.status === "retired") {
+      return { className: "opacity-60" };
+    }
+    return {};
   };
 
   return (
@@ -230,7 +229,10 @@ export function CustomFieldsTable({
 
       {/* Empty state or table */}
       {shouldShowEmpty ? (
-        <EmptyState />
+        <EmptyState
+          icon={Archive}
+          title="No custom fields on this object yet"
+        />
       ) : (
         <DataTable
           columns={columns}

@@ -6,9 +6,7 @@ export function useMembers() {
   return useQuery<MemberListResponse>({
     queryKey: ["members"],
     queryFn: async () => {
-      const { data, error } = await apiClient.GET("/members", {
-        params: { query: {} },
-      });
+      const { data, error } = await apiClient.GET("/members");
       if (error) throw error;
       if (!data) throw new Error("empty response");
       return data;

@@ -68,7 +68,9 @@ describe("useCreateCustomField", () => {
     const created = await result.current.mutateAsync({
       label: "New Field",
       object: "deal",
-      field_type: "text",
+      type: "text",
+      source: "manual",
+      captured_by: "human:u1",
     });
     expect(created.id).toBe("cf9");
     expect(apiClient.POST).toHaveBeenCalledWith(
@@ -99,7 +101,9 @@ describe("useCreateCustomField", () => {
       await result.current.mutateAsync({
         label: "New Field",
         object: "deal",
-        field_type: "text",
+        type: "text",
+        source: "manual",
+        captured_by: "human:u1",
       });
     });
     expect(invalidateSpy).toHaveBeenCalledWith({

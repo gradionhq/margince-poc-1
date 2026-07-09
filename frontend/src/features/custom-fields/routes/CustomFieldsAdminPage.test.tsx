@@ -9,10 +9,12 @@ import type { CustomField } from "../../../lib/api-client/generated/index.js";
 let mockFieldsData: CustomField[] = [
   {
     id: "f1",
+    workspace_id: "w1",
     label: "Custom Field 1",
     type: "text",
     object: "deal",
     slug: "custom_field_1",
+    column_name: "cf_custom_field_1",
     status: "active",
     created_by: "user1",
     created_at: "2026-07-01T00:00:00Z",
@@ -103,10 +105,12 @@ describe("CustomFieldsAdminPage", () => {
     mockFieldsData = [
       {
         id: "f1",
+        workspace_id: "w1",
         label: "Custom Field 1",
         type: "text",
         object: "deal",
         slug: "custom_field_1",
+        column_name: "cf_custom_field_1",
         status: "active",
         created_by: "user1",
         created_at: "2026-07-01T00:00:00Z",
@@ -373,10 +377,12 @@ describe("CustomFieldsAdminPage", () => {
       mockFieldsData = [
         {
           id: "f1",
+          workspace_id: "w1",
           label: "Custom Field 1",
           type: "text",
           object: "deal",
           slug: "custom_field_1",
+          column_name: "cf_custom_field_1",
           status: "active",
           created_by: "user1",
           created_at: "2026-07-01T00:00:00Z",
@@ -384,10 +390,12 @@ describe("CustomFieldsAdminPage", () => {
         },
         {
           id: "f2",
+          workspace_id: "w1",
           label: "Company Field",
           type: "text",
           object: "organization",
           slug: "company_field",
+          column_name: "cf_company_field",
           status: "active",
           created_by: "user1",
           created_at: "2026-07-01T00:00:00Z",

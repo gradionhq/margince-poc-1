@@ -187,7 +187,7 @@ export function CustomFieldsAdminPage() {
             fields={fields}
             members={members}
             selectedObject={selectedObject}
-            role={role}
+            role={role ?? ""}
             onEdit={handleRenameOpen}
             onRetire={handleRetireOpen}
             stagedRow={stagedRow}
@@ -202,7 +202,7 @@ export function CustomFieldsAdminPage() {
         <CustomFieldAuditCard
           fields={fields}
           members={members}
-          role={role}
+          role={role ?? ""}
           isLoading={isLoading}
           isError={isError}
         />

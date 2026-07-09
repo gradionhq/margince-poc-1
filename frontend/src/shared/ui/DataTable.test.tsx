@@ -39,6 +39,50 @@ describe("DataTable", () => {
     expect(onRowClick).toHaveBeenCalledTimes(2);
   });
 
+  it("applies getRowProps data attributes to the rendered row", () => {
+    render(
+      <DataTable<Row>
+        columns={[{ key: "name", header: "Name", render: (r) => r.name }]}
+        rows={[{ id: "1", name: "Alice" }]}
+        getRowKey={(r) => r.id}
+        getRowProps={() => ({ "data-staged": "true" })}
+      />,
+    );
+    const row = screen.getByText("Alice").closest("tr") as HTMLElement;
+    expect(row).toHaveAttribute("data-staged", "true");
+  });
+
+  it("merges getRowProps className with the row's existing classes instead of replacing them", () => {
+    const onRowClick = vi.fn();
+    render(
+      <DataTable<Row>
+        columns={[{ key: "name", header: "Name", render: (r) => r.name }]}
+        rows={[{ id: "1", name: "Alice" }]}
+        getRowKey={(r) => r.id}
+        onRowClick={onRowClick}
+        getRowProps={() => ({ className: "opacity-60" })}
+      />,
+    );
+    const row = screen.getByText("Alice").closest("tr") as HTMLElement;
+    expect(row).toHaveClass("opacity-60");
+    expect(row).toHaveClass("cursor-pointer");
+    expect(row).toHaveClass("hover:bg-gf-hover");
+  });
+
+  it("does not add getRowProps output for rows getRowProps returns {} for", () => {
+    render(
+      <DataTable<Row>
+        columns={[{ key: "name", header: "Name", render: (r) => r.name }]}
+        rows={[{ id: "1", name: "Alice" }]}
+        getRowKey={(r) => r.id}
+        getRowProps={() => ({})}
+      />,
+    );
+    const row = screen.getByText("Alice").closest("tr") as HTMLElement;
+    expect(row).not.toHaveAttribute("data-staged");
+    expect(row).not.toHaveClass("opacity-60");
+  });
+
   it("ignores bubbled keyboard events from interactive descendants", () => {
     const onRowClick = vi.fn();
     render(

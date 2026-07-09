@@ -5,13 +5,14 @@ import type {
   CustomField,
   CustomFieldListResponse,
 } from "../../../lib/api-client/generated/index.js";
+import type { ObjectKey } from "../lib/customFieldRules.js";
 
 export const customFieldsKeys = {
   all: ["custom-fields"] as const,
-  list: (object: string) => ["custom-fields", "list", object] as const,
+  list: (object: ObjectKey) => ["custom-fields", "list", object] as const,
 };
 
-export function useCustomFields(object: string) {
+export function useCustomFields(object: ObjectKey) {
   return useQuery<CustomFieldListResponse>({
     queryKey: customFieldsKeys.list(object),
     queryFn: async () => {

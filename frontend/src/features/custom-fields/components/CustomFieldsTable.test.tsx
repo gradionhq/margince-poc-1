@@ -100,9 +100,11 @@ vi.mock("../../../shared/ui/forge.js", () => ({
       {children}
     </span>
   ),
-  EmptyState: () => <div data-testid="empty-state">No custom fields</div>,
-  StatusBadge: ({ children }: { children: ReactNode }) => (
-    <span data-testid="status-badge">{children}</span>
+  EmptyState: ({ title }: { title: string }) => (
+    <div data-testid="empty-state">{title}</div>
+  ),
+  StatusBadge: ({ label }: { label: string; variant: string }) => (
+    <span data-testid="status-badge">{label}</span>
   ),
   Icon: () => <span data-testid="icon" />,
   IconButton: ({
