@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { apiClient } from "../../../lib/api-client/client.js";
 import { setAuth } from "../../identity/store/authStore.js";
 import { fieldHistoryKeys } from "../api/fieldHistory.js";
 import { FieldHistoryPage } from "./FieldHistoryPage.js";
@@ -149,8 +151,40 @@ export const HonestEmptyField: Story = {
   },
 };
 
+// Storybook doesn't mock apiClient the way *.test.tsx does via vi.mock, so a
+// pending query with no seeded QueryClient data still calls the real
+// apiClient.GET, which fetch()es and 404s against the static Storybook
+// server (2 console errors, failing the fe-uat render check).
+//
+// Registering a stub queryFn via qc.setQueryDefaults(key, { queryFn }) does
+// NOT work here: TanStack Query's defaultQueryOptions merges call-site
+// options over registered query defaults (`{ ...defaults, ...options }`),
+// so useFieldHistory/useEntityRecord's own explicit, in-source queryFn
+// always wins regardless of what's registered on the client.
+//
+// Instead, stub apiClient.GET itself so both queries genuinely stay pending
+// without ever hitting the network. The stub is installed synchronously
+// during render, not inside a useEffect here: FieldHistoryPage's own
+// query-triggering effects are deeper in the tree and — because React
+// fires effects child-to-parent on mount — would already run (and issue
+// the real fetch) before an effect placed in this component fires. Doing
+// it during render guarantees the stub is in place before any descendant
+// mounts. The real implementation is restored on unmount so no other story
+// in this Storybook session is affected.
+function LoadingDemo({ client }: { client: QueryClient }) {
+  const originalGetRef = useRef(apiClient.GET);
+  apiClient.GET = (() => new Promise(() => {})) as typeof apiClient.GET;
+  useEffect(() => {
+    return () => {
+      apiClient.GET = originalGetRef.current;
+    };
+  }, []);
+  return <Demo client={client} />;
+}
+
 export const Loading: Story = {
   args: {
     client: new QueryClient({ defaultOptions: { queries: { retry: false } } }),
   },
+  render: (args) => <LoadingDemo client={args.client} />,
 };

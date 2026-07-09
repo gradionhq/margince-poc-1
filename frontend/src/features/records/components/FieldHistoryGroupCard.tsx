@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Badge } from "../../../shared/ui/forge.js";
 import {
   COMPUTED_MONEY_FIELD,
   type FieldHistoryEntry,
@@ -64,12 +63,16 @@ function DiffRow({
   fieldEntries: FieldHistoryEntry[];
 }) {
   const [evidenceOpen, setEvidenceOpen] = useState(false);
+  // old_value/new_value are `string | null` per the contract ("— empty —" is
+  // represented as null) — the `?` in the generated type is an artifact of
+  // an optional JSON key, not a third real state, so `== null` (not `===`)
+  // is the type-safe way to treat "absent" the same as "explicitly empty".
   const from =
-    entry.old_value === null
+    entry.old_value == null
       ? originLabel(entry, fieldEntries)
       : formatDiffFieldValue(field, entry.old_value, currency);
   const to =
-    entry.new_value === null
+    entry.new_value == null
       ? "— removed —"
       : formatDiffFieldValue(field, entry.new_value, currency);
   const hasEvidence = entry.actor_type === "agent" && !!entry.evidence;
@@ -137,7 +140,7 @@ export function FieldHistoryGroupCard({
         </span>
       </div>
       <div className="mt-gf-sm flex items-center gap-gf-sm">
-        <Badge variant="neutral">Current</Badge>
+        <span className="text-gf-caption text-gf-secondary">Current</span>
         <span className="font-mono text-gf-body text-gf-primary">
           {formatCurrentFieldValue(group.field, group.currentValue, currency)}
         </span>

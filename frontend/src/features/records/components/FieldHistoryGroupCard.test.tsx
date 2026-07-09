@@ -45,6 +45,17 @@ describe("FieldHistoryGroupCard", () => {
     expect(screen.getByText("Proposal sent")).toBeInTheDocument();
   });
 
+  it("AC-2: the Current row renders a literal 'Current' label, never 'undefined' (Badge atom takes count/max, not children)", () => {
+    render(
+      <FieldHistoryGroupCard
+        group={group({ currentValue: "Proposal sent" })}
+        currency="EUR"
+      />,
+    );
+    expect(screen.getByText("Current")).toBeInTheDocument();
+    expect(screen.queryByText("undefined")).not.toBeInTheDocument();
+  });
+
   it("AC-field-history-8: zero entries shows the honest never-changed message, not a blank timeline", () => {
     render(
       <FieldHistoryGroupCard
