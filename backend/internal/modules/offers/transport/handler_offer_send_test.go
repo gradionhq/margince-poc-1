@@ -15,6 +15,7 @@ import (
 	"time"
 
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
+	"github.com/gradionhq/margince/backend/internal/modules/deals"
 	"github.com/gradionhq/margince/backend/internal/modules/offers/adapters"
 	"github.com/gradionhq/margince/backend/internal/platform/blobstore"
 	"github.com/gradionhq/margince/backend/internal/platform/database"
@@ -47,7 +48,7 @@ func seedWorkspace(t *testing.T, db *sql.DB, wsID string) {
 }
 
 func offerHandlerForTest(db *sql.DB) *OfferHandler {
-	return NewOfferHandler(adapters.NewOfferStore(db), adapters.NewOfferLineItemStore(db, adapters.NewProductStore(db)), &crmapprovals.DBVerifier{DB: db}, blobstore.NewMemoryStore(), NewNoOpRetriever())
+	return NewOfferHandler(adapters.NewOfferStore(db).WithDealStore(deals.NewDealStore(db)), adapters.NewOfferLineItemStore(db, adapters.NewProductStore(db)), &crmapprovals.DBVerifier{DB: db}, blobstore.NewMemoryStore(), NewNoOpRetriever())
 }
 
 func withOfferWorkspace(r *http.Request, wsID, userID string) *http.Request {
@@ -306,6 +307,63 @@ func TestOfferHandler_Send_AgentNoToken_403_ThenValidToken_200(t *testing.T) {
 	h.ServeHTTP(w3, req3)
 	if w3.Code != http.StatusForbidden {
 		t.Fatalf("replayed-token status = %d, want 403", w3.Code)
+	}
+}
+
+// UAT step 4: accept a sent offer as a human principal, and the handler
+// flips status to accepted without requiring an approval token.
+func TestOfferHandler_Accept_SentOffer_NoTokenNeeded(t *testing.T) {
+	t.Setenv("APPROVAL_TOKEN_SIGNING_SECRET", "merge-handler-it-secret")
+	db, h, wsID, offerID, humanID, agentID := setupSeededOfferWithLineItem(t, "EUR")
+
+	token := signSendOfferToken(t, wsID, offerID)
+	sendOfferAsAgentExpect200(t, h, wsID, agentID, offerID, token)
+
+	req := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/accept", nil)
+	req = withOfferWorkspace(req, wsID, humanID)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	resp := decodeJSONBody(t, w)
+	if status, ok := resp["status"].(string); !ok || status != "accepted" {
+		t.Fatalf("expected status=accepted, got %v", resp["status"])
+	}
+	if resp["accepted_at"] == nil {
+		t.Fatal("expected accepted_at populated")
+	}
+
+	var amountMinor int64
+	var currency string
+	if err := db.QueryRow(`SELECT amount_minor, currency FROM deal WHERE id=$1::uuid`, resp["deal_id"]).Scan(&amountMinor, &currency); err != nil {
+		t.Fatalf("read deal: %v", err)
+	}
+	if amountMinor != 297500 || currency != "EUR" {
+		t.Fatalf("expected deal sync to 297500 EUR, got amount_minor=%d currency=%s", amountMinor, currency)
+	}
+}
+
+// UAT step 5: agent accept without a valid approval token is rejected with
+// approval_required, mirroring sendOffer's tier-yellow gate.
+func TestOfferHandler_Accept_AgentNoToken_403ApprovalRequired(t *testing.T) {
+	t.Setenv("APPROVAL_TOKEN_SIGNING_SECRET", "merge-handler-it-secret")
+	_, h, wsID, offerID, _, agentID := setupSeededOfferWithLineItem(t, "EUR")
+
+	token := signSendOfferToken(t, wsID, offerID)
+	sendOfferAsAgentExpect200(t, h, wsID, agentID, offerID, token)
+
+	agentCtx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID, UserID: agentID, IsAgent: true})
+	req := httptest.NewRequest(http.MethodPost, "/offers/"+offerID+"/accept", nil)
+	req = req.WithContext(agentCtx)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	resp := decodeJSONBody(t, w)
+	if resp["code"] != "approval_required" {
+		t.Fatalf("expected code=approval_required, got %v", resp["code"])
 	}
 }
 

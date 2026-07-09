@@ -117,6 +117,26 @@ func (f *fakeOfferStore) Send(ctx context.Context, id, workspaceID string) (doma
 	return o, nil
 }
 
+func (f *fakeOfferStore) Accept(ctx context.Context, id, workspaceID string) (domain.Offer, error) {
+	if f.nextErr != nil {
+		err := f.nextErr
+		f.nextErr = nil
+		return domain.Offer{}, err
+	}
+	o, ok := f.offers[id]
+	if !ok {
+		return domain.Offer{}, errs.ErrNotFound
+	}
+	if o.Status != domain.OfferStatusSent {
+		return domain.Offer{}, adapters.ErrOfferNotAcceptable
+	}
+	now := time.Now().UTC()
+	o.Status = domain.OfferStatusAccepted
+	o.AcceptedAt = &now
+	f.offers[id] = o
+	return o, nil
+}
+
 // Regenerate mirrors OfferStore.Regenerate's public contract closely enough
 // for handler-level tests: it records every call's args (regenerateCalled/
 // regenerateID/regenerateWSID/regenerateSignals) so a test can assert what
@@ -305,6 +325,26 @@ func validCreateLineItemBody() map[string]any {
 		"source":           "test",
 		"captured_by":      "human:test",
 	}
+}
+
+// doOfferAction builds an OfferHandler backed by offerStore, POSTs a
+// bodyless request to path — as the default human principal (withWorkspace)
+// when principal is nil, or as principal otherwise — and returns the
+// recorded response alongside its decoded JSON body. This is the shared
+// "seed a store, fire a Send/Accept/Regenerate action request" shape common
+// to the handler's action-endpoint unit tests below.
+func doOfferAction(t *testing.T, offerStore *fakeOfferStore, path string, principal *crmctx.Principal) (*httptest.ResponseRecorder, map[string]any) {
+	t.Helper()
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
+	req := httptest.NewRequest(http.MethodPost, path, nil)
+	if principal != nil {
+		req = req.WithContext(crmctx.With(req.Context(), *principal))
+	} else {
+		req = withWorkspace(req)
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	return w, decodeJSONBody(t, w)
 }
 
 // ---- tests ----
@@ -521,17 +561,11 @@ func TestOfferHandler_Render_SetsResult(t *testing.T) {
 func TestOfferHandler_Send_HumanPrincipal_NoTokenNeeded(t *testing.T) {
 	offerStore := newFakeOfferStore()
 	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusDraft, "EUR")
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
-
-	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/send", nil)
-	req = withWorkspace(req)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
+	w, respBody := doOfferAction(t, offerStore, "/offers/offer-1/send", nil)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
-	respBody := decodeJSONBody(t, w)
 	if status, ok := respBody["status"].(string); !ok || status != "sent" {
 		t.Fatalf("expected status=sent, got %v", respBody["status"])
 	}
@@ -543,20 +577,58 @@ func TestOfferHandler_Send_HumanPrincipal_NoTokenNeeded(t *testing.T) {
 	}
 }
 
-func TestOfferHandler_Send_AgentPrincipal_NoToken_403ApprovalRequired(t *testing.T) {
+func TestOfferHandler_Accept_HumanPrincipal_NoTokenNeeded(t *testing.T) {
 	offerStore := newFakeOfferStore()
-	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusDraft, "EUR")
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
+	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusSent, "EUR")
+	w, respBody := doOfferAction(t, offerStore, "/offers/offer-1/accept", nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/send", nil)
-	req = req.WithContext(crmctx.With(req.Context(), crmctx.Principal{TenantID: testWorkspaceID, UserID: "agent:1", IsAgent: true}))
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	if status, ok := respBody["status"].(string); !ok || status != "accepted" {
+		t.Fatalf("expected status=accepted, got %v", respBody["status"])
+	}
+	if respBody["accepted_at"] == nil {
+		t.Fatal("expected accepted_at populated")
+	}
+}
+
+func TestOfferHandler_Accept_AgentPrincipal_NoToken_403ApprovalRequired(t *testing.T) {
+	offerStore := newFakeOfferStore()
+	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusSent, "EUR")
+	agent := crmctx.Principal{TenantID: testWorkspaceID, UserID: "agent:1", IsAgent: true}
+	w, respBody := doOfferAction(t, offerStore, "/offers/offer-1/accept", &agent)
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403, body=%s", w.Code, w.Body.String())
 	}
-	respBody := decodeJSONBody(t, w)
+	if code, ok := respBody["code"].(string); !ok || code != "approval_required" {
+		t.Fatalf("expected code=approval_required, got %v", respBody["code"])
+	}
+}
+
+func TestOfferHandler_Accept_NotSent_409(t *testing.T) {
+	offerStore := newFakeOfferStore()
+	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusDraft, "EUR")
+	w, respBody := doOfferAction(t, offerStore, "/offers/offer-1/accept", nil)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409, body=%s", w.Code, w.Body.String())
+	}
+	if code, ok := respBody["code"].(string); !ok || code != "offer_not_acceptable" {
+		t.Fatalf("expected code=offer_not_acceptable, got %v", respBody["code"])
+	}
+}
+
+func TestOfferHandler_Send_AgentPrincipal_NoToken_403ApprovalRequired(t *testing.T) {
+	offerStore := newFakeOfferStore()
+	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusDraft, "EUR")
+	agent := crmctx.Principal{TenantID: testWorkspaceID, UserID: "agent:1", IsAgent: true}
+	w, respBody := doOfferAction(t, offerStore, "/offers/offer-1/send", &agent)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403, body=%s", w.Code, w.Body.String())
+	}
 	if code, ok := respBody["code"].(string); !ok || code != "approval_required" {
 		t.Fatalf("expected code=approval_required, got %v", respBody["code"])
 	}
@@ -566,17 +638,11 @@ func TestOfferHandler_Send_FXRateUnavailable_422(t *testing.T) {
 	offerStore := newFakeOfferStore()
 	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusDraft, "USD")
 	offerStore.nextErr = &deals.FXRateUnavailableError{Currency: "USD", AsOf: time.Date(2026, 7, 8, 0, 0, 0, 0, time.UTC)}
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
-
-	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/send", nil)
-	req = withWorkspace(req)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
+	w, respBody := doOfferAction(t, offerStore, "/offers/offer-1/send", nil)
 
 	if w.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422, body=%s", w.Code, w.Body.String())
 	}
-	respBody := decodeJSONBody(t, w)
 	if code, ok := respBody["code"].(string); !ok || code != "fx_rate_unavailable" {
 		t.Fatalf("expected code=fx_rate_unavailable, got %v", respBody["code"])
 	}
@@ -589,17 +655,11 @@ func TestOfferHandler_Send_FXRateUnavailable_422(t *testing.T) {
 func TestOfferHandler_Regenerate_Success(t *testing.T) {
 	offerStore := newFakeOfferStore()
 	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusSent, "EUR")
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
-
-	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/regenerate", nil)
-	req = withWorkspace(req)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
+	w, respBody := doOfferAction(t, offerStore, "/offers/offer-1/regenerate", nil)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
-	respBody := decodeJSONBody(t, w)
 	if status, ok := respBody["status"].(string); !ok || status != "draft" {
 		t.Fatalf("expected the new revision's status=draft, got %v", respBody["status"])
 	}
@@ -660,17 +720,11 @@ func TestOfferHandler_Regenerate_NotSent_409(t *testing.T) {
 	offerStore := newFakeOfferStore()
 	offerStore.offers["offer-1"] = domain.Offer{ID: "offer-1", DealID: "deal-1", Status: domain.OfferStatusDraft, Revision: 1, Version: 1}
 	offerStore.regenerateErr = adapters.ErrOfferNotSent
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
-
-	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/regenerate", nil)
-	req = withWorkspace(req)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
+	w, respBody := doOfferAction(t, offerStore, "/offers/offer-1/regenerate", nil)
 
 	if w.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409, body=%s", w.Code, w.Body.String())
 	}
-	respBody := decodeJSONBody(t, w)
 	if code, ok := respBody["code"].(string); !ok || code != "offer_not_sent" {
 		t.Fatalf("expected code=offer_not_sent, got %v", respBody["code"])
 	}

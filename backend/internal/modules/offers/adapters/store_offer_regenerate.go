@@ -1,12 +1,21 @@
 package adapters
 
+// store_offer_regenerate.go holds OfferStore.Regenerate (OFFER-WIRE-8) and
+// its helpers — split out of store_offer_actions.go to stay under the
+// 500-LOC-per-file cap (architecture/18 §3.2) once Accept (OFFER-WIRE-9)
+// landed there.
+
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/gradionhq/margince/backend/internal/modules/offers/domain"
+	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
+	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 )
@@ -134,4 +143,209 @@ func lineChanged(a, b domain.OfferLineItem) bool {
 		a.DiscountPct != b.DiscountPct ||
 		a.TaxRate != b.TaxRate ||
 		a.PriceGrounded != b.PriceGrounded
+}
+
+// cloneOfferForRegenerate inserts newOffer (id/revision/status already set
+// by the caller, the rest copied verbatim from the source row) as a clone of
+// the offer row id/workspaceID, and clones that offer's live line items onto
+// the new offer id. Called from Regenerate inside its own tx.
+func cloneOfferForRegenerate(ctx context.Context, tx *sql.Tx, newOffer domain.Offer, id, workspaceID string) error {
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO offer (
+			id, workspace_id, deal_id, offer_number, revision, status, currency,
+			buyer_org_id, buyer_snapshot, issuer_snapshot, valid_until, intro_text,
+			terms_text, net_minor, tax_minor, gross_minor, fx_rate_to_base,
+			fx_rate_date, template_id, pdf_asset_ref, accepted_at, version,
+			source, captured_by
+		)
+		SELECT
+			$1::uuid, workspace_id, deal_id, offer_number, $2, $3, currency,
+			buyer_org_id, buyer_snapshot, issuer_snapshot, valid_until, intro_text,
+			terms_text, net_minor, tax_minor, gross_minor, fx_rate_to_base,
+			fx_rate_date, template_id, NULL, NULL, 1,
+			source, captured_by
+		FROM offer
+		WHERE id=$4::uuid AND workspace_id=$5::uuid`,
+		newOffer.ID, newOffer.Revision, newOffer.Status, id, workspaceID); err != nil {
+		return fmt.Errorf("offer regenerate insert: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO offer_line_item (
+			id, workspace_id, offer_id, position, product_id, description, unit,
+			quantity, unit_price_minor, discount_pct, tax_rate
+		)
+		SELECT
+			uuidv7(), workspace_id, $1::uuid, position, product_id, description, unit,
+			quantity, unit_price_minor, discount_pct, tax_rate
+		FROM offer_line_item
+		WHERE offer_id=$2::uuid AND workspace_id=$3::uuid AND archived_at IS NULL`,
+		newOffer.ID, id, workspaceID); err != nil {
+		return fmt.Errorf("offer regenerate lines: %w", err)
+	}
+	return nil
+}
+
+// Regenerate always starts from the verbatim clone of a sent offer's live
+// line items + row (OFFER-AC-10d) into a new draft revision, marking the
+// prior revision superseded. When signals carries at least one grounded
+// AI-proposed line (domain.FilterGroundedSignals — evidence-or-omit), the
+// cloned lines are discarded and replaced with the AI-authored lines
+// instead, totals are recomputed, and a diff against the prior revision's
+// lines is computed; AIGenerated/AIDisclosure/DiffFromPrevious are only set
+// on the result in that case — a plain regenerate (nil/no-grounded-signals,
+// e.g. today's NoOpRetriever-backed real callers) never claims AI
+// involvement and never silently drops the prior line items (no-fabrication
+// / evidence-or-omit, shared by OP-T06 and OP-T07).
+func (s *OfferStore) Regenerate(ctx context.Context, id, workspaceID string, signals []domain.OfferLineSignal) (domain.Offer, error) {
+	grounded := domain.FilterGroundedSignals(signals)
+	products := NewProductStore(s.db)
+
+	var out domain.Offer
+	var diff *domain.OfferDiff
+	aiApplied := false
+
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		status, version, err := lockOfferForMutation(ctx, tx, id, workspaceID)
+		if err != nil {
+			return err
+		}
+		if err := requireSent(status); err != nil {
+			return err
+		}
+
+		orig, err := scanOffer(tx.QueryRowContext(ctx, offerGetQuery, id, workspaceID))
+		if err != nil {
+			return err
+		}
+
+		priorLines, err := listLineItemsTx(ctx, tx, id, workspaceID)
+		if err != nil {
+			return err
+		}
+
+		out = nextRegenerateRevision(orig)
+		if err := cloneOfferForRegenerate(ctx, tx, out, id, workspaceID); err != nil {
+			return err
+		}
+
+		if len(grounded) > 0 {
+			aiApplied = true
+			diff, err = s.applyAIRegenerate(ctx, tx, products, out.ID, workspaceID, grounded, priorLines)
+			if err != nil {
+				return err
+			}
+		}
+
+		return supersedeAndAuditRegenerate(ctx, tx, id, workspaceID, version, orig, out)
+	})
+	if err != nil {
+		return domain.Offer{}, err
+	}
+
+	result, err := s.Get(ctx, out.ID, workspaceID)
+	if err != nil {
+		return domain.Offer{}, err
+	}
+	if aiApplied {
+		result.AIGenerated = true
+		disclosure := aiDisclosureText
+		result.AIDisclosure = &disclosure
+		result.DiffFromPrevious = diff
+	}
+	return result, nil
+}
+
+// nextRegenerateRevision derives the new draft revision's domain.Offer value
+// from orig (same deal/offer_number/currency/buyer/terms/provenance, fresh
+// id, revision+1, version reset to 1, send/render/archive fields cleared).
+// Extracted from Regenerate purely to keep its own length under the funlen
+// gate; no behavior change.
+func nextRegenerateRevision(orig domain.Offer) domain.Offer {
+	out := orig
+	out.ID = ids.New()
+	out.Status = domain.OfferStatusDraft
+	out.Revision = orig.Revision + 1
+	out.Version = 1
+	out.AcceptedAt = nil
+	out.PdfAssetRef = nil
+	out.CreatedAt = time.Time{}
+	out.UpdatedAt = time.Time{}
+	out.ArchivedAt = nil
+	return out
+}
+
+// applyAIRegenerate replaces newID's cloned line items with the AI-authored
+// lines built from grounded, recomputes newID's totals (only this path
+// recomputes — the verbatim-clone path already carries over the prior row's
+// exact net/tax/gross via cloneOfferForRegenerate's SELECT clone), and
+// returns the diff against priorLines. Extracted from Regenerate purely to
+// keep its own length under the funlen gate; no behavior change.
+func (s *OfferStore) applyAIRegenerate(ctx context.Context, tx *sql.Tx, products *ProductStore, newID, workspaceID string, grounded []domain.OfferLineSignal, priorLines []domain.OfferLineItem) (*domain.OfferDiff, error) {
+	newLines, err := s.replaceClonedLinesWithAI(ctx, tx, products, newID, workspaceID, grounded)
+	if err != nil {
+		return nil, err
+	}
+	if err := recomputeOfferTotals(ctx, tx, newID, workspaceID); err != nil {
+		return nil, err
+	}
+	return computeOfferDiff(priorLines, newLines), nil
+}
+
+// supersedeAndAuditRegenerate flips id's status to superseded (optimistic
+// version bump), writes its offer.superseded outbox event (entity_id=id —
+// the entity that was superseded), and writes out.ID's create audit_log
+// entry — all under the caller's workspace tx, regardless of which
+// Regenerate path (verbatim clone or AI-applied) ran. Extracted from
+// Regenerate purely to keep its own length under the funlen gate; no
+// behavior change.
+func supersedeAndAuditRegenerate(ctx context.Context, tx *sql.Tx, id, workspaceID string, version int64, orig, out domain.Offer) error {
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE offer SET status=$2, version=$3
+		WHERE id=$1::uuid AND workspace_id=$4::uuid`,
+		id, domain.OfferStatusSuperseded, version+1, workspaceID); err != nil {
+		return fmt.Errorf("offer regenerate supersede: %w", err)
+	}
+
+	payload, _ := json.Marshal(map[string]any{
+		payloadKeyOfferID: id,
+		payloadKeyDealID:  orig.DealID,
+		"new_offer_id":    out.ID,
+		"from_revision":   orig.Revision,
+		"to_revision":     out.Revision,
+	})
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
+		workspaceID, "offer.superseded", id, payload); err != nil {
+		return fmt.Errorf("offer regenerate event: %w", err)
+	}
+
+	e := crmaudit.EntryFromPrincipal(ctx, "create", entityTypeOffer, &out.ID, nil, out)
+	e.WorkspaceID = workspaceID
+	if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+		return fmt.Errorf("offer regenerate audit: %w", err)
+	}
+	return nil
+}
+
+// replaceClonedLinesWithAI discards newID's just-cloned line items (hard
+// delete — they were only ever visible inside this same transaction, never
+// returned to a caller) and inserts one AI-drafted line per grounded signal
+// in their place, in position order, returning the persisted lines for the
+// diff computation. Only called when grounded is non-empty.
+func (s *OfferStore) replaceClonedLinesWithAI(ctx context.Context, tx *sql.Tx, products *ProductStore, newID, workspaceID string, grounded []domain.OfferLineSignal) ([]domain.OfferLineItem, error) {
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM offer_line_item WHERE offer_id=$1::uuid AND workspace_id=$2::uuid`,
+		newID, workspaceID); err != nil {
+		return nil, fmt.Errorf("offer regenerate clear cloned lines: %w", err)
+	}
+	newLines := make([]domain.OfferLineItem, 0, len(grounded))
+	for i, signal := range grounded {
+		created, err := s.buildAndInsertRegeneratedLine(ctx, tx, products, newID, workspaceID, i+1, signal)
+		if err != nil {
+			return nil, err
+		}
+		newLines = append(newLines, created)
+	}
+	return newLines, nil
 }
