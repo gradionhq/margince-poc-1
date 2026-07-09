@@ -4,10 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/lib/pq"
+
 	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
+	"github.com/gradionhq/margince/backend/internal/platform/customfields"
 )
 
 // ---------------------------------------------------------------------------
@@ -22,7 +26,7 @@ var dealSortColumns = map[string]bool{
 	"last_activity_at":    true,
 }
 
-func dealOrderBy(sort string) string {
+func dealOrderBy(sort string, active map[string]bool) string {
 	if sort == "" {
 		return "ORDER BY id"
 	}
@@ -35,10 +39,10 @@ func dealOrderBy(sort string) string {
 			dir = "DESC"
 			col = f[1:]
 		}
-		if !dealSortColumns[col] {
+		if !dealSortColumns[col] && !active[col] {
 			continue
 		}
-		clauses = append(clauses, col+" "+dir)
+		clauses = append(clauses, pq.QuoteIdentifier(col)+" "+dir)
 	}
 	clauses = append(clauses, "id")
 	return "ORDER BY " + strings.Join(clauses, ", ")
@@ -117,6 +121,21 @@ func buildDealListWhereExtra(f domain.DealListFilter, where string, args []any, 
 	return where, args, n
 }
 
+func buildDealListWhereCustom(f domain.DealListFilter, where string, args []any, n int) (string, []any, int) {
+	cols := make([]string, 0, len(f.CustomFilters))
+	for col := range f.CustomFilters {
+		cols = append(cols, col)
+	}
+	sort.Strings(cols)
+	for _, col := range cols {
+		val := f.CustomFilters[col]
+		n++
+		args = append(args, val)
+		where += fmt.Sprintf(` AND %s::text = $%d`, pq.QuoteIdentifier(col), n)
+	}
+	return where, args, n
+}
+
 // buildDealListWhere composes the full WHERE clause and bound args for
 // ListFiltered from the fixed base predicate plus all optional filters in f.
 func buildDealListWhere(workspaceID, cursor string, limit int, f domain.DealListFilter) (string, []any, int) {
@@ -126,6 +145,7 @@ func buildDealListWhere(workspaceID, cursor string, limit int, f domain.DealList
 	where := `workspace_id=$1::uuid AND archived_at IS NULL AND ($2 = '' OR id::text > $2)`
 	where, args, n = buildDealListWhereBasic(f, where, args, n)
 	where, args, n = buildDealListWhereExtra(f, where, args, n)
+	where, args, n = buildDealListWhereCustom(f, where, args, n)
 	return where, args, n
 }
 
@@ -140,18 +160,29 @@ func (s *DealStore) ListFiltered(ctx context.Context, workspaceID, cursor string
 
 	out := []domain.Deal{}
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		activeCols, err := customfields.ActiveColumns(ctx, s.db, workspaceID, entityTypeDeal)
+		if err != nil {
+			return err
+		}
+		active := make(map[string]bool, len(activeCols))
+		for _, c := range activeCols {
+			active[c.ColumnName] = true
+		}
 		//nolint:gosec // G202: `where` injects only bound-param indices ($N), never user input; all filter values are passed via args
-		rows, err := tx.QueryContext(ctx,
-			`SELECT id, workspace_id, name, pipeline_id, stage_id,
+		query := `SELECT id, workspace_id, name, pipeline_id, stage_id,
 			        organization_id, owner_id, partner_org_id,
 			        amount_minor, currency, status, wait_until, last_activity_at,
 			        version, source, captured_by, created_at, updated_at,
 			        (SELECT max(occurred_at) FROM deal_stage_history WHERE deal_id=deal.id) AS stage_entered_at,
-			        (SELECT count(*) FROM relationship WHERE deal_id=deal.id AND kind='deal_stakeholder' AND archived_at IS NULL) AS stakeholder_count
+			        (SELECT count(*) FROM relationship WHERE deal_id=deal.id AND kind='deal_stakeholder' AND archived_at IS NULL) AS stakeholder_count`
+		for _, c := range activeCols {
+			query += ", " + pq.QuoteIdentifier(c.ColumnName)
+		}
+		query += `
 			 FROM deal
-			 WHERE `+where+`
-			 `+dealOrderBy(f.Sort)+` LIMIT $3`,
-			args...)
+			 WHERE ` + where + `
+			 ` + dealOrderBy(f.Sort, active) + ` LIMIT $3`
+		rows, err := tx.QueryContext(ctx, query, args...)
 		if err != nil {
 			return err
 		}
@@ -159,17 +190,22 @@ func (s *DealStore) ListFiltered(ctx context.Context, workspaceID, cursor string
 		for rows.Next() {
 			var d domain.Deal
 			var stageEnteredAt sql.NullTime
-			if err := rows.Scan(&d.ID, &d.WorkspaceID, &d.Name, &d.PipelineID, &d.StageID,
+			dests := []any{
+				&d.ID, &d.WorkspaceID, &d.Name, &d.PipelineID, &d.StageID,
 				&d.OrganizationID, &d.OwnerID, &d.PartnerOrgID,
 				&d.AmountMinor, &d.Currency, &d.Status, &d.WaitUntil, &d.LastActivityAt, &d.Version,
 				&d.Source, &d.CapturedBy,
 				&d.CreatedAt, &d.UpdatedAt,
-				&stageEnteredAt, &d.StakeholderCount); err != nil {
+				&stageEnteredAt, &d.StakeholderCount,
+			}
+			dests = append(dests, customfields.ScanDests(activeCols)...)
+			if err := rows.Scan(dests...); err != nil {
 				return err
 			}
 			if stageEnteredAt.Valid {
 				d.StageEnteredAt = &stageEnteredAt.Time
 			}
+			d.CustomFields = customfields.ExtractValues(activeCols, dests[len(dests)-len(activeCols):])
 			out = append(out, d)
 		}
 		return rows.Err()

@@ -64,7 +64,7 @@ func TestDealStore_Create_WritesHistoryRowAndStageCheck(t *testing.T) {
 	d := domain.NewDeal("Acme deal", pipelineID, stageID,
 		prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	d.WorkspaceID = createTestWorkspaceID
-	created, err := store.Create(ctx, d, "")
+	created, err := store.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestDealStore_Create_WritesHistoryRowAndStageCheck(t *testing.T) {
 	bad := domain.NewDeal("Bad deal", pipelineID, otherPipelineStageID,
 		prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	bad.WorkspaceID = createTestWorkspaceID
-	_, err = store.Create(ctx, bad, "")
+	_, err = store.Create(ctx, bad, "", nil)
 	if err == nil {
 		t.Fatal("expected ErrStageNotInPipeline, got nil")
 	}
@@ -115,7 +115,7 @@ func TestDealStore_Create_IdempotencyKeyReplay(t *testing.T) {
 	d := domain.NewDeal(dealName, pipelineID, stageID,
 		prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	d.WorkspaceID = createTestWorkspaceID
-	first, err := store.Create(ctx, d, "idem-key-1")
+	first, err := store.Create(ctx, d, "idem-key-1", nil)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
