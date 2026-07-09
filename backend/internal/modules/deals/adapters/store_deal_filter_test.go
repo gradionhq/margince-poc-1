@@ -58,11 +58,11 @@ func seedFilterFixture(t *testing.T) filterTestFixtures {
 
 	// Seed two organizations for organization_id FK.
 	ostore := orgadapters.NewOrgStore(db)
-	o1, err := ostore.Create(ctx, orgdomain.Organization{WorkspaceID: wsFilterTest, DisplayName: "Org1 " + pgtest.Uniq(), Source: "test", CapturedBy: "human:test"})
+	o1, err := ostore.Create(ctx, orgdomain.Organization{WorkspaceID: wsFilterTest, DisplayName: "Org1 " + pgtest.Uniq(), Source: "test", CapturedBy: "human:test"}, nil)
 	if err != nil {
 		t.Fatal("seed org1:", err)
 	}
-	o2, err := ostore.Create(ctx, orgdomain.Organization{WorkspaceID: wsFilterTest, DisplayName: "Org2 " + pgtest.Uniq(), Source: "test", CapturedBy: "human:test"})
+	o2, err := ostore.Create(ctx, orgdomain.Organization{WorkspaceID: wsFilterTest, DisplayName: "Org2 " + pgtest.Uniq(), Source: "test", CapturedBy: "human:test"}, nil)
 	if err != nil {
 		t.Fatal("seed org2:", err)
 	}

@@ -41,7 +41,7 @@ func TestPersonHandler_Get_Composite360(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed subject: %v", err)
 	}
-	org, err := organizations.NewOrgStore(db).Create(ctx, organizations.Organization{WorkspaceID: personCompositeWS, DisplayName: "Composite Org", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	org, err := organizations.NewOrgStore(db).Create(ctx, organizations.Organization{WorkspaceID: personCompositeWS, DisplayName: "Composite Org", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed org: %v", err)
 	}

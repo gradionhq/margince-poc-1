@@ -28,7 +28,7 @@ func TestOrgStoreCreateDomainDuplicateRejected(t *testing.T) {
 		WorkspaceID: ws, DisplayName: "Acme", Source: "api", CapturedBy: "human:t",
 		Domains: []orgDomain.OrganizationDomain{{Domain: "acme.com", IsPrimary: true}},
 	}
-	created, err := store.Create(ctx, first)
+	created, err := store.Create(ctx, first, nil)
 	if err != nil {
 		t.Fatalf("first create: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestOrgStoreCreateDomainDuplicateRejected(t *testing.T) {
 		WorkspaceID: ws, DisplayName: "Acme Dup", Source: "api", CapturedBy: "human:t",
 		Domains: []orgDomain.OrganizationDomain{{Domain: "ACME.com", IsPrimary: true}},
 	}
-	_, err = store.Create(ctx, second)
+	_, err = store.Create(ctx, second, nil)
 	var dup *orgAdapters.ErrDuplicateDomain
 	if !errors.As(err, &dup) {
 		t.Fatalf("second create: want ErrDuplicateDomain, got %v", err)

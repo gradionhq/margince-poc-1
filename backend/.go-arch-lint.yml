@@ -232,7 +232,7 @@ deps:
   orgsports:
     mayDependOn: [orgsdomain]
   orgsadapters:
-    mayDependOn: [orgsdomain, errs, ids, prov, database, audit, dedupekern, strengthkern, sqlutil]
+    mayDependOn: [orgsdomain, errs, ids, prov, database, audit, dedupekern, strengthkern, sqlutil, customfields]
     canUse: [pq]
   organizations:
     mayDependOn: [orgsdomain, orgsadapters]

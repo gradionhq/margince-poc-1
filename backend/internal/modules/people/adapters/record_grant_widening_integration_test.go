@@ -227,7 +227,7 @@ func TestRecordGrant_OrganizationWidensThenRevokes(t *testing.T) {
 	org := orgdomain.NewOrganization("Org-"+nonce, prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	org.WorkspaceID = ws
 	org.OwnerID = &ownerA
-	org, err := organizations.NewOrgStore(db).Create(ctx, org)
+	org, err := organizations.NewOrgStore(db).Create(ctx, org, nil)
 	if err != nil {
 		t.Fatalf("create org: %v", err)
 	}

@@ -51,7 +51,8 @@ func ScanDests(active []Column) []any {
 	return dests
 }
 
-// ExtractValues converts scanned custom-field values into wire values.
+// ExtractValues converts scanned custom-field values into wire values. A NULL
+// column (nil dest) is omitted from the map entirely.
 func ExtractValues(active []Column, dests []any) map[string]any {
 	out := make(map[string]any, len(active))
 	for i, c := range active {
