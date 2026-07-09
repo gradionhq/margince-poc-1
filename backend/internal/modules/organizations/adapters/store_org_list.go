@@ -62,7 +62,7 @@ func buildOrgListWhere(f domain.OrgListFilter, args []any, n int) (string, []any
 // appends the active custom columns, then its own trailer/WHERE/ORDER BY.
 const orgListColumns = `
 			SELECT id, workspace_id, name, website, classification, relevance,
-			       owner_id, social`
+			       owner_id, social, parent_org_id`
 
 // scanOrgListRow scans one row from a List query (orgListColumns + every
 // active custom column, in that order) into a domain.Organization — the
@@ -74,7 +74,7 @@ func scanOrgListRow(rows *sql.Rows, active []customfields.Column) (domain.Organi
 	dests := customfields.ScanDests(active)
 	scanArgs := append([]any{
 		&o.ID, &o.WorkspaceID, &o.DisplayName, &o.Website, &o.Classification, &o.Relevance,
-		&o.OwnerID, &socialRaw,
+		&o.OwnerID, &socialRaw, &o.ParentOrgID,
 	}, dests...)
 	scanArgs = append(scanArgs, &o.Version, &o.Source, &o.CapturedBy, &o.CreatedAt, &o.UpdatedAt)
 	if err := rows.Scan(scanArgs...); err != nil {

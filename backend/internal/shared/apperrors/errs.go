@@ -27,6 +27,7 @@ var (
 	ErrLostReasonRequired        = errors.New("lost reason required")                 // -> 422 (advancing to a lost stage needs lost_reason)
 	ErrFieldNotValidForKind      = errors.New("field not valid for kind")             // -> 422 (task-only field set on a non-task activity kind)
 	ErrInvalidLinkEntityType     = errors.New("invalid link entity type")             // -> 422 (relinkActivity: entity_type outside person/organization/deal)
+	ErrOrganizationCycle         = errors.New("organization cycle")                   // -> 422 (parent_org_id would create a cycle; DB trigger prevent_org_cycle/org_no_cycle)
 )
 
 // HTTPStatus maps a domain error to its HTTP status code — the single sentinel→status
@@ -59,7 +60,8 @@ func HTTPStatus(err error) int {
 		errors.Is(err, ErrStatusMismatch),
 		errors.Is(err, ErrLostReasonRequired),
 		errors.Is(err, ErrFieldNotValidForKind),
-		errors.Is(err, ErrInvalidLinkEntityType):
+		errors.Is(err, ErrInvalidLinkEntityType),
+		errors.Is(err, ErrOrganizationCycle):
 		return 422
 	case errors.Is(err, ErrSuppressed):
 		return 451

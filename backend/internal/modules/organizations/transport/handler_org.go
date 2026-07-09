@@ -331,6 +331,11 @@ func (h *OrganizationHandler) update(w http.ResponseWriter, r *http.Request, id 
 		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
 		return
 	}
+	if errors.Is(err, errs.ErrOrganizationCycle) {
+		httpkit.JSONValidationError(w, "parent_org_id would create a cycle.",
+			[]fieldError{{Field: "parent_org_id", Code: codeOrganizationCycle}})
+		return
+	}
 	if err != nil {
 		httpkit.JSONError(w, err)
 		return
