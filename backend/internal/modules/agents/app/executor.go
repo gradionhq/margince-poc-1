@@ -26,6 +26,18 @@ type DecidedEventPayload struct {
 	ItemID   string `json:"item_id"`
 }
 
+type eventTopicPayload struct {
+	EventTopic string `json:"event_topic"`
+}
+
+func eventTopicFromPayload(payload json.RawMessage) string {
+	var hint eventTopicPayload
+	if err := json.Unmarshal(payload, &hint); err != nil {
+		return ""
+	}
+	return hint.EventTopic
+}
+
 // HandleDecided consumes one approval.decided event. If the referenced
 // item's ActionType is not namespaced "overnight.", it belongs to some
 // other module — no-op. On "approved" or "modified" it executes the
@@ -73,7 +85,11 @@ func HandleDecided(ctx context.Context, tx ports.DBExec, repo crmapprovals.Repos
 	}
 
 	out, _ := json.Marshal(map[string]any{keyActionType: actionType, "item_id": item.ID, keyRollbackHandle: rollbackHandle})
-	if err := emitter.Emit(ctx, tx, TopicOvernightApplied, item.WorkspaceID, item.ID, out); err != nil {
+	topic := eventTopicFromPayload(item.Payload)
+	if topic == "" {
+		topic = TopicOvernightApplied
+	}
+	if err := emitter.Emit(ctx, tx, topic, item.WorkspaceID, item.ID, out); err != nil {
 		return fmt.Errorf("agents handle decided: emit: %w", err)
 	}
 	return nil

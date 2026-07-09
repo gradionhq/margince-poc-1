@@ -34,19 +34,25 @@ func ApplyGreen(ctx context.Context, tx ports.DBExec, effector ports.Effector, e
 		return "", fmt.Errorf("agents apply green: action_type %q effect carries no rollback handle", p.ActionType)
 	}
 
+	entityID := entityIDFromTarget(p.TargetEntity)
 	if _, err := crmaudit.WriteTx(ctx, tx, crmaudit.Entry{
 		WorkspaceID: p.WorkspaceID,
 		ActorType:   "agent",
 		ActorID:     ActorOvernight,
 		Action:      "update",
 		EntityType:  entityTypeFromTarget(p.TargetEntity),
+		EntityID:    &entityID,
 		After:       map[string]any{keyActionType: p.ActionType, "target": p.TargetEntity, keyRollbackHandle: rollbackHandle, "tier": "green"},
 	}); err != nil {
 		return "", fmt.Errorf("agents apply green: audit: %w", err)
 	}
 
 	payload, _ := json.Marshal(map[string]any{keyActionType: p.ActionType, "target": p.TargetEntity, keyRollbackHandle: rollbackHandle})
-	if err := emitter.Emit(ctx, tx, TopicOvernightApplied, p.WorkspaceID, entityIDFromTarget(p.TargetEntity), payload); err != nil {
+	topic := TopicOvernightApplied
+	if p.EventTopic != "" {
+		topic = p.EventTopic
+	}
+	if err := emitter.Emit(ctx, tx, topic, p.WorkspaceID, entityID, payload); err != nil {
 		return "", fmt.Errorf("agents apply green: emit: %w", err)
 	}
 	return rollbackHandle, nil
