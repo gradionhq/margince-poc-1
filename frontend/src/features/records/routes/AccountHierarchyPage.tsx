@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { Organization } from "../../../lib/api-client/generated/index.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
@@ -100,6 +100,7 @@ export function AccountHierarchyPage({
   const [toasts, setToasts] = useState<
     Array<{ id: string; variant: "success" | "error"; message: string }>
   >([]);
+  const toastSeqRef = useRef(0);
 
   const { data: rootOrg } = useOrganization(rootId);
   const {
@@ -115,7 +116,10 @@ export function AccountHierarchyPage({
   const { data: treeOrgs = [] } = useAccountTreeOrgs();
 
   function pushToast(variant: "success" | "error", message: string) {
-    setToasts((t) => [...t, { id: String(Math.random()), variant, message }]);
+    setToasts((t) => [
+      ...t,
+      { id: String(toastSeqRef.current++), variant, message },
+    ]);
   }
 
   function handleToggleExpand(id: string) {
