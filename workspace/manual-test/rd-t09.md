@@ -11,7 +11,7 @@ make infra-up && make migrate-up && make seed-reset && make run
 ## Step 1: Integration tests — org store Update with parent_org_id
 
 ```bash
-make test-it DIR=backend/internal/modules/organizations
+make test-it DIR=backend/internal/modules/organizations/adapters RUN=TestOrgStore_Update
 ```
 
 Expected: all three new tests in `store_org_update_test.go` pass:
@@ -23,11 +23,20 @@ Expected: all three new tests in `store_org_update_test.go` pass:
 
 ## Step 2: Backend API — PATCH /organizations/:id rejects cycles
 
-Seed two orgs `a` and `b` (use the CRM UI or the API directly). Set b's parent to a:
+Seed two orgs `a` and `b` (use the CRM UI or the API directly). Auth in this codebase is a
+`crm_session` cookie set by `POST /auth/login`, not a bearer token — log in first and reuse the
+cookie jar for subsequent requests:
 
 ```bash
-curl -s -X PATCH http://localhost:8080/api/v1/organizations/<b-id> \
-  -H "Authorization: Bearer <token>" \
+curl -s -c /tmp/rd-t09-cookies.txt -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "<user-email>", "password": "<password>"}'
+```
+
+Set b's parent to a:
+
+```bash
+curl -s -b /tmp/rd-t09-cookies.txt -X PATCH http://localhost:8080/api/v1/organizations/<b-id> \
   -H "Content-Type: application/json" \
   -d '{"parent_org_id": "<a-id>", "version": 1}'
 ```
@@ -37,19 +46,20 @@ Expected: 200 OK — b is now a child of a.
 Now attempt the cycle (a → b, which would create a → b → a):
 
 ```bash
-curl -s -X PATCH http://localhost:8080/api/v1/organizations/<a-id> \
-  -H "Authorization: Bearer <token>" \
+curl -s -b /tmp/rd-t09-cookies.txt -X PATCH http://localhost:8080/api/v1/organizations/<a-id> \
   -H "Content-Type: application/json" \
   -d '{"parent_org_id": "<b-id>", "version": 1}'
 ```
 
-Expected: 422 Unprocessable Entity with body:
+Expected: 422 Unprocessable Entity with the codebase's standard validation-error envelope
+(`httpkit.JSONValidationError`):
 
 ```json
 {
-  "errors": [
-    { "field": "parent_org_id", "code": "organization_cycle" }
-  ]
+  "code": "validation_error",
+  "detail": "...",
+  "details": { "errors": [{ "field": "parent_org_id", "code": "organization_cycle" }] },
+  "status": 422
 }
 ```
 
@@ -142,7 +152,7 @@ Expected:
 pnpm --dir frontend biome check
 pnpm --dir frontend test
 make check-go
-make test-it DIR=backend/internal/modules/organizations
+make test-it DIR=backend/internal/modules/organizations/adapters
 make check
 ```
 
