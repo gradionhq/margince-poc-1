@@ -2,6 +2,7 @@
 package mcp
 
 var GeneratedTools = []GeneratedTool{
+	{OperationID: "acceptAttachmentExtraction", Verb: "accept_extraction", RecordType: "deal", Tier: TierYellow, Resolver: ""},
 	{OperationID: "acceptDealNextStep", Verb: "accept_next_step", RecordType: "activity", Tier: TierGreen, Resolver: ""},
 	{OperationID: "acceptOffer", Verb: "accept_offer", RecordType: "offer", Tier: TierYellow, Resolver: ""},
 	{OperationID: "advanceDeal", Verb: "advance_deal", RecordType: "deal", Tier: TierDynamic, Resolver: "target_stage_semantic"},

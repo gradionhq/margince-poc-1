@@ -9,6 +9,7 @@ import {
 } from "../../../shared/ui/ArchivedBanner.js";
 import { Button, Skeleton } from "../../../shared/ui/forge.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
+import { AttachmentsPanel } from "../../attachments/index.js";
 import { useAuthStore } from "../../identity/store/authStore.js";
 import {
   dealsKeys,
@@ -260,6 +261,11 @@ export function DealDetailPage() {
           isLoading={activitiesLoading}
           isError={activitiesError}
           onTaskDone={() => pushToast("success", "Task completed")}
+        />
+        <AttachmentsPanel
+          entityType="deal"
+          entityId={deal.id}
+          dealId={deal.id}
         />
 
         <section

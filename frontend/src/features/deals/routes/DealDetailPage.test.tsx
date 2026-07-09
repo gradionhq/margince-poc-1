@@ -107,6 +107,18 @@ vi.mock("../../identity/store/authStore.js", () => ({
   }),
 }));
 
+vi.mock("../../attachments/api/attachments.js", () => ({
+  useAttachments: () => ({
+    data: [],
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useCreateAttachment: () => ({
+    mutateAsync: vi.fn(),
+  }),
+}));
+
 vi.mock("../../people/api/people.js", () => ({
   usePerson: (id: string) => ({
     data: { id, full_name: id === "p1" ? "Dana Lee" : "Sam Ito" },
@@ -153,7 +165,9 @@ describe("DealDetailPage", () => {
 
   it("renders header, stepper, weighted-value, stakeholders rail, tasks/timeline/history cards", () => {
     renderPage();
-    expect(screen.getByText("Acme deal")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Acme deal" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /view company/i })).toHaveAttribute(
       "href",
       "/companies/org1",
@@ -164,6 +178,7 @@ describe("DealDetailPage", () => {
     expect(screen.getByTestId("activity-timeline-card")).toBeInTheDocument();
     expect(screen.getByTestId("stage-history-card")).toBeInTheDocument();
     expect(screen.getByTestId("tasks-card")).toBeInTheDocument();
+    expect(screen.getByTestId("attachments-panel")).toBeInTheDocument();
   });
 
   it("Advance to an open stage calls advanceDeal directly, no dialog", async () => {
