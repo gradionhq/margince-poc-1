@@ -20,6 +20,14 @@ import (
 const (
 	entityTypeOffer = "offer"
 	nilUUID         = "00000000-0000-0000-0000-000000000000"
+	// localeDE is the German locale code used across offer template
+	// defaulting and PDF label resolution.
+	localeDE = "de-DE"
+	// payloadKeyDealID is the event_outbox payload key for an offer's
+	// parent deal id.
+	payloadKeyDealID = "deal_id"
+	// payloadKeyOfferID is the event_outbox payload key for the offer id.
+	payloadKeyOfferID = "offer_id"
 )
 
 // ErrDuplicateOfferNumber reports a live offer_number+revision collision
@@ -163,7 +171,7 @@ func (s *OfferStore) Create(ctx context.Context, o domain.Offer) (domain.Offer, 
 			o.BuyerOrgID, o.ValidUntil, o.IntroText, o.TermsText, o.TemplateID, o.Source, o.CapturedBy); err != nil {
 			return fmt.Errorf("offer create: %w", err)
 		}
-		payload, _ := json.Marshal(map[string]any{"offer_id": o.ID, "deal_id": o.DealID})
+		payload, _ := json.Marshal(map[string]any{payloadKeyOfferID: o.ID, payloadKeyDealID: o.DealID})
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
 			o.WorkspaceID, "offer.created", o.ID, payload); err != nil {
