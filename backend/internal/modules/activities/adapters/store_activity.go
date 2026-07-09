@@ -18,7 +18,8 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
 )
 
-// entity-type constants used in the List activity_link JOIN.
+// entity-type constants used in the List/ListFiltered activity_link EXISTS
+// branches (see store_activity_list.go).
 const (
 	entityTypePerson       = "person"
 	entityTypeOrganization = "organization"
@@ -260,84 +261,10 @@ func (s *ActivityStore) selectLinks(ctx context.Context, tx *sql.Tx, activityID 
 	return links, rows.Err()
 }
 
-// List returns a keyset page of activities, optionally filtered to a linked entity, and the next cursor.
-func (s *ActivityStore) List(ctx context.Context, workspaceID, entityType, entityID, cursor string, limit int) ([]domain.Activity, string, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 20
-	}
-
-	// ORDER BY occurred_at DESC, id — the seek must compare the FULL key, so a
-	// page boundary mid-timestamp neither skips nor repeats rows. The opaque cursor
-	// carries (occurred_at, id); the row-comparison predicate matches the ordering.
-	curOccurred, curID, hasCursor := sqlutil.DecodeKeysetCursor(cursor)
-
-	out := []domain.Activity{}
-	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		var rows *sql.Rows
-		var err error
-		if entityType != "" && entityID != "" {
-			// Timeline query via activity_link
-			colName := entityLinkColumn[entityType]
-			if colName == "" {
-				return fmt.Errorf("unknown entity_type: %s", entityType)
-			}
-			rows, err = tx.QueryContext(ctx, fmt.Sprintf(`
-				SELECT a.id, a.workspace_id, a.kind, a.subject, a.body,
-				       a.occurred_at, a.due_at, a.assignee_id, a.remind_at, a.is_done, a.done_at,
-				       a.duration_seconds, a.direction, a.meeting_status, a.source_system, a.source_id,
-				       a.version, a.source, a.captured_by, a.created_at, a.updated_at
-				FROM activity a
-				JOIN activity_link al ON al.activity_id = a.id
-				WHERE a.workspace_id=$1::uuid AND al.%s=$2::uuid
-				  AND a.archived_at IS NULL
-				  AND (NOT $3 OR (a.occurred_at, a.id) < ($4::timestamptz, $5::uuid))
-				ORDER BY a.occurred_at DESC, a.id DESC LIMIT $6`, colName),
-				workspaceID, entityID, hasCursor, sqlutil.NullStrParam(curOccurred), sqlutil.NullStrParam(curID), limit+1)
-		} else {
-			rows, err = tx.QueryContext(ctx, `
-				SELECT id, workspace_id, kind, subject, body,
-				       occurred_at, due_at, assignee_id, remind_at, is_done, done_at,
-				       duration_seconds, direction, meeting_status, source_system, source_id,
-				       version, source, captured_by, created_at, updated_at
-				FROM activity
-				WHERE workspace_id=$1::uuid AND archived_at IS NULL
-				  AND (NOT $2 OR (occurred_at, id) < ($3::timestamptz, $4::uuid))
-				ORDER BY occurred_at DESC, id DESC LIMIT $5`,
-				workspaceID, hasCursor, sqlutil.NullStrParam(curOccurred), sqlutil.NullStrParam(curID), limit+1)
-		}
-		if err != nil {
-			return err
-		}
-		defer func() { _ = rows.Close() }()
-		for rows.Next() {
-			var a domain.Activity
-			if err := rows.Scan(&a.ID, &a.WorkspaceID, &a.Kind, &a.Subject, &a.Body,
-				&a.OccurredAt, &a.DueAt, &a.AssigneeID, &a.RemindAt, &a.IsDone, &a.DoneAt,
-				&a.DurationSeconds, &a.Direction, &a.MeetingStatus, &a.SourceSystem, &a.SourceID,
-				&a.Version, &a.Source, &a.CapturedBy,
-				&a.CreatedAt, &a.UpdatedAt); err != nil {
-				return err
-			}
-			// List never selects links (or raw, by design — see
-			// TestActivityStore_List_NeverSelectsRaw), but Activity.Links has no
-			// omitempty and must marshal to JSON "[]", not "null" — so it needs an
-			// explicit non-nil zero value here, mirroring selectLinks' initializer.
-			a.Links = []domain.ActivityLink{}
-			out = append(out, a)
-		}
-		return rows.Err()
-	})
-	if err != nil {
-		return nil, "", err
-	}
-	var next string
-	if len(out) > limit {
-		last := out[limit-1]
-		next = sqlutil.EncodeKeysetCursor(last.OccurredAt.UTC().Format(time.RFC3339Nano), last.ID)
-		out = out[:limit]
-	}
-	return out, next, nil
-}
+// Update and List/ListFiltered live in store_activity_update.go and
+// store_activity_list.go respectively (both split out of this file to stay
+// under the 500-LOC cap — the former by origin/main's AT-T04 audit+event
+// work, the latter by this ticket's workspace-wide timeline read).
 
 // Archive soft-deletes an activity (sets archived_at), writing one audit_log
 // row (action=archive) and one activity.archived event_outbox row — only when

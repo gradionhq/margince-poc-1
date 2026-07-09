@@ -19,6 +19,8 @@ type Store interface {
 	// List returns a keyset page of activities, optionally filtered to a linked
 	// entity, and the next cursor.
 	List(ctx context.Context, workspaceID, entityType, entityID, cursor string, limit int) ([]domain.Activity, string, error)
+	// ListFiltered returns a keyset page of activities with optional filters.
+	ListFiltered(ctx context.Context, workspaceID, cursor string, limit int, f domain.ActivityListFilter) ([]domain.Activity, string, error)
 	// Update applies partial updates to an activity. When ifMatch==0 the version
 	// check is skipped (last-write-wins). Returns the updated Activity.
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (domain.Activity, error)
