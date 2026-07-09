@@ -24,14 +24,14 @@ type fakeActivityLogger struct {
 	err   error
 }
 
-func (f *fakeActivityLogger) LogFollowUp(_ context.Context, _ crmapprovals.DBExec, workspaceID, dealID, subject, body, source, capturedBy string) (string, error) {
+func (f *fakeActivityLogger) LogFollowUp(_ context.Context, _ crmapprovals.DBExec, target app.FollowUpTarget, subject, body string) (string, error) {
 	f.calls = append(f.calls, stalledRecoveryLoggerCall{
-		workspaceID: workspaceID,
-		dealID:      dealID,
+		workspaceID: target.WorkspaceID,
+		dealID:      target.DealID,
 		subject:     subject,
 		body:        body,
-		source:      source,
-		capturedBy:  capturedBy,
+		source:      target.Source,
+		capturedBy:  target.CapturedBy,
 	})
 	return f.id, f.err
 }

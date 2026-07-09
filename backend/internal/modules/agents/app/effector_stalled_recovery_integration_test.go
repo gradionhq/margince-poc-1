@@ -4,16 +4,61 @@ package app_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"testing"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // registers the "postgres" driver for database/sql.Open
 
 	"github.com/gradionhq/margince/backend/internal/modules/agents/app"
+	"github.com/gradionhq/margince/backend/internal/modules/agents/ports"
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 	apperrors "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 )
+
+// stageStalledRecoveryApproval stages one "overnight.stalled_recovery" item and
+// fails the test unless the stage returns the expected ErrRequiresApproval —
+// extracted to keep TestHandleDecided_ApprovedRecoverySendUsesFetchedPayloadAndProvenance
+// under the cognitive-complexity gate.
+func stageStalledRecoveryApproval(t *testing.T, db *sql.DB, repo crmapprovals.Repository, wsID string, payload json.RawMessage) string {
+	t.Helper()
+	tx, err := db.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("begin stage: %v", err)
+	}
+	itemID, err := crmapprovals.Stage(context.Background(), tx, repo, crmapprovals.StageInput{
+		WorkspaceID: wsID,
+		ActionType:  "overnight.stalled_recovery",
+		RequestedBy: app.ActorOvernight,
+		Payload:     payload,
+	})
+	if !errors.Is(err, apperrors.ErrRequiresApproval) {
+		_ = tx.Rollback()
+		t.Fatalf("stage: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit stage: %v", err)
+	}
+	return itemID
+}
+
+// decideStalledRecoveryApproval drives app.HandleDecided for one staged item —
+// same extraction rationale as stageStalledRecoveryApproval above.
+func decideStalledRecoveryApproval(t *testing.T, db *sql.DB, repo crmapprovals.Repository, effector app.StalledRecoveryEffector, emitter ports.EventEmitter, itemID string) {
+	t.Helper()
+	tx, err := db.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("begin handle: %v", err)
+	}
+	if err := app.HandleDecided(context.Background(), tx, repo, effector, emitter, app.DecidedEventPayload{Decision: "approved", ItemID: itemID}); err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("HandleDecided: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit handle: %v", err)
+	}
+}
 
 func TestHandleDecided_ApprovedRecoverySendUsesFetchedPayloadAndProvenance(t *testing.T) {
 	db := testDB(t)
@@ -26,65 +71,10 @@ func TestHandleDecided_ApprovedRecoverySendUsesFetchedPayloadAndProvenance(t *te
 	payloadA := json.RawMessage(`{"reason":"no_reply_14_days","evidence_activity_id":"act-1","deal_id":"1","workspace_id":"` + wsID + `","draft":{"subject":"First draft","body":"first body"}}`)
 	payloadB := json.RawMessage(`{"reason":"no_reply_14_days","evidence_activity_id":"act-1","deal_id":"1","workspace_id":"` + wsID + `","draft":{"subject":"Edited draft","body":"edited body"}}`)
 
-	tx, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("begin stage A: %v", err)
-	}
-	itemIDA, err := crmapprovals.Stage(context.Background(), tx, repo, crmapprovals.StageInput{
-		WorkspaceID: wsID,
-		ActionType:  "overnight.stalled_recovery",
-		RequestedBy: app.ActorOvernight,
-		Payload:     payloadA,
-	})
-	if !errors.Is(err, apperrors.ErrRequiresApproval) {
-		_ = tx.Rollback()
-		t.Fatalf("stage A: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit stage A: %v", err)
-	}
-
-	tx2, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("begin stage B: %v", err)
-	}
-	itemIDB, err := crmapprovals.Stage(context.Background(), tx2, repo, crmapprovals.StageInput{
-		WorkspaceID: wsID,
-		ActionType:  "overnight.stalled_recovery",
-		RequestedBy: app.ActorOvernight,
-		Payload:     payloadB,
-	})
-	if !errors.Is(err, apperrors.ErrRequiresApproval) {
-		_ = tx2.Rollback()
-		t.Fatalf("stage B: %v", err)
-	}
-	if err := tx2.Commit(); err != nil {
-		t.Fatalf("commit stage B: %v", err)
-	}
-
-	tx3, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("begin handle A: %v", err)
-	}
-	if err := app.HandleDecided(context.Background(), tx3, repo, effector, emitter, app.DecidedEventPayload{Decision: "approved", ItemID: itemIDA}); err != nil {
-		_ = tx3.Rollback()
-		t.Fatalf("HandleDecided A: %v", err)
-	}
-	if err := tx3.Commit(); err != nil {
-		t.Fatalf("commit handle A: %v", err)
-	}
-
-	tx4, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("begin handle B: %v", err)
-	}
-	if err := app.HandleDecided(context.Background(), tx4, repo, effector, emitter, app.DecidedEventPayload{Decision: "approved", ItemID: itemIDB}); err != nil {
-		_ = tx4.Rollback()
-		t.Fatalf("HandleDecided B: %v", err)
-	}
-	if err := tx4.Commit(); err != nil {
-		t.Fatalf("commit handle B: %v", err)
-	}
+	itemIDA := stageStalledRecoveryApproval(t, db, repo, wsID, payloadA)
+	itemIDB := stageStalledRecoveryApproval(t, db, repo, wsID, payloadB)
+	decideStalledRecoveryApproval(t, db, repo, effector, emitter, itemIDA)
+	decideStalledRecoveryApproval(t, db, repo, effector, emitter, itemIDB)
 
 	if len(logger.calls) != 2 {
 		t.Fatalf("expected 2 logger calls, got %d", len(logger.calls))
@@ -134,33 +124,11 @@ func TestHandleDecided_StalledRecoveryDraftlessPayloadNoOps(t *testing.T) {
 	repo := crmapprovals.NewRepository()
 
 	payload := json.RawMessage(`{"reason":"no_reply_14_days","evidence_activity_id":"act-c","deal_id":"deal-c","workspace_id":"` + wsID + `","draft":null}`)
-	tx, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	itemID, err := crmapprovals.Stage(context.Background(), tx, repo, crmapprovals.StageInput{
-		WorkspaceID: wsID, ActionType: "overnight.stalled_recovery", RequestedBy: app.ActorOvernight, Payload: payload,
-	})
-	if !errors.Is(err, apperrors.ErrRequiresApproval) {
-		_ = tx.Rollback()
-		t.Fatalf("stage: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit stage: %v", err)
-	}
+	itemID := stageStalledRecoveryApproval(t, db, repo, wsID, payload)
 
 	logger := &fakeActivityLogger{id: "should-never-be-logged"}
-	tx2, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	if err := app.HandleDecided(context.Background(), tx2, repo, app.StalledRecoveryEffector{Logger: logger}, &spyEmitter{}, app.DecidedEventPayload{Decision: "approved", ItemID: itemID}); err != nil {
-		_ = tx2.Rollback()
-		t.Fatalf("HandleDecided: %v", err)
-	}
-	if err := tx2.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	decideStalledRecoveryApproval(t, db, repo, app.StalledRecoveryEffector{Logger: logger}, &spyEmitter{}, itemID)
+
 	if len(logger.calls) != 0 {
 		t.Fatalf("expected Logger.LogFollowUp to never be called for a draft-less flag, got %+v", logger.calls)
 	}

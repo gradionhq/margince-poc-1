@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // registers the "postgres" driver for database/sql.Open
 
 	"github.com/gradionhq/margince/backend/internal/modules/agents/app"
 	"github.com/gradionhq/margince/backend/internal/modules/agents/domain"

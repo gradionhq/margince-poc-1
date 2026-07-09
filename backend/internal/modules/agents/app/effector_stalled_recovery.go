@@ -9,11 +9,21 @@ import (
 	crmapprovals "github.com/gradionhq/margince/backend/internal/modules/approvals"
 )
 
+// FollowUpTarget bundles LogFollowUp's identity/attribution params — kept as
+// one struct (not 4 separate strings) to stay under go:S107's parameter-count
+// limit while preserving every field the spec's ActivityLogger seam needs.
+type FollowUpTarget struct {
+	WorkspaceID string
+	DealID      string
+	Source      string
+	CapturedBy  string
+}
+
 // ActivityLogger is the narrow send seam this ticket owns. A recovery approval
 // can become a real activity only through this interface; the module does not
 // wire a datasource.Provider seam here.
 type ActivityLogger interface {
-	LogFollowUp(ctx context.Context, tx crmapprovals.DBExec, workspaceID, dealID, subject, body, source, capturedBy string) (activityID string, err error)
+	LogFollowUp(ctx context.Context, tx crmapprovals.DBExec, target FollowUpTarget, subject, body string) (activityID string, err error)
 }
 
 type stalledRecoveryDraft struct {
@@ -50,7 +60,12 @@ func (e StalledRecoveryEffector) Apply(ctx context.Context, tx crmapprovals.DBEx
 	if effect.Draft == nil || effect.Draft.Subject == "" || effect.Draft.Body == "" {
 		return "", nil
 	}
-	return e.Logger.LogFollowUp(ctx, tx, effect.WorkspaceID, effect.DealID, effect.Draft.Subject, effect.Draft.Body, ActorOvernight, ActorOvernight)
+	return e.Logger.LogFollowUp(ctx, tx, FollowUpTarget{
+		WorkspaceID: effect.WorkspaceID,
+		DealID:      effect.DealID,
+		Source:      ActorOvernight,
+		CapturedBy:  ActorOvernight,
+	}, effect.Draft.Subject, effect.Draft.Body)
 }
 
 // var _ proves StalledRecoveryEffector satisfies ports.Effector's exact shape.
