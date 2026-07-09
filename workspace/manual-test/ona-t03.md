@@ -6,27 +6,6 @@ Run this only after the stack is up with:
 make infra-up && make migrate-up && make seed-reset && make run
 ```
 
-The commands below assume:
-
-- the API is listening on `http://localhost:8080`
-- the database is reachable through `DATABASE_URL`
-- you can act as a tenant by sending `X-Workspace-Id` + `X-User-ID`
-
-Use one shell session so the variables exported in the bootstrap block stay available for the later steps.
-
-## Bootstrap
-
-```bash
-export API_BASE='http://localhost:8080'
-export WS_ID='00000000-0000-0000-0000-0000000000a3'
-export USER_ID='00000000-0000-0000-00a3-000000000001'
-export ROLE_ID='00000000-0000-0000-00a3-000000000010'
-export DEAL_ID='00000000-0000-0000-00a3-000000000020'
-export ORG_ID='00000000-0000-0000-00a3-000000000030'
-```
-
-Expected: the variables are exported in the shell that will run the guide.
-
 ## Step 1: Verify the agents module stays green
 
 ```bash
