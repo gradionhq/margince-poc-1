@@ -106,7 +106,7 @@ func (s *ProductStore) Create(ctx context.Context, p domain.Product) (domain.Pro
 	p.ID = ids.New()
 	unit := p.Unit
 	if unit == nil {
-		u := "unit"
+		u := defaultUnit
 		unit = &u
 	}
 	err := database.WithWorkspaceTx(ctx, s.db, p.WorkspaceID, func(tx *sql.Tx) error {
