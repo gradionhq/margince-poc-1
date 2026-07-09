@@ -16,12 +16,14 @@ export function AttachmentList({
   onDownload,
   onDetails,
   onFilenameClick,
+  currentUserId,
 }: {
   entityType: string;
   entityId: string;
   onDownload?: Parameters<typeof AttachmentRow>[0]["onDownload"];
   onDetails?: Parameters<typeof AttachmentRow>[0]["onDetails"];
   onFilenameClick?: Parameters<typeof AttachmentRow>[0]["onFilenameClick"];
+  currentUserId?: string;
 }) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
   const { data, isLoading, isError, refetch } = useAttachments({
@@ -145,6 +147,7 @@ export function AttachmentList({
                 onDownload={onDownload}
                 onDetails={onDetails}
                 onFilenameClick={onFilenameClick}
+                currentUserId={currentUserId}
               />
             ))}
           </ul>

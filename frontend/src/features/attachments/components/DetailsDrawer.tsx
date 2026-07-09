@@ -4,6 +4,7 @@ import type {
   components,
 } from "../../../lib/api-client/generated/index.js";
 import { Button, Chip, StatusBadge } from "../../../shared/ui/forge.js";
+import { provenanceLabel } from "../lib/provenance.js";
 import { ScanStatusChip } from "./ScanStatusChip.js";
 
 type Attachment = components["schemas"]["Attachment"];
@@ -14,13 +15,6 @@ function formatBytes(bytes: number) {
 
 function formatTimestamp(iso: string) {
   return new Date(iso).toLocaleString();
-}
-
-function provenanceLabel(attachment: Attachment) {
-  if (attachment.captured_by.startsWith("agent:")) {
-    return `Captured by ${attachment.captured_by}`;
-  }
-  return `Uploaded by ${attachment.captured_by.replace(/^human:/, "")}`;
 }
 
 function parseTimestamp(iso: string) {
@@ -66,11 +60,13 @@ export function DetailsDrawer({
   open,
   onClose,
   activities,
+  currentUserId,
 }: {
   attachment: Attachment;
   open: boolean;
   onClose: () => void;
   activities?: Activity[];
+  currentUserId?: string;
 }) {
   const linkedActivity = useMemo(() => {
     if (hasStoredActivityId(attachment)) {
@@ -160,7 +156,7 @@ export function DetailsDrawer({
             <div>
               <dt className="text-gf-caption text-gf-secondary">Provenance</dt>
               <dd className="text-gf-body text-gf-primary">
-                {provenanceLabel(attachment)}
+                {provenanceLabel(attachment, currentUserId)}
               </dd>
             </div>
             <div>

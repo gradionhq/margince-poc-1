@@ -85,6 +85,49 @@ describe("AttachmentRow", () => {
     expect(onFilenameClick).toHaveBeenCalledOnce();
   });
 
+  it("shows 'uploaded by you' when the viewer is the uploader", () => {
+    render(
+      <AttachmentRow
+        attachment={makeAttachment({
+          source: "human",
+          captured_by: "human:u1",
+        })}
+        currentUserId="u1"
+      />,
+    );
+
+    expect(screen.getByText(/uploaded by you/i)).toBeInTheDocument();
+  });
+
+  it("falls back to the raw id when the viewer is not the uploader", () => {
+    render(
+      <AttachmentRow
+        attachment={makeAttachment({
+          source: "human",
+          captured_by: "human:u1",
+        })}
+        currentUserId="someone-else"
+      />,
+    );
+
+    expect(screen.queryByText(/uploaded by you/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/uploaded by u1/i)).toBeInTheDocument();
+  });
+
+  it("falls back to the raw id when the current user id is unavailable", () => {
+    render(
+      <AttachmentRow
+        attachment={makeAttachment({
+          source: "human",
+          captured_by: "human:u1",
+        })}
+      />,
+    );
+
+    expect(screen.queryByText(/uploaded by you/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/uploaded by u1/i)).toBeInTheDocument();
+  });
+
   it("shows the agent provenance label for captured rows", () => {
     render(
       <AttachmentRow

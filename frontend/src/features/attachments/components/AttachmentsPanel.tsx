@@ -189,6 +189,7 @@ function AttachmentsPanelShell({
             onDownload={handleDownload}
             onDetails={(attachment) => setSelectedAttachment(attachment)}
             onFilenameClick={(attachment) => setSelectedAttachment(attachment)}
+            currentUserId={user?.id}
           />
 
           {entityType === "deal" && dealId && extractionAttachmentId && (
@@ -206,6 +207,7 @@ function AttachmentsPanelShell({
           open
           onClose={() => setSelectedAttachment(null)}
           activities={activityFeed}
+          currentUserId={user?.id}
         />
       )}
 

@@ -100,6 +100,33 @@ describe("DetailsDrawer", () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
+  it("shows 'uploaded by you' when the viewer is the uploader", () => {
+    render(
+      <DetailsDrawer
+        attachment={makeAttachment({ captured_by: "human:u1" })}
+        open
+        onClose={vi.fn()}
+        currentUserId="u1"
+      />,
+    );
+
+    expect(screen.getByText(/uploaded by you/i)).toBeInTheDocument();
+  });
+
+  it("falls back to the raw id when the viewer is not the uploader", () => {
+    render(
+      <DetailsDrawer
+        attachment={makeAttachment({ captured_by: "human:u1" })}
+        open
+        onClose={vi.fn()}
+        currentUserId="someone-else"
+      />,
+    );
+
+    expect(screen.queryByText(/uploaded by you/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/uploaded by u1/i)).toBeInTheDocument();
+  });
+
   it("prefers a stored timeline activity id when the attachment provides one", () => {
     const onClose = vi.fn();
     const attachment = {

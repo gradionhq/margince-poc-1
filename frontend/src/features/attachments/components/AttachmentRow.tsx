@@ -3,6 +3,7 @@ import { Button, Chip, RailIcon } from "../../../shared/ui/forge.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
 import { useRequestAccess } from "../api/attachments.js";
 import { useToasts } from "../hooks/useToasts.js";
+import { provenanceLabel } from "../lib/provenance.js";
 import { ScanStatusChip } from "./ScanStatusChip.js";
 
 type Attachment = components["schemas"]["Attachment"];
@@ -35,23 +36,18 @@ function sourceCanOpen(attachment: Attachment) {
   );
 }
 
-function provenanceLabel(attachment: Attachment) {
-  if (attachment.captured_by.startsWith("agent:")) {
-    return `captured by ${attachment.captured_by}`;
-  }
-  return `uploaded by ${attachment.captured_by.replace(/^human:/, "")}`;
-}
-
 export function AttachmentRow({
   attachment,
   onDownload,
   onDetails,
   onFilenameClick,
+  currentUserId,
 }: {
   attachment: Attachment;
   onDownload?: (attachment: Attachment) => void;
   onDetails?: (attachment: Attachment) => void;
   onFilenameClick?: (attachment: Attachment) => void;
+  currentUserId?: string;
 }) {
   const requestAccess = useRequestAccess(attachment.id);
   const { toasts, pushToast, dismissToast } = useToasts();
@@ -105,7 +101,7 @@ export function AttachmentRow({
             <ScanStatusChip scanStatus={attachment.scan_status} />
             {isRestricted && <Chip variant="info">Restricted</Chip>}
             <span>{formatBytes(attachment.byte_size)}</span>
-            <span>{provenanceLabel(attachment)}</span>
+            <span>{provenanceLabel(attachment, currentUserId)}</span>
             {isRestricted && (
               <span className="text-gf-status-warning">not your role</span>
             )}
