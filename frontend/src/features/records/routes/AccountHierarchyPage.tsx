@@ -31,18 +31,23 @@ import { SuggestedEdgeCard } from "../components/SuggestedEdgeCard.js";
 function CandidateCard({
   candidate,
   parentId,
+  initialStatus = "staged",
   onDismiss,
   onSuccess,
   onError,
 }: {
   candidate: Organization;
   parentId: string;
+  // Storybook-only seam: lets the SuggestedEdgeAccepted story render the post-mutation
+  // "accepted" branch directly, without firing a real (and in Storybook, unmocked) PATCH.
+  // The real route never passes this — it always defaults to "staged".
+  initialStatus?: "staged" | "accepted";
   onDismiss: () => void;
   onSuccess: () => void;
   onError: () => void;
 }) {
   const qc = useQueryClient();
-  const [status, setStatus] = useState<"staged" | "accepted">("staged");
+  const [status, setStatus] = useState<"staged" | "accepted">(initialStatus);
   const updateOrg = useUpdateOrganization(candidate.id);
 
   function handleAccept() {
@@ -76,7 +81,15 @@ function CandidateCard({
   );
 }
 
-export function AccountHierarchyPage() {
+export function AccountHierarchyPage({
+  initialAcceptedCandidateIds,
+}: {
+  // Storybook-only seam (see CandidateCard's initialStatus) — set of candidate org ids
+  // that should render already in the "accepted" state on first paint, so a story can
+  // demonstrate SuggestedEdgeCard's accepted branch without a real mutation call. The
+  // real route element never passes this prop.
+  initialAcceptedCandidateIds?: ReadonlySet<string>;
+} = {}) {
   const { id: rootId } = useParams<{ id: string }>();
 
   const [scope, setScope] = useState<"tree" | "self">("tree");
@@ -118,8 +131,21 @@ export function AccountHierarchyPage() {
   }
 
   const tree = rootId ? buildAccountTree(treeOrgs, rootId) : null;
-  const rows = tree ? flattenTree(tree, expandedIds) : [];
-  const treeIds = new Set(rows.map((r) => r.node.org.id));
+  const allRows = tree ? flattenTree(tree, expandedIds) : [];
+  const treeIds = new Set(allRows.map((r) => r.node.org.id));
+
+  // RD-AC-1: a node the server says the viewer can't read (rollup.restricted_excluded) must
+  // never render as a normal row in the main tree — it belongs only in AccountTree's
+  // "Restricted" section. Filtering the flattened `rows` (rather than filtering `treeOrgs`
+  // before buildAccountTree) is deliberate: buildAccountTree groups children by
+  // parent_org_id, so removing a restricted org from the source list up front would also
+  // orphan its own (non-restricted, readable) descendants out of the tree entirely — they'd
+  // never render anywhere, restricted section included. Filtering post-flatten drops only
+  // the restricted node's own row and leaves any readable descendants in place.
+  const restrictedIds = new Set(
+    (rollup?.restricted_excluded ?? []).map((entry) => entry.id),
+  );
+  const rows = allRows.filter((r) => !restrictedIds.has(r.node.org.id));
 
   const candidates =
     rootOrg && treeOrgs.length > 0
@@ -213,6 +239,11 @@ export function AccountHierarchyPage() {
                   key={candidate.id}
                   candidate={candidate}
                   parentId={rootId ?? ""}
+                  initialStatus={
+                    initialAcceptedCandidateIds?.has(candidate.id)
+                      ? "accepted"
+                      : "staged"
+                  }
                   onDismiss={() =>
                     setDismissedIds((prev) => new Set([...prev, candidate.id]))
                   }

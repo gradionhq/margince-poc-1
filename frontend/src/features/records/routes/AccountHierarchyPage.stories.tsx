@@ -159,7 +159,16 @@ function makeClient(opts: {
   return qc;
 }
 
-function Demo({ client }: { client: QueryClient }) {
+function Demo({
+  client,
+  initialAcceptedCandidateIds,
+}: {
+  client: QueryClient;
+  // Forwarded to AccountHierarchyPage's Storybook-only seam — lets a story render
+  // SuggestedEdgeCard's "accepted" branch without a real (unmocked) PATCH. See
+  // SuggestedEdgeAccepted below.
+  initialAcceptedCandidateIds?: ReadonlySet<string>;
+}) {
   setAuth(
     {
       id: "user-demo",
@@ -180,7 +189,11 @@ function Demo({ client }: { client: QueryClient }) {
         <Routes>
           <Route
             path="/companies/:id/hierarchy"
-            element={<AccountHierarchyPage />}
+            element={
+              <AccountHierarchyPage
+                initialAcceptedCandidateIds={initialAcceptedCandidateIds}
+              />
+            }
           />
         </Routes>
       </MemoryRouter>
@@ -225,11 +238,17 @@ export const SuggestedEdgeStaged: Story = {
   },
 };
 
-// AC-6: SuggestedEdgeAccepted — card flips to "edge written · audited" after accept.
-// (Seeding: show the accepted state by rendering with a pre-accepted candidate display)
+// AC-6: SuggestedEdgeAccepted — the accepted state ("edge written · audited"). Rendered
+// directly via AccountHierarchyPage's initialAcceptedCandidateIds seam rather than by
+// clicking "Accept edge": clicking would fire a real PATCH against the Storybook dev
+// server, which has no backend behind it and 404s — that's not a demonstration of the
+// accepted UI state, it's an error toast. Per this file's own convention (one Story per
+// state, render-only, no interaction test — docs/quality/testing.md's "visual states a
+// human reviews" rung), seeding the state directly is the correct fix.
 export const SuggestedEdgeAccepted: Story = {
   args: {
     client: makeClient({ orgs: [...ALL_ORGS, FIXTURE_ORPHAN] }),
+    initialAcceptedCandidateIds: new Set([FIXTURE_ORPHAN.id]),
   },
 };
 

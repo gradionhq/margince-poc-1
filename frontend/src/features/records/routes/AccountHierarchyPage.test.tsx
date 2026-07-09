@@ -260,6 +260,55 @@ describe("AccountHierarchyPage", () => {
     expect(apiClient.PATCH).not.toHaveBeenCalled();
   });
 
+  it("RD-AC-1: a child listed in rollup.restricted_excluded renders only in the Restricted section, never as a normal main-tree row", () => {
+    const restrictedChildOrg = {
+      id: "org-restricted-child",
+      workspace_id: "ws-1",
+      display_name: "Restricted Child Corp",
+      source: "test",
+      captured_by: "human:test",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      parent_org_id: ROOT_ID,
+      domains: [],
+      version: 1,
+    };
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    qc.setQueryData(recordsKeys.rollup(ROOT_ID, "tree"), {
+      ...treeRollup,
+      restricted_excluded: [
+        {
+          id: restrictedChildOrg.id,
+          display_name: restrictedChildOrg.display_name,
+        },
+      ],
+    });
+    qc.setQueryData(recordsKeys.rollup(ROOT_ID, "self"), selfRollup);
+    // restrictedChildOrg is structurally a child (parent_org_id === ROOT_ID) — the
+    // unfiltered GET /organizations list the viewer receives carries it — AND it's also
+    // named in rollup.restricted_excluded, meaning the server says this viewer can't
+    // actually read it.
+    qc.setQueryData(recordsKeys.treeOrgs(), [
+      rootOrg,
+      childOrg,
+      restrictedChildOrg,
+    ]);
+    qc.setQueryData(["organizations", "detail", ROOT_ID], rootOrg);
+
+    render(<AccountHierarchyPage />, { wrapper: wrapper(qc) });
+
+    // It appears exactly once — inside the Restricted section — never as a normal row.
+    expect(screen.getAllByText("Restricted Child Corp")).toHaveLength(1);
+    const restrictedRow = screen
+      .getByText("Restricted Child Corp")
+      .closest("tr");
+    expect(restrictedRow?.textContent?.includes("restricted")).toBe(true);
+    // Unrestricted sibling still renders normally in the main tree.
+    expect(screen.getByText("Child Corp")).toBeInTheDocument();
+  });
+
   it("AC-6: accepting a suggested edge card fires the real write chain — apiClient.PATCH with parent_org_id set to the root", async () => {
     const orphanOrg = {
       id: "org-orphan",

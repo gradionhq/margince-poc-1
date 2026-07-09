@@ -28,7 +28,7 @@ Seed two orgs `a` and `b` (use the CRM UI or the API directly). Auth in this cod
 cookie jar for subsequent requests:
 
 ```bash
-curl -s -c /tmp/rd-t09-cookies.txt -X POST http://localhost:8080/api/v1/auth/login \
+curl -s -c /tmp/rd-t09-cookies.txt -X POST http://localhost:8080/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "<user-email>", "password": "<password>"}'
 ```
@@ -36,7 +36,7 @@ curl -s -c /tmp/rd-t09-cookies.txt -X POST http://localhost:8080/api/v1/auth/log
 Set b's parent to a:
 
 ```bash
-curl -s -b /tmp/rd-t09-cookies.txt -X PATCH http://localhost:8080/api/v1/organizations/<b-id> \
+curl -s -b /tmp/rd-t09-cookies.txt -X PATCH http://localhost:8080/organizations/<b-id> \
   -H "Content-Type: application/json" \
   -d '{"parent_org_id": "<a-id>", "version": 1}'
 ```
@@ -46,7 +46,7 @@ Expected: 200 OK — b is now a child of a.
 Now attempt the cycle (a → b, which would create a → b → a):
 
 ```bash
-curl -s -b /tmp/rd-t09-cookies.txt -X PATCH http://localhost:8080/api/v1/organizations/<a-id> \
+curl -s -b /tmp/rd-t09-cookies.txt -X PATCH http://localhost:8080/organizations/<a-id> \
   -H "Content-Type: application/json" \
   -d '{"parent_org_id": "<b-id>", "version": 1}'
 ```
@@ -143,8 +143,11 @@ Expected:
 3. Open the **SuggestedEdgeAccepted** story.
 
 Expected:
-- The card shows "edge written · audited" text.
-- The treeOrgs cache is invalidated; the newly linked org appears in the tree on next render.
+- The card renders already in the accepted state and shows "edge written · audited" text
+  (seeded directly, not via a real click/PATCH — Storybook has no backend behind it, so
+  the story renders the post-accept UI state rather than exercising the mutation).
+- The write chain itself (PATCH call + treeOrgs/rollup cache invalidation) is proven by
+  `AccountHierarchyPage.test.tsx`'s AC-6 test, not by this story.
 
 4. Open the **SuggestedEdgeDismissed** story.
 
