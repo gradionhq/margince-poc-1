@@ -9,6 +9,7 @@ import (
 	"github.com/lib/pq"
 
 	"github.com/gradionhq/margince/backend/internal/modules/people/domain"
+	"github.com/gradionhq/margince/backend/internal/platform/customfields"
 	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/strength"
@@ -18,37 +19,46 @@ import (
 // PersonStore — PO-F-3 relationship strength
 // ---------------------------------------------------------------------------
 
-//nolint:cyclop // per-person strength dispatch: one branch per sort direction plus the sort/nil comparisons; the switch is the routing surface
-func (s *PersonStore) listByStrength(ctx context.Context, workspaceID, cursor string, limit int, ascending bool) ([]domain.Person, string, error) {
-	offset := sqlutil.DecodeOffsetCursor(cursor)
+// scanAllLivePersons runs personListColumns' fixed id-ordered SELECT and
+// scans every live workspace row (including its active custom-field values)
+// into a slice — the row-fetch step listByStrength shares with listByID's
+// non-strength cases, factored out so listByStrength itself stays under the
+// file-length/funlen cap.
+func scanAllLivePersons(ctx context.Context, tx *sql.Tx, workspaceID string, active []customfields.Column) ([]domain.Person, error) {
 	// Non-nil so an empty result marshals to a JSON array ([]), never null.
 	all := []domain.Person{}
-	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `
-			SELECT id, workspace_id, full_name, first_name, last_name, title,
-			       owner_id, social, version, source, captured_by, created_at, updated_at
-			FROM person
-			WHERE workspace_id=$1::uuid AND archived_at IS NULL
-			ORDER BY id`,
-			workspaceID)
+	//nolint:gosec // G202: personListColumns/customfields.SelectSuffix return quoted, catalog-derived identifiers only, never user input
+	query := personListColumns + customfields.SelectSuffix(active) + `, version, source, captured_by, created_at, updated_at
+		FROM person
+		WHERE workspace_id=$1::uuid AND archived_at IS NULL
+		ORDER BY id`
+	rows, err := tx.QueryContext(ctx, query, workspaceID) // NOSONAR: query is built from a fixed literal + customfields.SelectSuffix's quoted, catalog-derived identifiers only; workspaceID is a bound param
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		p, err := scanPersonListRow(rows, active)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		defer func() { _ = rows.Close() }()
-		for rows.Next() {
-			var p domain.Person
-			var socialRaw []byte
-			if err := rows.Scan(&p.ID, &p.WorkspaceID, &p.FullName, &p.FirstName, &p.LastName, &p.Title,
-				&p.OwnerID, &socialRaw, &p.Version, &p.Source, &p.CapturedBy,
-				&p.CreatedAt, &p.UpdatedAt); err != nil {
-				return err
-			}
-			p.Social = map[string]any{}
-			sqlutil.UnmarshalJSON(socialRaw, &p.Social)
-			all = append(all, p)
-		}
-		if err := rows.Err(); err != nil {
-			return err
+		all = append(all, p)
+	}
+	return all, rows.Err()
+}
+
+func (s *PersonStore) listByStrength(ctx context.Context, workspaceID, cursor string, limit int, ascending bool) ([]domain.Person, string, error) {
+	offset := sqlutil.DecodeOffsetCursor(cursor)
+	active, err := customfields.ActiveColumns(ctx, s.db, workspaceID, "person")
+	if err != nil {
+		return nil, "", err
+	}
+	var all []domain.Person
+	err = database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		var scanErr error
+		all, scanErr = scanAllLivePersons(ctx, tx, workspaceID, active)
+		if scanErr != nil {
+			return scanErr
 		}
 		ptrs := make([]*domain.Person, len(all))
 		for i := range all {

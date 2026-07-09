@@ -198,7 +198,7 @@ func TestDealHandler_Update_IfMatchVersionSkew(t *testing.T) {
 	d := domain.NewDeal("Update-me", pipelineID, stageID,
 		provenanceOf("test", "human:test"))
 	d.WorkspaceID = dealTestWorkspaceID
-	created, err := store.Create(context.Background(), d, "")
+	created, err := store.Create(context.Background(), d, "", nil)
 	if err != nil {
 		t.Fatalf("seed create: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestDealHandler_Update_MalformedIfMatch(t *testing.T) {
 	d := domain.NewDeal("Malformed-if-match", pipelineID, stageID,
 		provenanceOf("test", "human:test"))
 	d.WorkspaceID = dealTestWorkspaceID
-	created, err := store.Create(context.Background(), d, "")
+	created, err := store.Create(context.Background(), d, "", nil)
 	if err != nil {
 		t.Fatalf("seed create: %v", err)
 	}
@@ -257,7 +257,7 @@ func TestDealHandler_Update_StageNotInPipeline(t *testing.T) {
 	d := domain.NewDeal("Stage-move", pipelineID, stageID,
 		provenanceOf("test", "human:test"))
 	d.WorkspaceID = dealTestWorkspaceID
-	created, err := store.Create(context.Background(), d, "")
+	created, err := store.Create(context.Background(), d, "", nil)
 	if err != nil {
 		t.Fatalf("seed create: %v", err)
 	}
@@ -283,7 +283,7 @@ func TestDealHandler_Update_HappyPath(t *testing.T) {
 	d := domain.NewDeal("Happy-update", pipelineID, stageID,
 		provenanceOf("test", "human:test"))
 	d.WorkspaceID = dealTestWorkspaceID
-	created, err := store.Create(context.Background(), d, "")
+	created, err := store.Create(context.Background(), d, "", nil)
 	if err != nil {
 		t.Fatalf("seed create: %v", err)
 	}
@@ -330,7 +330,7 @@ func TestDealHandler_List_FilterAndSort(t *testing.T) {
 	d.AmountMinor = &amt
 	d.Status = "open"
 	d.PartnerOrgID = &orgID
-	created, err := store.Create(ctx, d, "")
+	created, err := store.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}

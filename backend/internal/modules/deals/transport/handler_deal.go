@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -43,9 +44,10 @@ type stageSemanticReader interface {
 	Get(ctx context.Context, id, workspaceID string) (domain.Deal, error)
 	GetAny(ctx context.Context, id, workspaceID string) (domain.Deal, error)
 	StageSemantic(ctx context.Context, stageID, workspaceID string) (string, error)
+	ActiveCustomFieldNames(ctx context.Context, workspaceID string) ([]string, error)
 	Advance(ctx context.Context, id, workspaceID string, in domain.AdvanceInput, ifMatch int64, changedBy string) (domain.Deal, error)
 	FindByIdempotencyKey(ctx context.Context, workspaceID, key string) (domain.Deal, bool, error)
-	Create(ctx context.Context, d domain.Deal, idempotencyKey string) (domain.Deal, error)
+	Create(ctx context.Context, d domain.Deal, idempotencyKey string, rawExtra map[string]any) (domain.Deal, error)
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (domain.Deal, error)
 	ListFiltered(ctx context.Context, workspaceID, cursor string, limit int, filter domain.DealListFilter) ([]domain.Deal, string, error)
 	Restore(ctx context.Context, id, workspaceID string) (domain.Deal, error)
@@ -128,6 +130,11 @@ func (h *DealHandler) serveSuffixRoutes(w http.ResponseWriter, r *http.Request) 
 
 func (h *DealHandler) create(w http.ResponseWriter, r *http.Request) {
 	wsID := workspaceID(r)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
+		return
+	}
 	var body struct {
 		Name              string  `json:"name"`
 		AmountMinor       *int64  `json:"amount_minor"`
@@ -141,7 +148,7 @@ func (h *DealHandler) create(w http.ResponseWriter, r *http.Request) {
 		Source            string  `json:"source"`
 		CapturedBy        string  `json:"captured_by"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.Unmarshal(raw, &body); err != nil {
 		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
 		return
 	}
@@ -178,7 +185,9 @@ func (h *DealHandler) create(w http.ResponseWriter, r *http.Request) {
 		d.ExpectedCloseDate = &t
 	}
 
-	created, err := h.store.Create(r.Context(), d, idemKey)
+	var rawExtra map[string]any
+	_ = json.Unmarshal(raw, &rawExtra)
+	created, err := h.store.Create(r.Context(), d, idemKey, rawExtra)
 	if errors.Is(err, errs.ErrStageNotInPipeline) {
 		jsonValidationError(w, "stage_id does not belong to pipeline_id.",
 			[]fieldError{{Field: "stage_id", Code: codeStageNotInPipeline}})
@@ -269,9 +278,22 @@ func (h *DealHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	sort := q.Get("sort")
+	activeNames, err := h.store.ActiveCustomFieldNames(r.Context(), wsID)
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	allowed := make(map[string]bool, len(dealSortColumnsMap)+len(activeNames)*2)
+	for k := range dealSortColumnsMap {
+		allowed[k] = true
+	}
+	for _, n := range activeNames {
+		allowed[n] = true
+		allowed["-"+n] = true
+	}
 	for _, f := range strings.Split(sort, ",") {
 		f = strings.TrimSpace(strings.TrimPrefix(f, "-"))
-		if f != "" && !dealSortColumnsMap[f] {
+		if f != "" && !allowed[f] {
 			jsonProblem(w, http.StatusUnprocessableEntity, "sort_field_not_allowed")
 			return
 		}
@@ -293,6 +315,17 @@ func (h *DealHandler) list(w http.ResponseWriter, r *http.Request) {
 		PartnerOrgID:     q.Get("partner_org_id"),
 		PersonID:         q.Get("person_id"),
 		Sort:             sort,
+		CustomFilters:    map[string]string{},
+	}
+	for key := range q {
+		if !strings.HasPrefix(key, "cf_") {
+			continue
+		}
+		if !allowed[key] {
+			jsonProblem(w, http.StatusUnprocessableEntity, "filter_field_not_allowed")
+			return
+		}
+		filter.CustomFilters[key] = q.Get(key)
 	}
 
 	items, next, err := h.store.ListFiltered(r.Context(), wsID, q.Get("cursor"), queryLimit(r, 20), filter)
@@ -347,6 +380,28 @@ type dealDetailResponse struct {
 	domain.Deal
 	Stakeholders []relDomain.Relationship `json:"stakeholders"`
 	Timeline     []dealTimelineRef        `json:"timeline"`
+}
+
+func (d dealDetailResponse) MarshalJSON() ([]byte, error) {
+	base, err := json.Marshal(d.Deal)
+	if err != nil {
+		return nil, err
+	}
+	var out map[string]json.RawMessage
+	if err := json.Unmarshal(base, &out); err != nil {
+		return nil, err
+	}
+	b, err := json.Marshal(d.Stakeholders)
+	if err != nil {
+		return nil, err
+	}
+	out["stakeholders"] = b
+	b, err = json.Marshal(d.Timeline)
+	if err != nil {
+		return nil, err
+	}
+	out["timeline"] = b
+	return json.Marshal(out)
 }
 
 func (h *DealHandler) get(w http.ResponseWriter, r *http.Request, id string) {

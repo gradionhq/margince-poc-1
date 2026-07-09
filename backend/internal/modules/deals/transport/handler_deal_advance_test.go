@@ -30,6 +30,10 @@ func (f *fakeStageSemanticReader) StageSemantic(_ context.Context, stageID, _ st
 	return f.semanticByID[stageID], nil
 }
 
+func (f *fakeStageSemanticReader) ActiveCustomFieldNames(_ context.Context, _ string) ([]string, error) {
+	return nil, nil
+}
+
 func (f *fakeStageSemanticReader) Advance(_ context.Context, _, _ string, _ domain.AdvanceInput, _ int64, _ string) (domain.Deal, error) {
 	f.advanceCalled = true
 	return domain.Deal{}, nil
@@ -39,7 +43,7 @@ func (f *fakeStageSemanticReader) FindByIdempotencyKey(_ context.Context, _, _ s
 	return domain.Deal{}, false, nil
 }
 
-func (f *fakeStageSemanticReader) Create(_ context.Context, d domain.Deal, _ string) (domain.Deal, error) {
+func (f *fakeStageSemanticReader) Create(_ context.Context, d domain.Deal, _ string, _ map[string]any) (domain.Deal, error) {
 	return d, nil
 }
 

@@ -67,7 +67,7 @@ func TestDealStore_Update_PersistsPartnerOrgIDChangeWithAudit(t *testing.T) {
 	d := domain.NewDeal("Deal with partner", pipelineID, stageID, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	d.WorkspaceID = dealPartnerTestWorkspaceID
 	d.PartnerOrgID = &orgA
-	created, err := store.Create(context.Background(), d, "")
+	created, err := store.Create(context.Background(), d, "", nil)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}

@@ -19,7 +19,7 @@ func createArchivableTestDeal(ctx context.Context, t *testing.T, dealStore *adap
 	t.Helper()
 	d := domain.NewDeal(name, pipelineID, stageID, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	d.WorkspaceID = dealTestWorkspaceID
-	d, err := dealStore.Create(ctx, d, "")
+	d, err := dealStore.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("create deal: %v", err)
 	}

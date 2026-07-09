@@ -58,11 +58,11 @@ func seedFilterFixture(t *testing.T) filterTestFixtures {
 
 	// Seed two organizations for organization_id FK.
 	ostore := orgadapters.NewOrgStore(db)
-	o1, err := ostore.Create(ctx, orgdomain.Organization{WorkspaceID: wsFilterTest, DisplayName: "Org1 " + pgtest.Uniq(), Source: "test", CapturedBy: "human:test"})
+	o1, err := ostore.Create(ctx, orgdomain.Organization{WorkspaceID: wsFilterTest, DisplayName: "Org1 " + pgtest.Uniq(), Source: "test", CapturedBy: "human:test"}, nil)
 	if err != nil {
 		t.Fatal("seed org1:", err)
 	}
-	o2, err := ostore.Create(ctx, orgdomain.Organization{WorkspaceID: wsFilterTest, DisplayName: "Org2 " + pgtest.Uniq(), Source: "test", CapturedBy: "human:test"})
+	o2, err := ostore.Create(ctx, orgdomain.Organization{WorkspaceID: wsFilterTest, DisplayName: "Org2 " + pgtest.Uniq(), Source: "test", CapturedBy: "human:test"}, nil)
 	if err != nil {
 		t.Fatal("seed org2:", err)
 	}
@@ -98,7 +98,7 @@ func seedFilterFixture(t *testing.T) filterTestFixtures {
 		d.OwnerID = &ownerID
 		d.OrganizationID = &orgID
 		d.Status = "open"
-		created, err := ds.Create(ctx, d, "")
+		created, err := ds.Create(ctx, d, "", nil)
 		if err != nil {
 			t.Fatalf("create deal %s: %v", name, err)
 		}
@@ -372,7 +372,7 @@ func TestDealStore_ListFiltered_ForecastCategoryPartnerOrgSort(t *testing.T) {
 	d1.AmountMinor = &amt1
 	partnerOrg1 := fix.org1
 	d1.PartnerOrgID = &partnerOrg1
-	created1, err := ds.Create(ctx, d1, "")
+	created1, err := ds.Create(ctx, d1, "", nil)
 	if err != nil {
 		t.Fatalf("create d1: %v", err)
 	}
@@ -383,7 +383,7 @@ func TestDealStore_ListFiltered_ForecastCategoryPartnerOrgSort(t *testing.T) {
 	d2.AmountMinor = &amt2
 	partnerOrg2 := fix.org2
 	d2.PartnerOrgID = &partnerOrg2
-	if _, err := ds.Create(ctx, d2, ""); err != nil {
+	if _, err := ds.Create(ctx, d2, "", nil); err != nil {
 		t.Fatalf("create d2: %v", err)
 	}
 
@@ -587,7 +587,7 @@ func TestDealListFilter_P95AndExplain(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		d := domain.NewDeal("Card "+pgtest.Uniq(), pl.ID, st.ID, p0)
 		d.WorkspaceID = wsKanbanP95
-		if _, err := ds.Create(ctx, d, ""); err != nil {
+		if _, err := ds.Create(ctx, d, "", nil); err != nil {
 			t.Fatalf("seed deal %d: %v", i, err)
 		}
 	}

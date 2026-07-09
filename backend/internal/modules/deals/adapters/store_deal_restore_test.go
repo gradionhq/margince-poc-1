@@ -58,7 +58,7 @@ func TestDealStore_Restore_HappyPath(t *testing.T) {
 		Source: "test", CapturedBy: "human:test",
 	})
 	d.WorkspaceID = dealRestoreWS
-	d, err := store.Create(ctx, d, "")
+	d, err := store.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestDealStore_Restore_LiveRecordRefused(t *testing.T) {
 		Source: "test", CapturedBy: "human:test",
 	})
 	d.WorkspaceID = dealRestoreWS
-	d, err := store.Create(ctx, d, "")
+	d, err := store.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

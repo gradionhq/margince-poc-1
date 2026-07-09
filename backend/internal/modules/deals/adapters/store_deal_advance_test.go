@@ -66,7 +66,7 @@ func TestDealStore_Advance_OpenToWon_SingleWriteEachTable(t *testing.T) {
 	currency := "EUR"
 	d.AmountMinor = &amountMinor
 	d.Currency = &currency
-	created, err := store.Create(ctx, d, "")
+	created, err := store.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestDealStore_Advance_OpenToWon_BaseCurrencyNoFXRateRow_DefaultsToOne(t *te
 	currency := "EUR"
 	d.AmountMinor = &amountMinor
 	d.Currency = &currency
-	created, err := store.Create(ctx, d, "")
+	created, err := store.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestDealStore_Advance_StatusMismatchRejected(t *testing.T) {
 
 	d := domain.NewDeal("Deal mismatch", pipelineID, openA, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	d.WorkspaceID = advanceTestWorkspaceID
-	created, err := store.Create(ctx, d, "")
+	created, err := store.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestDealStore_Advance_LostWithoutReasonRejected(t *testing.T) {
 
 	d := domain.NewDeal("Deal lost-no-reason", pipelineID, openA, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	d.WorkspaceID = advanceTestWorkspaceID
-	created, err := store.Create(ctx, d, "")
+	created, err := store.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -256,7 +256,7 @@ func TestDealStore_Advance_OpenToOpen_NoFXNoClosedAt(t *testing.T) {
 	openA, openB := pipe.pipelineStageA, pipe.pipelineStageB
 	d := domain.NewDeal("Deal o2o real", pipe.pipelineID, openA, prov.Provenance{Source: "test", CapturedBy: "human:test"})
 	d.WorkspaceID = advanceTestWorkspaceID
-	created, err := store.Create(ctx, d, "")
+	created, err := store.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestDealStore_Advance_Reopen_ClearsClosedAtLostReasonAndFX(t *testing.T) {
 	d.WorkspaceID = advanceTestWorkspaceID
 	d.AmountMinor = &amount
 	d.Currency = &currency
-	created, err := store.Create(ctx, d, "")
+	created, err := store.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}

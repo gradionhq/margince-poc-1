@@ -42,6 +42,7 @@ type Organization struct {
 	Relationships []RelationshipRef  `json:"relationships,omitempty"`
 	Deals         []DealRef          `json:"deals,omitempty"`
 	Activities    []ActivityRef      `json:"activities,omitempty"`
+	CustomFields  map[string]any     `json:"-"`
 }
 
 // OrganizationDomain is a normalized domain owned by an organization
@@ -80,6 +81,7 @@ type OrgListFilter struct {
 	RelevanceGTE   *int
 	Domain         string
 	OwnerID        string
+	CustomFilters  map[string]string
 }
 
 // OrgStrengthInput is one person's contribution to PO-N-ORGSTRENGTH's org

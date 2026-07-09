@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gradionhq/margince/backend/internal/modules/deals/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
+	"github.com/gradionhq/margince/backend/internal/platform/customfields"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/ids"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/sqlutil"
@@ -26,6 +28,9 @@ const (
 	statusLost        = "lost"
 	colDealID         = "deal_id"
 	fieldPartnerOrgID = "partner_org_id"
+	fieldStageID      = "stage_id"
+	fieldAmountMinor  = "amount_minor"
+	fieldStatus       = "status"
 )
 
 // ---------------------------------------------------------------------------
@@ -38,42 +43,76 @@ type DealStore struct{ db *sql.DB }
 // NewDealStore returns a DealStore.
 func NewDealStore(db *sql.DB) *DealStore { return &DealStore{db: db} }
 
+// dealCreateStageInPipeline reports whether stageID belongs to pipelineID
+// within workspaceID — Create's pre-check, kept separate from
+// checkStageInPipeline (store_deal_update.go) since Create has no existing
+// deal row to look the pipeline up from; the caller supplies both directly.
+func dealCreateStageInPipeline(ctx context.Context, tx *sql.Tx, stageID, pipelineID, workspaceID string) error {
+	var inPipeline bool
+	if err := tx.QueryRowContext(ctx, `
+		SELECT EXISTS(
+			SELECT 1
+			FROM stage
+			WHERE id=$1::uuid AND pipeline_id=$2::uuid AND workspace_id=$3::uuid AND archived_at IS NULL
+		)`,
+		stageID, pipelineID, workspaceID).Scan(&inPipeline); err != nil {
+		return err
+	}
+	if !inPipeline {
+		return errs.ErrStageNotInPipeline
+	}
+	return nil
+}
+
+// dealCreateInsertColsArgs builds Create's dynamic INSERT column/value lists:
+// the fixed columns first, then every active custom column rawExtra supplies
+// a matching (and type-valid, per customfields.SQLValue) key for.
+func dealCreateInsertColsArgs(d domain.Deal, rawExtra map[string]any, active []customfields.Column) ([]string, []any) {
+	cols := []string{"id", "workspace_id", "name", "pipeline_id", fieldStageID, "organization_id", "owner_id", fieldPartnerOrgID, fieldAmountMinor, "currency", fieldStatus, "expected_close_date", "forecast_category", "source", "captured_by", "version"}
+	args := []any{d.ID, d.WorkspaceID, d.Name, d.PipelineID, d.StageID, d.OrganizationID, d.OwnerID, d.PartnerOrgID, d.AmountMinor, d.Currency, d.Status, d.ExpectedCloseDate, d.ForecastCategory, d.Source, d.CapturedBy, 1}
+	if rawExtra == nil {
+		return cols, args
+	}
+	for _, c := range active {
+		v, ok := rawExtra[c.ColumnName]
+		if !ok {
+			continue
+		}
+		if val, ok := customfields.SQLValue(c, v); ok {
+			cols = append(cols, c.ColumnName)
+			args = append(args, val)
+		}
+	}
+	return cols, args
+}
+
 // Create inserts a new deal row, its initial stage history row, its create
 // audit_log entry, and its deal.created outbox event in one workspace-scoped tx.
 // The stage pre-check keeps the error readable at the store boundary instead of
 // relying on the composite FK to surface a lower-level constraint violation.
-func (s *DealStore) Create(ctx context.Context, d domain.Deal, idempotencyKey string) (domain.Deal, error) {
+func (s *DealStore) Create(ctx context.Context, d domain.Deal, idempotencyKey string, rawExtra map[string]any) (domain.Deal, error) {
 	if err := sqlutil.RequireProvenance(d.Source, d.CapturedBy); err != nil {
 		return domain.Deal{}, err
 	}
 	d.ID = ids.New()
 	err := withWorkspaceTx(ctx, s.db, d.WorkspaceID, func(tx *sql.Tx) error {
-		var inPipeline bool
-		if err := tx.QueryRowContext(ctx, `
-			SELECT EXISTS(
-				SELECT 1
-				FROM stage
-				WHERE id=$1::uuid AND pipeline_id=$2::uuid AND workspace_id=$3::uuid AND archived_at IS NULL
-			)`,
-			d.StageID, d.PipelineID, d.WorkspaceID).Scan(&inPipeline); err != nil {
+		if err := dealCreateStageInPipeline(ctx, tx, d.StageID, d.PipelineID, d.WorkspaceID); err != nil {
 			return err
 		}
-		if !inPipeline {
-			return errs.ErrStageNotInPipeline
-		}
 
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO deal (id, workspace_id, name, pipeline_id, stage_id,
-			    organization_id, owner_id, partner_org_id,
-			    amount_minor, currency, status,
-			    expected_close_date, forecast_category,
-			    source, captured_by, version)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,1)`,
-			d.ID, d.WorkspaceID, d.Name, d.PipelineID, d.StageID,
-			d.OrganizationID, d.OwnerID, d.PartnerOrgID,
-			d.AmountMinor, d.Currency, d.Status,
-			d.ExpectedCloseDate, d.ForecastCategory,
-			d.Source, d.CapturedBy); err != nil {
+		active, err := customfields.ActiveColumns(ctx, s.db, d.WorkspaceID, entityTypeDeal)
+		if err != nil {
+			return err
+		}
+		cols, args := dealCreateInsertColsArgs(d, rawExtra, active)
+		placeholders := make([]string, len(cols))
+		for i := range cols {
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+		}
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf( // NOSONAR: cols/placeholders are dealCreateInsertColsArgs's fixed columns + catalog-derived custom-column names/$N placeholders, never user input; all values are bound via args
+			`INSERT INTO deal (%s) VALUES (%s)`,
+			strings.Join(cols, ", "), strings.Join(placeholders, ","),
+		), args...); err != nil {
 			return err
 		}
 
@@ -108,7 +147,11 @@ func (s *DealStore) Create(ctx context.Context, d domain.Deal, idempotencyKey st
 	if err != nil {
 		return domain.Deal{}, err
 	}
-	return s.Get(ctx, d.ID, d.WorkspaceID)
+	out, err := s.Get(ctx, d.ID, d.WorkspaceID)
+	if err != nil {
+		return domain.Deal{}, err
+	}
+	return out, nil
 }
 
 // Get returns one deal by id, workspace-scoped; ErrNotFound if absent.
@@ -259,6 +302,10 @@ func (s *DealStore) loadDeal(ctx context.Context, id, workspaceID string, includ
 	var d domain.Deal
 	var stageEnteredAt sql.NullTime
 	err := withWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		active, err := customfields.ActiveColumns(ctx, s.db, workspaceID, entityTypeDeal)
+		if err != nil {
+			return err
+		}
 		query := `
 			SELECT id, workspace_id, name, pipeline_id, stage_id,
 			       organization_id, owner_id, partner_org_id,
@@ -267,13 +314,14 @@ func (s *DealStore) loadDeal(ctx context.Context, id, workspaceID string, includ
 			       forecast_category, wait_until, last_activity_at,
 			       version, source, captured_by, created_at, updated_at, archived_at,
 			       (SELECT max(occurred_at) FROM deal_stage_history WHERE deal_id=deal.id) AS stage_entered_at,
-			       (SELECT count(*) FROM relationship WHERE deal_id=deal.id AND kind='deal_stakeholder' AND archived_at IS NULL) AS stakeholder_count
+			       (SELECT count(*) FROM relationship WHERE deal_id=deal.id AND kind='deal_stakeholder' AND archived_at IS NULL) AS stakeholder_count`
+		query += customfields.SelectSuffix(active)
+		query += `
 			FROM deal WHERE id=$1::uuid AND workspace_id=$2::uuid`
 		if !includeArchived {
 			query += " AND archived_at IS NULL"
 		}
-		return tx.QueryRowContext(ctx, query,
-			id, workspaceID).Scan(
+		dests := []any{
 			&d.ID, &d.WorkspaceID, &d.Name, &d.PipelineID, &d.StageID,
 			&d.OrganizationID, &d.OwnerID, &d.PartnerOrgID,
 			&d.AmountMinor, &d.Currency, &d.FxRateToBase, &d.FxRateDate,
@@ -282,7 +330,13 @@ func (s *DealStore) loadDeal(ctx context.Context, id, workspaceID string, includ
 			&d.Version, &d.Source, &d.CapturedBy,
 			&d.CreatedAt, &d.UpdatedAt, &d.ArchivedAt,
 			&stageEnteredAt, &d.StakeholderCount,
-		)
+		}
+		dests = append(dests, customfields.ScanDests(active)...)
+		if err := tx.QueryRowContext(ctx, query, id, workspaceID).Scan(dests...); err != nil { // NOSONAR: query is built from a fixed literal + customfields.SelectSuffix's quoted, catalog-derived identifiers only; id/workspaceID are bound params
+			return err
+		}
+		d.CustomFields = customfields.ExtractValues(active, dests[len(dests)-len(active):])
+		return nil
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return d, errs.ErrNotFound
