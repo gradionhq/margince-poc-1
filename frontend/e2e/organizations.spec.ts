@@ -157,7 +157,7 @@ test.describe("CompanyDetailPage", () => {
     const archived = await seedArchivedOrganization(authedPage.request);
     await authedPage.goto(`/companies/${archived.id}`);
     await expect(
-      authedPage.getByRole("button", { name: "Edit" }),
+      authedPage.getByRole("button", { name: "Edit", exact: true }),
     ).toBeVisible();
   });
 
