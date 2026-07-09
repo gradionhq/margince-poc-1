@@ -309,6 +309,48 @@ describe("AccountHierarchyPage", () => {
     expect(screen.getByText("Child Corp")).toBeInTheDocument();
   });
 
+  it("RD-AC-1b: a restricted child that is the ONLY child still surfaces the Restricted section, not the empty state", () => {
+    const restrictedChildOrg = {
+      id: "org-restricted-child",
+      workspace_id: "ws-1",
+      display_name: "Restricted Child Corp",
+      source: "test",
+      captured_by: "human:test",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      parent_org_id: ROOT_ID,
+      domains: [],
+      version: 1,
+    };
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    qc.setQueryData(recordsKeys.rollup(ROOT_ID, "tree"), {
+      ...treeRollup,
+      // No readable children at all — root's only child is the restricted one, so the
+      // aggregated count collapses to 1 (root only), same as the honest-empty STATE-2 case.
+      aggregated_account_count: 1,
+      restricted_excluded: [
+        {
+          id: restrictedChildOrg.id,
+          display_name: restrictedChildOrg.display_name,
+        },
+      ],
+    });
+    qc.setQueryData(recordsKeys.rollup(ROOT_ID, "self"), selfRollup);
+    // Root's ONLY child is the restricted one — no non-restricted sibling. `rows` (after
+    // filtering restrictedIds out) collapses to just the root row, mirroring the honest
+    // "no sub-accounts" case at the rows.length<=1 check — but there IS something to
+    // disclose here (the restricted node), so the empty state must not win.
+    qc.setQueryData(recordsKeys.treeOrgs(), [rootOrg, restrictedChildOrg]);
+    qc.setQueryData(["organizations", "detail", ROOT_ID], rootOrg);
+
+    render(<AccountHierarchyPage />, { wrapper: wrapper(qc) });
+
+    expect(screen.queryByText(/no sub-accounts/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Restricted Child Corp")).toBeInTheDocument();
+  });
+
   it("AC-6: accepting a suggested edge card fires the real write chain — apiClient.PATCH with parent_org_id set to the root", async () => {
     const orphanOrg = {
       id: "org-orphan",

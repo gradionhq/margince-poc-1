@@ -187,6 +187,7 @@ export function AccountHierarchyPage({
     !rollupError &&
     tree &&
     rows.length <= 1 &&
+    restrictedIds.size === 0 &&
     (rollup?.aggregated_account_count ?? 0) <= 1;
 
   return (
