@@ -72,7 +72,7 @@ func TestProduceFieldChanges_MalformedOrIncompleteSignalsSkip(t *testing.T) {
 	cases := map[string]string{
 		"unparseable detail": `not json`,
 		"missing evidence":   mustJSON(map[string]any{"deal_id": "deal-1", "field": "stage", "confidence": 0.5}),
-		"missing confidence":  mustJSON(map[string]any{"deal_id": "deal-1", "field": "stage", "evidence": "e"}),
+		"missing confidence": mustJSON(map[string]any{"deal_id": "deal-1", "field": "stage", "evidence": "e"}),
 		"unknown field":      mustJSON(map[string]any{"deal_id": "deal-1", "field": "owner", "evidence": "e", "confidence": 0.5}),
 		"missing deal id":    mustJSON(map[string]any{"field": "stage", "evidence": "e", "confidence": 0.5}),
 	}
