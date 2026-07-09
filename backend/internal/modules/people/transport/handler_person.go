@@ -146,7 +146,20 @@ func (h *PersonHandler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sort := r.URL.Query().Get("sort")
-	if !personSortValues[sort] {
+	names, err := h.store.ActiveCustomFieldNames(r.Context(), wsID)
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	allowed := make(map[string]bool, len(personSortValues)+len(names)*2)
+	for k, v := range personSortValues {
+		allowed[k] = v
+	}
+	for _, n := range names {
+		allowed[n] = true
+		allowed["-"+n] = true
+	}
+	if !allowed[sort] {
 		jsonProblem(w, http.StatusUnprocessableEntity, "sort_field_not_allowed")
 		return
 	}
@@ -162,6 +175,11 @@ func (h *PersonHandler) list(w http.ResponseWriter, r *http.Request) {
 
 func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 	wsID := workspaceID(r)
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
+		return
+	}
 	var body struct {
 		FullName   string  `json:"full_name"`
 		FirstName  *string `json:"first_name"`
@@ -177,7 +195,7 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 			Position  int    `json:"position"`
 		} `json:"emails"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := decodeJSONMap(raw, &body); err != nil {
 		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
 		return
 	}
@@ -191,6 +209,12 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 	p.LastName = body.LastName
 	p.Title = body.Title
 	p.OwnerID = body.OwnerID
+	active, err := h.store.ActiveCustomFieldNames(r.Context(), wsID)
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	p.CustomFields = extractCustomFields(raw, active)
 	emails := make([]peopledomain.PersonEmailInput, len(body.Emails))
 	for i, e := range body.Emails {
 		emails[i] = peopledomain.PersonEmailInput{Email: e.Email, EmailType: e.EmailType, IsPrimary: e.IsPrimary, Position: e.Position}
@@ -210,21 +234,6 @@ func (h *PersonHandler) create(w http.ResponseWriter, r *http.Request) {
 	// Audit is written by PersonStore.Create at the store layer (covers direct
 	// store callers too), so no handler-level audit write is needed here.
 	jsonCreated(w, created)
-}
-
-// personDetailResponse is the person-360 composite read — the person itself
-// plus relationships, deals, and activities. Its own Relationships/Deals/
-// Activities fields shadow the embedded Person's `omitempty`-tagged fields of
-// the same Go field name (same class as deals/transport's dealDetailResponse:
-// list responses must omit these keys when unset, but a single-record read
-// must always show `[]`, never `null` or absent, when the composite result
-// set is legitimately empty — not expressible via one struct/tag serving both
-// list and get semantics).
-type personDetailResponse struct {
-	peopledomain.Person
-	Relationships []relationships.Relationship `json:"relationships"`
-	Deals         []deals.Deal                 `json:"deals"`
-	Activities    []activities.ActivityRef     `json:"activities"`
 }
 
 func (h *PersonHandler) get(w http.ResponseWriter, r *http.Request, id string) {
@@ -285,10 +294,28 @@ func (h *PersonHandler) update(w http.ResponseWriter, r *http.Request, id string
 		jsonProblem(w, http.StatusBadRequest, "bad_if_match")
 		return
 	}
-	var body map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
 		return
+	}
+	var body map[string]any
+	if err := decodeJSONMap(raw, &body); err != nil {
+		jsonProblem(w, http.StatusBadRequest, codeBadRequest)
+		return
+	}
+	active, err := h.store.ActiveCustomFieldNames(r.Context(), wsID)
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	for _, key := range active {
+		if v, ok := raw[key]; ok {
+			var decoded any
+			if err := json.Unmarshal(v, &decoded); err == nil {
+				body[key] = decoded
+			}
+		}
 	}
 	p, err := h.store.Update(r.Context(), id, wsID, body, ifMatch)
 	if errors.Is(err, errs.ErrVersionSkew) {
@@ -363,6 +390,14 @@ func queryLimit(r *http.Request, def int) int {
 		}
 	}
 	return def
+}
+
+func decodeJSONMap[T any](raw map[string]json.RawMessage, out *T) error {
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, out)
 }
 
 // parseIfMatch parses the optional If-Match header into an optimistic-concurrency
