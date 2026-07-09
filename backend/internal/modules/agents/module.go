@@ -69,8 +69,10 @@ type StageFunc = ports.StageFunc
 // Effector applies an approved or unconditionally-🟢 proposal's effect.
 type Effector = ports.Effector
 
-// DealReader/DealSnapshot are the narrow read port for close-date hygiene.
+// DealReader is the narrow read port for close-date hygiene.
 type DealReader = ports.DealReader
+
+// DealSnapshot is the deal state a close-date-hygiene sweep reads.
 type DealSnapshot = ports.DealSnapshot
 
 // ActorOvernight is the attribution string this module uses throughout.

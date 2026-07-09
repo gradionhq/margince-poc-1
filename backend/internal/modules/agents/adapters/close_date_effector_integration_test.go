@@ -17,7 +17,7 @@ func TestCloseDateEffector_Apply_UpdatesExpectedCloseDateWithIfMatch(t *testing.
 	db := testDB(t)
 	wsID := seedWorkspace(t, db)
 	pipelineID, stages := seedPipeline(t, db, wsID, []stageSpec{{name: "Open", position: 1, semantic: "open", winProb: 50}})
-	dealID := seedOpenDeal(t, db, wsID, pipelineID, stages[0].id, nil)
+	dealID := seedOpenDeal(t, db, wsID, pipelineID, stages[0].id)
 
 	store := deals.NewDealStore(db)
 	before, err := store.Get(context.Background(), dealID, wsID)
@@ -27,9 +27,9 @@ func TestCloseDateEffector_Apply_UpdatesExpectedCloseDateWithIfMatch(t *testing.
 
 	effector := adapters.NewCloseDateEffector(store)
 	payload, err := json.Marshal(map[string]any{
-		"deal_id":         dealID,
-		"workspace_id":    wsID,
-		"if_match":        before.Version,
+		"deal_id":          dealID,
+		"workspace_id":     wsID,
+		"if_match":         before.Version,
 		"new_close_date":   "2026-08-01",
 		"prior_close_date": nil,
 		"prior_version":    before.Version,
@@ -63,15 +63,15 @@ func TestCloseDateEffector_Apply_IfMatchZero_SkipsVersionCheck(t *testing.T) {
 	db := testDB(t)
 	wsID := seedWorkspace(t, db)
 	pipelineID, stages := seedPipeline(t, db, wsID, []stageSpec{{name: "Open", position: 1, semantic: "open", winProb: 50}})
-	dealID := seedOpenDeal(t, db, wsID, pipelineID, stages[0].id, nil)
+	dealID := seedOpenDeal(t, db, wsID, pipelineID, stages[0].id)
 
 	effector := adapters.NewCloseDateEffector(deals.NewDealStore(db))
 	payload, err := json.Marshal(map[string]any{
-		"deal_id":       dealID,
-		"workspace_id":  wsID,
-		"if_match":      0,
+		"deal_id":        dealID,
+		"workspace_id":   wsID,
+		"if_match":       0,
 		"new_close_date": "2026-09-15",
-		"prior_version": 999,
+		"prior_version":  999,
 	})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
@@ -94,15 +94,15 @@ func TestCloseDateEffector_Apply_VersionSkew_Rejected(t *testing.T) {
 	db := testDB(t)
 	wsID := seedWorkspace(t, db)
 	pipelineID, stages := seedPipeline(t, db, wsID, []stageSpec{{name: "Open", position: 1, semantic: "open", winProb: 50}})
-	dealID := seedOpenDeal(t, db, wsID, pipelineID, stages[0].id, nil)
+	dealID := seedOpenDeal(t, db, wsID, pipelineID, stages[0].id)
 
 	effector := adapters.NewCloseDateEffector(deals.NewDealStore(db))
 	payload, err := json.Marshal(map[string]any{
-		"deal_id":       dealID,
-		"workspace_id":  wsID,
-		"if_match":      999,
+		"deal_id":        dealID,
+		"workspace_id":   wsID,
+		"if_match":       999,
 		"new_close_date": "2026-08-01",
-		"prior_version": 999,
+		"prior_version":  999,
 	})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)

@@ -63,12 +63,16 @@ func seedPipeline(t *testing.T, db *sql.DB, wsID string, stages []stageSpec) (st
 	return pipelineID, out
 }
 
-func seedOpenDeal(t *testing.T, db *sql.DB, wsID, pipelineID, stageID string, expectedCloseDate *time.Time) string {
+// seedOpenDeal seeds a bare open deal with no expected_close_date — every
+// caller in this package only needs a plain open deal to read/write against;
+// app.seedOpenDealFull is the fixture that varies expected_close_date/
+// forecast_category/wait_until for the close-date-hygiene decision scenarios.
+func seedOpenDeal(t *testing.T, db *sql.DB, wsID, pipelineID, stageID string) string {
 	t.Helper()
 	var dealID string
-	if err := db.QueryRow(`INSERT INTO deal (workspace_id, name, pipeline_id, stage_id, status, expected_close_date, source, captured_by)
-		VALUES ($1::uuid,$2,$3::uuid,$4::uuid,'open',$5,'fixture','agent:overnight') RETURNING id`,
-		wsID, "agents-deal-"+ids.New(), pipelineID, stageID, expectedCloseDate).Scan(&dealID); err != nil {
+	if err := db.QueryRow(`INSERT INTO deal (workspace_id, name, pipeline_id, stage_id, status, source, captured_by)
+		VALUES ($1::uuid,$2,$3::uuid,$4::uuid,'open','fixture','agent:overnight') RETURNING id`,
+		wsID, "agents-deal-"+ids.New(), pipelineID, stageID).Scan(&dealID); err != nil {
 		t.Fatalf("seed deal: %v", err)
 	}
 	return dealID
@@ -108,7 +112,7 @@ func TestSQLDealReader_ListOpenDeals_ResolvesWinProbabilityAndRemainingStages(t 
 		{name: "Negotiation", position: 2, semantic: "open", winProb: 60},
 		{name: "Won", position: 3, semantic: "won", winProb: 100},
 	})
-	dealID := seedOpenDeal(t, db, wsID, pipelineID, stages[0].id, nil)
+	dealID := seedOpenDeal(t, db, wsID, pipelineID, stages[0].id)
 
 	r := adapters.NewSQLDealReader(db)
 	now := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)

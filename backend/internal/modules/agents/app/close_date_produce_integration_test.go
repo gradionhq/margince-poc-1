@@ -119,6 +119,15 @@ func TestRunPass_CloseDateHygiene_FullSweep_InvariantHoldsAcrossEveryTier(t *tes
 	wonID := seedClosedDealWithPastCloseDate(t, db, wsID, pipelineID, stages[2].id, "won", overdue)
 	healthyID := seedOpenDealFull(t, db, wsID, pipelineID, stages[0].id, &healthyDate, nil, nil, now.AddDate(0, 0, -1))
 
+	// PROVISIONAL_CONFIRM (rep-set forecast_category="commit"): Discovery
+	// stage (early, <50%, so NOT late_stage), otherwise AUTO_APPLY-eligible
+	// (clear-overdue, active) — the explicit rep-set category alone must
+	// still route this to PROVISIONAL_CONFIRM via InForecastCommit's
+	// rep-override branch, distinct from the >=50-probability default this
+	// suite already covers via provisionalLateStageID.
+	commitOverride := "commit"
+	commitOverrideID := seedOpenDealFull(t, db, wsID, pipelineID, stages[0].id, &overdue, &commitOverride, nil, now.AddDate(0, 0, -3))
+
 	reader := adapters.NewSQLDealReader(db)
 	dealStore := deals.NewDealStore(db)
 	effector := adapters.NewCloseDateEffector(dealStore)
@@ -159,7 +168,8 @@ func TestRunPass_CloseDateHygiene_FullSweep_InvariantHoldsAcrossEveryTier(t *tes
 	}
 
 	assertDealClosesOnOrAfter(t, db, autoApplyID, now)
-	assertPendingApprovalActionType(t, db, wsID, "overnight.close-date-confirm-request", 3)
+	assertDealClosesOnOrAfter(t, db, commitOverrideID, now)
+	assertPendingApprovalActionType(t, db, wsID, "overnight.close-date-confirm-request", 4) // late_stage + missing + wait-suppressed(late_stage) + commit-override cases
 	assertPendingApprovalActionType(t, db, wsID, "overnight.close-date-downgrade-review", 1)
 
 	wonAfter, _ := dealStore.GetAny(context.Background(), wonID, wsID)

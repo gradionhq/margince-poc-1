@@ -1,3 +1,6 @@
+// Package adapters holds the agents module's concrete read/write adapters
+// against other modules' storage — the ONLY place in this module that
+// depends on the deals module directly (backend/.go-arch-lint.yml).
 package adapters
 
 import (
@@ -42,14 +45,14 @@ func (r *SQLDealReader) ListOpenDeals(ctx context.Context, workspaceID string, n
 	var snaps []ports.DealSnapshot
 	for rows.Next() {
 		var (
-			snap                                  ports.DealSnapshot
-			expectedCloseDate                     sql.NullTime
-			forecastCategory                      sql.NullString
-			stagePosition                         int
-			winProbability                        int
-			stageSemantic                         string
-			lastActivityAt, waitUntil             sql.NullTime
-			createdAt                             time.Time
+			snap                      ports.DealSnapshot
+			expectedCloseDate         sql.NullTime
+			forecastCategory          sql.NullString
+			stagePosition             int
+			winProbability            int
+			stageSemantic             string
+			lastActivityAt, waitUntil sql.NullTime
+			createdAt                 time.Time
 		)
 		if err := rows.Scan(&snap.DealID, &snap.WorkspaceID, &snap.PipelineID, &snap.Status,
 			&expectedCloseDate, &forecastCategory, &snap.Version,
@@ -121,10 +124,6 @@ func (r *SQLDealReader) PipelineWonVelocity(ctx context.Context, workspaceID, pi
 	}
 	defer func() { _ = rows.Close() }()
 
-	type history struct {
-		dealID string
-		at     time.Time
-	}
 	byDeal := map[string][]time.Time{}
 	for rows.Next() {
 		var dealID string
