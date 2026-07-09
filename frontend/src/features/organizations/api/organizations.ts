@@ -18,6 +18,7 @@ export type OrgPatch = {
   size_band?: Organization["size_band"];
   address?: Organization["address"];
   version?: number;
+  parent_org_id?: string | null;
 };
 
 export function useOrganizations(opts?: { sort?: string; q?: string }) {

@@ -33,6 +33,20 @@ export default defineConfig({
       {
         // Storybook project: real Chromium via Playwright
         extends: true,
+        // Pre-bundle @dnd-kit/core (the deals feature's drag-and-drop dep) so Vite
+        // never lazily re-optimizes it mid-run: an on-the-fly "optimized dependencies
+        // changed, reloading" invalidates the dev server mid-request, which kills
+        // @storybook/addon-vitest's setup-file import ("Vitest failed to find the
+        // runner") and fails every story suite that hadn't already loaded. Only
+        // @dnd-kit/core is imported directly by source (PipelineBoard/StageColumn/
+        // DealCard) -- its own transitive deps (utilities, accessibility) aren't
+        // resolvable as bare top-level specifiers under this pnpm layout (they're
+        // nested inside @dnd-kit/core's own tree), but esbuild's dependency scanner
+        // already follows core's import graph once core itself is listed, so they
+        // don't need (and can't take) an explicit entry here.
+        optimizeDeps: {
+          include: ["@dnd-kit/core"],
+        },
         plugins: [
           storybookTest({ configDir: path.join(dirname, ".storybook") }),
         ],
