@@ -32,7 +32,7 @@ func TestPersonCreate_FuzzyReview_SameOrg(t *testing.T) {
 	org := orgdomain.NewOrganization("Acme Corp", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	org.WorkspaceID = ws
 	org.Domains = []orgdomain.OrganizationDomain{{Domain: "acme.com", IsPrimary: true}}
-	createdOrg, err := orgs.Create(pgtest.AppCtx(ws), org)
+	createdOrg, err := orgs.Create(pgtest.AppCtx(ws), org, nil)
 	if err != nil {
 		t.Fatalf("create org: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestPersonCreate_FuzzyReview_DomainOnly_NoEmploymentConfirmation(t *testing
 	org := orgdomain.NewOrganization("Acme Corp", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	org.WorkspaceID = ws
 	org.Domains = []orgdomain.OrganizationDomain{{Domain: "acme.com", IsPrimary: true}}
-	if _, err := orgs.Create(pgtest.AppCtx(ws), org); err != nil {
+	if _, err := orgs.Create(pgtest.AppCtx(ws), org, nil); err != nil {
 		t.Fatalf("create org: %v", err)
 	}
 
@@ -186,7 +186,7 @@ func TestPersonCreate_TieBreak_LowestID(t *testing.T) {
 	org := orgdomain.NewOrganization("Acme Corp", prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	org.WorkspaceID = ws
 	org.Domains = []orgdomain.OrganizationDomain{{Domain: "acme.com", IsPrimary: true}}
-	if _, err := orgs.Create(pgtest.AppCtx(ws), org); err != nil {
+	if _, err := orgs.Create(pgtest.AppCtx(ws), org, nil); err != nil {
 		t.Fatalf("create org: %v", err)
 	}
 

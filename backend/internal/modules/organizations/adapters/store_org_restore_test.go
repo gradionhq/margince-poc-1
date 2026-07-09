@@ -48,7 +48,7 @@ func TestOrgStore_Restore_ArchivedOrgWritesEventAndAudit(t *testing.T) {
 		DisplayName: "Restore Target",
 		Source:      "test",
 		CapturedBy:  "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create org: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestOrgStore_Restore_RefusesLiveAndMergedRecords(t *testing.T) {
 		DisplayName: "Live Organization",
 		Source:      "test",
 		CapturedBy:  "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create live org: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestOrgStore_Restore_RefusesLiveAndMergedRecords(t *testing.T) {
 		DisplayName: "Merged Organization",
 		Source:      "test",
 		CapturedBy:  "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create merged org: %v", err)
 	}

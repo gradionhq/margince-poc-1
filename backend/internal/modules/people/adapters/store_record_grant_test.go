@@ -49,7 +49,7 @@ func seedRecordGrantDealFixtures(ctx context.Context, t *testing.T, db *sql.DB, 
 	}
 	d := deals.NewDeal(dealName, pl.ID, st.ID, prov.Provenance{Source: "api", CapturedBy: "human:test"})
 	d.WorkspaceID = ws
-	deal, err = deals.NewDealStore(db).Create(ctx, d, "")
+	deal, err = deals.NewDealStore(db).Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("create deal: %v", err)
 	}

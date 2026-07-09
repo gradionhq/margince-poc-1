@@ -13,6 +13,7 @@ import (
 
 	"github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
+	"github.com/gradionhq/margince/backend/internal/platform/customfields"
 	database "github.com/gradionhq/margince/backend/internal/platform/database"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/dedupe"
@@ -42,8 +43,15 @@ func (e *ErrDuplicateDomain) Error() string {
 }
 
 // Create inserts an organization and its domains in one workspace-scoped tx.
-func (s *OrgStore) Create(ctx context.Context, o domain.Organization) (domain.Organization, error) {
+// rawExtra carries the raw request body's extension properties; any key that
+// matches an active custom column (and whose value shape matches the column
+// type) is written to that column in the same INSERT.
+func (s *OrgStore) Create(ctx context.Context, o domain.Organization, rawExtra map[string]any) (domain.Organization, error) {
 	if err := sqlutil.RequireProvenance(o.Source, o.CapturedBy); err != nil {
+		return domain.Organization{}, err
+	}
+	active, err := customfields.ActiveColumns(ctx, s.db, o.WorkspaceID, "organization")
+	if err != nil {
 		return domain.Organization{}, err
 	}
 	o.ID = ids.New()
@@ -54,29 +62,28 @@ func (s *OrgStore) Create(ctx context.Context, o domain.Organization) (domain.Or
 		def := "prospect"
 		classification = &def
 	}
-	domains := make([]domain.OrganizationDomain, len(o.Domains))
-	copy(domains, o.Domains)
-	hasPrimary := false
-	for i := range domains {
-		domains[i].Domain = strings.ToLower(strings.TrimSpace(domains[i].Domain))
-		if domains[i].IsPrimary {
-			hasPrimary = true
-		}
-	}
-	if len(domains) > 0 && !hasPrimary {
-		domains[0].IsPrimary = true
-	}
+	domains := normalizeCreateDomains(o.Domains)
 	o.Classification = classification
 	o.Domains = domains
 	var reviewFlag *dedupe.ReviewFlag
-	err := database.WithWorkspaceTx(ctx, s.db, o.WorkspaceID, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `
-			INSERT INTO organization (id, workspace_id, name, website, classification, relevance,
-			    owner_id, social, address, source, captured_by, version)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,1)`,
+	err = database.WithWorkspaceTx(ctx, s.db, o.WorkspaceID, func(tx *sql.Tx) error {
+		cols := []string{
+			"id", "workspace_id", "name", "website", "classification", "relevance",
+			"owner_id", "social", "address", "source", "captured_by", "version",
+		}
+		vals := []string{"$1", "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$9", "$10", "$11", "1"}
+		args := []any{
 			o.ID, o.WorkspaceID, o.DisplayName, o.Website, classification, o.Relevance,
-			o.OwnerID, social, address,
-			o.Source, o.CapturedBy)
+			o.OwnerID, social, address, o.Source, o.CapturedBy,
+		}
+		customCols, customVals, customArgs := customfields.InsertColumns(active, rawExtra, 12)
+		cols = append(cols, customCols...)
+		vals = append(vals, customVals...)
+		args = append(args, customArgs...)
+		//nolint:gosec // G202: only pq.QuoteIdentifier'd catalog-derived cf_* column names and $N placeholders are interpolated; all values are bound via args
+		_, err := tx.ExecContext(ctx, // NOSONAR: cols/vals are quoted, catalog-derived identifiers ($N placeholders only) from customfields.InsertColumns; all values are bound via args
+			`INSERT INTO organization (`+strings.Join(cols, ", ")+`) VALUES (`+strings.Join(vals, ", ")+`)`,
+			args...)
 		if err != nil {
 			return err
 		}
@@ -115,6 +122,24 @@ func (s *OrgStore) Create(ctx context.Context, o domain.Organization) (domain.Or
 	return created, nil
 }
 
+// normalizeCreateDomains lower-cases/trims each domain and guarantees exactly
+// one primary (defaulting the first when none is flagged).
+func normalizeCreateDomains(in []domain.OrganizationDomain) []domain.OrganizationDomain {
+	domains := make([]domain.OrganizationDomain, len(in))
+	copy(domains, in)
+	hasPrimary := false
+	for i := range domains {
+		domains[i].Domain = strings.ToLower(strings.TrimSpace(domains[i].Domain))
+		if domains[i].IsPrimary {
+			hasPrimary = true
+		}
+	}
+	if len(domains) > 0 && !hasPrimary {
+		domains[0].IsPrimary = true
+	}
+	return domains
+}
+
 func insertOrgDomains(ctx context.Context, tx *sql.Tx, workspaceID, orgID string, domains []domain.OrganizationDomain) error {
 	for i, d := range domains {
 		var existingID string
@@ -141,31 +166,50 @@ func insertOrgDomains(ctx context.Context, tx *sql.Tx, workspaceID, orgID string
 	return nil
 }
 
-// Get returns a live organization by id, workspace-scoped; ErrNotFound if absent.
-//
-//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
-func (s *OrgStore) Get(ctx context.Context, id, workspaceID string) (domain.Organization, error) {
+// orgDetailColumns is the fixed SELECT column list shared by Get and GetAny —
+// the only difference between the two reads is whether archived rows are
+// excluded, so both build their query by appending this same base plus the
+// active custom columns.
+const orgDetailColumns = `
+	SELECT id, workspace_id, name, website, classification, relevance,
+	       owner_id, social, address, parent_org_id, merged_into_id,
+	       version, source, captured_by, created_at, updated_at, archived_at`
+
+// orgDetailScanTargets returns the ordered Scan() targets for orgDetailColumns
+// (extended with the active custom-column destinations) shared by Get and
+// GetAny — the mechanical scan-target/column-list pairing that is identical
+// between the two reads, split out so neither hand-duplicates it.
+func orgDetailScanTargets(o *domain.Organization, socialRaw, addrRaw *[]byte, dests []any) []any {
+	return append([]any{
+		&o.ID, &o.WorkspaceID, &o.DisplayName, &o.Website, &o.Classification, &o.Relevance,
+		&o.OwnerID, socialRaw, addrRaw, &o.ParentOrgID, &o.MergedIntoID,
+		&o.Version, &o.Source, &o.CapturedBy,
+		&o.CreatedAt, &o.UpdatedAt, &o.ArchivedAt,
+	}, dests...)
+}
+
+// getOrg is Get/GetAny's shared body: liveOnly toggles the "AND archived_at
+// IS NULL" predicate that is the only difference between the two reads.
+func (s *OrgStore) getOrg(ctx context.Context, id, workspaceID string, liveOnly bool) (domain.Organization, error) {
+	active, err := customfields.ActiveColumns(ctx, s.db, workspaceID, "organization")
+	if err != nil {
+		return domain.Organization{}, err
+	}
 	var o domain.Organization
 	var socialRaw, addrRaw []byte
-	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		err := tx.QueryRowContext(ctx, `
-			SELECT id, workspace_id, name, website, classification, relevance,
-			       owner_id, social, address, parent_org_id, merged_into_id,
-			       version, source, captured_by, created_at, updated_at, archived_at
-			FROM organization WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
-			id, workspaceID).Scan(
-			&o.ID, &o.WorkspaceID, &o.DisplayName, &o.Website, &o.Classification, &o.Relevance,
-			&o.OwnerID, &socialRaw, &addrRaw, &o.ParentOrgID, &o.MergedIntoID,
-			&o.Version, &o.Source, &o.CapturedBy,
-			&o.CreatedAt, &o.UpdatedAt, &o.ArchivedAt,
-		)
-		if err != nil {
+	dests := customfields.ScanDests(active)
+	where := "WHERE id=$1::uuid AND workspace_id=$2::uuid"
+	if liveOnly {
+		where += " AND archived_at IS NULL"
+	}
+	err = database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		targets := orgDetailScanTargets(&o, &socialRaw, &addrRaw, dests)
+		query := orgDetailColumns + customfields.SelectSuffix(active) + `
+			FROM organization ` + where
+		if err := tx.QueryRowContext(ctx, query, id, workspaceID).Scan(targets...); err != nil { // NOSONAR: query is built from a fixed literal + customfields.SelectSuffix's quoted, catalog-derived identifiers only; id/workspaceID are bound params
 			return err
 		}
-		if err := attachOrgDomains(ctx, tx, workspaceID, &o); err != nil {
-			return err
-		}
-		return nil
+		return attachOrgDomains(ctx, tx, workspaceID, &o)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return o, errs.ErrNotFound
@@ -179,46 +223,52 @@ func (s *OrgStore) Get(ctx context.Context, id, workspaceID string) (domain.Orga
 		o.Address = map[string]any{}
 		sqlutil.UnmarshalJSON(addrRaw, &o.Address)
 	}
+	o.CustomFields = customfields.ExtractValues(active, dests)
 	return o, nil
+}
+
+// Get returns a live organization by id, workspace-scoped; ErrNotFound if absent.
+func (s *OrgStore) Get(ctx context.Context, id, workspaceID string) (domain.Organization, error) {
+	return s.getOrg(ctx, id, workspaceID, true)
 }
 
 // Update applies partial updates to an organization, writes one audit_log row and one
 // organization.updated outbox event in the same tx (PO-AC-3, GATE-CORE-3/5); ifMatch==0
 // skips the version check (last-write-wins).
 func (s *OrgStore) Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (domain.Organization, error) {
-	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		var res sql.Result
-		var err error
-		if ifMatch == 0 {
-			res, err = tx.ExecContext(ctx, `
-				UPDATE organization
-				SET name       = COALESCE($3, name),
-				    website    = COALESCE($4, website),
-				    owner_id   = COALESCE($5, owner_id),
-				    updated_at = now()
-				WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL`,
-				id, workspaceID,
-				sqlutil.NullStr(updates, "display_name"),
-				sqlutil.NullStr(updates, "website"),
-				sqlutil.NullStr(updates, "owner_id"))
-		} else {
-			res, err = tx.ExecContext(ctx, `
-				UPDATE organization
-				SET name       = COALESCE($3, name),
-				    website    = COALESCE($4, website),
-				    owner_id   = COALESCE($5, owner_id),
-				    updated_at = now()
-				WHERE id=$1::uuid AND workspace_id=$2::uuid AND version=$6 AND archived_at IS NULL`,
-				id, workspaceID,
-				sqlutil.NullStr(updates, "display_name"),
-				sqlutil.NullStr(updates, "website"),
-				sqlutil.NullStr(updates, "owner_id"),
-				ifMatch)
+	active, err := customfields.ActiveColumns(ctx, s.db, workspaceID, "organization")
+	if err != nil {
+		return domain.Organization{}, err
+	}
+	err = database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		setClauses := []string{
+			"name       = COALESCE($3, name)",
+			"website    = COALESCE($4, website)",
+			"owner_id   = COALESCE($5, owner_id)",
+			"updated_at = now()",
 		}
+		args := []any{
+			id, workspaceID,
+			sqlutil.NullStr(updates, "display_name"),
+			sqlutil.NullStr(updates, "website"),
+			sqlutil.NullStr(updates, "owner_id"),
+		}
+		customSet, customArgs := customfields.UpdateSetClauses(active, updates, 6)
+		setClauses = append(setClauses, customSet...)
+		args = append(args, customArgs...)
+		where := "WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL"
+		if ifMatch != 0 {
+			args = append(args, ifMatch)
+			where = fmt.Sprintf("WHERE id=$1::uuid AND workspace_id=$2::uuid AND version=$%d AND archived_at IS NULL", len(args))
+		}
+		//nolint:gosec // G202: only pq.QuoteIdentifier'd catalog-derived cf_* column names and $N placeholders are interpolated; all values are bound via args
+		res, err := tx.ExecContext(ctx, // NOSONAR: setClauses/where are quoted, catalog-derived identifiers ($N placeholders only) from customfields.UpdateSetClauses; all values are bound via args
+			`UPDATE organization SET `+strings.Join(setClauses, ", ")+` `+where,
+			args...)
 		if err != nil {
 			return err
 		}
-		if n, _ := res.RowsAffected(); n == 0 {
+		if rowsAffected, _ := res.RowsAffected(); rowsAffected == 0 {
 			if ifMatch != 0 {
 				return errs.ErrVersionSkew
 			}
@@ -348,44 +398,8 @@ func (s *OrgStore) Restore(ctx context.Context, id, workspaceID string) (domain.
 }
 
 // GetAny fetches an organization by id regardless of archived_at status.
-//
-//nolint:dupl // parallel per-entity CRUD: the SQL column list and Scan targets differ by type; a generic extraction would read worse than the explicit form
 func (s *OrgStore) GetAny(ctx context.Context, id, workspaceID string) (domain.Organization, error) {
-	var o domain.Organization
-	var socialRaw, addrRaw []byte
-	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
-		err := tx.QueryRowContext(ctx, `
-			SELECT id, workspace_id, name, website, classification, relevance,
-			       owner_id, social, address, parent_org_id, merged_into_id,
-			       version, source, captured_by, created_at, updated_at, archived_at
-			FROM organization WHERE id=$1::uuid AND workspace_id=$2::uuid`,
-			id, workspaceID).Scan(
-			&o.ID, &o.WorkspaceID, &o.DisplayName, &o.Website, &o.Classification, &o.Relevance,
-			&o.OwnerID, &socialRaw, &addrRaw, &o.ParentOrgID, &o.MergedIntoID,
-			&o.Version, &o.Source, &o.CapturedBy,
-			&o.CreatedAt, &o.UpdatedAt, &o.ArchivedAt,
-		)
-		if err != nil {
-			return err
-		}
-		if err := attachOrgDomains(ctx, tx, workspaceID, &o); err != nil {
-			return err
-		}
-		return nil
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return o, errs.ErrNotFound
-	}
-	if err != nil {
-		return o, err
-	}
-	o.Social = map[string]any{}
-	sqlutil.UnmarshalJSON(socialRaw, &o.Social)
-	if addrRaw != nil {
-		o.Address = map[string]any{}
-		sqlutil.UnmarshalJSON(addrRaw, &o.Address)
-	}
-	return o, nil
+	return s.getOrg(ctx, id, workspaceID, false)
 }
 
 func attachOrgDomains(ctx context.Context, tx *sql.Tx, workspaceID string, o *domain.Organization) error {

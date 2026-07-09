@@ -49,7 +49,7 @@ func TestOrganizationHandler_Get_Composite360(t *testing.T) {
 	actStore := actAdapters.NewActivityStore(db)
 	h := orgHandlerForTest(db, orgStore)
 
-	org, err := orgStore.Create(ctx, orgDomain.Organization{WorkspaceID: orgCompositeWS, DisplayName: "Composite Org", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	org, err := orgStore.Create(ctx, orgDomain.Organization{WorkspaceID: orgCompositeWS, DisplayName: "Composite Org", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed org: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestOrganizationHandler_Get_Composite360(t *testing.T) {
 	d := deals.NewDeal("Composite Deal", pl.ID, st.ID, p0)
 	d.WorkspaceID = orgCompositeWS
 	d.OrganizationID = &org.ID
-	createdDeal, err := dealStore.Create(ctx, d, "")
+	createdDeal, err := dealStore.Create(ctx, d, "", nil)
 	if err != nil {
 		t.Fatalf("seed deal: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestOrganizationHandler_Get_Composite360(t *testing.T) {
 		t.Fatalf("link activity: %v", err)
 	}
 
-	otherOrg, err := orgStore.Create(ctx, orgDomain.Organization{WorkspaceID: orgCompositeWS, DisplayName: "Other Org", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	otherOrg, err := orgStore.Create(ctx, orgDomain.Organization{WorkspaceID: orgCompositeWS, DisplayName: "Other Org", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed other org: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestOrganizationHandler_Get_EmptyCompositeShowsEmptyArrays_NotNull(t *testi
 	orgStore := orgAdapters.NewOrgStore(db)
 	h := orgHandlerForTest(db, orgStore)
 
-	org, err := orgStore.Create(ctx, orgDomain.Organization{WorkspaceID: orgCompositeWS, DisplayName: "Lonely Org", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	org, err := orgStore.Create(ctx, orgDomain.Organization{WorkspaceID: orgCompositeWS, DisplayName: "Lonely Org", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed org: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestOrganizationHandler_Get_ArchivedStillFetchableWithComposite(t *testing.
 	orgStore := orgAdapters.NewOrgStore(db)
 	h := orgHandlerForTest(db, orgStore)
 
-	org, err := orgStore.Create(ctx, orgDomain.Organization{WorkspaceID: orgCompositeWS, DisplayName: "Archive Me Org", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	org, err := orgStore.Create(ctx, orgDomain.Organization{WorkspaceID: orgCompositeWS, DisplayName: "Archive Me Org", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestOrganizationHandler_Get_ForeignWorkspaceID_Returns404(t *testing.T) {
 	orgStore := orgAdapters.NewOrgStore(db)
 	h := orgHandlerForTest(db, orgStore)
 
-	org, err := orgStore.Create(ctx, orgDomain.Organization{WorkspaceID: orgCompositeWS, DisplayName: "Tenant A Org", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	org, err := orgStore.Create(ctx, orgDomain.Organization{WorkspaceID: orgCompositeWS, DisplayName: "Tenant A Org", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed org: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestOrganizationHandler_Get_Composite360_PerfBudgetAndPaginationCap(t *test
 	relStore := relAdapters.NewRelationshipStore(db)
 	h := orgHandlerForTest(db, orgStore)
 
-	org, err := orgStore.Create(ctx, orgDomain.Organization{WorkspaceID: ws, DisplayName: "Perf Org", Source: p0.Source, CapturedBy: p0.CapturedBy})
+	org, err := orgStore.Create(ctx, orgDomain.Organization{WorkspaceID: ws, DisplayName: "Perf Org", Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed org: %v", err)
 	}

@@ -192,7 +192,16 @@ func (h *OrganizationHandler) create(w http.ResponseWriter, r *http.Request) {
 			IsPrimary *bool  `json:"is_primary,omitempty"`
 		} `json:"domains,omitempty"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	// Read the body once into raw JSON so the typed decode and the best-effort
+	// extension-property decode both see the same bytes (the typed struct
+	// discards any cf_* keys; rawExtra preserves them for the store to filter
+	// against the active custom columns).
+	var raw json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+		httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
+		return
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
 		httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
 		return
 	}
@@ -200,6 +209,8 @@ func (h *OrganizationHandler) create(w http.ResponseWriter, r *http.Request) {
 		httpkit.JSONProblem(w, http.StatusBadRequest, "missing_required_fields")
 		return
 	}
+	var rawExtra map[string]any
+	_ = json.Unmarshal(raw, &rawExtra) // best-effort: a non-object body just yields no custom fields
 
 	org := domain.Organization{
 		WorkspaceID: wsID,
@@ -223,7 +234,7 @@ func (h *OrganizationHandler) create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	created, err := h.store.Create(r.Context(), org)
+	created, err := h.store.Create(r.Context(), org, rawExtra)
 	if err != nil {
 		var dup *adapters.ErrDuplicateDomain
 		if errors.As(err, &dup) {
@@ -257,6 +268,22 @@ type organizationDetailResponse struct {
 	Activities    []domain.ActivityRef     `json:"activities"`
 }
 
+func (r organizationDetailResponse) MarshalJSON() ([]byte, error) {
+	type alias organizationDetailResponse
+	base, err := json.Marshal(alias(r))
+	if err != nil {
+		return nil, err
+	}
+	var out map[string]json.RawMessage
+	if err := json.Unmarshal(base, &out); err != nil {
+		return nil, err
+	}
+	out["relationships"], _ = json.Marshal(r.Relationships)
+	out["deals"], _ = json.Marshal(r.Deals)
+	out["activities"], _ = json.Marshal(r.Activities)
+	return json.Marshal(out)
+}
+
 func (h *OrganizationHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	wsID := httpkit.WorkspaceID(r)
 	o, err := h.store.GetAny(r.Context(), id, wsID)
@@ -279,87 +306,6 @@ func (h *OrganizationHandler) get(w http.ResponseWriter, r *http.Request, id str
 		Deals:         deals,
 		Activities:    acts,
 	})
-}
-
-// assembleComposite fans out to related stores for the organization-360 read,
-// converting each store's domain type to the organization module's view-model.
-func (h *OrganizationHandler) assembleComposite(ctx context.Context, wsID, orgID string) ([]domain.RelationshipRef, []domain.DealRef, []domain.ActivityRef, error) {
-	rawRels, _, err := h.relStore.List(ctx, wsID, "", 50, reldomain.RelationshipListFilter{OrganizationID: orgID})
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	rels := make([]domain.RelationshipRef, len(rawRels))
-	for i, r := range rawRels {
-		rels[i] = domain.RelationshipRef{
-			ID:                r.ID,
-			WorkspaceID:       r.WorkspaceID,
-			Kind:              r.Kind,
-			PersonID:          r.PersonID,
-			OrganizationID:    r.OrganizationID,
-			DealID:            r.DealID,
-			CounterpartyOrgID: r.CounterpartyOrgID,
-			Role:              r.Role,
-			IsCurrentPrimary:  r.IsCurrentPrimary,
-			StartedAt:         r.StartedAt,
-			EndedAt:           r.EndedAt,
-			Version:           r.Version,
-			Source:            r.Source,
-			CapturedBy:        r.CapturedBy,
-			Provenance:        r.Provenance,
-			CreatedAt:         r.CreatedAt,
-			UpdatedAt:         r.UpdatedAt,
-			ArchivedAt:        r.ArchivedAt,
-		}
-	}
-
-	rawDeals, _, err := h.dealStore.ListFiltered(ctx, wsID, "", 50, dealdomain.DealListFilter{OrganizationID: orgID})
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	deals := make([]domain.DealRef, len(rawDeals))
-	for i, d := range rawDeals {
-		deals[i] = domain.DealRef{
-			ID:                d.ID,
-			WorkspaceID:       d.WorkspaceID,
-			Name:              d.Name,
-			AmountMinor:       d.AmountMinor,
-			Currency:          d.Currency,
-			FxRateToBase:      d.FxRateToBase,
-			FxRateDate:        d.FxRateDate,
-			PipelineID:        d.PipelineID,
-			StageID:           d.StageID,
-			OrganizationID:    d.OrganizationID,
-			OwnerID:           d.OwnerID,
-			PartnerOrgID:      d.PartnerOrgID,
-			Status:            d.Status,
-			LostReason:        d.LostReason,
-			ExpectedCloseDate: d.ExpectedCloseDate,
-			ClosedAt:          d.ClosedAt,
-			ForecastCategory:  d.ForecastCategory,
-			WaitUntil:         d.WaitUntil,
-			LastActivityAt:    d.LastActivityAt,
-			Stalled:           d.Stalled,
-			StageEnteredAt:    d.StageEnteredAt,
-			StakeholderCount:  d.StakeholderCount,
-			Version:           d.Version,
-			Source:            d.Source,
-			CapturedBy:        d.CapturedBy,
-			Provenance:        d.Provenance,
-			CreatedAt:         d.CreatedAt,
-			UpdatedAt:         d.UpdatedAt,
-			ArchivedAt:        d.ArchivedAt,
-		}
-	}
-
-	rawActs, _, err := h.activityStore.List(ctx, wsID, "organization", orgID, "", 50)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	acts := make([]domain.ActivityRef, len(rawActs))
-	for i, a := range rawActs {
-		acts[i] = domain.ActivityRef{ID: a.ID, Kind: a.Kind, Subject: a.Subject, OccurredAt: a.OccurredAt}
-	}
-	return rels, deals, acts, nil
 }
 
 func (h *OrganizationHandler) update(w http.ResponseWriter, r *http.Request, id string) {
@@ -434,7 +380,26 @@ func (h *OrganizationHandler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sortVal := r.URL.Query().Get("sort")
-	if !orgSortAllowed[sortVal] {
+	// Fetch the workspace's active custom columns once and use them to admit
+	// both a sort value and a filter key into the vocabulary — an active column
+	// becomes legal; a retired (or never-existed) cf_ key is refused with a 422,
+	// the same way an unknown sort/filter field always is.
+	names, err := h.store.ActiveCustomFieldNames(r.Context(), wsID)
+	if err != nil {
+		httpkit.JSONError(w, err)
+		return
+	}
+	activeCustom := make(map[string]bool, len(names))
+	allowed := make(map[string]bool, len(orgSortAllowed)+len(names)*2)
+	for k, v := range orgSortAllowed {
+		allowed[k] = v
+	}
+	for _, n := range names {
+		activeCustom[n] = true
+		allowed[n] = true
+		allowed["-"+n] = true
+	}
+	if !allowed[sortVal] {
 		httpkit.JSONProblem(w, http.StatusUnprocessableEntity, "sort_field_not_allowed")
 		return
 	}
@@ -443,11 +408,22 @@ func (h *OrganizationHandler) list(w http.ResponseWriter, r *http.Request) {
 		Classification: q.Get("classification"),
 		Domain:         q.Get("domain"),
 		OwnerID:        q.Get("owner_id"),
+		CustomFilters:  map[string]string{},
 	}
 	if s := q.Get("relevance_gte"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil {
 			filter.RelevanceGTE = &n
 		}
+	}
+	for key, values := range q {
+		if !strings.HasPrefix(key, "cf_") || len(values) == 0 {
+			continue
+		}
+		if !activeCustom[key] {
+			httpkit.JSONProblem(w, http.StatusUnprocessableEntity, "filter_field_not_allowed")
+			return
+		}
+		filter.CustomFilters[key] = values[0]
 	}
 	cursor := r.URL.Query().Get("cursor")
 	limit := httpkit.QueryLimit(r, 20)

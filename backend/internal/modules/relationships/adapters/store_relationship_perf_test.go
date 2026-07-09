@@ -33,7 +33,7 @@ func TestRelationshipList_OrgEmployment_P95AndExplain(t *testing.T) {
 	p0 := prov.Provenance{Source: "test", CapturedBy: "human:test"}
 
 	os := orgadapters.NewOrgStore(db)
-	org, err := os.Create(ctx, orgdomain.Organization{WorkspaceID: wsRelPerf, DisplayName: "Perf Org " + pgtest.Uniq(), Classification: strPtr("prospect"), Source: p0.Source, CapturedBy: p0.CapturedBy})
+	org, err := os.Create(ctx, orgdomain.Organization{WorkspaceID: wsRelPerf, DisplayName: "Perf Org " + pgtest.Uniq(), Classification: strPtr("prospect"), Source: p0.Source, CapturedBy: p0.CapturedBy}, nil)
 	if err != nil {
 		t.Fatalf("seed org: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestRelationshipList_DealStakeholders_P95AndExplain(t *testing.T) {
 	ds := deals.NewDealStore(db)
 	dSeed := deals.NewDeal("RelPerf Deal "+pgtest.Uniq(), pl.ID, st.ID, p0)
 	dSeed.WorkspaceID = wsRelPerf
-	d, err := ds.Create(ctx, dSeed, "")
+	d, err := ds.Create(ctx, dSeed, "", nil)
 	if err != nil {
 		t.Fatalf("seed deal: %v", err)
 	}
