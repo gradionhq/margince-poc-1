@@ -169,6 +169,35 @@ describe("CustomFieldsAdminPage", () => {
     });
   });
 
+  describe("List query states", () => {
+    it("STATE-2: shows the table skeleton while the fields query is loading, and does not render the table", () => {
+      mockFieldsIsLoading = true;
+      renderPage();
+
+      expect(screen.getByTestId("table-skeleton")).toBeInTheDocument();
+      // CustomFieldsTable (and its internal chips/table) must be swapped out,
+      // not rendered alongside the skeleton.
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("chip-deal")).not.toBeInTheDocument();
+    });
+
+    it("STATE-3: shows InlineErrorFallback when the fields query errors, and retry calls refetch", async () => {
+      const user = userEvent.setup();
+      mockFieldsIsError = true;
+      renderPage();
+
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("chip-deal")).not.toBeInTheDocument();
+
+      const retryButton = screen.getByRole("button", { name: /try again/i });
+      expect(retryButton).toBeInTheDocument();
+
+      await user.click(retryButton);
+
+      expect(refetchFields).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("Create flow", () => {
     it("opens NewCustomFieldModal when Add field button is clicked", async () => {
       const user = userEvent.setup();
