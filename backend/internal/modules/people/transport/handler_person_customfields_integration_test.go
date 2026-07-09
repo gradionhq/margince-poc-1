@@ -248,3 +248,164 @@ func TestPersonHandler_CustomFields_RetiredFieldHiddenAndSortRefused(t *testing.
 		t.Fatalf("problem code = %#v, want sort_field_not_allowed: %s", problem["code"], listW.Body.String())
 	}
 }
+
+// TestPersonHandler_CustomFields_ListByCustomColumn_PaginatesWithoutSkippingOrDuplicating
+// is the regression test for the FINAL GATE finding: listByCustomColumn used
+// to page with an id-keyset cursor (`id::text > $2`) over a query ORDER BY
+// the custom column — since the seek key didn't match the sort key, a row
+// whose id sorted below the previous page's last id (but whose cf_ value
+// sorted later) could be skipped entirely. Three people are seeded with
+// cf_ values that deliberately sort in the OPPOSITE order of their id/
+// creation order, and limit=1 forces every row onto its own page, so an
+// id-keyset bug would visibly skip or duplicate a row.
+func TestPersonHandler_CustomFields_ListByCustomColumn_PaginatesWithoutSkippingOrDuplicating(t *testing.T) {
+	db := openTestDB(t)
+	wsID := "00000000-0000-0000-0000-000000000054"
+	seedWorkspace(t, db, wsID)
+	setRLS(t, db, wsID)
+	seedPersonCustomField(t, db, wsID, "Rank2")
+
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID, UserID: "human:test"})
+	store := people.NewPersonStore(db)
+	h := personHandlerForTest(db, store)
+
+	// Created in this order (so ids ascend in this order), but cf_rank2
+	// values ascend in the REVERSE order — an id-keyset seek would walk id
+	// order, not cf_rank2 order, silently skipping rows.
+	seeded := []struct {
+		name  string
+		value int
+	}{
+		{"Page A", 30},
+		{"Page B", 20},
+		{"Page C", 10},
+	}
+	for _, s := range seeded {
+		createBody := map[string]any{
+			"full_name":   s.name,
+			"source":      "test",
+			"captured_by": "human:test",
+			"cf_rank2":    s.value,
+		}
+		b, _ := json.Marshal(createBody)
+		req := httptest.NewRequest(http.MethodPost, "/people", bytes.NewReader(b))
+		req = req.WithContext(ctx)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("POST /people (%s): got %d: %s", s.name, w.Code, w.Body.String())
+		}
+	}
+
+	seen := map[string]bool{}
+	var order []string
+	cursor := ""
+	for page := 0; page < 10; page++ {
+		url := "/people?sort=cf_rank2&limit=1"
+		if cursor != "" {
+			url += "&cursor=" + cursor
+		}
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = req.WithContext(ctx)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET %s: got %d: %s", url, w.Code, w.Body.String())
+		}
+		var resp map[string]any
+		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+			t.Fatal(err)
+		}
+		data, _ := resp["data"].([]any)
+		for _, item := range data {
+			m, _ := item.(map[string]any)
+			fullName, _ := m["full_name"].(string)
+			if seen[fullName] {
+				t.Fatalf("duplicate row across pages: %q (order so far: %v)", fullName, order)
+			}
+			seen[fullName] = true
+			order = append(order, fullName)
+		}
+		pageMeta, _ := resp["page"].(map[string]any)
+		nextCursor, _ := pageMeta["next_cursor"].(string)
+		if nextCursor == "" {
+			break
+		}
+		cursor = nextCursor
+	}
+
+	if len(order) != len(seeded) {
+		t.Fatalf("expected all %d seeded rows across pages (no skip), got %d: %v", len(seeded), len(order), order)
+	}
+	// cf_rank2 ascends 10, 20, 30 -> Page C, Page B, Page A.
+	want := []string{"Page C", "Page B", "Page A"}
+	for i, name := range want {
+		if order[i] != name {
+			t.Fatalf("page order[%d] = %q, want %q (full order %v)", i, order[i], name, order)
+		}
+	}
+}
+
+// TestPersonHandler_List_SortStrength_IncludesCustomFields is the regression
+// test for the FINAL GATE finding that listByStrength never attached
+// CustomFields at all: GET /people?sort=strength (and -strength) used to
+// return persons with CustomFields == nil (and no cf_<slug> key on the
+// wire), even though the default list and the custom-column sort both
+// already attached them correctly.
+func TestPersonHandler_List_SortStrength_IncludesCustomFields(t *testing.T) {
+	db := openTestDB(t)
+	wsID := "00000000-0000-0000-0000-000000000055"
+	seedWorkspace(t, db, wsID)
+	setRLS(t, db, wsID)
+	seedPersonCustomField(t, db, wsID, "Strength")
+
+	ctx := crmctx.With(context.Background(), crmctx.Principal{TenantID: wsID, UserID: "human:test"})
+	store := people.NewPersonStore(db)
+	h := personHandlerForTest(db, store)
+
+	createBody := map[string]any{
+		"full_name":   "Strength Sorted Person",
+		"source":      "test",
+		"captured_by": "human:test",
+		"cf_strength": 99,
+	}
+	b, _ := json.Marshal(createBody)
+	req := httptest.NewRequest(http.MethodPost, "/people", bytes.NewReader(b))
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("POST /people: got %d: %s", w.Code, w.Body.String())
+	}
+
+	for _, sortVal := range []string{"strength", "-strength"} {
+		listReq := httptest.NewRequest(http.MethodGet, "/people?sort="+sortVal, nil)
+		listReq = listReq.WithContext(ctx)
+		listW := httptest.NewRecorder()
+		h.ServeHTTP(listW, listReq)
+		if listW.Code != http.StatusOK {
+			t.Fatalf("GET /people?sort=%s: got %d: %s", sortVal, listW.Code, listW.Body.String())
+		}
+		var resp map[string]any
+		if err := json.NewDecoder(listW.Body).Decode(&resp); err != nil {
+			t.Fatal(err)
+		}
+		data, ok := resp["data"].([]any)
+		if !ok || len(data) == 0 {
+			t.Fatalf("sort=%s: expected list data, got %#v", sortVal, resp["data"])
+		}
+		found := false
+		for _, item := range data {
+			m, _ := item.(map[string]any)
+			if m["full_name"] == "Strength Sorted Person" {
+				found = true
+				if m["cf_strength"] != float64(99) {
+					t.Fatalf("sort=%s: cf_strength = %#v, want 99: %s", sortVal, m["cf_strength"], listW.Body.String())
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("sort=%s: seeded person not found in response: %s", sortVal, listW.Body.String())
+		}
+	}
+}

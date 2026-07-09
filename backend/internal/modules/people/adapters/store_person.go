@@ -346,11 +346,19 @@ func (s *PersonStore) listByID(ctx context.Context, workspaceID, cursor string, 
 	return out, next, nil
 }
 
+// listByCustomColumn pages by a catalog-derived, non-unique, possibly-NULL
+// custom column: an id-keyset cursor cannot safely seek against such a
+// column (a later page could skip a row whose id sorts below the previous
+// page's last id but whose custom-field value sorts later), so this fetches
+// every matching row ordered by the custom column in one query and
+// offset-paginates in Go — mirrors OrgStore.listByCustomColumn's shape
+// exactly (store_org_list.go).
 func (s *PersonStore) listByCustomColumn(ctx context.Context, workspaceID, cursor string, limit int, sort string, active []customfields.Column) ([]domain.Person, string, error) {
 	column := strings.TrimPrefix(sort, "-")
 	desc := strings.HasPrefix(sort, "-")
+	offset := sqlutil.DecodeOffsetCursor(cursor)
 	// Non-nil so an empty result marshals to a JSON array ([]), never null.
-	out := []domain.Person{}
+	all := []domain.Person{}
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		//nolint:gosec // G202: column is re-derived against the caller's own active-columns fetch (never trusted from the transport layer a second time) and pq.QuoteIdentifier-quoted; personCustomSelect returns quoted, catalog-derived identifiers only
 		rows, err := tx.QueryContext(ctx, `
@@ -359,15 +367,13 @@ func (s *PersonStore) listByCustomColumn(ctx context.Context, workspaceID, curso
 			       version, source, captured_by, created_at, updated_at
 			FROM person
 			WHERE workspace_id=$1::uuid AND archived_at IS NULL
-			  AND ($2 = '' OR id::text > $2)
 			ORDER BY `+pq.QuoteIdentifier(column)+func() string {
 			if desc {
 				return " DESC NULLS LAST, id"
 			}
 			return " ASC NULLS LAST, id"
-		}()+`
-			LIMIT $3`,
-			workspaceID, cursor, limit+1)
+		}(),
+			workspaceID)
 		if err != nil {
 			return err
 		}
@@ -388,19 +394,24 @@ func (s *PersonStore) listByCustomColumn(ctx context.Context, workspaceID, curso
 			p.Social = map[string]any{}
 			sqlutil.UnmarshalJSON(socialRaw, &p.Social)
 			p.CustomFields = customfields.ExtractValues(active, dests)
-			out = append(out, p)
+			all = append(all, p)
 		}
 		return rows.Err()
 	})
 	if err != nil {
 		return nil, "", err
 	}
-	var next string
-	if len(out) > limit {
-		next = out[limit-1].ID
-		out = out[:limit]
+	if offset > len(all) {
+		offset = len(all)
 	}
-	return out, next, nil
+	end := offset + limit
+	var next string
+	if end < len(all) {
+		next = sqlutil.EncodeOffsetCursor(end)
+	} else {
+		end = len(all)
+	}
+	return all[offset:end], next, nil
 }
 
 // Update applies partial updates to a person using optimistic concurrency.
