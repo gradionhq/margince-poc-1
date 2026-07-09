@@ -203,11 +203,22 @@ export function useTeamRollup(
     })),
   });
 
-  const reps = siblings.map((quota, i) => ({
-    quota,
-    attainment: attainmentResults[i]?.data as QuotaAttainment | null | undefined,
-    isCurrent: false,
-  }));
+  // The current quota's own row belongs at the front of the rail (AC-quota-8: "each rep's
+  // attainment percent" includes the viewer's own) — its attainment is already loaded by the
+  // caller (the ring), reused here rather than re-fetched.
+  const currentRep =
+    currentQuota && currentAttainment
+      ? [{ quota: currentQuota, attainment: currentAttainment, isCurrent: true }]
+      : [];
+
+  const reps = [
+    ...currentRep,
+    ...siblings.map((quota, i) => ({
+      quota,
+      attainment: attainmentResults[i]?.data as QuotaAttainment | null | undefined,
+      isCurrent: false,
+    })),
+  ];
 
   return {
     reps,

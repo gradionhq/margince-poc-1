@@ -261,8 +261,11 @@ describe("useTeamRollup", () => {
     );
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     const ids = result.current.reps.map((r) => r.quota.id);
-    expect(ids).toContain("q2");
-    expect(ids).not.toContain("q3");
-    expect(ids).not.toContain("q1");
+    expect(ids).toContain("q2"); // same period, different owner
+    expect(ids).not.toContain("q3"); // different period, excluded
+    const currentRep = result.current.reps.find((r) => r.quota.id === "q1");
+    expect(currentRep).toBeDefined();
+    expect(currentRep?.isCurrent).toBe(true);
+    expect(currentRep?.attainment).toBe(FIXTURE_ATTAINMENT);
   });
 });
