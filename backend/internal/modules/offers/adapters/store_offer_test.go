@@ -264,7 +264,7 @@ func TestOfferStore_Regenerate_SentOffer_ClonesAndSupersedes(t *testing.T) {
 		t.Fatalf("force status=sent: %v", err)
 	}
 
-	regenerated, err := s.Regenerate(context.Background(), created.ID, wsID)
+	regenerated, err := s.Regenerate(context.Background(), created.ID, wsID, nil)
 	if err != nil {
 		t.Fatalf("regenerate: %v", err)
 	}

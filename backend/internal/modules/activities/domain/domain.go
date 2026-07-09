@@ -8,6 +8,18 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 )
 
+// ActivityListFilter narrows the workspace activity timeline read.
+type ActivityListFilter struct {
+	Kind            string
+	EntityType      string
+	EntityID        string
+	AssigneeID      string
+	Q               string
+	Direction       string
+	IncludeArchived bool
+	Sort            string
+}
+
 // ActivityLink is one typed link from an activity to a person/organization/deal
 // (mirrors the activity_link table; entity_type is restricted to those three —
 // activity_link_shape CHECK, 000003_core_objects.up.sql).

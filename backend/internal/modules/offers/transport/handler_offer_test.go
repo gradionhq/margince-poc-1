@@ -17,13 +17,20 @@ import (
 	"github.com/gradionhq/margince/backend/internal/platform/blobstore"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	"github.com/gradionhq/margince/backend/internal/shared/ports/retrieval"
 )
 
 // fakeOfferStore is an in-memory OfferStore for handler tests — mirrors
 // fakeProductStore's map-backed shape.
 type fakeOfferStore struct {
-	offers  map[string]domain.Offer
-	nextErr error
+	offers            map[string]domain.Offer
+	nextErr           error
+	regenerateErr     error
+	regenerateReturn  domain.Offer
+	regenerateID      string
+	regenerateWSID    string
+	regenerateSignals []domain.OfferLineSignal
+	regenerateCalled  bool
 }
 
 func newFakeOfferStore() *fakeOfferStore {
@@ -110,7 +117,27 @@ func (f *fakeOfferStore) Send(ctx context.Context, id, workspaceID string) (doma
 	return o, nil
 }
 
-func (f *fakeOfferStore) Regenerate(ctx context.Context, id, workspaceID string) (domain.Offer, error) {
+// Regenerate mirrors OfferStore.Regenerate's public contract closely enough
+// for handler-level tests: it records every call's args (regenerateCalled/
+// regenerateID/regenerateWSID/regenerateSignals) so a test can assert what
+// the handler decoded and passed through, honors an explicit regenerateErr/
+// regenerateReturn override when a test sets one (the OP-T07-style AI-signal
+// tests), and otherwise falls back to a plain clone-and-supersede simulation
+// (the OP-T06-style plain-regenerate tests) — offer-1 -> superseded,
+// offer-2 -> the new draft.
+func (f *fakeOfferStore) Regenerate(ctx context.Context, id, workspaceID string, signals []domain.OfferLineSignal) (domain.Offer, error) {
+	f.regenerateCalled = true
+	f.regenerateID = id
+	f.regenerateWSID = workspaceID
+	f.regenerateSignals = append([]domain.OfferLineSignal(nil), signals...)
+	if f.regenerateErr != nil {
+		err := f.regenerateErr
+		f.regenerateErr = nil
+		return domain.Offer{}, err
+	}
+	if f.regenerateReturn.ID != "" {
+		return f.regenerateReturn, nil
+	}
 	if f.nextErr != nil {
 		err := f.nextErr
 		f.nextErr = nil
@@ -164,6 +191,32 @@ func (f *fakeOfferStore) SetPdfAssetRef(ctx context.Context, id, workspaceID, re
 type fakeOfferLineItemStore struct {
 	items   map[string]domain.OfferLineItem
 	nextErr error
+}
+
+type fakeRetriever struct {
+	ctx      retrieval.Context
+	nextErr  error
+	entityID string
+	called   bool
+}
+
+func (f *fakeRetriever) Search(ctx context.Context, query string, limit int) ([]retrieval.Result, error) {
+	return nil, nil
+}
+
+func (f *fakeRetriever) HybridSearch(ctx context.Context, q retrieval.HybridQuery) ([]retrieval.Result, error) {
+	return nil, nil
+}
+
+func (f *fakeRetriever) AssembleContext(ctx context.Context, entityID string) (retrieval.Context, error) {
+	f.called = true
+	f.entityID = entityID
+	if f.nextErr != nil {
+		err := f.nextErr
+		f.nextErr = nil
+		return retrieval.Context{}, err
+	}
+	return f.ctx, nil
 }
 
 func newFakeOfferLineItemStore() *fakeOfferLineItemStore {
@@ -304,7 +357,7 @@ func TestOfferHandler_CreateDealOffer_MissingProvenance_422(t *testing.T) {
 func TestOfferHandler_CreateDealOffer_DuplicateOfferNumber_409(t *testing.T) {
 	offerStore := newFakeOfferStore()
 	offerStore.nextErr = adapters.ErrDuplicateOfferNumber
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
 
 	postExpectConflict(t, h, "/deals/deal-1/offers", validCreateOfferBody(), "offer_number_duplicate")
 }
@@ -334,7 +387,7 @@ func TestOfferHandler_GetOffer_NotFound_404(t *testing.T) {
 func TestOfferHandler_UpdateOffer_NotDraft_409(t *testing.T) {
 	offerStore := newFakeOfferStore()
 	offerStore.nextErr = adapters.ErrOfferNotDraft
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
 
 	body := map[string]any{"intro_text": "hello"}
 	bodyBytes, _ := json.Marshal(body)
@@ -356,7 +409,7 @@ func TestOfferHandler_CreateOfferLineItem_Created(t *testing.T) {
 	offerStore := newFakeOfferStore()
 	o := domain.Offer{ID: "offer-1", Status: domain.OfferStatusDraft, Revision: 1, Version: 1}
 	offerStore.offers["offer-1"] = o
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
 
 	bodyBytes, _ := json.Marshal(validCreateLineItemBody())
 	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/line-items", bytes.NewReader(bodyBytes))
@@ -370,7 +423,7 @@ func TestOfferHandler_CreateOfferLineItem_Created(t *testing.T) {
 func TestOfferHandler_CreateOfferLineItem_PositionConflict_409(t *testing.T) {
 	lineStore := newFakeOfferLineItemStore()
 	lineStore.nextErr = &adapters.ErrDuplicatePosition{ExistingID: "li-existing", Position: 1}
-	h := NewOfferHandler(newFakeOfferStore(), lineStore, fakeVerifier{}, blobstore.NewMemoryStore())
+	h := NewOfferHandler(newFakeOfferStore(), lineStore, fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
 
 	respBody := postExpectConflict(t, h, "/offers/offer-1/line-items", validCreateLineItemBody(), "offer_line_item_position_duplicate")
 	if details, ok := respBody["details"].(map[string]any); !ok || details["existing_id"] != "li-existing" {
@@ -386,7 +439,7 @@ func TestOfferHandler_UpdateOfferLineItem_Updated(t *testing.T) {
 		Source: "test", CapturedBy: "human:test",
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	h := NewOfferHandler(newFakeOfferStore(), lineStore, fakeVerifier{}, blobstore.NewMemoryStore())
+	h := NewOfferHandler(newFakeOfferStore(), lineStore, fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
 
 	body := map[string]any{"description": "Updated"}
 	bodyBytes, _ := json.Marshal(body)
@@ -406,7 +459,7 @@ func TestOfferHandler_DeleteOfferLineItem_NoContent(t *testing.T) {
 		ID: "li-1", OfferID: "offer-1",
 		Source: "test", CapturedBy: "human:test",
 	}
-	h := NewOfferHandler(newFakeOfferStore(), lineStore, fakeVerifier{}, blobstore.NewMemoryStore())
+	h := NewOfferHandler(newFakeOfferStore(), lineStore, fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
 
 	req := httptest.NewRequest(http.MethodDelete, "/offers/offer-1/line-items/li-1", nil)
 	req = withWorkspace(req)
@@ -436,7 +489,7 @@ func TestOfferHandler_Render_SetsResult(t *testing.T) {
 	o.NetMinor, o.TaxMinor, o.GrossMinor = 125000, 23750, 148750
 	offerStore.offers["offer-1"] = o
 	blob := blobstore.NewMemoryStore()
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blob)
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blob, NewNoOpRetriever())
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/render", nil)
 	req = withWorkspace(req)
@@ -468,7 +521,7 @@ func TestOfferHandler_Render_SetsResult(t *testing.T) {
 func TestOfferHandler_Send_HumanPrincipal_NoTokenNeeded(t *testing.T) {
 	offerStore := newFakeOfferStore()
 	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusDraft, "EUR")
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/send", nil)
 	req = withWorkspace(req)
@@ -493,7 +546,7 @@ func TestOfferHandler_Send_HumanPrincipal_NoTokenNeeded(t *testing.T) {
 func TestOfferHandler_Send_AgentPrincipal_NoToken_403ApprovalRequired(t *testing.T) {
 	offerStore := newFakeOfferStore()
 	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusDraft, "EUR")
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/send", nil)
 	req = req.WithContext(crmctx.With(req.Context(), crmctx.Principal{TenantID: testWorkspaceID, UserID: "agent:1", IsAgent: true}))
@@ -513,7 +566,7 @@ func TestOfferHandler_Send_FXRateUnavailable_422(t *testing.T) {
 	offerStore := newFakeOfferStore()
 	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusDraft, "USD")
 	offerStore.nextErr = &deals.FXRateUnavailableError{Currency: "USD", AsOf: time.Date(2026, 7, 8, 0, 0, 0, 0, time.UTC)}
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/send", nil)
 	req = withWorkspace(req)
@@ -536,7 +589,7 @@ func TestOfferHandler_Send_FXRateUnavailable_422(t *testing.T) {
 func TestOfferHandler_Regenerate_Success(t *testing.T) {
 	offerStore := newFakeOfferStore()
 	offerStore.offers["offer-1"] = newOfferFixture(domain.OfferStatusSent, "EUR")
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/regenerate", nil)
 	req = withWorkspace(req)
@@ -558,10 +611,56 @@ func TestOfferHandler_Regenerate_Success(t *testing.T) {
 	}
 }
 
-func TestOfferHandler_Regenerate_DraftOffer_409(t *testing.T) {
+// TestOfferHandler_Regenerate_DecodesSignalsFromRetriever covers OP-T07's
+// wiring: the handler resolves the offer, assembles the deal's retrieval
+// context, decodes it into offer-line signals, and threads both the route's
+// id/workspace and the decoded signals through to OfferStore.Regenerate.
+func TestOfferHandler_Regenerate_DecodesSignalsFromRetriever(t *testing.T) {
 	offerStore := newFakeOfferStore()
-	offerStore.nextErr = adapters.ErrOfferNotSent
-	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
+	offerStore.offers["offer-1"] = domain.Offer{ID: "offer-1", DealID: "deal-1", Status: domain.OfferStatusSent, Revision: 1, Version: 1}
+	offerStore.regenerateReturn = domain.Offer{ID: "offer-2", DealID: "deal-1", Status: domain.OfferStatusDraft, Revision: 2, Version: 1}
+	retriever := &fakeRetriever{
+		ctx: retrieval.Context{
+			Raw: map[string]any{
+				"offer_line_signals": []domain.OfferLineSignal{
+					{Description: "Consulting", Quantity: 1, Snippet: "consulting scope", SourceID: "activity-1"},
+				},
+			},
+		},
+	}
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), retriever)
+
+	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/regenerate", nil)
+	req = withWorkspace(req)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	if !offerStore.regenerateCalled {
+		t.Fatalf("expected Regenerate to be called")
+	}
+	if offerStore.regenerateID != "offer-1" || offerStore.regenerateWSID != testWorkspaceID {
+		t.Fatalf("expected Regenerate to receive the route offer id and workspace id, got id=%q workspace=%q", offerStore.regenerateID, offerStore.regenerateWSID)
+	}
+	if !retriever.called || retriever.entityID != "deal-1" {
+		t.Fatalf("expected AssembleContext to be called with the offer's deal id, got called=%t entityID=%q", retriever.called, retriever.entityID)
+	}
+	if len(offerStore.regenerateSignals) != 1 || offerStore.regenerateSignals[0].Description != "Consulting" {
+		t.Fatalf("expected the decoded signal slice to reach the store, got %+v", offerStore.regenerateSignals)
+	}
+	respBody := decodeJSONBody(t, w)
+	if id, ok := respBody["id"].(string); !ok || id != "offer-2" {
+		t.Fatalf("expected the regenerated offer body, got %+v", respBody)
+	}
+}
+
+func TestOfferHandler_Regenerate_NotSent_409(t *testing.T) {
+	offerStore := newFakeOfferStore()
+	offerStore.offers["offer-1"] = domain.Offer{ID: "offer-1", DealID: "deal-1", Status: domain.OfferStatusDraft, Revision: 1, Version: 1}
+	offerStore.regenerateErr = adapters.ErrOfferNotSent
+	h := NewOfferHandler(offerStore, newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
 
 	req := httptest.NewRequest(http.MethodPost, "/offers/offer-1/regenerate", nil)
 	req = withWorkspace(req)
@@ -582,6 +681,7 @@ func TestOfferHandler_Regenerate_DraftOffer_409(t *testing.T) {
 var (
 	_ offerStoreSeam         = (*fakeOfferStore)(nil)
 	_ offerLineItemStoreSeam = (*fakeOfferLineItemStore)(nil)
+	_ retrieval.Retriever    = (*fakeRetriever)(nil)
 )
 
 // Compile-time check that errors.Is works as expected for the non-pointer sentinel.

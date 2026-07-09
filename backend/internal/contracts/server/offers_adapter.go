@@ -13,9 +13,9 @@ import (
 // ListDealOffers/CreateDealOffer/GetOffer/UpdateOffer/ListOfferLineItems/
 // CreateOfferLineItem/UpdateOfferLineItem/DeleteOfferLineItem delegate to the
 // real OfferHandler cmd/api/routes.go wires (mirrors ProductsAdapter's
-// shape). RegenerateOffer/RenderOffer/SendOffer/AcceptOffer stay 501 stubs —
-// a separate ticket owns the sent->accepted transitions and ApprovalToken
-// gating.
+// shape). RegenerateOffer delegates too; RenderOffer/SendOffer/AcceptOffer
+// stay 501 stubs — a separate ticket owns the sent->accepted transitions and
+// ApprovalToken gating.
 type OffersAdapter struct {
 	H *offerstransport.OfferHandler
 }
@@ -60,9 +60,9 @@ func (a *OffersAdapter) DeleteOfferLineItem(w http.ResponseWriter, r *http.Reque
 	a.H.ServeHTTP(w, r)
 }
 
-// RegenerateOffer is unimplemented; see the struct doc comment above — a separate ticket.
+// RegenerateOffer delegates to the wired handler; see the struct doc comment above.
 func (a *OffersAdapter) RegenerateOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.RegenerateOfferParams) {
-	w.WriteHeader(http.StatusNotImplemented)
+	a.H.ServeHTTP(w, r)
 }
 
 // RenderOffer is unimplemented; see the struct doc comment above — a separate ticket.

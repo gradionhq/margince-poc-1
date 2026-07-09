@@ -20,6 +20,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
 	approvalsport "github.com/gradionhq/margince/backend/internal/shared/ports/approvals"
 	"github.com/gradionhq/margince/backend/internal/shared/ports/mcp"
+	"github.com/gradionhq/margince/backend/internal/shared/ports/retrieval"
 )
 
 // pathPrefixOffers and pathSegmentLineItems are the two path literals this
@@ -40,7 +41,7 @@ type offerStoreSeam interface {
 	List(ctx context.Context, workspaceID, dealID, cursor string, limit int, includeArchived bool) ([]domain.Offer, string, error)
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (domain.Offer, error)
 	Send(ctx context.Context, id, workspaceID string) (domain.Offer, error)
-	Regenerate(ctx context.Context, id, workspaceID string) (domain.Offer, error)
+	Regenerate(ctx context.Context, id, workspaceID string, signals []domain.OfferLineSignal) (domain.Offer, error)
 	PrepareRender(ctx context.Context, id, workspaceID string) (adapters.RenderIngredients, error)
 	SetPdfAssetRef(ctx context.Context, id, workspaceID, ref string) (domain.Offer, error)
 }
@@ -64,11 +65,12 @@ type OfferHandler struct {
 	lineItems offerLineItemStoreSeam
 	verifier  approvalsport.Verifier
 	blob      blobstore.Store
+	retriever retrieval.Retriever
 }
 
 // NewOfferHandler returns an OfferHandler backed by the given stores.
-func NewOfferHandler(offers offerStoreSeam, lineItems offerLineItemStoreSeam, verifier approvalsport.Verifier, blob blobstore.Store) *OfferHandler {
-	return &OfferHandler{offers: offers, lineItems: lineItems, verifier: verifier, blob: blob}
+func NewOfferHandler(offers offerStoreSeam, lineItems offerLineItemStoreSeam, verifier approvalsport.Verifier, blob blobstore.Store, retriever retrieval.Retriever) *OfferHandler {
+	return &OfferHandler{offers: offers, lineItems: lineItems, verifier: verifier, blob: blob, retriever: retriever}
 }
 
 func (h *OfferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -100,6 +102,8 @@ func (h *OfferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *OfferHandler) serveOffer(w http.ResponseWriter, r *http.Request, path string) {
 	id := httpkit.PathID(path, pathPrefixOffers)
 	switch {
+	case r.Method == http.MethodPost && strings.HasSuffix(path, "/regenerate") && id != "":
+		h.regenerate(w, r, id)
 	case r.Method == http.MethodGet && id != "":
 		h.get(w, r, id)
 	case r.Method == http.MethodPatch && id != "":
@@ -392,9 +396,29 @@ func (h *OfferHandler) send(w http.ResponseWriter, r *http.Request, id string) {
 	httpkit.WriteUpdateResult(w, updated, err)
 }
 
+// regenerate resolves the offer, assembles the deal's retrieval context and
+// decodes it into candidate AI line signals (a no-op today —
+// transport.NewNoOpRetriever always yields an empty context, so signals is
+// always nil/empty until a real retriever is wired — see
+// decodeOfferLineSignals), and hands both id and the decoded signals to
+// OfferStore.Regenerate, which always clones the prior sent offer's line
+// items verbatim and layers AI-authored lines on top only when grounded
+// signals are present (OFFER-AC-10d). The precondition is requireSent, not
+// requireDraft: crm.yaml's regenerateOffer operation is documented as
+// "regenerate a sent offer into a new draft revision".
 func (h *OfferHandler) regenerate(w http.ResponseWriter, r *http.Request, id string) {
 	wsID := httpkit.WorkspaceID(r)
-	updated, err := h.offers.Regenerate(r.Context(), id, wsID)
+	offer, err := h.offers.Get(r.Context(), id, wsID)
+	if err != nil {
+		httpkit.JSONError(w, err)
+		return
+	}
+	assembled, err := h.retriever.AssembleContext(r.Context(), offer.DealID)
+	if err != nil {
+		httpkit.JSONError(w, err)
+		return
+	}
+	updated, err := h.offers.Regenerate(r.Context(), id, wsID, decodeOfferLineSignals(assembled))
 	if errors.Is(err, adapters.ErrOfferNotSent) {
 		httpkit.JSONProblem(w, http.StatusConflict, "offer_not_sent")
 		return

@@ -80,7 +80,7 @@ func (fakeVerifier) VerifyAndConsume(_ context.Context, _ string, _ approvalspor
 }
 
 func newTestOfferHandler() *OfferHandler {
-	return NewOfferHandler(newFakeOfferStore(), newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore())
+	return NewOfferHandler(newFakeOfferStore(), newFakeOfferLineItemStore(), fakeVerifier{}, blobstore.NewMemoryStore(), NewNoOpRetriever())
 }
 
 var _ approvalsport.Verifier = fakeVerifier{}

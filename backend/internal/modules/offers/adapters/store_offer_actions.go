@@ -189,12 +189,25 @@ func cloneOfferForRegenerate(ctx context.Context, tx *sql.Tx, newOffer domain.Of
 	return nil
 }
 
-// Regenerate clones a sent offer into a new draft revision and marks the
-// prior revision superseded. The new revision keeps the prior line-item
-// snapshot and provenance, but is inserted as a fresh row with a new id and
-// revision+1.
-func (s *OfferStore) Regenerate(ctx context.Context, id, workspaceID string) (domain.Offer, error) {
+// Regenerate always starts from the verbatim clone of a sent offer's live
+// line items + row (OFFER-AC-10d) into a new draft revision, marking the
+// prior revision superseded. When signals carries at least one grounded
+// AI-proposed line (domain.FilterGroundedSignals — evidence-or-omit), the
+// cloned lines are discarded and replaced with the AI-authored lines
+// instead, totals are recomputed, and a diff against the prior revision's
+// lines is computed; AIGenerated/AIDisclosure/DiffFromPrevious are only set
+// on the result in that case — a plain regenerate (nil/no-grounded-signals,
+// e.g. today's NoOpRetriever-backed real callers) never claims AI
+// involvement and never silently drops the prior line items (no-fabrication
+// / evidence-or-omit, shared by OP-T06 and OP-T07).
+func (s *OfferStore) Regenerate(ctx context.Context, id, workspaceID string, signals []domain.OfferLineSignal) (domain.Offer, error) {
+	grounded := domain.FilterGroundedSignals(signals)
+	products := NewProductStore(s.db)
+
 	var out domain.Offer
+	var diff *domain.OfferDiff
+	aiApplied := false
+
 	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		status, version, err := lockOfferForMutation(ctx, tx, id, workspaceID)
 		if err != nil {
@@ -209,46 +222,135 @@ func (s *OfferStore) Regenerate(ctx context.Context, id, workspaceID string) (do
 			return err
 		}
 
-		out = orig
-		out.ID = ids.New()
-		out.Status = domain.OfferStatusDraft
-		out.Revision = orig.Revision + 1
-		out.Version = 1
-		out.AcceptedAt = nil
-		out.PdfAssetRef = nil
-		out.CreatedAt = time.Time{}
-		out.UpdatedAt = time.Time{}
-		out.ArchivedAt = nil
+		priorLines, err := listLineItemsTx(ctx, tx, id, workspaceID)
+		if err != nil {
+			return err
+		}
 
+		out = nextRegenerateRevision(orig)
 		if err := cloneOfferForRegenerate(ctx, tx, out, id, workspaceID); err != nil {
 			return err
 		}
 
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE offer SET status=$2, version=$3
-			WHERE id=$1::uuid AND workspace_id=$4::uuid`,
-			id, domain.OfferStatusSuperseded, version+1, workspaceID); err != nil {
-			return fmt.Errorf("offer regenerate supersede: %w", err)
+		if len(grounded) > 0 {
+			aiApplied = true
+			diff, err = s.applyAIRegenerate(ctx, tx, products, out.ID, workspaceID, grounded, priorLines)
+			if err != nil {
+				return err
+			}
 		}
 
-		payload, _ := json.Marshal(map[string]any{payloadKeyOfferID: id, payloadKeyDealID: orig.DealID, "new_offer_id": out.ID})
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
-			workspaceID, "offer.superseded", out.ID, payload); err != nil {
-			return fmt.Errorf("offer regenerate event: %w", err)
-		}
-
-		e := crmaudit.EntryFromPrincipal(ctx, "create", entityTypeOffer, &out.ID, nil, out)
-		e.WorkspaceID = workspaceID
-		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
-			return fmt.Errorf("offer regenerate audit: %w", err)
-		}
-		return nil
+		return supersedeAndAuditRegenerate(ctx, tx, id, workspaceID, version, orig, out)
 	})
 	if err != nil {
 		return domain.Offer{}, err
 	}
-	return s.Get(ctx, out.ID, workspaceID)
+
+	result, err := s.Get(ctx, out.ID, workspaceID)
+	if err != nil {
+		return domain.Offer{}, err
+	}
+	if aiApplied {
+		result.AIGenerated = true
+		disclosure := aiDisclosureText
+		result.AIDisclosure = &disclosure
+		result.DiffFromPrevious = diff
+	}
+	return result, nil
+}
+
+// nextRegenerateRevision derives the new draft revision's domain.Offer value
+// from orig (same deal/offer_number/currency/buyer/terms/provenance, fresh
+// id, revision+1, version reset to 1, send/render/archive fields cleared).
+// Extracted from Regenerate purely to keep its own length under the funlen
+// gate; no behavior change.
+func nextRegenerateRevision(orig domain.Offer) domain.Offer {
+	out := orig
+	out.ID = ids.New()
+	out.Status = domain.OfferStatusDraft
+	out.Revision = orig.Revision + 1
+	out.Version = 1
+	out.AcceptedAt = nil
+	out.PdfAssetRef = nil
+	out.CreatedAt = time.Time{}
+	out.UpdatedAt = time.Time{}
+	out.ArchivedAt = nil
+	return out
+}
+
+// applyAIRegenerate replaces newID's cloned line items with the AI-authored
+// lines built from grounded, recomputes newID's totals (only this path
+// recomputes — the verbatim-clone path already carries over the prior row's
+// exact net/tax/gross via cloneOfferForRegenerate's SELECT clone), and
+// returns the diff against priorLines. Extracted from Regenerate purely to
+// keep its own length under the funlen gate; no behavior change.
+func (s *OfferStore) applyAIRegenerate(ctx context.Context, tx *sql.Tx, products *ProductStore, newID, workspaceID string, grounded []domain.OfferLineSignal, priorLines []domain.OfferLineItem) (*domain.OfferDiff, error) {
+	newLines, err := s.replaceClonedLinesWithAI(ctx, tx, products, newID, workspaceID, grounded)
+	if err != nil {
+		return nil, err
+	}
+	if err := recomputeOfferTotals(ctx, tx, newID, workspaceID); err != nil {
+		return nil, err
+	}
+	return computeOfferDiff(priorLines, newLines), nil
+}
+
+// supersedeAndAuditRegenerate flips id's status to superseded (optimistic
+// version bump), writes its offer.superseded outbox event (entity_id=id —
+// the entity that was superseded), and writes out.ID's create audit_log
+// entry — all under the caller's workspace tx, regardless of which
+// Regenerate path (verbatim clone or AI-applied) ran. Extracted from
+// Regenerate purely to keep its own length under the funlen gate; no
+// behavior change.
+func supersedeAndAuditRegenerate(ctx context.Context, tx *sql.Tx, id, workspaceID string, version int64, orig, out domain.Offer) error {
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE offer SET status=$2, version=$3
+		WHERE id=$1::uuid AND workspace_id=$4::uuid`,
+		id, domain.OfferStatusSuperseded, version+1, workspaceID); err != nil {
+		return fmt.Errorf("offer regenerate supersede: %w", err)
+	}
+
+	payload, _ := json.Marshal(map[string]any{
+		payloadKeyOfferID: id,
+		payloadKeyDealID:  orig.DealID,
+		"new_offer_id":    out.ID,
+		"from_revision":   orig.Revision,
+		"to_revision":     out.Revision,
+	})
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
+		workspaceID, "offer.superseded", id, payload); err != nil {
+		return fmt.Errorf("offer regenerate event: %w", err)
+	}
+
+	e := crmaudit.EntryFromPrincipal(ctx, "create", entityTypeOffer, &out.ID, nil, out)
+	e.WorkspaceID = workspaceID
+	if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
+		return fmt.Errorf("offer regenerate audit: %w", err)
+	}
+	return nil
+}
+
+// replaceClonedLinesWithAI discards newID's just-cloned line items (hard
+// delete — they were only ever visible inside this same transaction, never
+// returned to a caller) and inserts one AI-drafted line per grounded signal
+// in their place, in position order, returning the persisted lines for the
+// diff computation. Only called when grounded is non-empty.
+func (s *OfferStore) replaceClonedLinesWithAI(ctx context.Context, tx *sql.Tx, products *ProductStore, newID, workspaceID string, grounded []domain.OfferLineSignal) ([]domain.OfferLineItem, error) {
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM offer_line_item WHERE offer_id=$1::uuid AND workspace_id=$2::uuid`,
+		newID, workspaceID); err != nil {
+		return nil, fmt.Errorf("offer regenerate clear cloned lines: %w", err)
+	}
+	newLines := make([]domain.OfferLineItem, 0, len(grounded))
+	for i, signal := range grounded {
+		created, err := s.buildAndInsertRegeneratedLine(ctx, tx, products, newID, workspaceID, i+1, signal)
+		if err != nil {
+			return nil, err
+		}
+		newLines = append(newLines, created)
+	}
+	return newLines, nil
 }
 
 // PrepareRender gathers the resolved, persisted inputs required to build an

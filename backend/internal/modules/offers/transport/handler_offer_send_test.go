@@ -47,7 +47,7 @@ func seedWorkspace(t *testing.T, db *sql.DB, wsID string) {
 }
 
 func offerHandlerForTest(db *sql.DB) *OfferHandler {
-	return NewOfferHandler(adapters.NewOfferStore(db), adapters.NewOfferLineItemStore(db, adapters.NewProductStore(db)), &crmapprovals.DBVerifier{DB: db}, blobstore.NewMemoryStore())
+	return NewOfferHandler(adapters.NewOfferStore(db), adapters.NewOfferLineItemStore(db, adapters.NewProductStore(db)), &crmapprovals.DBVerifier{DB: db}, blobstore.NewMemoryStore(), NewNoOpRetriever())
 }
 
 func withOfferWorkspace(r *http.Request, wsID, userID string) *http.Request {
@@ -442,12 +442,16 @@ func TestOfferHandler_Regenerate_SentOffer_NewDraftRevisionSupersedesePrior(t *t
 		t.Fatalf("expected regenerated offer to keep one line item, got %d", len(items))
 	}
 
+	// entity_id is keyed on the prior (now-superseded) offer id, not the new
+	// revision's — "offer.superseded" names the entity that was superseded
+	// (mirrors OfferStore.Regenerate's merged convention, reconciled from
+	// OP-T07's own surviving adapters-level test).
 	var count int
-	if err := db.QueryRow(`SELECT count(*) FROM event_outbox WHERE topic='offer.superseded' AND entity_id=$1::uuid`, newID).Scan(&count); err != nil {
+	if err := db.QueryRow(`SELECT count(*) FROM event_outbox WHERE topic='offer.superseded' AND entity_id=$1::uuid`, offerID).Scan(&count); err != nil {
 		t.Fatalf("count superseded event: %v", err)
 	}
 	if count != 1 {
-		t.Fatalf("expected exactly one offer.superseded row for the regenerated offer, got %d", count)
+		t.Fatalf("expected exactly one offer.superseded row for the prior offer, got %d", count)
 	}
 }
 

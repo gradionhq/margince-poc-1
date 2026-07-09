@@ -76,6 +76,6 @@ func New(db *sql.DB) *Module {
 		OfferLineItemStore:   offerLineItemStore,
 		ProductHandler:       transport.NewProductHandler(productStore),
 		OfferTemplateHandler: transport.NewOfferTemplateHandler(offerTemplateStore),
-		OfferHandler:         transport.NewOfferHandler(offerStore, offerLineItemStore, nil, nil),
+		OfferHandler:         transport.NewOfferHandler(offerStore, offerLineItemStore, nil, nil, transport.NewNoOpRetriever()),
 	}
 }
