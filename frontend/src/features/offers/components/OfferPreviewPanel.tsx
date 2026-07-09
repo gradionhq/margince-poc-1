@@ -1,17 +1,20 @@
 import { useState } from "react";
-import type { Offer } from "../../../lib/api-client/generated/index.js";
+import type { Offer, OfferLineItem } from "../../../lib/api-client/generated/index.js";
 import { Button } from "../../../shared/ui/forge.js";
 import { useRenderOffer } from "../api/offers.js";
 import { getOfferCopy } from "../lib/offerCopy.js";
 import { formatMoneyForLocale } from "../lib/money.js";
+import { computeLineNet } from "../lib/offerMath.js";
 
 export function OfferPreviewPanel({
   dealName,
   offer,
+  lines,
   canMutateOffer,
 }: {
   dealName: string;
   offer: Offer;
+  lines: OfferLineItem[];
   canMutateOffer: boolean;
 }) {
   const [locale, setLocale] = useState<"de" | "en">("de");
@@ -81,19 +84,29 @@ export function OfferPreviewPanel({
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td className="py-gf-xs pr-gf-sm">{offer.title}</td>
-              <td className="py-gf-xs pr-gf-sm">1</td>
-              <td className="py-gf-xs pr-gf-sm">{offer.currency}</td>
-              <td className="py-gf-xs pr-gf-sm">
-                {formatMoneyForLocale(offer.net_minor, offer.currency, locale)}
-              </td>
-              <td className="py-gf-xs pr-gf-sm">0%</td>
-              <td className="py-gf-xs pr-gf-sm">0%</td>
-              <td className="py-gf-xs pr-gf-sm">
-                {formatMoneyForLocale(offer.net_minor, offer.currency, locale)}
-              </td>
-            </tr>
+            {lines.map((line) => {
+              const netMinor = computeLineNet(
+                line.quantity,
+                line.unit_price_minor,
+                line.discount_pct,
+              );
+
+              return (
+                <tr key={line.id}>
+                  <td className="py-gf-xs pr-gf-sm">{line.description}</td>
+                  <td className="py-gf-xs pr-gf-sm">{line.quantity}</td>
+                  <td className="py-gf-xs pr-gf-sm">{line.unit}</td>
+                  <td className="py-gf-xs pr-gf-sm">
+                    {formatMoneyForLocale(line.unit_price_minor, offer.currency, locale)}
+                  </td>
+                  <td className="py-gf-xs pr-gf-sm">{line.discount_pct}%</td>
+                  <td className="py-gf-xs pr-gf-sm">{line.tax_rate}%</td>
+                  <td className="py-gf-xs pr-gf-sm">
+                    {formatMoneyForLocale(netMinor, offer.currency, locale)}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
