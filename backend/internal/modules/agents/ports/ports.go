@@ -36,6 +36,29 @@ type ContextAssembler interface {
 	Assemble(ctx context.Context, workspaceID string, since time.Time) (domain.AssembledView, error)
 }
 
+// DealSnapshot is the agents-owned read model for an open deal. The adapter
+// resolves the SQL-specific details and hands the rest of the module plain
+// values.
+type DealSnapshot struct {
+	DealID              string
+	WorkspaceID         string
+	PipelineID          string
+	Status              string
+	ExpectedCloseDate   *time.Time
+	ForecastCategory    *string
+	WinProbability      int
+	RemainingOpenStages int
+	IsStalled           bool
+	Version             int64
+}
+
+// DealReader reads the open-deal snapshot set and the velocity history the
+// close-date formula consumes.
+type DealReader interface {
+	ListOpenDeals(ctx context.Context, workspaceID string, now time.Time) ([]DealSnapshot, error)
+	PipelineWonVelocity(ctx context.Context, workspaceID, pipelineID string) (observedMedianDays, wonDealCount int, err error)
+}
+
 // FixtureAssembler is the fixture-backed ContextAssembler this ticket ships
 // in place of a real event-bus-backed one (OVN-EVT-1's own acceptance note:
 // no live capture emission is required here). Tests construct it directly;

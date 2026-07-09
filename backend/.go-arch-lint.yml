@@ -174,6 +174,7 @@ components:
   agentsdomain:      { in: internal/modules/agents/domain }
   agentsports:       { in: internal/modules/agents/ports }
   agentsapp:         { in: internal/modules/agents/app }
+  agentsadapters:    { in: internal/modules/agents/adapters }
 deps:
   # Tier-0 seams + kernel are not listed -> may depend on nothing internal.
   # Exception: datasource aliases errs.ErrVersionSkew (ADR-0036/B-E18.1a) — both are Tier-0.
@@ -390,13 +391,15 @@ deps:
   approvalsapp:
     mayDependOn: [approvalsdomain, approvalsports, datasource, audit, errs, database]
   agents:
-    mayDependOn: [agentsdomain, agentsports, agentsapp, approvals]
+    mayDependOn: [agentsdomain, agentsports, agentsapp, agentsadapters, approvals]
   agentsdomain:
     mayDependOn: [mcp]
   agentsports:
     mayDependOn: [agentsdomain, approvals]
   agentsapp:
     mayDependOn: [agentsdomain, agentsports, approvals, audit, database, mcp, errs]
+  agentsadapters:
+    mayDependOn: [agentsdomain, agentsports, deals, database, errs, ids]
   toolgate:
     mayDependOn: [mcp, approvalsport, crmctx, ids]
   customfields:
