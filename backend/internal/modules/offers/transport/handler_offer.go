@@ -32,6 +32,7 @@ const (
 	pathSegmentLineItems = "/line-items"
 	pathSuffixRender     = "/render"
 	pathSuffixSend       = "/send"
+	pathSuffixAccept     = "/accept"
 	pathSuffixRegenerate = "/regenerate"
 )
 
@@ -41,6 +42,7 @@ type offerStoreSeam interface {
 	List(ctx context.Context, workspaceID, dealID, cursor string, limit int, includeArchived bool) ([]domain.Offer, string, error)
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (domain.Offer, error)
 	Send(ctx context.Context, id, workspaceID string) (domain.Offer, error)
+	Accept(ctx context.Context, id, workspaceID string) (domain.Offer, error)
 	Regenerate(ctx context.Context, id, workspaceID string, signals []domain.OfferLineSignal) (domain.Offer, error)
 	PrepareRender(ctx context.Context, id, workspaceID string) (adapters.RenderIngredients, error)
 	SetPdfAssetRef(ctx context.Context, id, workspaceID, ref string) (domain.Offer, error)
@@ -53,7 +55,10 @@ type offerLineItemStoreSeam interface {
 	Delete(ctx context.Context, id, offerID, workspaceID string) error
 }
 
-var sendOfferTool = mcp.GeneratedTool{OperationID: "sendOffer", Verb: "send_offer", RecordType: "offer", Tier: mcp.TierYellow}
+var (
+	sendOfferTool   = mcp.GeneratedTool{OperationID: "sendOffer", Verb: "send_offer", RecordType: "offer", Tier: mcp.TierYellow}
+	acceptOfferTool = mcp.GeneratedTool{OperationID: "acceptOffer", Verb: "accept_offer", RecordType: "offer", Tier: mcp.TierYellow}
+)
 
 // OfferHandler routes /deals/{id}/offers, /offers/{id}, /offers/{id}/line-items,
 // /offers/{id}/render, /offers/{id}/send, and /offers/{id}/regenerate requests
@@ -77,26 +82,51 @@ func (h *OfferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	switch {
 	case strings.HasPrefix(path, "/deals/") && strings.HasSuffix(path, pathPrefixOffers):
-		dealID := httpkit.PathID(strings.TrimSuffix(path, pathPrefixOffers), "/deals")
-		switch r.Method {
-		case http.MethodGet:
-			h.listForDeal(w, r, dealID)
-		case http.MethodPost:
-			h.create(w, r, dealID)
-		default:
-			http.NotFound(w, r)
-		}
+		h.serveDealOffers(w, r, path)
 	case strings.Contains(path, pathSegmentLineItems):
 		h.serveLineItems(w, r, path)
-	case r.Method == http.MethodPost && strings.HasSuffix(path, pathSuffixRender):
-		h.render(w, r, httpkit.PathID(strings.TrimSuffix(path, pathSuffixRender), pathPrefixOffers))
-	case r.Method == http.MethodPost && strings.HasSuffix(path, pathSuffixSend):
-		h.send(w, r, httpkit.PathID(strings.TrimSuffix(path, pathSuffixSend), pathPrefixOffers))
-	case r.Method == http.MethodPost && strings.HasSuffix(path, pathSuffixRegenerate):
-		h.regenerate(w, r, httpkit.PathID(strings.TrimSuffix(path, pathSuffixRegenerate), pathPrefixOffers))
+	case h.serveOfferAction(w, r, path):
+		// handled by serveOfferAction
 	default:
 		h.serveOffer(w, r, path)
 	}
+}
+
+// serveDealOffers handles /deals/{id}/offers (list/create).
+func (h *OfferHandler) serveDealOffers(w http.ResponseWriter, r *http.Request, path string) {
+	dealID := httpkit.PathID(strings.TrimSuffix(path, pathPrefixOffers), "/deals")
+	switch r.Method {
+	case http.MethodGet:
+		h.listForDeal(w, r, dealID)
+	case http.MethodPost:
+		h.create(w, r, dealID)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+// serveOfferAction dispatches the POST .../render, .../send, .../accept, and
+// .../regenerate action suffixes. Reports whether path matched one of these
+// actions (and was therefore handled); ServeHTTP falls through to serveOffer
+// when it returns false. Extracted from ServeHTTP purely to keep its own
+// cyclomatic complexity under the cyclop gate; no routing behavior change.
+func (h *OfferHandler) serveOfferAction(w http.ResponseWriter, r *http.Request, path string) bool {
+	if r.Method != http.MethodPost {
+		return false
+	}
+	switch {
+	case strings.HasSuffix(path, pathSuffixRender):
+		h.render(w, r, httpkit.PathID(strings.TrimSuffix(path, pathSuffixRender), pathPrefixOffers))
+	case strings.HasSuffix(path, pathSuffixSend):
+		h.send(w, r, httpkit.PathID(strings.TrimSuffix(path, pathSuffixSend), pathPrefixOffers))
+	case strings.HasSuffix(path, pathSuffixAccept):
+		h.accept(w, r, httpkit.PathID(strings.TrimSuffix(path, pathSuffixAccept), pathPrefixOffers))
+	case strings.HasSuffix(path, pathSuffixRegenerate):
+		h.regenerate(w, r, httpkit.PathID(strings.TrimSuffix(path, pathSuffixRegenerate), pathPrefixOffers))
+	default:
+		return false
+	}
+	return true
 }
 
 func (h *OfferHandler) serveOffer(w http.ResponseWriter, r *http.Request, path string) {
@@ -394,6 +424,26 @@ func (h *OfferHandler) send(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	httpkit.WriteUpdateResult(w, updated, err)
+}
+
+func (h *OfferHandler) accept(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := httpkit.WorkspaceID(r)
+	p, _ := crmctx.From(r.Context())
+	diffFields := map[string]any{"offer_id": id}
+	if err := toolgate.Enforce(r.Context(), p, h.verifier, acceptOfferTool, wsID, diffFields, nil, r.Header.Get("X-Approval-Token")); err != nil {
+		if errors.Is(err, toolgate.ErrApprovalRequired) {
+			httpkit.JSONProblem(w, http.StatusForbidden, "approval_required")
+		} else {
+			httpkit.JSONProblem(w, http.StatusForbidden, "approval_token_invalid")
+		}
+		return
+	}
+	accepted, err := h.offers.Accept(r.Context(), id, wsID)
+	if errors.Is(err, adapters.ErrOfferNotAcceptable) {
+		httpkit.JSONProblem(w, http.StatusConflict, "offer_not_acceptable")
+		return
+	}
+	httpkit.WriteUpdateResult(w, accepted, err)
 }
 
 // regenerate resolves the offer, assembles the deal's retrieval context and
