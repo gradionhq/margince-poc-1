@@ -34,6 +34,7 @@ import { StageStepper } from "../components/StageStepper.js";
 import { StakeholdersRail } from "../components/StakeholdersRail.js";
 import { TasksCard } from "../components/TasksCard.js";
 import { WeightedValueExplainer } from "../components/WeightedValueExplainer.js";
+import { AttachmentsPanel } from "../../attachments/index.js";
 
 type Toast = { id: string; variant: "success" | "error"; message: string };
 
@@ -230,6 +231,7 @@ export function DealDetailPage() {
           isError={activitiesError}
           onTaskDone={() => pushToast("success", "Task completed")}
         />
+        <AttachmentsPanel entityType="deal" entityId={deal.id} dealId={deal.id} />
       </div>
 
       <div>
