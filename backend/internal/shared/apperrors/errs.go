@@ -26,6 +26,7 @@ var (
 	ErrStatusMismatch            = errors.New("status mismatch")                      // -> 422 (explicit status != target stage's derived semantic)
 	ErrLostReasonRequired        = errors.New("lost reason required")                 // -> 422 (advancing to a lost stage needs lost_reason)
 	ErrFieldNotValidForKind      = errors.New("field not valid for kind")             // -> 422 (task-only field set on a non-task activity kind)
+	ErrInvalidLinkEntityType     = errors.New("invalid link entity type")             // -> 422 (relinkActivity: entity_type outside person/organization/deal)
 )
 
 // HTTPStatus maps a domain error to its HTTP status code — the single sentinel→status
@@ -57,7 +58,8 @@ func HTTPStatus(err error) int {
 		errors.Is(err, ErrMergedRecord),
 		errors.Is(err, ErrStatusMismatch),
 		errors.Is(err, ErrLostReasonRequired),
-		errors.Is(err, ErrFieldNotValidForKind):
+		errors.Is(err, ErrFieldNotValidForKind),
+		errors.Is(err, ErrInvalidLinkEntityType):
 		return 422
 	case errors.Is(err, ErrSuppressed):
 		return 451

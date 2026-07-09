@@ -24,6 +24,7 @@ type activityStoreSeam interface {
 	ListFiltered(ctx context.Context, workspaceID, cursor string, limit int, filter actdomain.ActivityListFilter) ([]actdomain.Activity, string, error)
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (actdomain.Activity, error)
 	Archive(ctx context.Context, id, workspaceID string) (actdomain.Activity, error)
+	Relink(ctx context.Context, activityID, workspaceID, entityType, entityID string) (actdomain.Activity, error)
 }
 
 // ActivityHandler routes /activities and /activities/{id} requests: list
@@ -39,6 +40,12 @@ func NewActivityHandler(store activityStoreSeam) *ActivityHandler {
 // createActivityLinkRequest is the wire shape of one links[] entry on the
 // create-activity request body.
 type createActivityLinkRequest struct {
+	EntityType string `json:"entity_type"`
+	EntityID   string `json:"entity_id"`
+}
+
+// relinkActivityRequest is the decoded /activities/{id}/relink POST request body.
+type relinkActivityRequest struct {
 	EntityType string `json:"entity_type"`
 	EntityID   string `json:"entity_id"`
 }
@@ -154,6 +161,9 @@ func (h *ActivityHandler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ActivityHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h.serveSuffixRoutes(w, r) {
+		return
+	}
 	id := httpkit.PathID(r.URL.Path, "/activities")
 	switch {
 	case r.Method == http.MethodGet && id == "":
@@ -169,6 +179,16 @@ func (h *ActivityHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// serveSuffixRoutes handles the /activities/{id}/relink sub-resource route.
+func (h *ActivityHandler) serveSuffixRoutes(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/relink") {
+		id := httpkit.PathID(strings.TrimSuffix(r.URL.Path, "/relink"), "/activities")
+		h.relink(w, r, id)
+		return true
+	}
+	return false
 }
 
 func (h *ActivityHandler) list(w http.ResponseWriter, r *http.Request) {
@@ -254,6 +274,36 @@ func (h *ActivityHandler) archive(w http.ResponseWriter, r *http.Request, id str
 	a, err := h.store.Archive(r.Context(), id, wsID)
 	if errors.Is(err, errs.ErrNotFound) {
 		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		httpkit.JSONError(w, err)
+		return
+	}
+	httpkit.JSONOK(w, a)
+}
+
+// relink handles POST /activities/{id}/relink.
+func (h *ActivityHandler) relink(w http.ResponseWriter, r *http.Request, id string) {
+	wsID := httpkit.WorkspaceID(r)
+	var body relinkActivityRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpkit.JSONProblem(w, http.StatusBadRequest, codeBadRequest)
+		return
+	}
+	if body.EntityType == "" || body.EntityID == "" {
+		httpkit.JSONValidationError(w, "entity_type and entity_id are required.",
+			[]fieldError{{Field: "entity_type", Code: codeRequired}, {Field: "entity_id", Code: codeRequired}})
+		return
+	}
+	a, err := h.store.Relink(r.Context(), id, wsID, body.EntityType, body.EntityID)
+	if errors.Is(err, errs.ErrNotFound) {
+		httpkit.JSONProblem(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if errors.Is(err, errs.ErrInvalidLinkEntityType) {
+		httpkit.JSONValidationError(w, "entity_type must be person, organization, or deal.",
+			[]fieldError{{Field: "entity_type", Code: "invalid_link_entity_type"}})
 		return
 	}
 	if err != nil {
