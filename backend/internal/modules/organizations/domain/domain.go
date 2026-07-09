@@ -38,11 +38,12 @@ type Organization struct {
 	ArchivedAt *time.Time      `json:"archived_at"`
 	// ReviewFlag is PO-AC-19's non-blocking fuzzy-dedupe flag (PO-F-2
 	// name-only tier), computed fresh on every Create call, never persisted.
-	ReviewFlag    *dedupe.ReviewFlag `json:"dedupe_review,omitempty"`
-	Relationships []RelationshipRef  `json:"relationships,omitempty"`
-	Deals         []DealRef          `json:"deals,omitempty"`
-	Activities    []ActivityRef      `json:"activities,omitempty"`
-	CustomFields  map[string]any     `json:"-"`
+	ReviewFlag     *dedupe.ReviewFlag `json:"dedupe_review,omitempty"`
+	Relationships  []RelationshipRef  `json:"relationships,omitempty"`
+	Deals          []DealRef          `json:"deals,omitempty"`
+	Activities     []ActivityRef      `json:"activities,omitempty"`
+	ComputedFields []ComputedField    `json:"computed_fields,omitempty"`
+	CustomFields   map[string]any     `json:"-"`
 }
 
 // OrganizationDomain is a normalized domain owned by an organization
@@ -65,6 +66,19 @@ type OrgStrengthBlock struct {
 	Bucket        string `json:"bucket"`
 	TopPersonID   string `json:"top_person_id"`
 	TopPersonName string `json:"top_person_name"`
+}
+
+// ComputedField is one S-E15.8c formula-field display row.
+type ComputedField struct {
+	Key          string   `json:"key"`
+	Label        string   `json:"label"`
+	Kind         string   `json:"kind"`
+	ValueMinor   *int64   `json:"value_minor,omitempty"`
+	Value        *float64 `json:"value,omitempty"`
+	FormulaSQL   string   `json:"formula_sql"`
+	Dependencies []string `json:"dependencies"`
+	Computable   bool     `json:"computable"`
+	Reason       *string  `json:"reason,omitempty"`
 }
 
 // NewOrganization returns an Organization with a fresh ID, version 1, and copied provenance.

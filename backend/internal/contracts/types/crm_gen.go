@@ -617,6 +617,30 @@ func (e ColdStartProposalStatus) Valid() bool {
 	}
 }
 
+// Defines values for ComputedFieldKind.
+const (
+	ComputedFieldKindCount          ComputedFieldKind = "count"
+	ComputedFieldKindCurrencyMinor  ComputedFieldKind = "currency_minor"
+	ComputedFieldKindDurationMonths ComputedFieldKind = "duration_months"
+	ComputedFieldKindPercent        ComputedFieldKind = "percent"
+)
+
+// Valid indicates whether the value is a known member of the ComputedFieldKind enum.
+func (e ComputedFieldKind) Valid() bool {
+	switch e {
+	case ComputedFieldKindCount:
+		return true
+	case ComputedFieldKindCurrencyMinor:
+		return true
+	case ComputedFieldKindDurationMonths:
+		return true
+	case ComputedFieldKindPercent:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ConsentEventActorType.
 const (
 	ConsentEventActorTypeAgent     ConsentEventActorType = "agent"
@@ -2440,28 +2464,28 @@ func (e RelinkActivityRequestEntityType) Valid() bool {
 
 // Defines values for RunReportRequestAggregatesFn.
 const (
-	Avg           RunReportRequestAggregatesFn = "avg"
-	Count         RunReportRequestAggregatesFn = "count"
-	CountDistinct RunReportRequestAggregatesFn = "count_distinct"
-	Max           RunReportRequestAggregatesFn = "max"
-	Min           RunReportRequestAggregatesFn = "min"
-	Sum           RunReportRequestAggregatesFn = "sum"
+	RunReportRequestAggregatesFnAvg           RunReportRequestAggregatesFn = "avg"
+	RunReportRequestAggregatesFnCount         RunReportRequestAggregatesFn = "count"
+	RunReportRequestAggregatesFnCountDistinct RunReportRequestAggregatesFn = "count_distinct"
+	RunReportRequestAggregatesFnMax           RunReportRequestAggregatesFn = "max"
+	RunReportRequestAggregatesFnMin           RunReportRequestAggregatesFn = "min"
+	RunReportRequestAggregatesFnSum           RunReportRequestAggregatesFn = "sum"
 )
 
 // Valid indicates whether the value is a known member of the RunReportRequestAggregatesFn enum.
 func (e RunReportRequestAggregatesFn) Valid() bool {
 	switch e {
-	case Avg:
+	case RunReportRequestAggregatesFnAvg:
 		return true
-	case Count:
+	case RunReportRequestAggregatesFnCount:
 		return true
-	case CountDistinct:
+	case RunReportRequestAggregatesFnCountDistinct:
 		return true
-	case Max:
+	case RunReportRequestAggregatesFnMax:
 		return true
-	case Min:
+	case RunReportRequestAggregatesFnMin:
 		return true
-	case Sum:
+	case RunReportRequestAggregatesFnSum:
 		return true
 	default:
 		return false
@@ -3726,6 +3750,33 @@ type ColdStartRequest struct {
 	// Url Company website URL to read back.
 	Url string `json:"url"`
 }
+
+// ComputedField S-E15.8c formula-field display row (RD-AC-6/RD-AC-7/RD-AC-N-1) — a read-only,
+// database-computed value, never a runtime-authored expression. `computable: false` +
+// `reason` is the honest floor for a field with no backend data model yet — the row is
+// still returned, never omitted or fabricated.
+type ComputedField struct {
+	Computable   bool     `json:"computable"`
+	Dependencies []string `json:"dependencies"`
+
+	// FormulaSql The literal GENERATED-column/view SQL definition; empty string when computable=false.
+	FormulaSql string            `json:"formula_sql"`
+	Key        string            `json:"key"`
+	Kind       ComputedFieldKind `json:"kind"`
+	Label      string            `json:"label"`
+
+	// Reason Set (non-null) iff computable=false, e.g. "not_yet_built".
+	Reason *string `json:"reason,omitempty"`
+
+	// Value Present (and non-null) only when kind is count/duration_months/percent and computable=true.
+	Value *float32 `json:"value,omitempty"`
+
+	// ValueMinor Present (and non-null) only when kind=currency_minor and computable=true.
+	ValueMinor *int64 `json:"value_minor,omitempty"`
+}
+
+// ComputedFieldKind defines model for ComputedField.Kind.
+type ComputedFieldKind string
 
 // ConsentEvent An append-only proof row (Art. 7 demonstrability). Never updated or deleted.
 type ConsentEvent struct {
@@ -5126,6 +5177,11 @@ type Organization struct {
 
 	// Classification PO-DDL-4 target values (agency, reseller, tech_vendor, platform, competitor, plus prospect/customer/partner/other) unioned with legacy live values (vendor) per the additive-first gate decision (gate issue #58, Option 1) — legacy values are DEPRECATED, not removed; a fast-follow ticket drops them + adds NOT NULL DEFAULT 'prospect' after a deprecation window. An org IS a partner iff classification='partner' AND it has a `partner` row (A41/ADR-0032).
 	Classification *OrganizationClassification `json:"classification,omitempty"`
+
+	// ComputedFields S-E15.8c formula-field display rows (RD-AC-6/RD-AC-7/RD-AC-N-1). Populated on
+	// `getOrganization` only; the key is absent entirely (not an empty array) when the
+	// viewer's role lacks computed_field:read visibility (STATE-4).
+	ComputedFields *[]ComputedField `json:"computed_fields,omitempty"`
 
 	// ContactCount Count of people with a live `employment` relationship to this
 	// organization (server-computed, AC-companies-3).
@@ -11107,6 +11163,14 @@ func (a *Organization) UnmarshalJSON(b []byte) error {
 		delete(object, "classification")
 	}
 
+	if raw, found := object["computed_fields"]; found {
+		err = json.Unmarshal(raw, &a.ComputedFields)
+		if err != nil {
+			return fmt.Errorf("error reading 'computed_fields': %w", err)
+		}
+		delete(object, "computed_fields")
+	}
+
 	if raw, found := object["contact_count"]; found {
 		err = json.Unmarshal(raw, &a.ContactCount)
 		if err != nil {
@@ -11356,6 +11420,13 @@ func (a Organization) MarshalJSON() ([]byte, error) {
 		object["classification"], err = json.Marshal(a.Classification)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'classification': %w", err)
+		}
+	}
+
+	if a.ComputedFields != nil {
+		object["computed_fields"], err = json.Marshal(a.ComputedFields)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'computed_fields': %w", err)
 		}
 	}
 
