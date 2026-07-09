@@ -12,6 +12,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/modules/offers/domain"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/httpkit"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
+	"github.com/gradionhq/margince/backend/internal/shared/ports/retrieval"
 )
 
 // pathPrefixOffers and pathSegmentLineItems are the two path literals this
@@ -28,6 +29,7 @@ type offerStoreSeam interface {
 	Get(ctx context.Context, id, workspaceID string) (domain.Offer, error)
 	List(ctx context.Context, workspaceID, dealID, cursor string, limit int, includeArchived bool) ([]domain.Offer, string, error)
 	Update(ctx context.Context, id, workspaceID string, updates map[string]any, ifMatch int64) (domain.Offer, error)
+	Regenerate(ctx context.Context, id, workspaceID string, signals []domain.OfferLineSignal) (domain.Offer, error)
 }
 
 type offerLineItemStoreSeam interface {
@@ -37,18 +39,20 @@ type offerLineItemStoreSeam interface {
 	Delete(ctx context.Context, id, offerID, workspaceID string) error
 }
 
-// OfferHandler routes /deals/{id}/offers, /offers/{id}, /offers/{id}/line-items,
-// and /offers/{id}/line-items/{lineId} requests (OFFER-WIRE-3/4/5). Mirrors
-// DealHandler's suffix-routing shape — one handler, several path shapes,
-// because line items are a draft-only child collection of one offer.
+// OfferHandler routes /deals/{id}/offers, /offers/{id}, /offers/{id}/regenerate,
+// /offers/{id}/line-items, and /offers/{id}/line-items/{lineId} requests
+// (OFFER-WIRE-3/4/5/6). Mirrors DealHandler's suffix-routing shape — one
+// handler, several path shapes, because line items are a draft-only child
+// collection of one offer.
 type OfferHandler struct {
 	offers    offerStoreSeam
 	lineItems offerLineItemStoreSeam
+	retriever retrieval.Retriever
 }
 
 // NewOfferHandler returns an OfferHandler backed by the given stores.
-func NewOfferHandler(offers offerStoreSeam, lineItems offerLineItemStoreSeam) *OfferHandler {
-	return &OfferHandler{offers: offers, lineItems: lineItems}
+func NewOfferHandler(offers offerStoreSeam, lineItems offerLineItemStoreSeam, retriever retrieval.Retriever) *OfferHandler {
+	return &OfferHandler{offers: offers, lineItems: lineItems, retriever: retriever}
 }
 
 func (h *OfferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -74,6 +78,8 @@ func (h *OfferHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *OfferHandler) serveOffer(w http.ResponseWriter, r *http.Request, path string) {
 	id := httpkit.PathID(path, pathPrefixOffers)
 	switch {
+	case r.Method == http.MethodPost && strings.HasSuffix(path, "/regenerate") && id != "":
+		h.regenerate(w, r, id)
 	case r.Method == http.MethodGet && id != "":
 		h.get(w, r, id)
 	case r.Method == http.MethodPatch && id != "":
@@ -203,6 +209,24 @@ func (h *OfferHandler) update(w http.ResponseWriter, r *http.Request, id string)
 		return
 	}
 	httpkit.WriteUpdateResult(w, o, err)
+}
+
+func (h *OfferHandler) regenerate(w http.ResponseWriter, r *http.Request, id string) {
+	assembled, err := h.retriever.AssembleContext(r.Context(), id)
+	if err != nil {
+		httpkit.JSONError(w, err)
+		return
+	}
+	o, err := h.offers.Regenerate(r.Context(), id, httpkit.WorkspaceID(r), decodeOfferLineSignals(assembled))
+	if errors.Is(err, adapters.ErrOfferNotDraft) {
+		httpkit.JSONProblem(w, http.StatusConflict, "offer_not_draft")
+		return
+	}
+	if err != nil {
+		httpkit.JSONError(w, err)
+		return
+	}
+	httpkit.JSONOK(w, o)
 }
 
 // ---- line-item handlers ----

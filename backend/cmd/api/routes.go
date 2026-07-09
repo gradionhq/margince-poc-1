@@ -141,7 +141,7 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 	crud("/quotas", platformauth.ObjQuota, recordstransport.NewQuotaHandler(records.NewQuotaStore(k.db)))
 	activityStore := activities.NewActivityStore(k.db)
 	crud("/attachments", platformauth.ObjAttachment, recordstransport.NewAttachmentHandler(records.NewAttachmentStore(k.db), k.blob, recordsadapters.NewDownloadAuditWriter(activityStore), k.db))
-	offerHandler := offerstransport.NewOfferHandler(offers.NewOfferStore(k.db), offers.NewOfferLineItemStore(k.db, offers.NewProductStore(k.db)))
+	offerHandler := offerstransport.NewOfferHandler(offers.NewOfferStore(k.db), offers.NewOfferLineItemStore(k.db, offers.NewProductStore(k.db)), offerstransport.NewNoOpRetriever())
 	mux.Handle("GET /deals/{id}/offers", instrument("/deals/offers", k.domainWrap(platformauth.ObjOffer, offerHandler)))
 	mux.Handle("POST /deals/{id}/offers", instrument("/deals/offers", k.domainWrap(platformauth.ObjOffer, offerHandler)))
 	crud("/offers", platformauth.ObjOffer, offerHandler)
