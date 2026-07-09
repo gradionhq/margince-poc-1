@@ -75,7 +75,7 @@ func (a *OffersAdapter) SendOffer(w http.ResponseWriter, r *http.Request, idPara
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// AcceptOffer is unimplemented; see the struct doc comment above — a separate ticket.
+// AcceptOffer delegates to the wired handler; see the struct doc comment above.
 func (a *OffersAdapter) AcceptOffer(w http.ResponseWriter, r *http.Request, idParam types.IdParam, params types.AcceptOfferParams) {
-	w.WriteHeader(http.StatusNotImplemented)
+	a.H.ServeHTTP(w, r)
 }
