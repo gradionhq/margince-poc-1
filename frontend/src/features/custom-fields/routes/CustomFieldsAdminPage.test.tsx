@@ -455,5 +455,25 @@ describe("CustomFieldsAdminPage", () => {
         expect(screen.getByText(/is live on the 360/i)).toBeInTheDocument();
       });
     });
+
+    it("surfaces the picklist last-option guard message as a toast (AC-custom-fields-4)", async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      const addButton = screen.getByRole("button", { name: /add field/i });
+      await user.click(addButton);
+
+      const typeSelect = screen.getByRole("combobox");
+      await user.selectOptions(typeSelect, "picklist");
+
+      const removeButton = screen.getByRole("button", { name: /remove/i });
+      await user.click(removeButton);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/a picklist needs at least one option/i),
+        ).toBeInTheDocument();
+      });
+    });
   });
 });

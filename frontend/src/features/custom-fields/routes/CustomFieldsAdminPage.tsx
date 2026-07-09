@@ -217,6 +217,7 @@ export function CustomFieldsAdminPage() {
           onConfirm={handleNewFieldConfirm}
           isLoading={createPending}
           userId={userId}
+          onGuardToast={(message) => pushToast("error", message)}
         />
       )}
 
