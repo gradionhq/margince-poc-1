@@ -7,7 +7,7 @@ type ComputedField = components["schemas"]["ComputedField"];
 type Scenario = "212k" | "177k" | "lost";
 type Toast = { id: string; variant: "info"; message: string };
 
-const scenarioOptions: ReadonlyArray<{ value: Scenario; label: string }> = [
+const scenarioOptions = [
   { value: "212k", label: "212k" },
   { value: "177k", label: "177k" },
   { value: "lost", label: "lost" },
