@@ -325,7 +325,7 @@ describe("DealDetailPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders an Offers card with empty-state chrome when there are no offers", () => {
+  it("renders an Offers card with empty-state chrome when there are no offers", async () => {
     renderPage();
 
     expect(screen.getByTestId("deal-offers-card")).toBeInTheDocument();
@@ -333,6 +333,17 @@ describe("DealDetailPage", () => {
     expect(
       screen.getByRole("button", { name: /new offer/i }),
     ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /new offer/i }));
+
+    expect(createOfferMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        captured_by: "human:u1",
+      }),
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+      }),
+    );
   });
 
   it("hides the New offer button for read_only and ops roles", () => {

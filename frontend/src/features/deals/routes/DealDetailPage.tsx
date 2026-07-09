@@ -45,7 +45,7 @@ export function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { role } = useAuthStore();
+  const { role, user } = useAuthStore();
   const { data: deal, isLoading, isError, refetch } = useDeal(id);
   const { data: allStages, isLoading: stagesLoading } = useStages(
     deal?.pipeline_id,
@@ -288,20 +288,21 @@ export function DealDetailPage() {
               {canCreateOffer && (
                 <Button
                   variant="secondary"
-                  onClick={() =>
+                  onClick={() => {
+                    const capturedBy = `human:${user?.id ?? "unknown"}`;
                     createOffer.mutate(
                       {
                         offer_number: `ANG-${Date.now()}`,
                         currency: deal.currency ?? "EUR",
                         source: "ui",
-                        captured_by: "human:ui",
+                        captured_by: capturedBy,
                       },
                       {
                         onSuccess: (offer) =>
                           navigate(`/deals/${id}/offers/${offer.id}`),
                       },
-                    )
-                  }
+                    );
+                  }}
                 >
                   New offer
                 </Button>
