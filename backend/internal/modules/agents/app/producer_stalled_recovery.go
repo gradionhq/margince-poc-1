@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/gradionhq/margince/backend/internal/modules/agents/domain"
 	"github.com/gradionhq/margince/backend/internal/modules/agents/ports"
@@ -24,7 +25,7 @@ type stalledRecoveryEffect struct {
 	EvidenceActivityID string            `json:"evidence_activity_id"`
 	DealID             string            `json:"deal_id"`
 	WorkspaceID        string            `json:"workspace_id"`
-	Draft              map[string]string `json:"draft,omitempty"`
+	Draft              map[string]string `json:"draft"`
 }
 
 type stalledClaim struct {
@@ -188,7 +189,7 @@ func buildStalledRecoveryProposal(workspaceID, dealID string, claims map[string]
 		ActionType:   "stalled_recovery",
 		TargetEntity: "deal:" + dealID,
 		Effect:       effect,
-		Evidence:     bestEvidence.EvidenceText,
+		Evidence:     fmt.Sprintf("%s: %s", bestEvidence.SpecificReason, bestEvidence.EvidenceText),
 		Confidence:   bestEvidence.Confidence,
 		Source:       bestEvidence.Source,
 	}, true

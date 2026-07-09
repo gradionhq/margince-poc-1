@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/gradionhq/margince/backend/internal/modules/agents/app"
@@ -104,6 +105,9 @@ func TestStalledRecoveryProduce_StalledWithEvidenceNoDraftYieldsNullDraft(t *tes
 	}
 	if len(out) != 1 {
 		t.Fatalf("expected 1 proposal, got %d", len(out))
+	}
+	if !strings.Contains(string(out[0].Effect), `"draft":null`) {
+		t.Errorf("Effect JSON = %s, want the literal \"draft\":null key (not an omitted key)", out[0].Effect)
 	}
 	var effect struct {
 		Draft *struct{} `json:"draft"`
