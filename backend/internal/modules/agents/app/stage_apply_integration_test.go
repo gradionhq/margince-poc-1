@@ -143,15 +143,20 @@ func TestApplyGreen_WritesAuditAndEvent(t *testing.T) {
 	// Use a spy Effector + a spy EventEmitter (in-memory, no real domain
 	// table for the 🟢 fixture kind) but a REAL crmaudit.WriteTx against
 	// the real audit_log table, so the audit-row assertion is real.
+	// audit_log.entity_id is uuid NOT NULL-shaped (nullable column, uuid
+	// type), so the fixture entity id must itself be a real uuid, not an
+	// arbitrary string like "fixture-1" — the audit row is real now that
+	// ApplyGreen sets EntityID (ONA-T02 live-UAT fix).
 	db := testDB(t)
 	wsID := seedWorkspace(t, db)
 	conf := 0.95
+	activityID := ids.New()
 	// "log_link" is the one action type Task 2's tier router declares
 	// TierGreen — routed for real here too, not hand-set.
 	p := app.RouteTier(domain.Proposal{
 		WorkspaceID:  wsID,
 		ActionType:   "log_link",
-		TargetEntity: "activity:fixture-1",
+		TargetEntity: "activity:" + activityID,
 		Effect:       json.RawMessage(`{"link":"call-123"}`),
 		Evidence:     "fixture evidence",
 		Confidence:   &conf,
@@ -182,12 +187,12 @@ func TestApplyGreen_WritesAuditAndEvent(t *testing.T) {
 	if len(emitter.emitted) != 1 || emitter.emitted[0].topic != "overnight.applied" {
 		t.Fatalf("expected exactly one overnight.applied emission, got %+v", emitter.emitted)
 	}
-	// entity_id must be just the id portion of TargetEntity ("fixture-1"),
-	// never the whole "kind:id" composite ("activity:fixture-1") — a real
+	// entity_id must be just the id portion of TargetEntity (activityID),
+	// never the whole "kind:id" composite ("activity:"+activityID) — a real
 	// EventEmitter's event_outbox.entity_id column is uuid NOT NULL and
 	// would reject the composite string.
-	if got := emitter.emitted[0].entityID; got != "fixture-1" {
-		t.Fatalf("emitted entityID = %q, want %q", got, "fixture-1")
+	if got := emitter.emitted[0].entityID; got != activityID {
+		t.Fatalf("emitted entityID = %q, want %q", got, activityID)
 	}
 
 	var count int
@@ -196,6 +201,20 @@ func TestApplyGreen_WritesAuditAndEvent(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("audit_log rows for agent:overnight = %d, want 1", count)
+	}
+
+	// ONA-T02 live-UAT fix: audit_log.entity_id must be populated (not NULL)
+	// for every green-applied proposal — this ticket wires the first real
+	// domain writes (close-date corrections) through this exact path.
+	var gotEntityID sql.NullString
+	if err := db.QueryRow(
+		`SELECT entity_id FROM audit_log WHERE workspace_id = $1::uuid AND actor_id = $2`,
+		wsID, app.ActorOvernight,
+	).Scan(&gotEntityID); err != nil {
+		t.Fatalf("select audit_log.entity_id: %v", err)
+	}
+	if !gotEntityID.Valid || gotEntityID.String != activityID {
+		t.Fatalf("audit_log.entity_id = %+v, want valid uuid %q", gotEntityID, activityID)
 	}
 }
 
