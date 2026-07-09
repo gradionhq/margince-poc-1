@@ -18,7 +18,9 @@ export function FormulaFieldRow({ field }: { field: ComputedField }) {
           <Chip variant="info">Σ Derived</Chip>
         </div>
         <p className="mt-1 text-gf-caption text-gf-secondary">
-          {field.computable ? "Read-only computed value" : "Formula unavailable"}
+          {field.computable
+            ? "Read-only computed value"
+            : "Formula unavailable"}
         </p>
       </div>
       <div className="flex items-center justify-between gap-gf-sm md:justify-end">

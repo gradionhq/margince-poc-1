@@ -68,7 +68,9 @@ export function RecomputeDriver({
       return;
     }
     const change =
-      nextDeltaMinor === 0 ? "no change" : formatSignedEuroMinor(nextDeltaMinor);
+      nextDeltaMinor === 0
+        ? "no change"
+        : formatSignedEuroMinor(nextDeltaMinor);
     pushToast(`Simulation only ${change}. Nothing is saved.`);
   }
 
@@ -88,6 +90,7 @@ export function RecomputeDriver({
         </div>
         <div
           className="rounded-full border border-gf-subtle bg-gf-page px-gf-sm py-gf-xs text-gf-caption font-semibold text-gf-primary"
+          role="status"
           aria-label="Win probability label"
         >
           {scenarioLabel(selectedScenario)}
@@ -106,7 +109,9 @@ export function RecomputeDriver({
 
       <div className="mt-gf-md grid grid-cols-1 gap-gf-sm rounded-lg border border-gf-subtle bg-gf-page p-gf-md sm:grid-cols-2">
         <div>
-          <p className="text-gf-caption text-gf-secondary">Simulated open pipeline</p>
+          <p className="text-gf-caption text-gf-secondary">
+            Simulated open pipeline
+          </p>
           <p className="font-mono text-gf-body font-semibold text-gf-primary">
             {formatEuroMinor(simulatedValueMinor)}
           </p>
@@ -121,7 +126,9 @@ export function RecomputeDriver({
 
       <ToastContainer
         toasts={toasts}
-        onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))}
+        onDismiss={(id) =>
+          setToasts((current) => current.filter((toast) => toast.id !== id))
+        }
       />
     </section>
   );

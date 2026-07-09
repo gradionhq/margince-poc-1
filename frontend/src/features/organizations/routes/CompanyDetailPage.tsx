@@ -8,6 +8,7 @@ import {
 } from "../../../shared/ui/ArchivedBanner.js";
 import { Button, Skeleton, StatusDot } from "../../../shared/ui/forge.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
+import { FormulaFieldsPanel } from "../../formula-fields/index.js";
 import {
   useArchiveOrganization,
   useOrganization,
@@ -25,7 +26,6 @@ import { AccountSignalCard } from "../components/AccountSignalCard.js";
 import { ActivityCard } from "../components/ActivityCard.js";
 import { DealRail } from "../components/DealRail.js";
 import { EditOrgModal } from "../components/EditOrgModal.js";
-import { FormulaFieldsPanel } from "../../formula-fields/index.js";
 import { NewDealModal } from "../components/NewDealModal.js";
 import { OrgLogo } from "../components/OrgLogo.js";
 import { OrgStrengthCard } from "../components/OrgStrengthCard.js";

@@ -12,7 +12,8 @@ const computedFields = [
     label: "Open pipeline",
     kind: "currency_minor",
     value_minor: 212000,
-    formula_sql: "COALESCE(organization_open_pipeline_rollup.open_pipeline_minor_base, 0)",
+    formula_sql:
+      "COALESCE(organization_open_pipeline_rollup.open_pipeline_minor_base, 0)",
     dependencies: [
       "organization_open_pipeline_rollup.open_pipeline_minor_base",
       "deal.amount_minor_base",
@@ -72,9 +73,7 @@ function makeOrg(overrides: Partial<Organization> = {}): Organization {
 
 describe("FormulaFieldsPanel", () => {
   it("returns null when computed_fields is absent", () => {
-    const { container } = render(
-      <FormulaFieldsPanel org={makeOrg()} />,
-    );
+    const { container } = render(<FormulaFieldsPanel org={makeOrg()} />);
 
     expect(container).toBeEmptyDOMElement();
   });
@@ -96,8 +95,12 @@ describe("FormulaFieldsPanel", () => {
       /read-only computed/i,
     );
     expect(screen.getByText(/recomputes on every write/i)).toBeInTheDocument();
-    expect(screen.getByTestId("formula-field-row-open_pipeline")).toBeInTheDocument();
-    expect(screen.getByTestId("formula-field-row-weighted_pipeline")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("formula-field-row-open_pipeline"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("formula-field-row-weighted_pipeline"),
+    ).toBeInTheDocument();
     expect(screen.getByText("See it recompute")).toBeInTheDocument();
     expect(screen.getByText("AI-proposed")).toBeInTheDocument();
     expect(screen.getByText("computed:server")).toBeInTheDocument();

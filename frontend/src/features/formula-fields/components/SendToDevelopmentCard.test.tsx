@@ -25,9 +25,9 @@ describe("SendToDevelopmentCard", () => {
     expect(
       screen.getByRole("link", { name: /development path/i }),
     ).toHaveAttribute("href", "/development");
-    expect(
-      screen.getByRole("status"),
-    ).toHaveTextContent("Formula logic is reviewed code, not runtime.");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Formula logic is reviewed code, not runtime.",
+    );
     expect(screen.getByText("AI-proposed")).toBeInTheDocument();
   });
 

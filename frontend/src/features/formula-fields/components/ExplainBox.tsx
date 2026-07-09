@@ -48,7 +48,8 @@ export function ExplainBox({ field }: { field: ComputedField }) {
                         key={dependency}
                         className="text-gf-caption text-gf-secondary"
                       >
-                        Input from <span className="font-mono">{dependency}</span>
+                        Input from{" "}
+                        <span className="font-mono">{dependency}</span>
                       </li>
                     ))}
                   </ul>

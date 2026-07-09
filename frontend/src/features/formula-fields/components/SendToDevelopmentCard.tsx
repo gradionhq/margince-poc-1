@@ -36,8 +36,8 @@ export function SendToDevelopmentCard() {
       {state === "routed" ? (
         <div className="mt-gf-md rounded-lg border border-gf-subtle bg-gf-elevated p-gf-md text-gf-body text-gf-primary">
           <p>
-            This logic ships as a reviewed source change, not as runtime
-            editor state.
+            This logic ships as a reviewed source change, not as runtime editor
+            state.
           </p>
           <p className="mt-gf-xs text-gf-caption text-gf-secondary">
             This needs the development path, not this screen.
@@ -70,7 +70,9 @@ export function SendToDevelopmentCard() {
         <Button
           variant="secondary"
           onClick={() =>
-            showToast("Draft edit - formula logic ships as reviewed source, not edited here")
+            showToast(
+              "Draft edit - formula logic ships as reviewed source, not edited here",
+            )
           }
         >
           Edit formula

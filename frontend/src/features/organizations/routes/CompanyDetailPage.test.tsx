@@ -2,8 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { components } from "../../../lib/api-client/generated/index.js";
-import type { Organization } from "../../../lib/api-client/generated/index.js";
+import type {
+  components,
+  Organization,
+} from "../../../lib/api-client/generated/index.js";
 
 const baseOrgData = {
   id: "org1",
@@ -44,14 +46,19 @@ let mockUpdateMutate = vi.fn(
   },
 );
 let mockArchiveMutate = vi.fn(
-  (_vars: undefined, opts?: { onSuccess?: () => undefined }) =>
-    (opts?.onSuccess?.(), undefined),
+  (_vars: undefined, opts?: { onSuccess?: () => undefined }) => {
+    opts?.onSuccess?.();
+    return undefined;
+  },
 );
 let mockRestoreMutate = vi.fn(
   (
     _vars: undefined,
     opts?: { onSuccess?: () => undefined; onError?: (err: unknown) => void },
-  ) => (opts?.onSuccess?.(), undefined),
+  ) => {
+    opts?.onSuccess?.();
+    return undefined;
+  },
 );
 
 type ComputedField = components["schemas"]["ComputedField"];
@@ -62,7 +69,8 @@ const baseComputedFields = [
     label: "Open pipeline",
     kind: "currency_minor",
     value_minor: 212000,
-    formula_sql: "COALESCE(organization_open_pipeline_rollup.open_pipeline_minor_base, 0)",
+    formula_sql:
+      "COALESCE(organization_open_pipeline_rollup.open_pipeline_minor_base, 0)",
     dependencies: [
       "organization_open_pipeline_rollup.open_pipeline_minor_base",
       "deal.amount_minor_base",
@@ -158,8 +166,10 @@ describe("CompanyDetailPage", () => {
       },
     );
     mockArchiveMutate = vi.fn(
-      (_vars: undefined, opts?: { onSuccess?: () => undefined }) =>
-        (opts?.onSuccess?.(), undefined),
+      (_vars: undefined, opts?: { onSuccess?: () => undefined }) => {
+        opts?.onSuccess?.();
+        return undefined;
+      },
     );
     mockRestoreMutate = vi.fn(
       (
@@ -168,7 +178,10 @@ describe("CompanyDetailPage", () => {
           onSuccess?: () => undefined;
           onError?: (err: unknown) => void;
         },
-      ) => (opts?.onSuccess?.(), undefined),
+      ) => {
+        opts?.onSuccess?.();
+        return undefined;
+      },
     );
   });
 
@@ -310,7 +323,9 @@ describe("CompanyDetailPage", () => {
       /read-only computed/i,
     );
     expect(screen.getByText(/recomputes on every write/i)).toBeInTheDocument();
-    expect(screen.getByTestId("formula-field-row-open_pipeline")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("formula-field-row-open_pipeline"),
+    ).toBeInTheDocument();
     expect(screen.getByText("See it recompute")).toBeInTheDocument();
     expect(screen.getByText("AI-proposed")).toBeInTheDocument();
     expect(screen.getByText("computed:server")).toBeInTheDocument();

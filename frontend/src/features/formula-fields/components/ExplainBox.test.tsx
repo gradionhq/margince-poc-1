@@ -21,18 +21,20 @@ describe("ExplainBox", () => {
     render(<ExplainBox field={field} />);
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /explain this number/i }));
+    await user.click(
+      screen.getByRole("button", { name: /explain this number/i }),
+    );
     expect(
       screen.getByTestId("formula-field-explain-open_pipeline"),
     ).toBeInTheDocument();
     expect(screen.getByText("Open pipeline")).toBeInTheDocument();
-    expect(
-      screen.getByText("sum(deal.amount_minor_base)"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("sum(deal.amount_minor_base)")).toBeInTheDocument();
     expect(screen.getByText("deal.amount_minor")).toBeInTheDocument();
     expect(screen.getByText("2.120,00 €")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /explain this number/i }));
+    await user.click(
+      screen.getByRole("button", { name: /explain this number/i }),
+    );
     expect(
       screen.queryByTestId("formula-field-explain-open_pipeline"),
     ).not.toBeInTheDocument();
@@ -52,7 +54,9 @@ describe("ExplainBox", () => {
     render(<ExplainBox field={field} />);
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /explain this number/i }));
+    await user.click(
+      screen.getByRole("button", { name: /explain this number/i }),
+    );
     expect(
       screen.getByTestId("formula-field-explain-weighted_pipeline"),
     ).toBeInTheDocument();
