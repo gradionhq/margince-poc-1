@@ -13,7 +13,6 @@ export type PersonListResponse  = C["schemas"]["PersonListResponse"];
 export type Organization              = C["schemas"]["Organization"];
 export type CreateOrganizationRequest = C["schemas"]["CreateOrganizationRequest"];
 export type OrganizationListResponse  = C["schemas"]["OrganizationListResponse"];
-export type Relationship = C["schemas"]["Relationship"];
 export type Partner      = C["schemas"]["Partner"];
 export type Deal              = C["schemas"]["Deal"];
 export type CreateDealRequest = C["schemas"]["CreateDealRequest"];
