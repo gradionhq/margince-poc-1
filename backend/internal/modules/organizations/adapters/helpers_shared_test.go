@@ -30,7 +30,7 @@ func mkOrg(ctx context.Context, t *testing.T, store *orgAdapters.OrgStore, ws, n
 	t.Helper()
 	created, err := store.Create(ctx, orgDomain.Organization{
 		WorkspaceID: ws, DisplayName: name, Source: "api", CapturedBy: "human:t",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create org %s: %v", name, err)
 	}

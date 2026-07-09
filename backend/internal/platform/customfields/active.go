@@ -25,7 +25,7 @@ func ActiveColumns(ctx context.Context, db *sql.DB, workspaceID, object string) 
 		if err != nil {
 			return fmt.Errorf("customfields: select active columns: %w", err)
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var c Column
 			if err := rows.Scan(&c.ColumnName, &c.Slug, &c.Type); err != nil {
@@ -51,7 +51,8 @@ func ScanDests(active []Column) []any {
 	return dests
 }
 
-// ExtractValues converts scanned custom-field values into wire values.
+// ExtractValues converts scanned custom-field values into wire values. A NULL
+// column (nil dest) is omitted from the map entirely.
 func ExtractValues(active []Column, dests []any) map[string]any {
 	out := make(map[string]any, len(active))
 	for i, c := range active {
@@ -62,39 +63,47 @@ func ExtractValues(active []Column, dests []any) map[string]any {
 		if !ok || p == nil || *p == nil {
 			continue
 		}
-		switch c.Type {
-		case TypeCurrency:
-			if v, ok := (*p).(int64); ok {
-				out[c.ColumnName] = v
-			}
-		case TypeBoolean:
-			if v, ok := (*p).(bool); ok {
-				out[c.ColumnName] = v
-			}
-		case TypeText, TypePicklist:
-			switch v := (*p).(type) {
-			case []byte:
-				out[c.ColumnName] = string(v)
-			case string:
-				out[c.ColumnName] = v
-			}
-		case TypeDate:
-			switch v := (*p).(type) {
-			case time.Time:
-				out[c.ColumnName] = v.Format("2006-01-02")
-			case string:
-				out[c.ColumnName] = v
-			}
-		case TypeNumber:
-			switch v := (*p).(type) {
-			case []byte:
-				out[c.ColumnName] = json.Number(string(v))
-			case string:
-				out[c.ColumnName] = json.Number(v)
-			}
+		if wire, ok := wireValue(c.Type, *p); ok {
+			out[c.ColumnName] = wire
 		}
 	}
 	return out
+}
+
+// wireValue converts one scanned driver value into its wire representation for
+// the given custom-field type, returning ok=false when the value's Go type does
+// not match the column type (the key is then omitted from the response).
+func wireValue(fieldType string, raw any) (any, bool) {
+	switch fieldType {
+	case TypeCurrency:
+		v, ok := raw.(int64)
+		return v, ok
+	case TypeBoolean:
+		v, ok := raw.(bool)
+		return v, ok
+	case TypeText, TypePicklist:
+		switch v := raw.(type) {
+		case []byte:
+			return string(v), true
+		case string:
+			return v, true
+		}
+	case TypeDate:
+		switch v := raw.(type) {
+		case time.Time:
+			return v.Format("2006-01-02"), true
+		case string:
+			return v, true
+		}
+	case TypeNumber:
+		switch v := raw.(type) {
+		case []byte:
+			return json.Number(string(v)), true
+		case string:
+			return json.Number(v), true
+		}
+	}
+	return nil, false
 }
 
 // SQLValue converts one JSON-decoded value into a database bind value.

@@ -119,7 +119,7 @@ func TestOrganizationHandler_List_WithAggregates(t *testing.T) {
 	org, err := orgStore.Create(ctx, orgDomain.Organization{
 		WorkspaceID: orgHandlerTestWS, DisplayName: "TestCo-" + ids.New(),
 		Source: "test", CapturedBy: "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create org: %v", err)
 	}
@@ -321,7 +321,7 @@ func TestOrganizationHandler_Get_ArchivedStillFetchable(t *testing.T) {
 	org, err := orgStore.Create(ctx, orgDomain.Organization{
 		WorkspaceID: orgHandlerTestWS, DisplayName: "Archivable-" + ids.New(),
 		Source: "test", CapturedBy: "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create org: %v", err)
 	}
@@ -370,7 +370,7 @@ func TestOrganizationHandler_Update_StaleIfMatchAndMalformed(t *testing.T) {
 	org, err := orgStore.Create(ctx, orgDomain.Organization{
 		WorkspaceID: orgHandlerTestWS, DisplayName: "Updatable-" + ids.New(),
 		Source: "test", CapturedBy: "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create org: %v", err)
 	}
@@ -436,14 +436,14 @@ func TestOrganizationHandler_List_ClassificationAndRelevanceFilter(t *testing.T)
 		WorkspaceID: orgHandlerTestWS, DisplayName: matchingName,
 		Classification: &classification, Relevance: 75,
 		Source: "test", CapturedBy: "human:test",
-	}); err != nil {
+	}, nil); err != nil {
 		t.Fatalf("create matching org: %v", err)
 	}
 	if _, err := orgStore.Create(ctx, orgDomain.Organization{
 		WorkspaceID: orgHandlerTestWS, DisplayName: "PartnerLow-" + ids.New(),
 		Classification: &classification, Relevance: 10,
 		Source: "test", CapturedBy: "human:test",
-	}); err != nil {
+	}, nil); err != nil {
 		t.Fatalf("create low-relevance org: %v", err)
 	}
 	otherClass := "vendor"
@@ -451,7 +451,7 @@ func TestOrganizationHandler_List_ClassificationAndRelevanceFilter(t *testing.T)
 		WorkspaceID: orgHandlerTestWS, DisplayName: "Vendor-" + ids.New(),
 		Classification: &otherClass, Relevance: 90,
 		Source: "test", CapturedBy: "human:test",
-	}); err != nil {
+	}, nil); err != nil {
 		t.Fatalf("create vendor org: %v", err)
 	}
 
@@ -499,14 +499,14 @@ func TestOrganizationHandler_List_DomainAndOwnerFilter(t *testing.T) {
 		OwnerID: &ownerID,
 		Domains: []orgDomain.OrganizationDomain{{Domain: "Owned.Example"}},
 		Source:  "test", CapturedBy: "human:test",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("create owned org: %v", err)
 	}
 	if _, err := orgStore.Create(ctx, orgDomain.Organization{
 		WorkspaceID: orgHandlerTestWS, DisplayName: "Unowned-" + ids.New(),
 		Source: "test", CapturedBy: "human:test",
-	}); err != nil {
+	}, nil); err != nil {
 		t.Fatalf("create unowned org: %v", err)
 	}
 
