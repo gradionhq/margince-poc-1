@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lib/pq"
+
 	"github.com/gradionhq/margince/backend/internal/modules/organizations/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	"github.com/gradionhq/margince/backend/internal/platform/customfields"
@@ -242,18 +244,20 @@ func (s *OrgStore) Update(ctx context.Context, id, workspaceID string, updates m
 	}
 	err = database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
 		setClauses := []string{
-			"name       = COALESCE($3, name)",
-			"website    = COALESCE($4, website)",
-			"owner_id   = COALESCE($5, owner_id)",
-			"updated_at = now()",
+			"name          = COALESCE($3, name)",
+			"website       = COALESCE($4, website)",
+			"owner_id      = COALESCE($5, owner_id)",
+			"parent_org_id = COALESCE($6, parent_org_id)",
+			"updated_at    = now()",
 		}
 		args := []any{
 			id, workspaceID,
 			sqlutil.NullStr(updates, "display_name"),
 			sqlutil.NullStr(updates, "website"),
 			sqlutil.NullStr(updates, "owner_id"),
+			sqlutil.NullStr(updates, "parent_org_id"),
 		}
-		customSet, customArgs := customfields.UpdateSetClauses(active, updates, 6)
+		customSet, customArgs := customfields.UpdateSetClauses(active, updates, 7)
 		setClauses = append(setClauses, customSet...)
 		args = append(args, customArgs...)
 		where := "WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL"
@@ -266,7 +270,7 @@ func (s *OrgStore) Update(ctx context.Context, id, workspaceID string, updates m
 			`UPDATE organization SET `+strings.Join(setClauses, ", ")+` `+where,
 			args...)
 		if err != nil {
-			return err
+			return mapOrgCycleError(err)
 		}
 		if rowsAffected, _ := res.RowsAffected(); rowsAffected == 0 {
 			if ifMatch != 0 {
@@ -400,6 +404,18 @@ func (s *OrgStore) Restore(ctx context.Context, id, workspaceID string) (domain.
 // GetAny fetches an organization by id regardless of archived_at status.
 func (s *OrgStore) GetAny(ctx context.Context, id, workspaceID string) (domain.Organization, error) {
 	return s.getOrg(ctx, id, workspaceID, false)
+}
+
+// mapOrgCycleError translates the org-table's cycle-prevention triggers' plain
+// RAISE EXCEPTION (no custom SQLSTATE, so pq reports generic code P0001) into
+// errs.ErrOrganizationCycle — mirrors mapRelationshipUniqueViolation's
+// errors.As(err, &pgErr) shape in relationships/adapters/store_relationship.go.
+func mapOrgCycleError(err error) error {
+	var pgErr *pq.Error
+	if errors.As(err, &pgErr) && pgErr.Code == "P0001" {
+		return errs.ErrOrganizationCycle
+	}
+	return err
 }
 
 func attachOrgDomains(ctx context.Context, tx *sql.Tx, workspaceID string, o *domain.Organization) error {
