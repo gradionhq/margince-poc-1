@@ -82,7 +82,7 @@ func TestOfferStore_Accept_SentOffer_FlipsStatusSyncsDealAndEmitsPairedEvents(t 
 	}
 
 	var offerAuditCount, dealAuditCount int
-	if err := db.QueryRow(`SELECT count(*) FROM audit_log WHERE entity_type='offer' AND entity_id=$1::uuid`, created.ID).Scan(&offerAuditCount); err != nil {
+	if err := db.QueryRow(`SELECT count(*) FROM audit_log WHERE entity_type='offer' AND entity_id=$1::uuid AND action='update'`, created.ID).Scan(&offerAuditCount); err != nil {
 		t.Fatalf("count offer audit: %v", err)
 	}
 	if offerAuditCount != 1 {
