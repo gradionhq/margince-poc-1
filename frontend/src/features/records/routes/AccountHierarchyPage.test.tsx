@@ -91,7 +91,7 @@ function makeClient(overrides: Record<string, unknown> = {}): QueryClient {
 }
 
 function wrapper(qc: QueryClient) {
-  return function Wrapper({ children }: { children: ReactNode }) {
+  return function Wrapper({ children: _children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={qc}>
         <MemoryRouter initialEntries={[`/companies/${ROOT_ID}/hierarchy`]}>

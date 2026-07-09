@@ -90,11 +90,11 @@ describe("AccountTree", () => {
     );
     expect(screen.getByText("Restricted Corp")).toBeInTheDocument();
     // FieldGuard masked token
-    expect(screen.getAllByTestId("field-guard-masked").length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("field-guard-masked").length).toBeGreaterThan(
+      0,
+    );
     // Excluded note
-    expect(
-      screen.getByText(/excluded from roll-up/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/excluded from roll-up/i)).toBeInTheDocument();
   });
 
   it("renders the bound caption (Architecture design point 1)", () => {

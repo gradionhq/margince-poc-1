@@ -72,7 +72,7 @@ export function AccountTree({
                 header: "Account",
                 render: (entry: RestrictedExcludedEntry) => (
                   <div className="flex items-center gap-gf-xs">
-                    <Icon name="Lock" size="sm" />
+                    <Icon name="Lock" size={16} />
                     <span>{entry.display_name}</span>
                     <span className="ml-gf-xs text-gf-caption text-gf-muted">
                       — restricted

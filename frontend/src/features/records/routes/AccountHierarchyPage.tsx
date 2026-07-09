@@ -75,7 +75,6 @@ function CandidateCard({
 
 export function AccountHierarchyPage() {
   const { id: rootId } = useParams<{ id: string }>();
-  const qc = useQueryClient();
 
   const [scope, setScope] = useState<"tree" | "self">("tree");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(
@@ -128,7 +127,10 @@ export function AccountHierarchyPage() {
 
   // Derive explain-box figures from server rollups (never recomputed client-side).
   const selfFigure = selfRollup
-    ? selfRollup.weighted_pipeline
+    ? {
+        amount_minor: selfRollup.weighted_pipeline.amount_minor ?? 0,
+        currency: selfRollup.weighted_pipeline.currency ?? "EUR",
+      }
     : {
         amount_minor: 0,
         currency: rollup?.weighted_pipeline.currency ?? "EUR",
@@ -137,9 +139,9 @@ export function AccountHierarchyPage() {
     treeRollup && selfRollup
       ? {
           amount_minor:
-            treeRollup.weighted_pipeline.amount_minor -
-            selfRollup.weighted_pipeline.amount_minor,
-          currency: treeRollup.weighted_pipeline.currency,
+            (treeRollup.weighted_pipeline.amount_minor ?? 0) -
+            (selfRollup.weighted_pipeline.amount_minor ?? 0),
+          currency: treeRollup.weighted_pipeline.currency ?? "EUR",
         }
       : {
           amount_minor: 0,
