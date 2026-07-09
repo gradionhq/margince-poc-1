@@ -4,14 +4,6 @@ import type { QuotaAttainment } from "../api/quotas.js";
 import { useContributingDealDetails } from "../api/quotas.js";
 import { formatMoneyDeDE } from "./RollupTilesBand.js";
 
-const ClosedWonBadge =
-  StatusBadge ??
-  (({ label }: { label: string; variant?: string }) => (
-    <span className="rounded-full border border-gf-accent bg-gf-accent-light px-gf-xs py-[2px] text-gf-caption text-gf-accent">
-      {label}
-    </span>
-  ));
-
 type Row = {
   deal_id: string;
   base_value_minor: number;
@@ -61,9 +53,7 @@ export function ContributingDealsTable({
           {
             key: "status",
             header: "Status",
-            render: () => (
-              <ClosedWonBadge label="Closed-won" variant="success" />
-            ),
+            render: () => <StatusBadge label="Closed-won" variant="success" />,
           },
           {
             key: "amount",
