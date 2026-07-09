@@ -29,6 +29,21 @@ func (a *AttachmentsAdapter) GetAttachment(w http.ResponseWriter, r *http.Reques
 	a.H.ServeHTTP(w, r)
 }
 
+// GetAttachmentExtraction delegates to the wired handler; see the struct doc comment above.
+func (a *AttachmentsAdapter) GetAttachmentExtraction(w http.ResponseWriter, r *http.Request, idParam types.IdParam) {
+	a.H.ServeHTTP(w, r)
+}
+
+// AcceptAttachmentExtraction delegates to the wired handler; see the struct doc comment above.
+func (a *AttachmentsAdapter) AcceptAttachmentExtraction(w http.ResponseWriter, r *http.Request, idParam types.IdParam) {
+	a.H.ServeHTTP(w, r)
+}
+
+// RequestAttachmentAccess delegates to the wired handler; see the struct doc comment above.
+func (a *AttachmentsAdapter) RequestAttachmentAccess(w http.ResponseWriter, r *http.Request, idParam types.IdParam) {
+	a.H.ServeHTTP(w, r)
+}
+
 // ArchiveAttachment delegates to the wired handler; see the struct doc comment above.
 func (a *AttachmentsAdapter) ArchiveAttachment(w http.ResponseWriter, r *http.Request, idParam types.IdParam) {
 	a.H.ServeHTTP(w, r)

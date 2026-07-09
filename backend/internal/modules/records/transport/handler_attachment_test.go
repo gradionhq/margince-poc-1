@@ -14,6 +14,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/platform/blobstore"
 	errs "github.com/gradionhq/margince/backend/internal/shared/apperrors"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	"github.com/gradionhq/margince/backend/internal/shared/ports/extraction"
 )
 
 // ---------------------------------------------------------------------------
@@ -90,11 +91,36 @@ func (f *fakeAttachmentStore) Archive(_ context.Context, id, _ string) (domain.A
 	return domain.Attachment{}, errs.ErrNotFound
 }
 
-// fakeAudit records WriteAudit calls for assertion.
-type fakeAudit struct{ called int }
+// fakeAudit records attachment audit calls for assertion.
+type fakeAudit struct {
+	called              int
+	requestCalled       int
+	requestCapturedBy   string
+	extractionCalls     []auditExtractionCall
+	lastExtractionField string
+}
+
+type auditExtractionCall struct {
+	field       string
+	sourceQuote string
+	capturedBy  string
+}
 
 func (f *fakeAudit) WriteAudit(_ context.Context, _, _, _, _ string) error {
 	f.called++
+	return nil
+}
+
+func (f *fakeAudit) WriteRequestAccessAudit(ctx context.Context, _, _, _, _ string) error {
+	f.requestCalled++
+	principal, _ := crmctx.From(ctx)
+	f.requestCapturedBy = principal.UserID
+	return nil
+}
+
+func (f *fakeAudit) WriteExtractionAcceptAudit(_ context.Context, _, _, _, field, sourceQuote, capturedBy string) error {
+	f.extractionCalls = append(f.extractionCalls, auditExtractionCall{field: field, sourceQuote: sourceQuote, capturedBy: capturedBy})
+	f.lastExtractionField = field
 	return nil
 }
 
@@ -102,9 +128,13 @@ func (f *fakeAudit) WriteAudit(_ context.Context, _, _, _, _ string) error {
 // default) and a MemoryStore blobstore. The isVisible field may be overridden
 // after construction for visibility-gate tests.
 func newTestHandler(store attachmentStoreSeam, audit *fakeAudit) *AttachmentHandler {
+	return newTestHandlerWithSeams(store, audit, nil, nil)
+}
+
+func newTestHandlerWithSeams(store attachmentStoreSeam, audit auditSeam, extractor extraction.Extractor, dealWriter dealFieldWriter) *AttachmentHandler {
 	blob := blobstore.NewMemoryStore()
 	// db=nil → isVisible stays nil → withURLs treats every row as visible.
-	return NewAttachmentHandler(store, blob, audit, nil)
+	return NewAttachmentHandler(store, blob, audit, nil, extractor, dealWriter)
 }
 
 // seed places a ready-made attachment in the fake store and returns its ID.

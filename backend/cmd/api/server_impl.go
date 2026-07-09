@@ -27,6 +27,7 @@ import (
 	customfields "github.com/gradionhq/margince/backend/internal/platform/customfields"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/authz"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
+	"github.com/gradionhq/margince/backend/internal/shared/ports/extraction"
 )
 
 // buildAllOperations constructs server.AllOperations (AC-D3/D10) from the
@@ -62,6 +63,13 @@ func buildAllOperations(k *routeKit) *server.AllOperations {
 		server.OfferTemplatesAdapter{H: offerstransport.NewOfferTemplateHandler(offers.NewOfferTemplateStore(k.db))},
 		server.OffersAdapter{H: offerstransport.NewOfferHandler(offers.NewOfferStore(k.db), offers.NewOfferLineItemStore(k.db, offers.NewProductStore(k.db)), k.verifier, k.blob, offerstransport.NewNoOpRetriever())},
 	)
-	ops.AttachmentsAdapter = server.AttachmentsAdapter{H: recordstransport.NewAttachmentHandler(records.NewAttachmentStore(k.db), k.blob, recordsadapters.NewDownloadAuditWriter(activities.NewActivityStore(k.db)), k.db)}
+	ops.AttachmentsAdapter = server.AttachmentsAdapter{H: recordstransport.NewAttachmentHandler(
+		records.NewAttachmentStore(k.db),
+		k.blob,
+		recordsadapters.NewDownloadAuditWriter(activities.NewActivityStore(k.db)),
+		k.db,
+		extraction.NoOpExtractor{},
+		recordsadapters.NewDealFieldWriter(deals.NewDealStore(k.db)),
+	)}
 	return ops
 }

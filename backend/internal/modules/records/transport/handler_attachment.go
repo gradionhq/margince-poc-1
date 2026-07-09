@@ -17,6 +17,7 @@ import (
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/crmctx"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/httpkit"
 	"github.com/gradionhq/margince/backend/internal/shared/kernel/prov"
+	"github.com/gradionhq/margince/backend/internal/shared/ports/extraction"
 )
 
 // attachmentStoreSeam is the subset of *adapters.AttachmentStore this handler needs.
@@ -35,13 +36,23 @@ type attachmentStoreSeam interface {
 // is *adapters.DownloadAuditWriter.
 type auditSeam interface {
 	WriteAudit(ctx context.Context, workspaceID, entityType, entityID, filename string) error
+	WriteRequestAccessAudit(ctx context.Context, workspaceID, entityType, entityID, filename string) error
+	WriteExtractionAcceptAudit(ctx context.Context, workspaceID, entityType, entityID, field, sourceQuote, capturedBy string) error
+}
+
+// dealFieldWriter persists accepted extraction fields onto the deal record
+// without making this transport package depend on the deals module directly.
+type dealFieldWriter interface {
+	UpdateFields(ctx context.Context, workspaceID, dealID string, updates map[string]any) error
 }
 
 // AttachmentHandler routes /attachments and /attachments/{id} requests.
 type AttachmentHandler struct {
-	store attachmentStoreSeam
-	blob  blobstore.Store
-	audit auditSeam
+	store      attachmentStoreSeam
+	blob       blobstore.Store
+	audit      auditSeam
+	extractor  extraction.Extractor
+	dealWriter dealFieldWriter
 	// isVisible combines LoadRolePermissions + RecordVisible (Constraint 6). When
 	// nil (unit tests without a real DB) every attachment is treated as visible.
 	isVisible func(ctx context.Context, wsID, entityType, entityID string, principal crmctx.Principal) (bool, error)
@@ -50,8 +61,8 @@ type AttachmentHandler struct {
 // NewAttachmentHandler returns an AttachmentHandler. db is used to load role
 // permissions and check bound-record visibility (Constraint 6); pass nil only
 // in unit tests — visibility defaults to true when db is nil.
-func NewAttachmentHandler(store attachmentStoreSeam, blob blobstore.Store, audit auditSeam, db *sql.DB) *AttachmentHandler {
-	h := &AttachmentHandler{store: store, blob: blob, audit: audit}
+func NewAttachmentHandler(store attachmentStoreSeam, blob blobstore.Store, audit auditSeam, db *sql.DB, extractor extraction.Extractor, dealWriter dealFieldWriter) *AttachmentHandler {
+	h := &AttachmentHandler{store: store, blob: blob, audit: audit, extractor: extractor, dealWriter: dealWriter}
 	if db != nil {
 		h.isVisible = func(ctx context.Context, wsID, entityType, entityID string, principal crmctx.Principal) (bool, error) {
 			perms, err := platformauth.LoadRolePermissions(ctx, db, wsID, principal.UserID)
@@ -66,6 +77,9 @@ func NewAttachmentHandler(store attachmentStoreSeam, blob blobstore.Store, audit
 
 // ServeHTTP dispatches /attachments and /attachments/{id}.
 func (h *AttachmentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h.serveSuffixRoutes(w, r) {
+		return
+	}
 	id := httpkit.PathID(r.URL.Path, "/attachments")
 	switch {
 	case r.Method == http.MethodGet && id == "":

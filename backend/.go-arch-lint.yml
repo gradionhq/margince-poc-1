@@ -288,7 +288,8 @@ deps:
     mayDependOn: [recordsdomain, recordsadapters, recordstransport, blobstore]
     canUse: [pq]
   recordstransport:
-    mayDependOn: [records, recordsadapters, recordsdomain, recordsports, crmctx, errs, httpkit, prov, blobstore, auth, extraction]
+    mayDependOn: [records, recordsadapters, recordsdomain, recordsports, crmctx, errs, httpkit, prov, blobstore, auth, extraction, contracts]
+    canUse: [uuid, oapi]
   # recordsfieldhistory is the field-level change history projection over audit_log
   # before/after diffs (RD-WIRE-5 / RD-AC-5 / RD-AC-11).
   recordsfieldhistory:
