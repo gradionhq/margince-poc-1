@@ -38,7 +38,10 @@ const refetchFields = vi.fn();
 
 vi.mock("../api/customFields.js", () => ({
   useCustomFields: (object: string) => ({
-    data: mockFieldsData.filter((f) => f.object === object),
+    data: {
+      data: mockFieldsData.filter((f) => f.object === object),
+      page: { total: mockFieldsData.length },
+    },
     isLoading: mockFieldsIsLoading,
     isError: mockFieldsIsError,
     refetch: refetchFields,
@@ -67,7 +70,7 @@ vi.mock("../api/customFields.js", () => ({
 
 vi.mock("../api/members.js", () => ({
   useMembers: () => ({
-    data: mockMembersData,
+    data: { data: mockMembersData },
   }),
 }));
 
