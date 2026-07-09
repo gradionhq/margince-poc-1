@@ -3,6 +3,10 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("../shared/ui/ToastContainer.js", () => ({
+  ToastContainer: () => <div>Toasts</div>,
+}));
+
 vi.mock("../features/identity/store/authStore.js", () => ({
   useAuthStore: () => ({
     user: { id: "u1", display_name: "Admin" },
@@ -38,6 +42,42 @@ vi.mock("../features/organizations/api/organizations.js", () => ({
   }),
   useArchiveOrganization: () => ({ mutate: vi.fn(), isPending: false }),
   useRestoreOrganization: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock("../features/custom-fields/api/customFields.js", () => ({
+  useCustomFields: () => ({
+    data: {
+      data: [
+        {
+          id: "field-1",
+          workspace_id: "ws-1",
+          object: "deal",
+          label: "Test Field",
+          slug: "test_field",
+          type: "text",
+          status: "active",
+          column_name: "cf_test_field",
+          created_by: "user-1",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      ],
+      page: { total: 1 },
+    },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useCreateCustomField: () => ({ mutate: vi.fn(), isPending: false }),
+  useRenameCustomField: () => ({ mutate: vi.fn(), isPending: false }),
+  useRetireCustomField: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateCustomFieldOptions: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock("../features/custom-fields/api/members.js", () => ({
+  useMembers: () => ({
+    data: { data: [] },
+    isLoading: false,
+    isError: false,
+  }),
 }));
 
 import App from "./App.js";
@@ -75,6 +115,13 @@ describe("App routes", () => {
     renderApp("/companies");
     expect(
       screen.getByRole("heading", { name: /companies/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("mounts CustomFieldsAdminPage at /admin/custom-fields", () => {
+    renderApp("/admin/custom-fields");
+    expect(
+      screen.getByRole("heading", { name: /custom fields/i }),
     ).toBeInTheDocument();
   });
 });
