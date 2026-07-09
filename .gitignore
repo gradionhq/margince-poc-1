@@ -28,3 +28,6 @@ cmd/crm-mcp/crm-mcp
 # FE build outputs (poc never ran fe-build; skeleton does)
 frontend/dist/
 frontend/storybook-static/
+
+# Factory-internal — never commit (plans/specs/UAT guides live in the factory repo)
+workspace/
