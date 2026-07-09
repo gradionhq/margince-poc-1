@@ -602,11 +602,18 @@ func TestActivityStore_ListFiltered_DirectionFilter_UsesNewIndex(t *testing.T) {
 		t.Fatalf("expected only the inbound row, got %+v", out)
 	}
 
+	// Stabilize the planner's stats before EXPLAIN: on a throwaway clone DB the
+	// `activity` table has never been ANALYZEd since these two rows were inserted, so
+	// enable_seqscan=off alone doesn't reliably pin the planner to the *specific*
+	// covering index (idx_activity_direction) — ANALYZE gives it fresh, accurate stats
+	// for this tiny table so the cost-based choice deterministically lands on the index.
+	if _, err := db.Exec(`ANALYZE activity`); err != nil {
+		t.Fatalf("analyze activity: %v", err)
+	}
+
 	// Prove idx_activity_direction (000077) is actually the index Postgres picks for this predicate.
-	// SET LOCAL enable_seqscan=off forces the planner off a sequential scan so this holds
-	// deterministically regardless of how few rows the shared integration DB's activity table
-	// happens to have accumulated (a real-world planner would naturally prefer the index once the
-	// table is large; this test doesn't depend on reaching that volume).
+	// SET LOCAL enable_seqscan=off guards against a seqscan tie on an unanalyzed table in
+	// some other environment; the preceding ANALYZE is what pins the *specific* index.
 	tx, err := db.Begin()
 	if err != nil {
 		t.Fatalf("begin: %v", err)
