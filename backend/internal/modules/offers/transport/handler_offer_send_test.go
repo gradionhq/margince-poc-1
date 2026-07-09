@@ -313,6 +313,7 @@ func TestOfferHandler_Send_AgentNoToken_403_ThenValidToken_200(t *testing.T) {
 // UAT step 4: accept a sent offer as a human principal, and the handler
 // flips status to accepted without requiring an approval token.
 func TestOfferHandler_Accept_SentOffer_NoTokenNeeded(t *testing.T) {
+	t.Setenv("APPROVAL_TOKEN_SIGNING_SECRET", "merge-handler-it-secret")
 	db, h, wsID, offerID, humanID, agentID := setupSeededOfferWithLineItem(t, "EUR")
 
 	token := signSendOfferToken(t, wsID, offerID)
@@ -346,6 +347,7 @@ func TestOfferHandler_Accept_SentOffer_NoTokenNeeded(t *testing.T) {
 // UAT step 5: agent accept without a valid approval token is rejected with
 // approval_required, mirroring sendOffer's tier-yellow gate.
 func TestOfferHandler_Accept_AgentNoToken_403ApprovalRequired(t *testing.T) {
+	t.Setenv("APPROVAL_TOKEN_SIGNING_SECRET", "merge-handler-it-secret")
 	_, h, wsID, offerID, _, agentID := setupSeededOfferWithLineItem(t, "EUR")
 
 	token := signSendOfferToken(t, wsID, offerID)
