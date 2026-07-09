@@ -125,6 +125,17 @@ func TestPersonHandler_CustomFields_RoundTripAndSortVocabulary(t *testing.T) {
 	if upW.Code != http.StatusOK {
 		t.Fatalf("PATCH /people/{id}: got %d: %s", upW.Code, upW.Body.String())
 	}
+	// PersonHandler.update returns h.store.Update's result directly via
+	// jsonOK, and Update ends with s.Get (which attaches CustomFields), so
+	// the PATCH response body already carries the updated wire-level
+	// cf_score — same as the deal handler's PATCH round-trip assertion.
+	var updated map[string]any
+	if err := json.Unmarshal(upW.Body.Bytes(), &updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated["cf_score"] != float64(7) {
+		t.Fatalf("after update cf_score = %#v, want 7: %s", updated["cf_score"], upW.Body.String())
+	}
 
 	listReq := httptest.NewRequest(http.MethodGet, "/people?sort=cf_score", nil)
 	listReq = listReq.WithContext(ctx)
