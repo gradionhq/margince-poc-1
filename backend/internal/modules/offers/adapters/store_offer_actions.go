@@ -25,6 +25,10 @@ import (
 // ErrOfferNotSent reports a mutation attempted against an offer that is not sent.
 var ErrOfferNotSent = errors.New("offer is not sent")
 
+// ErrOfferNotAcceptable reports an accept attempted against an offer that is
+// not currently sent.
+var ErrOfferNotAcceptable = errors.New("offer is not acceptable")
+
 // requireSent returns ErrOfferNotSent unless status is sent.
 func requireSent(status string) error {
 	if status != domain.OfferStatusSent {
@@ -139,6 +143,95 @@ func (s *OfferStore) Send(ctx context.Context, id, workspaceID string) (domain.O
 		e.WorkspaceID = workspaceID
 		if _, err := crmaudit.WriteTx(ctx, tx, e); err != nil {
 			return fmt.Errorf("offer send audit: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.Offer{}, err
+	}
+	return s.Get(ctx, id, workspaceID)
+}
+
+// Accept flips a sent offer to accepted, syncs the parent deal through the
+// deals module's public write path, and writes paired outbox/audit rows.
+func (s *OfferStore) Accept(ctx context.Context, id, workspaceID string) (domain.Offer, error) {
+	if s.dealStore == nil {
+		return domain.Offer{}, fmt.Errorf("offers: Accept requires a deal store (call OfferStore.WithDealStore first)")
+	}
+
+	correlationID := ids.New()
+	err := database.WithWorkspaceTx(ctx, s.db, workspaceID, func(tx *sql.Tx) error {
+		status, _, err := lockOfferForMutation(ctx, tx, id, workspaceID)
+		if err != nil {
+			return err
+		}
+		if status != domain.OfferStatusSent {
+			return ErrOfferNotAcceptable
+		}
+
+		offer, err := scanOffer(tx.QueryRowContext(ctx, offerGetQuery, id, workspaceID))
+		if err != nil {
+			return err
+		}
+
+		now := time.Now().UTC()
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE offer SET status=$1, accepted_at=$2
+			WHERE id=$3::uuid AND workspace_id=$4::uuid`,
+			domain.OfferStatusAccepted, now, id, workspaceID); err != nil {
+			return fmt.Errorf("offer accept: %w", err)
+		}
+
+		deal, err := s.dealStore.Get(ctx, offer.DealID, workspaceID)
+		if err != nil {
+			return fmt.Errorf("offer accept deal lookup: %w", err)
+		}
+		if _, err := s.dealStore.Update(ctx, offer.DealID, workspaceID, map[string]any{
+			"amount_minor": offer.GrossMinor,
+			"currency":     offer.Currency,
+		}, deal.Version); err != nil {
+			return fmt.Errorf("offer accept deal sync: %w", err)
+		}
+
+		offerPayload, _ := json.Marshal(map[string]any{
+			payloadKeyOfferID: id,
+			payloadKeyDealID:  offer.DealID,
+			"revision":        offer.Revision,
+			"gross_minor":     offer.GrossMinor,
+			"correlation_id":  correlationID,
+		})
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
+			workspaceID, "offer.accepted", id, offerPayload); err != nil {
+			return fmt.Errorf("offer accepted event: %w", err)
+		}
+
+		dealPayload, _ := json.Marshal(map[string]any{
+			payloadKeyDealID: offer.DealID,
+			"amount_minor":   offer.GrossMinor,
+			"currency":       offer.Currency,
+			"correlation_id": correlationID,
+		})
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO event_outbox (workspace_id, topic, entity_id, payload) VALUES ($1,$2,$3::uuid,$4)`,
+			workspaceID, "deal.updated", offer.DealID, dealPayload); err != nil {
+			return fmt.Errorf("deal updated event: %w", err)
+		}
+
+		oe := crmaudit.EntryFromPrincipal(ctx, "update", entityTypeOffer, &id,
+			map[string]any{"status": status},
+			map[string]any{"status": domain.OfferStatusAccepted, "accepted_at": now, "correlation_id": correlationID})
+		oe.WorkspaceID = workspaceID
+		if _, err := crmaudit.WriteTx(ctx, tx, oe); err != nil {
+			return fmt.Errorf("offer accept audit: %w", err)
+		}
+
+		de := crmaudit.EntryFromPrincipal(ctx, "update", entityTypeDeal, &offer.DealID,
+			map[string]any{"amount_minor": deal.AmountMinor, "currency": deal.Currency},
+			map[string]any{"amount_minor": offer.GrossMinor, "currency": offer.Currency, "correlation_id": correlationID})
+		de.WorkspaceID = workspaceID
+		if _, err := crmaudit.WriteTx(ctx, tx, de); err != nil {
+			return fmt.Errorf("deal accept audit: %w", err)
 		}
 		return nil
 	})

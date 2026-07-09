@@ -9,6 +9,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/gradionhq/margince/backend/internal/modules/deals"
 	"github.com/gradionhq/margince/backend/internal/modules/offers/domain"
 	crmaudit "github.com/gradionhq/margince/backend/internal/platform/audit"
 	database "github.com/gradionhq/margince/backend/internal/platform/database"
@@ -19,6 +20,7 @@ import (
 
 const (
 	entityTypeOffer = "offer"
+	entityTypeDeal  = "deal"
 	nilUUID         = "00000000-0000-0000-0000-000000000000"
 	// localeDE is the German locale code used across offer template
 	// defaulting and PDF label resolution.
@@ -120,10 +122,18 @@ func requireDraft(status string) error {
 }
 
 // OfferStore executes parameterized SQL against the offer table.
-type OfferStore struct{ db *sql.DB }
+type OfferStore struct {
+	db        *sql.DB
+	dealStore *deals.DealStore
+}
 
 // NewOfferStore returns an OfferStore backed by db.
 func NewOfferStore(db *sql.DB) *OfferStore { return &OfferStore{db: db} }
+
+// WithDealStore returns a copy of s with dealStore injected.
+func (s *OfferStore) WithDealStore(dealStore *deals.DealStore) *OfferStore {
+	return &OfferStore{db: s.db, dealStore: dealStore}
+}
 
 func (s *OfferStore) checkOfferNumberConflict(ctx context.Context, tx *sql.Tx, workspaceID, offerNumber string, revision int64) error {
 	var existingID string
