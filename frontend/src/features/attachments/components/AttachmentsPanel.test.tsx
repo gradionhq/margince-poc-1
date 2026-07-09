@@ -1,9 +1,20 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetAuth, setAuth } from "../../identity/store/authStore.js";
 import { AttachmentsPanel } from "../index.js";
+
+function makeFileList(files: File[]): FileList {
+  const fileList = {
+    length: files.length,
+    item: (index: number) => files[index] ?? null,
+  } as FileList & { [index: number]: File };
+  files.forEach((file, index) => {
+    fileList[index] = file;
+  });
+  return fileList;
+}
 
 const dealData = {
   id: "d1",
@@ -89,6 +100,7 @@ const attachmentExtraction = vi.fn();
 const acceptExtraction = vi.fn();
 const requestAccess = vi.fn();
 const refetchAttachments = vi.fn();
+const useAttachmentsMock = vi.fn();
 
 vi.mock("../../deals/api/deals.js", () => ({
   useDeal: () => dealData,
@@ -100,12 +112,7 @@ vi.mock("../../deals/api/deals.js", () => ({
 }));
 
 vi.mock("../api/attachments.js", () => ({
-  useAttachments: () => ({
-    data: attachments,
-    isLoading: false,
-    isError: false,
-    refetch: refetchAttachments,
-  }),
+  useAttachments: (...args: unknown[]) => useAttachmentsMock(...args),
   useCreateAttachment: () => ({
     mutateAsync: attachmentsMutate,
   }),
@@ -137,8 +144,15 @@ describe("AttachmentsPanel", () => {
     acceptExtraction.mockReset();
     requestAccess.mockReset();
     refetchAttachments.mockReset();
+    useAttachmentsMock.mockReset();
     attachmentExtraction.mockReturnValue(extraction as never);
     dealActivities.mockReturnValue([]);
+    useAttachmentsMock.mockReturnValue({
+      data: attachments,
+      isLoading: false,
+      isError: false,
+      refetch: refetchAttachments,
+    });
   });
 
   afterEach(() => {
@@ -213,5 +227,90 @@ describe("AttachmentsPanel", () => {
     await user.keyboard("{Escape}");
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("sends the real signed-in user's id as captured_by, not a placeholder", async () => {
+    resetAuth();
+    setAuth(
+      { id: "u42", email: "priya@example.com", full_name: "Priya" } as never,
+      "Sales",
+      ["Sales"],
+    );
+    attachmentsMutate.mockResolvedValue({
+      ...attachments[1],
+      id: "a3",
+      filename: "diagram.png",
+      scan_status: "scanning",
+    });
+
+    render(
+      <MemoryRouter>
+        <AttachmentsPanel entityType="deal" entityId="d1" dealId="d1" />
+      </MemoryRouter>,
+    );
+
+    const file = new File(["hello"], "diagram.png", { type: "image/png" });
+    fireEvent.drop(screen.getByTestId("dropzone"), {
+      dataTransfer: { files: makeFileList([file]) },
+    });
+
+    await waitFor(() => {
+      expect(attachmentsMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          request: expect.objectContaining({ captured_by: "human:u42" }),
+        }),
+      );
+    });
+    expect(attachmentsMutate).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({ captured_by: "human:you" }),
+      }),
+    );
+  });
+
+  it("toasts virus-scan-in-progress on upload, then confirms once the scan completes", async () => {
+    const uploaded = {
+      ...attachments[1],
+      id: "a3",
+      filename: "diagram.png",
+      scan_status: "scanning" as const,
+    };
+    attachmentsMutate.mockResolvedValue(uploaded);
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <AttachmentsPanel entityType="deal" entityId="d1" dealId="d1" />
+      </MemoryRouter>,
+    );
+
+    const file = new File(["hello"], "diagram.png", { type: "image/png" });
+    fireEvent.drop(screen.getByTestId("dropzone"), {
+      dataTransfer: { files: makeFileList([file]) },
+    });
+
+    expect(
+      await screen.findByText("Virus scan in progress"),
+    ).toBeInTheDocument();
+
+    // Simulate the existing useAttachments poll (attachments.ts) observing
+    // the scan flip from "scanning" to "clean" for the just-uploaded file.
+    useAttachmentsMock.mockReturnValue({
+      data: [...attachments, { ...uploaded, scan_status: "clean" as const }],
+      isLoading: false,
+      isError: false,
+      refetch: refetchAttachments,
+    });
+
+    rerender(
+      <MemoryRouter>
+        <AttachmentsPanel entityType="deal" entityId="d1" dealId="d1" />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText(
+        "diagram.png attached and written to the timeline with provenance",
+      ),
+    ).toBeInTheDocument();
   });
 });

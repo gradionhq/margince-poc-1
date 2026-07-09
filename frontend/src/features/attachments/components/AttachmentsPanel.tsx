@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { components } from "../../../lib/api-client/generated/index.js";
 import { Chip } from "../../../shared/ui/forge.js";
@@ -68,19 +68,52 @@ function AttachmentsPanelShell({
   extractionAttachmentId?: string;
   activityFeed?: Activity[];
 }) {
-  const { role } = useAuthStore();
+  const { role, user } = useAuthStore();
   const createAttachment = useCreateAttachment();
   const [selectedAttachment, setSelectedAttachment] =
     useState<Attachment | null>(null);
   const { toasts, pushToast, dismissToast } = useToasts();
+  // Reuses the same `useAttachments` polling AttachmentList already drives
+  // (shared react-query cache key, no second poll loop) to detect when a
+  // just-uploaded file's scan finishes.
+  const { data: liveAttachments } = useAttachments({ entityType, entityId });
+  const [pendingScanIds, setPendingScanIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
+
+  useEffect(() => {
+    if (pendingScanIds.size === 0 || !liveAttachments) return;
+
+    const stillPending = new Set(pendingScanIds);
+    for (const attachment of liveAttachments) {
+      if (!stillPending.has(attachment.id)) continue;
+      if (attachment.scan_status === "scanning") continue;
+
+      stillPending.delete(attachment.id);
+      if (attachment.scan_status === "clean") {
+        pushToast(
+          "success",
+          `${attachment.filename} attached and written to the timeline with provenance`,
+        );
+      }
+    }
+
+    if (stillPending.size !== pendingScanIds.size) {
+      setPendingScanIds(stillPending);
+    }
+  }, [liveAttachments, pendingScanIds, pushToast]);
 
   async function handleFilesSelected(files: FileList) {
     if (entityType !== "deal" || !dealId) return;
+    if (!user) {
+      pushToast("error", "Sign in to upload attachments");
+      return;
+    }
 
     const queued = Array.from(files);
     for (const file of queued) {
       try {
-        await createAttachment.mutateAsync({
+        const attachment = await createAttachment.mutateAsync({
           request: {
             entity_type: entityType,
             entity_id: entityId,
@@ -88,10 +121,12 @@ function AttachmentsPanelShell({
             content_type: file.type || "application/octet-stream",
             byte_size: file.size,
             source: "ui",
-            captured_by: "human:you",
+            captured_by: `human:${user.id}`,
           },
           file,
         });
+        pushToast("info", "Virus scan in progress");
+        setPendingScanIds((current) => new Set(current).add(attachment.id));
       } catch {
         pushToast("error", `Failed to attach ${file.name}`);
       }
