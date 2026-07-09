@@ -5,7 +5,14 @@ import { Skeleton } from "../../../shared/ui/forge.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
 import { useAuthStore } from "../../identity/store/authStore.js";
 import { useDeal, useDealOffers } from "../../deals/api/deals.js";
-import { useOfferLineItems, useOffer, offersKeys } from "../api/offers.js";
+import {
+  offersKeys,
+  useCreateLineItem,
+  useDeleteLineItem,
+  useOffer,
+  useOfferLineItems,
+  useUpdateLineItem,
+} from "../api/offers.js";
 import { ExplainTotalPanel } from "../components/ExplainTotalPanel.js";
 import { LineItemEditor } from "../components/LineItemEditor.js";
 import { OfferPreviewPanel } from "../components/OfferPreviewPanel.js";
@@ -56,6 +63,9 @@ export function OfferBuilderPage() {
   } = useDealOffers(id);
   const { data: deal } = useDeal(id);
   const { data: lineItems = [] } = useOfferLineItems(offerId);
+  const createLineItem = useCreateLineItem(offerId);
+  const updateLineItem = useUpdateLineItem(offerId);
+  const deleteLineItem = useDeleteLineItem(offerId);
 
   const dealOffers = dealOffersResponse?.data ?? [];
   const currentChain = offer
@@ -72,6 +82,8 @@ export function OfferBuilderPage() {
   const committedLines = lineItems.filter(
     (line) => !(line.evidence != null && line.captured_by.startsWith("agent:")),
   );
+  const nextLinePosition =
+    committedLines.reduce((max, line) => Math.max(max, line.position), 0) + 1;
 
   if (isLoading || dealOffersLoading) {
     return <OfferBuilderSkeleton />;
@@ -175,17 +187,30 @@ export function OfferBuilderPage() {
       <LineItemEditor
         lines={committedLines}
         canMutateOffer={canEdit}
-        onCreate={() => undefined}
-        onUpdate={() => undefined}
-        onDelete={() => undefined}
+        onCreate={() =>
+          createLineItem.mutate({
+            position: nextLinePosition,
+            description: "New line",
+            quantity: 1,
+            unit_price_minor: 0,
+            discount_pct: 0,
+            tax_rate: 0,
+            source: "ui",
+            captured_by: `human:${user?.id ?? "unknown"}`,
+          })
+        }
+        onUpdate={(lineId, patch) =>
+          updateLineItem.mutate({ lineId, patch })
+        }
+        onDelete={(lineId) => deleteLineItem.mutate({ lineId })}
       />
 
       <StagedLinesPanel
         lines={lineItems}
         canMutateOffer={canEdit}
         currentUserId={user?.id ?? ""}
-        onAccept={async () => undefined}
-        onDismiss={async () => undefined}
+        onAccept={(lineId, patch) => updateLineItem.mutate({ lineId, patch })}
+        onDismiss={(lineId) => deleteLineItem.mutate({ lineId })}
       />
 
       <ExplainTotalPanel
@@ -194,7 +219,7 @@ export function OfferBuilderPage() {
         grossMinor={offer.gross_minor}
       />
 
-        <OfferPreviewPanel
+      <OfferPreviewPanel
         dealName={dealName}
         offer={offer}
         lines={committedLines}

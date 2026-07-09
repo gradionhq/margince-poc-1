@@ -8,6 +8,9 @@ import { OfferBuilderPage, canMutateOffer } from "./OfferBuilderPage.js";
 const refetchOffer = vi.fn();
 const refetchDealOffers = vi.fn();
 const refetchDeal = vi.fn();
+const createLineItemMutate = vi.fn();
+const updateLineItemMutate = vi.fn();
+const deleteLineItemMutate = vi.fn();
 
 let mockRole: string | null = "admin";
 let mockUserId = "u1";
@@ -71,7 +74,7 @@ let mockLineItems = [
     description: "Staged AI line",
     unit: "ea",
     quantity: 1,
-    unit_price_minor: 0,
+    unit_price_minor: 2500,
     discount_pct: 0,
     tax_rate: 20,
     source: "ai",
@@ -100,6 +103,21 @@ vi.mock("../api/offers.js", () => ({
     refetch: refetchOffer,
   }),
   useRegenerateOffer: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useCreateLineItem: () => ({
+    mutate: createLineItemMutate,
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useUpdateLineItem: () => ({
+    mutate: updateLineItemMutate,
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useDeleteLineItem: () => ({
+    mutate: deleteLineItemMutate,
     mutateAsync: vi.fn(),
     isPending: false,
   }),
@@ -225,7 +243,7 @@ describe("OfferBuilderPage", () => {
         description: "Staged AI line",
         unit: "ea",
         quantity: 1,
-        unit_price_minor: 0,
+        unit_price_minor: 2500,
         discount_pct: 0,
         tax_rate: 20,
         source: "ai",
@@ -235,6 +253,9 @@ describe("OfferBuilderPage", () => {
         position: 2,
       },
     ];
+    createLineItemMutate.mockClear();
+    updateLineItemMutate.mockClear();
+    deleteLineItemMutate.mockClear();
   });
 
   it("renders the loading skeleton immediately", () => {
@@ -305,5 +326,51 @@ describe("OfferBuilderPage", () => {
 
     await user.click(screen.getByRole("link", { name: /v1/i }));
     expect(screen.getByRole("heading", { name: /off-1 v2/i })).toBeInTheDocument();
+  });
+
+  it("wires the composed editor and staged panel to the real line item mutations", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: /add line/i }));
+    expect(createLineItemMutate).toHaveBeenCalledWith({
+      position: 2,
+      description: "New line",
+      quantity: 1,
+      unit_price_minor: 0,
+      discount_pct: 0,
+      tax_rate: 0,
+      source: "ui",
+      captured_by: "human:u1",
+    });
+
+    const qtyInput = screen.getByLabelText("qty Committed line");
+    await user.clear(qtyInput);
+    await user.type(qtyInput, "3");
+    await user.tab();
+    expect(updateLineItemMutate).toHaveBeenCalledWith({
+      lineId: "l1",
+      patch: {
+        quantity: 3,
+        unit_price_minor: 1000,
+        discount_pct: 0,
+        tax_rate: 20,
+      },
+    });
+
+    await user.click(screen.getByRole("button", { name: /delete/i }));
+    expect(deleteLineItemMutate).toHaveBeenCalledWith({ lineId: "l1" });
+
+    await user.click(screen.getByRole("button", { name: /accept/i }));
+    expect(updateLineItemMutate).toHaveBeenCalledWith({
+      lineId: "l2",
+      patch: {
+        captured_by: "human:u1",
+        source: "ui",
+      },
+    });
+
+    await user.click(screen.getByRole("button", { name: /dismiss/i }));
+    expect(deleteLineItemMutate).toHaveBeenCalledWith({ lineId: "l2" });
   });
 });
