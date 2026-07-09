@@ -35,6 +35,7 @@ describe("StagedLinesPanel", () => {
     const { container } = render(
       <StagedLinesPanel
         lines={[humanLine]}
+        stagedLineIds={new Set()}
         canMutateOffer
         currentUserId="u1"
         onAccept={vi.fn()}
@@ -49,6 +50,7 @@ describe("StagedLinesPanel", () => {
     render(
       <StagedLinesPanel
         lines={[humanLine, stagedLine]}
+        stagedLineIds={new Set(["li-1"])}
         canMutateOffer
         currentUserId="u1"
         onAccept={vi.fn()}
@@ -65,6 +67,7 @@ describe("StagedLinesPanel", () => {
     render(
       <StagedLinesPanel
         lines={[stagedLine]}
+        stagedLineIds={new Set(["li-1"])}
         canMutateOffer={false}
         currentUserId="u1"
         onAccept={vi.fn()}

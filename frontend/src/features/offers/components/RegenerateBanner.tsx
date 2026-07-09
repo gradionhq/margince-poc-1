@@ -18,21 +18,27 @@ function diffCounts(diff: OfferDiff) {
 export function RegenerateBanner({
   dealId,
   offer,
-  canMutateOffer,
+  userRole,
+  onRegenerated,
 }: {
   dealId: string;
   offer: Pick<
     Offer,
     "id" | "offer_number" | "revision" | "status" | "currency"
   >;
-  canMutateOffer: boolean;
+  userRole: string | null | undefined;
+  onRegenerated: (newOfferId: string, aiLineIds: string[]) => void;
 }) {
   const navigate = useNavigate();
   const regenerate = useRegenerateOffer(dealId);
   const [result, setResult] = useState<Offer | null>(null);
   const [showDiff, setShowDiff] = useState(false);
 
-  if (!canMutateOffer || offer.status !== "draft") {
+  const canRegenerate =
+    (userRole === "admin" || userRole === "rep" || userRole === "manager") &&
+    offer.status === "sent";
+
+  if (!canRegenerate) {
     return null;
   }
 
@@ -62,6 +68,10 @@ export function RegenerateBanner({
           onClick={async () => {
             const next = await regenerate.mutateAsync({ offerId: offer.id });
             setResult(next);
+            const aiLineIds = next.ai_generated
+              ? (next.diff_from_previous?.added ?? []).map((line) => line.id)
+              : [];
+            onRegenerated(next.id, aiLineIds);
             navigate(`/deals/${dealId}/offers/${next.id}`);
           }}
           className="rounded-full border border-gf-accent px-gf-sm py-gf-xs text-gf-caption text-gf-accent disabled:opacity-50"

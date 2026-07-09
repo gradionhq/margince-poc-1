@@ -57,6 +57,7 @@ describe("ExplainTotalPanel", () => {
       <ExplainTotalPanel
         currency="USD"
         lines={[humanLine, stagedPricedLine, humanUnpricedLine]}
+        stagedLineIds={new Set(["line-staged"])}
         grossMinor={99999}
       />,
     );
@@ -91,6 +92,7 @@ describe("ExplainTotalPanel", () => {
       <ExplainTotalPanel
         currency="EUR"
         lines={[humanLine]}
+        stagedLineIds={new Set()}
         grossMinor={5400}
       />,
     );

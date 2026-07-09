@@ -48,6 +48,7 @@ export function OfferBuilderPage() {
   const [toasts, setToasts] = useState<
     { id: string; variant: "success" | "error"; message: string }[]
   >([]);
+  const [stagedLineIds, setStagedLineIds] = useState<Set<string>>(new Set());
   const pushToast = (variant: "success" | "error", message: string) =>
     setToasts((current) => [
       ...current,
@@ -85,7 +86,7 @@ export function OfferBuilderPage() {
   const hasPermissionError = offerStatus === 401 || offerStatus === 403;
   const dealName = deal?.name ?? "Deal";
   const committedLines = lineItems.filter(
-    (line) => !(line.evidence != null && line.captured_by.startsWith("agent:")),
+    (line) => !stagedLineIds.has(line.id),
   );
   const nextLinePosition =
     committedLines.reduce((max, line) => Math.max(max, line.position), 0) + 1;
@@ -194,11 +195,15 @@ export function OfferBuilderPage() {
       <RegenerateBanner
         dealId={id ?? ""}
         offer={offer}
-        canMutateOffer={canEdit}
+        userRole={role}
+        onRegenerated={(_, aiLineIds) => {
+          setStagedLineIds(new Set(aiLineIds));
+        }}
       />
 
       <LineItemEditor
         lines={committedLines}
+        stagedLineIds={stagedLineIds}
         canMutateOffer={canEdit}
         onCreate={() =>
           createLineItem.mutate({
@@ -218,15 +223,43 @@ export function OfferBuilderPage() {
 
       <StagedLinesPanel
         lines={lineItems}
-        canMutateOffer={canEdit}
+        stagedLineIds={stagedLineIds}
+        canMutateOffer={canEdit || stagedLineIds.size > 0}
         currentUserId={user?.id ?? ""}
-        onAccept={(lineId, patch) => updateLineItem.mutate({ lineId, patch })}
-        onDismiss={(lineId) => deleteLineItem.mutate({ lineId })}
+        onAccept={(lineId, patch) =>
+          updateLineItem.mutate(
+            { lineId, patch },
+            {
+              onSuccess: () => {
+                setStagedLineIds((prev) => {
+                  const next = new Set(prev);
+                  next.delete(lineId);
+                  return next;
+                });
+              },
+            },
+          )
+        }
+        onDismiss={(lineId) =>
+          deleteLineItem.mutate(
+            { lineId },
+            {
+              onSuccess: () => {
+                setStagedLineIds((prev) => {
+                  const next = new Set(prev);
+                  next.delete(lineId);
+                  return next;
+                });
+              },
+            },
+          )
+        }
       />
 
       <ExplainTotalPanel
         currency={offer.currency}
         lines={committedLines}
+        stagedLineIds={stagedLineIds}
         grossMinor={offer.gross_minor}
       />
 

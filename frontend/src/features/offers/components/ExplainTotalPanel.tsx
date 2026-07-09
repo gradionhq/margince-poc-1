@@ -7,12 +7,12 @@ import {
   computeOfferTotals,
 } from "../lib/offerMath.js";
 
-function isStaged(line: OfferLineItem) {
-  return line.evidence != null && line.captured_by.startsWith("agent:");
-}
-
-function isPriced(line: OfferLineItem) {
-  return !isStaged(line) && line.price_grounded && line.unit_price_minor > 0;
+function isPriced(line: OfferLineItem, stagedLineIds: Set<string>) {
+  return (
+    !stagedLineIds.has(line.id) &&
+    line.price_grounded &&
+    line.unit_price_minor > 0
+  );
 }
 
 function formatFormula(line: OfferLineItem) {
@@ -39,18 +39,21 @@ function formatGrossCaption(stagedCount: number) {
 export function ExplainTotalPanel({
   currency,
   lines,
+  stagedLineIds,
   grossMinor,
 }: {
   currency: string;
   lines: OfferLineItem[];
+  stagedLineIds: Set<string>;
   grossMinor: number;
 }) {
   const [open, setOpen] = useState(false);
-  const visibleLines = lines.filter(isPriced);
-  const stagedCount = lines.filter(isStaged).length;
+  const visibleLines = lines.filter((line) => isPriced(line, stagedLineIds));
+  const stagedCount = lines.filter((line) => stagedLineIds.has(line.id)).length;
   const unpricedCount = lines.filter(
     (line) =>
-      !isStaged(line) && (!line.price_grounded || line.unit_price_minor <= 0),
+      !stagedLineIds.has(line.id) &&
+      (!line.price_grounded || line.unit_price_minor <= 0),
   ).length;
   const totals = computeOfferTotals(
     visibleLines.map((line) => ({

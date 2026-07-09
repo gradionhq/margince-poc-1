@@ -3,18 +3,16 @@ import { Button, Divider } from "../../../shared/ui/forge.js";
 import { computeOfferTotals } from "../lib/offerMath.js";
 import { LineItemRow } from "./LineItemRow.js";
 
-function isStaged(line: OfferLineItem) {
-  return line.evidence != null && line.captured_by.startsWith("agent:");
-}
-
 export function LineItemEditor({
   lines,
+  stagedLineIds,
   canMutateOffer,
   onCreate,
   onUpdate,
   onDelete,
 }: {
   lines: OfferLineItem[];
+  stagedLineIds: Set<string>;
   canMutateOffer: boolean;
   onCreate: () => void;
   onUpdate: (
@@ -28,7 +26,7 @@ export function LineItemEditor({
   ) => void;
   onDelete: (lineId: string) => void;
 }) {
-  const visibleLines = lines.filter((line) => !isStaged(line));
+  const visibleLines = lines.filter((line) => !stagedLineIds.has(line.id));
   const stagedCount = lines.length - visibleLines.length;
 
   if (lines.length === 0) {

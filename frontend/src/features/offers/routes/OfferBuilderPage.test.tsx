@@ -11,6 +11,7 @@ const refetchDeal = vi.fn();
 const createLineItemMutate = vi.fn();
 const updateLineItemMutate = vi.fn();
 const deleteLineItemMutate = vi.fn();
+const regenerateMutateAsync = vi.fn();
 
 let mockRole: string | null = "admin";
 let mockUserId = "u1";
@@ -103,7 +104,7 @@ vi.mock("../api/offers.js", () => ({
     refetch: refetchOffer,
   }),
   useRegenerateOffer: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: regenerateMutateAsync,
     isPending: false,
   }),
   useCreateLineItem: () => ({
@@ -256,6 +257,18 @@ describe("OfferBuilderPage", () => {
     createLineItemMutate.mockClear();
     updateLineItemMutate.mockClear();
     deleteLineItemMutate.mockClear();
+    regenerateMutateAsync.mockReset();
+    updateLineItemMutate.mockImplementation((_variables, options) => {
+      options?.onSuccess?.();
+      return undefined;
+    });
+    deleteLineItemMutate.mockImplementation((variables, options) => {
+      mockLineItems = mockLineItems.filter(
+        (line) => line.id !== variables.lineId,
+      );
+      options?.onSuccess?.();
+      return undefined;
+    });
   });
 
   it("renders the loading skeleton immediately", () => {
@@ -304,13 +317,8 @@ describe("OfferBuilderPage", () => {
   it("composes the full offer builder and shows the send card on drafts", () => {
     renderPage();
 
-    expect(
-      screen.getByRole("heading", { name: /regenerate/i }),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /regenerate/i })).toBeNull();
     expect(screen.getAllByText(/Committed line/i)).toHaveLength(2);
-    expect(
-      screen.getByRole("heading", { name: /staged ai lines/i }),
-    ).toBeInTheDocument();
     expect(screen.getByText(/Explain this total/i)).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: /angebot/i }),
@@ -326,11 +334,181 @@ describe("OfferBuilderPage", () => {
     mockDealOffers = [{ ...mockOffer, id: "o2", status: "sent" }];
     renderPage();
 
+    expect(
+      screen.getByRole("heading", { name: /regenerate/i }),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("send-card")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /add line/i }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/this revision is locked/i)).toBeInTheDocument();
+  });
+
+  it("tracks staged ids from regenerate and clears them on accept or dismiss", async () => {
+    const user = userEvent.setup();
+    mockOffer = { ...mockOffer, status: "sent" };
+    mockDealOffers = [{ ...mockOffer, id: "o2", status: "sent" }];
+    mockLineItems = [
+      {
+        id: "l1",
+        offer_id: "o2",
+        description: "Committed line",
+        unit: "ea",
+        quantity: 2,
+        unit_price_minor: 1000,
+        discount_pct: 0,
+        tax_rate: 20,
+        source: "ui",
+        captured_by: "human:u1",
+        evidence: null,
+        price_grounded: true,
+        position: 1,
+      },
+    ];
+
+    regenerateMutateAsync.mockImplementationOnce(async () => {
+      mockOffer = {
+        ...mockOffer,
+        id: "o3",
+        revision: 3,
+        status: "sent",
+      };
+      mockDealOffers = [
+        { ...mockOffer },
+        { ...mockOffer, id: "o2", revision: 2 },
+      ];
+      mockLineItems = [
+        mockLineItems[0],
+        {
+          id: "l3",
+          offer_id: "o3",
+          description: "AI staged line",
+          unit: "ea",
+          quantity: 1,
+          unit_price_minor: 2500,
+          discount_pct: 0,
+          tax_rate: 20,
+          source: "agent:regen",
+          captured_by: "agent:regen",
+          evidence: { snippet: "AI scope", source_id: "src2" },
+          price_grounded: true,
+          position: 2,
+        },
+      ];
+      return {
+        id: "o3",
+        deal_id: "d1",
+        offer_number: "OFF-1",
+        revision: 3,
+        status: "sent",
+        currency: "EUR",
+        ai_generated: true,
+        ai_disclosure: "AI disclosure",
+        diff_from_previous: {
+          added: [
+            {
+              id: "l3",
+              offer_id: "o3",
+              description: "AI staged line",
+              unit: "ea",
+              quantity: 1,
+              unit_price_minor: 2500,
+              discount_pct: 0,
+              tax_rate: 20,
+              source: "agent:regen",
+              captured_by: "agent:regen",
+              evidence: { snippet: "AI scope", source_id: "src2" },
+              price_grounded: true,
+              position: 2,
+            },
+          ],
+          removed: [],
+          changed: [],
+        },
+      };
+    });
+
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: /regenerate/i }));
+    expect(await screen.findByTestId("staged-lines-panel")).toBeInTheDocument();
+    expect(screen.getByText("AI staged line")).toBeInTheDocument();
+    expect(screen.getAllByText("Committed line").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /accept/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /dismiss/i }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /accept/i }));
+    expect(screen.queryByTestId("staged-lines-panel")).toBeNull();
+    expect(screen.getAllByText("AI staged line").length).toBeGreaterThan(0);
+
+    regenerateMutateAsync.mockImplementationOnce(async () => {
+      mockOffer = {
+        ...mockOffer,
+        id: "o4",
+        revision: 4,
+        status: "sent",
+      };
+      mockDealOffers = [
+        { ...mockOffer },
+        { ...mockOffer, id: "o3", revision: 3 },
+      ];
+      mockLineItems = [
+        mockLineItems[0],
+        {
+          id: "l4",
+          offer_id: "o4",
+          description: "Second AI line",
+          unit: "ea",
+          quantity: 1,
+          unit_price_minor: 1500,
+          discount_pct: 0,
+          tax_rate: 20,
+          source: "agent:regen",
+          captured_by: "agent:regen",
+          evidence: { snippet: "Another AI scope", source_id: "src3" },
+          price_grounded: true,
+          position: 3,
+        },
+      ];
+      return {
+        id: "o4",
+        deal_id: "d1",
+        offer_number: "OFF-1",
+        revision: 4,
+        status: "sent",
+        currency: "EUR",
+        ai_generated: true,
+        ai_disclosure: "AI disclosure",
+        diff_from_previous: {
+          added: [
+            {
+              id: "l4",
+              offer_id: "o4",
+              description: "Second AI line",
+              unit: "ea",
+              quantity: 1,
+              unit_price_minor: 1500,
+              discount_pct: 0,
+              tax_rate: 20,
+              source: "agent:regen",
+              captured_by: "agent:regen",
+              evidence: { snippet: "Another AI scope", source_id: "src3" },
+              price_grounded: true,
+              position: 3,
+            },
+          ],
+          removed: [],
+          changed: [],
+        },
+      };
+    });
+
+    await user.click(screen.getByRole("button", { name: /regenerate/i }));
+    expect(await screen.findByText("Second AI line")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /dismiss/i })[0]);
+    expect(screen.queryByText("Second AI line")).not.toBeInTheDocument();
   });
 
   it("navigates to a locked revision when its pill is clicked", async () => {
@@ -349,7 +527,7 @@ describe("OfferBuilderPage", () => {
 
     await user.click(screen.getByRole("button", { name: /add line/i }));
     expect(createLineItemMutate).toHaveBeenCalledWith({
-      position: 2,
+      position: 3,
       description: "New line",
       quantity: 1,
       unit_price_minor: 0,
@@ -373,19 +551,7 @@ describe("OfferBuilderPage", () => {
       },
     });
 
-    await user.click(screen.getByRole("button", { name: /delete/i }));
+    await user.click(screen.getAllByRole("button", { name: /delete/i })[0]);
     expect(deleteLineItemMutate).toHaveBeenCalledWith({ lineId: "l1" });
-
-    await user.click(screen.getByRole("button", { name: /accept/i }));
-    expect(updateLineItemMutate).toHaveBeenCalledWith({
-      lineId: "l2",
-      patch: {
-        captured_by: "human:u1",
-        source: "ui",
-      },
-    });
-
-    await user.click(screen.getByRole("button", { name: /dismiss/i }));
-    expect(deleteLineItemMutate).toHaveBeenCalledWith({ lineId: "l2" });
   });
 });

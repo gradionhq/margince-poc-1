@@ -38,7 +38,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe("RegenerateBanner", () => {
-  it("hides itself when the offer cannot be mutated", () => {
+  it("hides itself for draft offers even for mutate-capable roles", () => {
     const { container } = render(
       <RegenerateBanner
         dealId="deal-1"
@@ -49,12 +49,35 @@ describe("RegenerateBanner", () => {
           status: "draft",
           currency: "EUR",
         }}
-        canMutateOffer={false}
+        userRole="admin"
+        onRegenerated={vi.fn()}
       />,
       { wrapper },
     );
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("shows itself for sent offers when the role can mutate", () => {
+    render(
+      <RegenerateBanner
+        dealId="deal-1"
+        offer={{
+          id: "offer-1",
+          offer_number: "OFF-1",
+          revision: 1,
+          status: "sent",
+          currency: "EUR",
+        }}
+        userRole="rep"
+        onRegenerated={vi.fn()}
+      />,
+      { wrapper },
+    );
+
+    expect(
+      screen.getByRole("button", { name: /regenerate/i }),
+    ).toBeInTheDocument();
   });
 
   it("navigates to the regenerated draft and uses the mutation response for the banner", async () => {
@@ -130,10 +153,11 @@ describe("RegenerateBanner", () => {
           id: "offer-1",
           offer_number: "OFF-1",
           revision: 1,
-          status: "draft",
+          status: "sent",
           currency: "EUR",
         }}
-        canMutateOffer
+        userRole="admin"
+        onRegenerated={vi.fn()}
       />,
       { wrapper },
     );
@@ -180,10 +204,11 @@ describe("RegenerateBanner", () => {
           id: "offer-1",
           offer_number: "OFF-1",
           revision: 1,
-          status: "draft",
+          status: "sent",
           currency: "EUR",
         }}
-        canMutateOffer
+        userRole="admin"
+        onRegenerated={vi.fn()}
       />,
       { wrapper },
     );

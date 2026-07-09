@@ -2,18 +2,16 @@ import type { OfferLineItem } from "../../../lib/api-client/generated/index.js";
 import { AiDisclosureBanner } from "./AiDisclosureBanner.js";
 import { StagedLineRow } from "./StagedLineRow.js";
 
-function isStaged(line: OfferLineItem) {
-  return line.evidence != null && line.captured_by.startsWith("agent:");
-}
-
 export function StagedLinesPanel({
   lines,
+  stagedLineIds,
   canMutateOffer,
   currentUserId,
   onAccept,
   onDismiss,
 }: {
   lines: OfferLineItem[];
+  stagedLineIds: Set<string>;
   canMutateOffer: boolean;
   currentUserId: string;
   onAccept: (
@@ -22,7 +20,7 @@ export function StagedLinesPanel({
   ) => Promise<void> | void;
   onDismiss: (lineId: string) => Promise<void> | void;
 }) {
-  const staged = lines.filter(isStaged);
+  const staged = lines.filter((line) => stagedLineIds.has(line.id));
 
   if (staged.length === 0) return null;
 

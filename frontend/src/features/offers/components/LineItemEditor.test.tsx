@@ -37,6 +37,7 @@ describe("LineItemEditor", () => {
     render(
       <LineItemEditor
         lines={[humanLine, stagedLine]}
+        stagedLineIds={new Set(["li-2"])}
         canMutateOffer={true}
         onCreate={vi.fn()}
         onUpdate={vi.fn()}
@@ -56,6 +57,7 @@ describe("LineItemEditor", () => {
     render(
       <LineItemEditor
         lines={[]}
+        stagedLineIds={new Set()}
         canMutateOffer={false}
         onCreate={vi.fn()}
         onUpdate={vi.fn()}
