@@ -74,6 +74,8 @@ func (s *DealStore) applyUpdate(ctx context.Context, tx *sql.Tx, id, workspaceID
 		sqlutil.NullStr(updates, fieldStageID),
 		sqlutil.NullStr(updates, fieldStatus),
 		sqlutil.NullStr(updates, "lost_reason"),
+		nullInt(updates, fieldAmountMinor),
+		sqlutil.NullStr(updates, "currency"),
 		fxRate,
 		fxRateDate,
 		sqlutil.NullStr(updates, "expected_close_date"),
@@ -94,12 +96,14 @@ func (s *DealStore) applyUpdate(ctx context.Context, tx *sql.Tx, id, workspaceID
 		    stage_id            = COALESCE($4::uuid, stage_id),
 		    status              = COALESCE($5, status),
 		    lost_reason         = COALESCE($6, lost_reason),
+		    amount_minor        = COALESCE($7, amount_minor),
+		    currency            = COALESCE($8, currency),
 		    closed_at           = CASE WHEN $5 IN ('won','lost') THEN now() ELSE closed_at END,
-		    fx_rate_to_base     = COALESCE($7, fx_rate_to_base),
-		    fx_rate_date        = COALESCE($8, fx_rate_date),
-		    expected_close_date = COALESCE($9, expected_close_date),
-		    owner_id            = COALESCE($10::uuid, owner_id),
-		    partner_org_id      = COALESCE($11::uuid, partner_org_id)%s,
+		    fx_rate_to_base     = COALESCE($9, fx_rate_to_base),
+		    fx_rate_date        = COALESCE($10, fx_rate_date),
+		    expected_close_date = COALESCE($11, expected_close_date),
+		    owner_id            = COALESCE($12::uuid, owner_id),
+		    partner_org_id      = COALESCE($13::uuid, partner_org_id)%s,
 		    updated_at          = now()
 		WHERE id=$1::uuid AND workspace_id=$2::uuid AND archived_at IS NULL
 		  AND ($%d = 0 OR version = $%d)`, customSet, ifMatchIdx, ifMatchIdx)

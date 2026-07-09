@@ -155,12 +155,14 @@ func (k *routeKit) registerCoreCRUD(mux *http.ServeMux) {
 	mux.Handle("GET /attachments/{id}/extraction", instrument("/attachments/extraction", k.domainWrap(platformauth.ObjAttachment, attachmentHandler)))
 	mux.Handle("POST /attachments/{id}/extraction:accept", instrument("/attachments/extraction-accept", k.domainWrap(platformauth.ObjAttachment, attachmentHandler)))
 	mux.Handle("POST /attachments/{id}/request-access", instrument("/attachments/request-access", k.domainWrap(platformauth.ObjAttachment, attachmentHandler)))
-	offerHandler := offerstransport.NewOfferHandler(offers.NewOfferStore(k.db), offers.NewOfferLineItemStore(k.db, offers.NewProductStore(k.db)), k.verifier, k.blob, offerstransport.NewNoOpRetriever())
+	offerStore := offers.NewOfferStore(k.db).WithDealStore(deals.NewDealStore(k.db))
+	offerHandler := offerstransport.NewOfferHandler(offerStore, offers.NewOfferLineItemStore(k.db, offers.NewProductStore(k.db)), k.verifier, k.blob, offerstransport.NewNoOpRetriever())
 	mux.Handle("GET /deals/{id}/offers", instrument("/deals/offers", k.domainWrap(platformauth.ObjOffer, offerHandler)))
 	mux.Handle("POST /deals/{id}/offers", instrument("/deals/offers", k.domainWrap(platformauth.ObjOffer, offerHandler)))
 	crud("/offers", platformauth.ObjOffer, offerHandler)
 	mux.Handle("POST /offers/{id}/render", instrument("/offers/render", k.domainWrap(platformauth.ObjOffer, offerHandler)))
 	mux.Handle("POST /offers/{id}/send", instrument("/offers/send", k.domainWrap(platformauth.ObjOffer, offerHandler)))
+	mux.Handle("POST /offers/{id}/accept", instrument("/offers/accept", k.domainWrap(platformauth.ObjOffer, offerHandler)))
 	mux.Handle("POST /offers/{id}/regenerate", instrument("/offers/regenerate", k.domainWrap(platformauth.ObjOffer, offerHandler)))
 
 	historyAuthz := authz.Authorizer(func(ctx context.Context, object, action string) error {
