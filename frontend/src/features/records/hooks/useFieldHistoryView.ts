@@ -26,7 +26,7 @@ export function useFieldHistoryView(
   const fieldKeys = useMemo(() => {
     const catalog = new Set(scalarFieldKeys(record));
     for (const e of entries) catalog.add(e.field);
-    return Array.from(catalog).sort();
+    return Array.from(catalog).sort((a, b) => a.localeCompare(b));
   }, [record, entries]);
 
   const header = useMemo(
