@@ -8,6 +8,7 @@ import {
 } from "../../../shared/ui/ArchivedBanner.js";
 import { Button, Skeleton, StatusDot } from "../../../shared/ui/forge.js";
 import { ToastContainer } from "../../../shared/ui/ToastContainer.js";
+import { FormulaFieldsPanel } from "../../formula-fields/index.js";
 import {
   useArchiveOrganization,
   useOrganization,
@@ -247,6 +248,7 @@ export function CompanyDetailPage() {
           <QuickFactsRail org={org} />
         </div>
         <PartnerPanel partner={partner} sourcedDeals={sourcedDeals ?? []} />
+        <FormulaFieldsPanel org={org} />
       </main>
       <NewDealModal
         open={newDealOpen}

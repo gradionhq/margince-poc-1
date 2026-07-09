@@ -16,12 +16,22 @@ import (
 
 // fakeRollupStore satisfies rollupStoreSeam for handler unit tests.
 type fakeRollupStore struct {
-	result records.RollupResult
-	err    error
+	result            records.RollupResult
+	openPipelineMinor *int64
+	visible           bool
+	err               error
 }
 
 func (f *fakeRollupStore) Compute(_ context.Context, _, _, _, _ string) (records.RollupResult, error) {
 	return f.result, f.err
+}
+
+func (f *fakeRollupStore) OpenPipelineRollup(_ context.Context, _, _ string) (*int64, int, error) {
+	return f.openPipelineMinor, 0, f.err
+}
+
+func (f *fakeRollupStore) ComputedFieldsVisible(_ context.Context, _ string, _ crmctx.Principal) (bool, error) {
+	return f.visible, f.err
 }
 
 func rollupHandlerForTest(store rollupStoreSeam) *OrganizationHandler {

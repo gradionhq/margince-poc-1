@@ -57,6 +57,8 @@ type actStoreSeam interface {
 // GET .../hierarchy-rollup read. Satisfied by *records.RollupStore.
 type rollupStoreSeam interface {
 	Compute(ctx context.Context, rootID, workspaceID, userID, scope string) (records.RollupResult, error)
+	OpenPipelineRollup(ctx context.Context, orgID, workspaceID string) (*int64, int, error)
+	ComputedFieldsVisible(ctx context.Context, workspaceID string, principal crmctx.Principal) (bool, error)
 }
 
 // OrganizationHandler routes /organizations and /organizations/{id} requests
@@ -300,6 +302,12 @@ func (h *OrganizationHandler) get(w http.ResponseWriter, r *http.Request, id str
 		httpkit.JSONError(w, err)
 		return
 	}
+	cf, err := h.computedFields(r.Context(), wsID, o.ID)
+	if err != nil {
+		httpkit.JSONError(w, err)
+		return
+	}
+	o.ComputedFields = cf
 	httpkit.JSONOK(w, organizationDetailResponse{
 		Organization:  o,
 		Relationships: rels,

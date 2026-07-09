@@ -2,13 +2,26 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+  components,
+  Organization,
+} from "../../../lib/api-client/generated/index.js";
 
 const baseOrgData = {
   id: "org1",
+  workspace_id: "ws1",
   display_name: "Acme Corp",
   industry: "Software",
   size_band: "51-200",
-  domains: [{ domain: "acme.com", is_primary: true }],
+  domains: [
+    {
+      id: "dom-1",
+      domain: "acme.com",
+      is_primary: true,
+      source: "manual",
+      captured_by: "human:u1",
+    },
+  ],
   address: { city: "Berlin", country: "DE" },
   org_strength: null,
   deals: [],
@@ -22,23 +35,85 @@ const baseOrgData = {
   source: "manual",
   captured_by: "human:u1",
   archived_at: null as string | null,
-};
+} satisfies Organization;
 
 let mockPartner: unknown = null;
-let mockOrg = { ...baseOrgData };
+let mockOrg: Organization = { ...baseOrgData };
 let mockUpdateMutate = vi.fn(
-  (_patch: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.(),
+  (_patch: unknown, opts?: { onSuccess?: () => void }) => {
+    opts?.onSuccess?.();
+    return undefined;
+  },
 );
 let mockArchiveMutate = vi.fn(
-  (_vars: undefined, opts?: { onSuccess?: () => undefined }) =>
-    opts?.onSuccess?.(),
+  (_vars: undefined, opts?: { onSuccess?: () => undefined }) => {
+    opts?.onSuccess?.();
+    return undefined;
+  },
 );
 let mockRestoreMutate = vi.fn(
   (
     _vars: undefined,
     opts?: { onSuccess?: () => undefined; onError?: (err: unknown) => void },
-  ) => opts?.onSuccess?.(),
+  ) => {
+    opts?.onSuccess?.();
+    return undefined;
+  },
 );
+
+type ComputedField = components["schemas"]["ComputedField"];
+
+const baseComputedFields = [
+  {
+    key: "open_pipeline",
+    label: "Open pipeline",
+    kind: "currency_minor",
+    value_minor: 212000,
+    formula_sql:
+      "COALESCE(organization_open_pipeline_rollup.open_pipeline_minor_base, 0)",
+    dependencies: [
+      "organization_open_pipeline_rollup.open_pipeline_minor_base",
+      "deal.amount_minor_base",
+    ],
+    computable: true,
+  },
+  {
+    key: "weighted_pipeline",
+    label: "Weighted pipeline",
+    kind: "currency_minor",
+    formula_sql: "",
+    dependencies: [],
+    computable: false,
+    reason: "not_yet_built",
+  },
+  {
+    key: "customer_age",
+    label: "Customer age",
+    kind: "duration_months",
+    formula_sql: "",
+    dependencies: [],
+    computable: false,
+    reason: "not_yet_built",
+  },
+  {
+    key: "net_revenue_retention",
+    label: "Net revenue retention",
+    kind: "percent",
+    formula_sql: "",
+    dependencies: [],
+    computable: false,
+    reason: "not_yet_built",
+  },
+  {
+    key: "blended_gross_margin",
+    label: "Blended gross margin",
+    kind: "percent",
+    formula_sql: "",
+    dependencies: [],
+    computable: false,
+    reason: "not_yet_built",
+  },
+] satisfies ComputedField[];
 
 vi.mock("../api/organizations.js", () => ({
   useOrganization: () => ({
@@ -85,12 +160,16 @@ describe("CompanyDetailPage", () => {
     mockPartner = null;
     mockOrg = { ...baseOrgData };
     mockUpdateMutate = vi.fn(
-      (_patch: unknown, opts?: { onSuccess?: () => void }) =>
-        opts?.onSuccess?.(),
+      (_patch: unknown, opts?: { onSuccess?: () => void }) => {
+        opts?.onSuccess?.();
+        return undefined;
+      },
     );
     mockArchiveMutate = vi.fn(
-      (_vars: undefined, opts?: { onSuccess?: () => undefined }) =>
-        opts?.onSuccess?.(),
+      (_vars: undefined, opts?: { onSuccess?: () => undefined }) => {
+        opts?.onSuccess?.();
+        return undefined;
+      },
     );
     mockRestoreMutate = vi.fn(
       (
@@ -99,7 +178,10 @@ describe("CompanyDetailPage", () => {
           onSuccess?: () => undefined;
           onError?: (err: unknown) => void;
         },
-      ) => opts?.onSuccess?.(),
+      ) => {
+        opts?.onSuccess?.();
+        return undefined;
+      },
     );
   });
 
@@ -194,20 +276,22 @@ describe("CompanyDetailPage", () => {
 
   it("shows the existing-record pointer link on a 409 restore refusal", () => {
     mockOrg = { ...baseOrgData, archived_at: "2026-07-05T00:00:00Z" };
-    mockRestoreMutate = vi.fn(
+    mockRestoreMutate.mockImplementationOnce(
       (
         _vars: undefined,
         opts?: {
           onSuccess?: () => undefined;
           onError?: (err: unknown) => void;
         },
-      ) =>
+      ): undefined => {
         opts?.onError?.({
           status: 409,
           code: "duplicate_domain",
           details: { existing_id: "org2" },
           detail: "A live company already has this domain.",
-        }),
+        });
+        return undefined;
+      },
     );
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: /restore/i }));
@@ -227,6 +311,32 @@ describe("CompanyDetailPage", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/this company is archived/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders the formula fields panel when computed fields are present", () => {
+    mockOrg = { ...baseOrgData, computed_fields: baseComputedFields };
+    renderPage();
+
+    expect(screen.getByTestId("formula-fields-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("formula-fields-panel")).toHaveTextContent(
+      /read-only computed/i,
+    );
+    expect(screen.getByText(/recomputes on every write/i)).toBeInTheDocument();
+    expect(
+      screen.getByTestId("formula-field-row-open_pipeline"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("See it recompute")).toBeInTheDocument();
+    expect(screen.getByText("AI-proposed")).toBeInTheDocument();
+    expect(screen.getByText("computed:server")).toBeInTheDocument();
+  });
+
+  it("does not render the formula fields panel when computed_fields is undefined", () => {
+    mockOrg = { ...baseOrgData, computed_fields: undefined };
+    renderPage();
+
+    expect(
+      screen.queryByTestId("formula-fields-panel"),
     ).not.toBeInTheDocument();
   });
 });
