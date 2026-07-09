@@ -1,8 +1,16 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { components } from "../../../lib/api-client/generated/index.js";
 import { AttachmentRow } from "./AttachmentRow.js";
+
+const mutateAsync = vi.fn();
+
+vi.mock("../api/attachments.js", () => ({
+  useRequestAccess: () => ({
+    mutateAsync,
+  }),
+}));
 
 type Attachment = components["schemas"]["Attachment"];
 
@@ -30,6 +38,10 @@ function makeAttachment(overrides: Partial<Attachment> = {}): Attachment {
 }
 
 describe("AttachmentRow", () => {
+  afterEach(() => {
+    mutateAsync.mockReset();
+  });
+
   it("renders scan status, size, provenance, and actions", () => {
     render(
       <AttachmentRow
@@ -81,5 +93,63 @@ describe("AttachmentRow", () => {
 
     expect(screen.getByText(/captured by agent:attachment-extractor/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "contract.pdf" })).toBeInTheDocument();
+  });
+
+  it("locks restricted rows down to request-access and keeps scan status visible", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AttachmentRow
+        attachment={makeAttachment({
+          access: "restricted",
+          scan_status: "clean",
+        })}
+      />,
+    );
+
+    expect(screen.getByText("Clean")).toBeInTheDocument();
+    expect(screen.getByText("Restricted")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /request access/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /download/i }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /request access/i }));
+
+    expect(mutateAsync).toHaveBeenCalledOnce();
+    expect(
+      await screen.findByText(/access request sent and logged/i),
+    ).toBeInTheDocument();
+  });
+
+  it("blocks downloads and exposes the reason action for quarantined files", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AttachmentRow
+        attachment={makeAttachment({
+          scan_status: "blocked",
+          download_url: null,
+        })}
+      />,
+    );
+
+    expect(screen.getByText("Blocked")).toBeInTheDocument();
+    expect(
+      screen.getByText(/quarantined - not downloadable/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /download/i }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /why was this blocked/i }),
+    );
+
+    expect(
+      await screen.findByText(/blocked because the file was quarantined/i),
+    ).toBeInTheDocument();
   });
 });
