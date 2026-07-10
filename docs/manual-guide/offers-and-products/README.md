@@ -117,13 +117,27 @@ DEAL=00000000-0000-0000-0042-000000000001
   **Expected:** the offer now reports `net_minor: 750000` (5 × 150000), `tax_minor: 142500`
   (750000 × 19%), `gross_minor: 892500` — **the server derived every figure**; the line and offer
   totals were never sent by the client.
-- [ ] **2.3 The client cannot write a total** (OFFER-AC-3). Try to force a line total:
+- [ ] **2.3 The client cannot move the totals** (OFFER-AC-3 / API-ERR-15). Try to PATCH the draft
+  offer with bogus totals, then re-read:
   ```bash
-  curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8080/offers/$OFFER/line-items "${HDRS[@]}" -d '{
-    "position":2,"description":"Hack","quantity":1,"unit_price_minor":100,"line_total":1,
-    "source":"ui","captured_by":"human:00000000-0000-0000-0010-000000000001"}'
+  curl -s -X PATCH http://localhost:8080/offers/$OFFER "${HDRS[@]}" -d '{"gross_minor":999999999,"net_minor":999999999}' >/dev/null
+  curl -s http://localhost:8080/offers/$OFFER "${HDRS[@]}" | jq '{net_minor,gross_minor}'
   ```
-  **Expected:** **`422`** (`field_not_writable`) — money is server-computed, never client-supplied.
+  **Expected:** the totals are **unchanged** (`net_minor: 750000`, `gross_minor: 892500`) — the
+  client-supplied figures had **no effect**; the server value always wins (`net_minor`/`gross_minor`
+  are `readOnly`, re-derived from line items).
+
+> **⚠️ Known code gap found during testing (report this).** The contract specifies a *stronger*
+> guarantee than the server currently enforces: per `crm.yaml` (createOfferLineItem, API-ERR-15,
+> lines ~1316–1330), sending a `line_total` on **`POST /offers/{id}/line-items`** must be **rejected
+> with `422 {field: line_total, code: field_not_writable}`**. The running build instead returns
+> **`201` and silently ignores** the field (creating the line with its server-computed total). The
+> value still has no effect, so the money guarantee holds *in substance* — but the specified 422
+> refusal is **not implemented**, and no runtime test covers it (the contract test only asserts the
+> generated type has no `line_total` field). Worth a backend ticket.
+- [ ] **2.4 (optional) Product snapshot.** Add a line with `"product_id":"<PROD_ID>"` and no
+  description/price. **Expected:** the line copies the product's price + description as a **snapshot** —
+  later editing the product does not retro-change this offer.
 - [ ] **2.4 (optional) Product snapshot.** Add a line with `"product_id":"<PROD_ID>"` and no
   description/price. **Expected:** the line copies the product's price + description as a **snapshot** —
   later editing the product does not retro-change this offer.
@@ -209,21 +223,37 @@ DEAL=00000000-0000-0000-0042-000000000001
 ## Part 6 — AI authoring / regenerate (OP-T07)
 
 > **Dev caveat:** the running dev server wires the offer handler with a **no-op retriever**, so
-> `regenerate` exercises the *revision + diff + disclosure* mechanics but stages **zero** grounded AI
-> lines (there is no live model in dev). The evidence-or-omit and never-fabricate-a-price guarantees
-> are proven by the integration tests in the Automated counterpart, not by the dev stack. Also note
+> `regenerate` exercises only the *revision + supersede* mechanic — it stages **zero** grounded AI
+> lines and, because nothing was AI-generated, the response comes back with **`ai_generated: false`,
+> `ai_disclosure: null`, and `diff_from_previous: null`**. The AI flags, disclosure text, and diff
+> only populate when a real retriever generates content — those are proven by the integration tests
+> in the Automated counterpart, not by the dev stack. Also note
 > there is **no draft-from-context endpoint** — a fresh offer starts empty; `regenerate` (sent-only)
 > is the sole AI path, so the screen's regenerate banner only appears on a **sent** offer.
+>
+> **Regenerate needs a `sent` offer — not an accepted one.** The `$OFFER` from Parts 1–5 is now
+> `accepted`, so regenerating *it* returns `409 offer_not_acceptable`. Build a fresh offer, send it,
+> and **don't accept it**, for this Part.
 
-- [ ] **6.1 Regenerate a sent offer into a new draft revision:**
+- [ ] **6.1 Set up a sent-but-unaccepted offer:**
   ```bash
-  curl -s -X POST http://localhost:8080/offers/$OFFER/regenerate "${HDRS[@]}" | jq '{revision,status,ai_generated,ai_disclosure,diff_from_previous}'
+  OFFER2=$(curl -s -X POST http://localhost:8080/deals/$DEAL/offers "${HDRS[@]}" -d '{"offer_number":"ANG-2026-0002","currency":"EUR","source":"ui","captured_by":"human:00000000-0000-0000-0010-000000000001"}' | jq -r .id)
+  curl -s -X POST http://localhost:8080/offers/$OFFER2/line-items "${HDRS[@]}" -d '{"position":1,"description":"Consulting","quantity":2,"unit_price_minor":150000,"tax_rate":19,"source":"ui","captured_by":"human:00000000-0000-0000-0010-000000000001"}' >/dev/null
+  curl -s -X POST http://localhost:8080/offers/$OFFER2/render "${HDRS[@]}" >/dev/null
+  curl -s -X POST http://localhost:8080/offers/$OFFER2/send "${HDRS[@]}" | jq '{status}'
   ```
-  **Expected:** a **new revision (n+1), status `draft`**, `ai_generated: true` with an `ai_disclosure`
-  string, and a `diff_from_previous {added, removed, changed}` object; the **prior** revision is now
-  `superseded` (never edited in place). In dev, `added` will be empty (no-op retriever).
-- [ ] **6.2 Regenerate refuses a draft** (revision discipline). Regenerating the *new draft* → **`409`**
-  (`offer_not_sent`) — you regenerate from a sent revision, not an open draft.
+  **Expected:** the last line shows `status: "sent"`.
+- [ ] **6.2 Regenerate it into a new draft revision:**
+  ```bash
+  curl -s -X POST http://localhost:8080/offers/$OFFER2/regenerate "${HDRS[@]}" | jq '{id,revision,status,ai_generated,ai_disclosure,diff_from_previous}'
+  ```
+  **Expected:** a **new revision (`revision: 2`), status `draft`**, and the **prior revision now
+  `superseded`** (never edited in place — this is the observable dev mechanic). Per the dev caveat
+  above, `ai_generated` is **`false`** and `ai_disclosure` / `diff_from_previous` are **`null`** (the
+  no-op retriever produced no AI content); with a real retriever these carry the disclosure + diff.
+  The response `id` is the new draft revision — use it in 6.3.
+- [ ] **6.3 Regenerate refuses a draft** (revision discipline). Regenerating that **new draft**
+  revision → **`409`** (`offer_not_sent`) — you regenerate from a sent revision, not an open draft.
 
 ---
 
