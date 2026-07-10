@@ -10,6 +10,9 @@ gates that prove the same thing.
 | [epic01/](epic01/README.md) | Epic 01 (T01–T23) | People/orgs, dedupe/merge, relationship strength, pipelines & deals, archive/restore, STATE-1..5 |
 | [custom-fields/](custom-fields/README.md) | GitHub epic **#103 — CF** | Custom-fields admin screen, governed add/rename/retire engine, core-field parity, contract + catalog |
 | [activities-and-timeline/](activities-and-timeline/README.md) | GitHub epic **#83 — AT** | Activity store + idempotent capture, timeline read vocabulary, update/archive events, relink |
+| [overnight-agent/](overnight-agent/README.md) | GitHub epic **#104 — ONA** | Overnight reconciliation pass: no-guess gate + tier router, close-date hygiene, reconciliation/integrity/stalled-recovery proposals, staged-not-committed — *test-driven (no UI/endpoint yet)* |
+| [offers-and-products/](offers-and-products/README.md) | GitHub epic **#105 — OP** | Products/rate-card + offer-template admin, offer create/line-items/server-computed totals, render + confirm-first send, accept→deal-amount sync, AI authoring, offer builder screen |
+| [records-depth/](records-depth/README.md) | GitHub epic **#84 — RD** | Field-history projection, formula GENERATED columns, quotas + attainment, org hierarchy roll-up, attachments (blob seam + scan gate) — five screens + backend depth |
 
 Common prerequisites for every guide (repeated per-guide as well):
 
