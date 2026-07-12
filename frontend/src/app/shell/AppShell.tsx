@@ -27,6 +27,12 @@ export function AppShell({ counts }: { counts?: RailCounts } = {}) {
   const { toasts, dismiss } = useToasts();
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-gf-page">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-gf-max focus:rounded-md focus:bg-gf-card focus:px-gf-md focus:py-gf-sm focus:text-gf-body focus:text-gf-primary focus:ring-2 focus:ring-gf-accent focus:ring-offset-2 focus:ring-offset-gf-card focus:outline-none"
+      >
+        Skip to main content
+      </a>
       <WorkspaceRail
         activeId={activeId}
         counts={counts}
@@ -35,7 +41,11 @@ export function AppShell({ counts }: { counts?: RailCounts } = {}) {
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar title={title} />
-        <main className="min-h-0 flex-1 overflow-auto">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="min-h-0 flex-1 overflow-auto"
+        >
           <Outlet />
         </main>
       </div>

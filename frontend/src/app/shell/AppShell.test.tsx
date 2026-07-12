@@ -37,4 +37,28 @@ describe("AppShell", () => {
     renderAt("/home");
     expect(screen.getByTestId("top-bar-actions").children).toHaveLength(0);
   });
+
+  it("skip link is first focusable, wired to main, and sr-only by default", () => {
+    renderAt("/home");
+
+    // (a) skip link present
+    const link = screen.getByRole("link", { name: /skip to main content/i });
+    expect(link).not.toBeNull();
+
+    // (b) first focusable in DOM order (before rail items)
+    const { container } = renderAt("/home");
+    const focusable = container.querySelectorAll("a[href], button, [tabindex]");
+    expect(focusable[0]).toBe(
+      container.querySelector('a[href="#main-content"]'),
+    );
+
+    // (c) href wires to main's id
+    expect(link.getAttribute("href")).toBe("#main-content");
+    const main = document.querySelector("main");
+    expect(main?.id).toBe("main-content");
+    expect(main?.getAttribute("tabindex")).toBe("-1");
+
+    // (d) sr-only by default (hidden until focused)
+    expect(link.className).toContain("sr-only");
+  });
 });
