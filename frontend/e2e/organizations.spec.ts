@@ -83,7 +83,7 @@ test.describe("CompaniesPage", () => {
 
     await page.goto("/companies");
     await expect(
-      page.getByRole("heading", { name: /companies/i }),
+      page.getByRole("heading", { level: 1, name: /companies/i }),
     ).toBeVisible();
   });
 
