@@ -45,6 +45,7 @@ export function WorkspaceRail({
               <Link
                 to={item.to}
                 aria-label={item.label}
+                aria-current={active ? "page" : undefined}
                 data-testid="rail-nav-item"
                 data-nav-id={item.id}
                 data-active={active}

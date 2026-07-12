@@ -79,6 +79,25 @@ describe("WorkspaceRail", () => {
     expect(within(inbox).queryByTestId("rail-badge")).toBeNull();
   });
 
+  it("marks only the active nav item with aria-current=page", () => {
+    renderRail({ activeId: "contacts" });
+
+    // The active item's Link carries aria-current="page"
+    const activeLink = screen
+      .getByTestId("rail-nav-item-contacts")
+      .querySelector("a");
+    expect(activeLink).toHaveAttribute("aria-current", "page");
+
+    // Every other rail nav link has NO aria-current attribute at all
+    const allItems = screen.getAllByTestId("rail-nav-item");
+    const inactiveLinks = allItems
+      .filter((el) => el.getAttribute("data-nav-id") !== "contacts")
+      .map((el) => el.closest("a") ?? el.querySelector("a"));
+    for (const link of inactiveLinks) {
+      expect(link).not.toHaveAttribute("aria-current");
+    }
+  });
+
   it("admin sees the Members nav item", () => {
     renderRail({ isAdmin: true });
     expect(screen.getByTestId("rail-nav-item-members")).toBeInTheDocument();
