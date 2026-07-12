@@ -3,6 +3,15 @@ import { describe, expect, it } from "vitest";
 import { TopBar } from "./TopBar.js";
 
 describe("TopBar", () => {
+  it("exposes the page title as a level-1 heading", () => {
+    render(<TopBar title="Contacts" />);
+    const heading = screen.getByRole("heading", { level: 1, name: "Contacts" });
+    expect(heading.className).toContain("font-display");
+    expect(heading.className).toContain("text-base");
+    expect(heading.className).toContain("font-semibold");
+    expect(heading.className).toContain("text-gf-primary");
+  });
+
   it("renders a 56px (h-14) elevated bar with a subtle bottom border", () => {
     render(<TopBar title="Contacts" />);
     const bar = screen.getByTestId("top-bar");
