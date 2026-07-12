@@ -13,7 +13,9 @@ export const WithTitle: Story = { args: { title: "Contacts" } };
 export const WithActions: Story = {
   args: {
     title: "Deals",
-    actions: [{ id: "new", render: () => <button type="button">New deal</button> }],
+    actions: [
+      { id: "new", render: () => <button type="button">New deal</button> },
+    ],
   },
 };
 export const NoTitle: Story = { args: {} };
