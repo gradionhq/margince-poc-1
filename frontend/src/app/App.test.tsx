@@ -133,7 +133,7 @@ describe("App routes", () => {
   it("mounts CompaniesPage at /companies", () => {
     renderApp("/companies");
     expect(
-      screen.getByRole("heading", { name: /companies/i }),
+      screen.getByRole("heading", { level: 2, name: /companies/i }),
     ).toBeInTheDocument();
   });
 

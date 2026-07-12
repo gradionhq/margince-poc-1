@@ -14,9 +14,9 @@ export function TopBar({
       data-testid="top-bar"
       className="flex h-14 shrink-0 items-center justify-between border-b border-gf-subtle bg-gf-elevated px-gf-md"
     >
-      <span className="font-display text-base font-semibold text-gf-primary">
+      <h1 className="font-display text-base font-semibold text-gf-primary">
         {title}
-      </span>
+      </h1>
       {/* Contextual action area — renders ONLY actions true for the current
           state. Empty at cold start ("nothing connected", §2b). */}
       <div

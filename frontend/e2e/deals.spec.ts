@@ -73,7 +73,9 @@ test.describe("PipelinePage", () => {
     await page.waitForURL("**/people");
 
     await page.goto("/deals");
-    await expect(page.getByRole("heading", { name: /deals/i })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: /deals/i }),
+    ).toBeVisible();
   });
 
   test("STATE-5: omits PILOT-EXCLUDED panels from the DOM", async ({
