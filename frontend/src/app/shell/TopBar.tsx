@@ -21,6 +21,8 @@ export function TopBar({
           state. Empty at cold start ("nothing connected", §2b). */}
       <div
         data-testid="top-bar-actions"
+        role="toolbar"
+        aria-label="Page actions"
         className="flex items-center gap-gf-sm"
       >
         {(actions ?? []).map((a) => (
