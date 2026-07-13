@@ -22,11 +22,19 @@ export const Default: Story = {
 };
 
 export const WithBadgeCounts: Story = {
-  args: { activeId: "tasks", counts: { tasks: 3, inbox: 0 }, userName: "Ada Lovelace" },
+  args: {
+    activeId: "tasks",
+    counts: { tasks: 3, inbox: 0 },
+    userName: "Ada Lovelace",
+  },
 };
 
 export const InboxBadge: Story = {
-  args: { activeId: "inbox", counts: { tasks: 0, inbox: 7 }, userName: "Ada Lovelace" },
+  args: {
+    activeId: "inbox",
+    counts: { tasks: 0, inbox: 7 },
+    userName: "Ada Lovelace",
+  },
 };
 
 export const NoCounts: Story = {
