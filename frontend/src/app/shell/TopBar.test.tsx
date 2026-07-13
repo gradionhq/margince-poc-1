@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { TopBar } from "./TopBar.js";
 
@@ -38,5 +38,29 @@ describe("TopBar", () => {
     const actions = screen.getByTestId("top-bar-actions");
     expect(actions.children).toHaveLength(1);
     expect(screen.getByRole("button", { name: "New deal" })).not.toBeNull();
+  });
+
+  it("groups the contextual actions as a labeled toolbar", () => {
+    render(
+      <TopBar
+        title="Deals"
+        actions={[
+          { id: "new", render: () => <button type="button">New deal</button> },
+        ]}
+      />,
+    );
+
+    // The action area is exposed as a toolbar with a non-empty accessible name
+    const toolbar = screen.getByRole("toolbar");
+    expect(toolbar).toHaveAttribute("aria-label");
+    expect(toolbar.getAttribute("aria-label")).not.toBe("");
+
+    // It is the same element as data-testid="top-bar-actions"
+    expect(toolbar).toBe(screen.getByTestId("top-bar-actions"));
+
+    // The supplied action renders inside the toolbar
+    expect(
+      within(toolbar).getByRole("button", { name: "New deal" }),
+    ).not.toBeNull();
   });
 });
