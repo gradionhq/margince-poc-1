@@ -36,6 +36,8 @@ export function WorkspaceRail({
         {visibleNav.map((item) => {
           const active = item.id === activeId;
           const count = item.badgeKey ? counts?.[item.badgeKey] : undefined;
+          const hasCount = typeof count === "number" && count > 0;
+          const label = hasCount ? `${item.label}, ${count}` : item.label;
           return (
             <li
               key={item.id}
@@ -44,7 +46,7 @@ export function WorkspaceRail({
             >
               <Link
                 to={item.to}
-                aria-label={item.label}
+                aria-label={label}
                 aria-current={active ? "page" : undefined}
                 data-testid="rail-nav-item"
                 data-nav-id={item.id}
@@ -56,9 +58,10 @@ export function WorkspaceRail({
                 }`}
               >
                 <RailIcon name={item.icon} />
-                {typeof count === "number" && count > 0 && (
+                {hasCount && (
                   <span
                     data-testid="rail-badge"
+                    aria-hidden="true"
                     className="absolute -right-0.5 -top-0.5 flex min-w-gf-lg items-center justify-center rounded-full bg-gf-accent px-gf-xs text-gf-mini leading-4 text-gf-on-accent"
                   >
                     {count}

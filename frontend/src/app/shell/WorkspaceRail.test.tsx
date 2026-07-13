@@ -79,6 +79,29 @@ describe("WorkspaceRail", () => {
     expect(within(inbox).queryByTestId("rail-badge")).toBeNull();
   });
 
+  describe("accessible badge count in nav link name (SH-T05)", () => {
+    it("(a) Tasks link accessible name includes count when count > 0", () => {
+      renderRail({ counts: { tasks: 3 } });
+      const tasks = screen.getByTestId("rail-nav-item-tasks");
+      const link = within(tasks).getByRole("link");
+      expect(link).toHaveAccessibleName("Tasks, 3");
+    });
+
+    it("(b) Inbox link accessible name is plain label when no count", () => {
+      renderRail({ counts: { tasks: 3 } });
+      const inbox = screen.getByTestId("rail-nav-item-inbox");
+      const link = within(inbox).getByRole("link");
+      expect(link).toHaveAccessibleName("Inbox");
+    });
+
+    it("(c) rail-badge span carries aria-hidden=true when rendered", () => {
+      renderRail({ counts: { tasks: 3 } });
+      const tasks = screen.getByTestId("rail-nav-item-tasks");
+      const badge = within(tasks).getByTestId("rail-badge");
+      expect(badge).toHaveAttribute("aria-hidden", "true");
+    });
+  });
+
   it("marks only the active nav item with aria-current=page", () => {
     renderRail({ activeId: "contacts" });
 
